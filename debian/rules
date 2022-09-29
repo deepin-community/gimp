@@ -1,0 +1,43 @@
+#!/usr/bin/make -f
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+export DEB_LDFLAGS_MAINT_APPEND = -Wl,-O1
+
+ifeq (yes,$(shell dpkg-vendor --derives-from Ubuntu && echo yes))
+	BUGTRACKER = https://bugs.launchpad.net/ubuntu/+source/gimp/+filebug?no-redirect
+else
+	BUGTRACKER = https://www.debian.org/Bugs/Reporting
+endif
+
+%:
+	dh $@
+
+# Don't switch to Multi-Arch yet because of potential incompatibility with
+# third-party add-ons
+override_dh_auto_configure:
+	dh_auto_configure -- \
+		--libdir=/usr/lib \
+		--libexecdir=/usr/lib/gimp \
+		--disable-static \
+		--disable-python \
+		--disable-check-update \
+		--enable-default-binary \
+		--enable-gtk-doc \
+		--without-appdata-test \
+		--without-webkit \
+		--without-xvfb-run \
+		--with-bug-report-url=$(BUGTRACKER)
+
+override_dh_autoreconf:
+	dh_autoreconf --as-needed
+
+# exclude since we manually add the Suggests in debian/control
+override_dh_shlibdeps:
+	dh_shlibdeps -Xusr/lib/gimp/2.0/modules/libcontroller-midi.so \
+		-Llibgimp2.0 -l$(CURDIR)/debian/libgimp2.0/usr/lib
+
+override_dh_makeshlibs:
+	dh_makeshlibs -X/usr/lib/gimp/2.0/modules -- -c4
+
+execute_before_dh_install:
+	find debian/tmp -name '*.la' -print -delete

@@ -1,0 +1,24 @@
+From: Svante Signell <svante.signell@telia.com>
+Date: Sun, 1 Apr 2018 17:43:04 -0400
+Subject: Define PATH_MAX to fix build on the Hurd.
+
+Forwarded: https://gitlab.gnome.org/GNOME/gimp/-/merge_requests/424
+Applied-upstream: no
+---
+ libgimpbase/gimpreloc.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/libgimpbase/gimpreloc.c b/libgimpbase/gimpreloc.c
+index b9fa4df..8cd72f9 100644
+--- a/libgimpbase/gimpreloc.c
++++ b/libgimpbase/gimpreloc.c
+@@ -27,6 +27,9 @@
+ 
+ #include "gimpreloc.h"
+ 
++#ifndef PATH_MAX
++#define PATH_MAX 4096
++#endif
+ 
+ /*
+  * Find the canonical filename of the executable. Returns the filename

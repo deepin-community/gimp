@@ -1,0 +1,81 @@
+#!/bin/sh
+# autopkgtest check: Build and run a program against libgimp, to verify
+# that the headers and pkg-config file are installed correctly
+# (C) 2012 Canonical Ltd.
+# (C) 2018-2020 Simon McVittie
+# Authors: Martin Pitt, Simon McVittie
+
+set -eux
+
+WORKDIR=$(mktemp -d)
+export XDG_RUNTIME_DIR="$WORKDIR"
+trap 'rm -rf "$WORKDIR"' 0 INT QUIT ABRT PIPE TERM
+cd "$WORKDIR"
+
+if [ -n "${DEB_HOST_GNU_TYPE:-}" ]; then
+    CROSS_COMPILE="${DEB_HOST_GNU_TYPE}-"
+else
+    CROSS_COMPILE=
+fi
+
+cat <<'EOF' > gimp-2.0.c
+#include <libgimp/gimp.h>
+
+#undef NDEBUG
+#include <assert.h>
+
+int main(void)
+{
+    const char *dir = gimp_directory ();
+    assert(dir != NULL);
+    return 0;
+}
+EOF
+
+cat <<'EOF' > gimpthumb-2.0.c
+/* TODO: shouldn't be necessary */
+#include <glib.h>
+#include <glib-object.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
+
+#include <libgimpthumb/gimpthumb.h>
+
+#undef NDEBUG
+#include <assert.h>
+
+int main(void)
+{
+    assert(GIMP_TYPE_THUMBNAIL != G_TYPE_INVALID);
+    return 0;
+}
+EOF
+
+cat <<'EOF' > gimpui-2.0.c
+/* TODO: shouldn't be necessary */
+#include <libgimp/gimp.h>
+
+#include <libgimp/gimpui.h>
+
+#undef NDEBUG
+#include <assert.h>
+
+int main(void)
+{
+    assert(GIMP_TYPE_ASPECT_PREVIEW != G_TYPE_INVALID);
+    return 0;
+}
+EOF
+
+for lib in \
+    gimp-2.0 \
+    gimpthumb-2.0 \
+    gimpui-2.0 \
+; do
+    # Deliberately word-splitting pkg-config's output:
+    # shellcheck disable=SC2046
+    "${CROSS_COMPILE}gcc" -o "${lib}-test" "${lib}.c" $("${CROSS_COMPILE}pkg-config" --cflags --libs "${lib}")
+    echo "build ($lib): OK"
+    [ -x "${lib}-test" ]
+    xvfb-run -a "./${lib}-test"
+    echo "run ($lib): OK"
+done

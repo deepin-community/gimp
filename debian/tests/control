@@ -1,0 +1,3 @@
+Tests: libgimp2.0-dev
+Depends: build-essential, libgimp2.0-dev, xauth, xvfb
+Restrictions: allow-stderr superficial
