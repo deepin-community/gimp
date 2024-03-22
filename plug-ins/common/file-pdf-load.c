@@ -58,15 +58,17 @@ typedef struct
   gboolean                antialias;
   gboolean                reverse_order;
   gchar                  *PDF_password;
+  gboolean                white_background;
 } PdfLoadVals;
 
 static PdfLoadVals loadvals =
 {
   GIMP_PAGE_SELECTOR_TARGET_LAYERS,
-  100.00,  /* resolution in dpi   */
+  300.00,  /* resolution in dpi */
   TRUE,    /* antialias */
   FALSE,   /* reverse_order */
-  NULL     /* pdf_password */
+  NULL,    /* pdf_password */
+  TRUE,    /* white_background */
 };
 
 typedef struct
@@ -89,6 +91,7 @@ static gint32            load_image        (PopplerDocument        *doc,
                                             GimpPageSelectorTarget  target,
                                             gdouble                 resolution,
                                             gboolean                antialias,
+                                            gboolean                white_background,
                                             gboolean                reverse_order,
                                             PdfSelectedPages       *pages);
 
@@ -102,11 +105,13 @@ static PopplerDocument * open_document     (const gchar            *filename,
 
 static cairo_surface_t * get_thumb_surface (PopplerDocument        *doc,
                                             gint                    page,
-                                            gint                    preferred_size);
+                                            gint                    preferred_size,
+                                            gboolean                white_background);
 
 static GdkPixbuf *       get_thumb_pixbuf  (PopplerDocument        *doc,
                                             gint                    page,
-                                            gint                    preferred_size);
+                                            gint                    preferred_size,
+                                            gboolean                white_background);
 
 static gint32            layer_from_surface (gint32                  image,
                                              const gchar            *layer_name,
@@ -541,6 +546,7 @@ run (const gchar      *name,
                                  loadvals.target,
                                  loadvals.resolution,
                                  loadvals.antialias,
+                                 loadvals.white_background,
                                  loadvals.reverse_order,
                                  &pages);
 
@@ -604,7 +610,7 @@ run (const gchar      *name,
 
               num_pages = poppler_document_get_n_pages (doc);
 
-              surface = get_thumb_surface (doc, 0, param[1].data.d_int32);
+              surface = get_thumb_surface (doc, 0, param[1].data.d_int32, TRUE);
 
               g_object_unref (doc);
             }
@@ -955,7 +961,8 @@ render_page_to_surface (PopplerPage *page,
                         int          width,
                         int          height,
                         double       scale,
-                        gboolean     antialias)
+                        gboolean     antialias,
+                        gboolean     white_background)
 {
   cairo_surface_t *surface;
   cairo_t *cr;
@@ -984,9 +991,12 @@ render_page_to_surface (PopplerPage *page,
   poppler_page_render (page, cr);
   cairo_restore (cr);
 
-  cairo_set_operator (cr, CAIRO_OPERATOR_DEST_OVER);
-  cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
-  cairo_paint (cr);
+  if (white_background)
+    {
+      cairo_set_operator (cr, CAIRO_OPERATOR_DEST_OVER);
+      cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
+      cairo_paint (cr);
+    }
 
   cairo_destroy (cr);
 
@@ -1025,6 +1035,7 @@ load_image (PopplerDocument        *doc,
             GimpPageSelectorTarget  target,
             gdouble                 resolution,
             gboolean                antialias,
+            gboolean                white_background,
             gboolean                reverse_order,
             PdfSelectedPages       *pages)
 {
@@ -1092,7 +1103,8 @@ load_image (PopplerDocument        *doc,
           gimp_image_set_resolution (image_ID, resolution, resolution);
         }
 
-      surface = render_page_to_surface (page, width, height, scale, antialias);
+      surface = render_page_to_surface (page, width, height, scale,
+                                        antialias, white_background);
 
       layer_from_surface (image_ID, page_label, 0, surface,
                           doc_progress, 1.0 / pages->n_pages);
@@ -1143,7 +1155,8 @@ load_image (PopplerDocument        *doc,
 static cairo_surface_t *
 get_thumb_surface (PopplerDocument *doc,
                    gint             page_num,
-                   gint             preferred_size)
+                   gint             preferred_size,
+                   gboolean         white_background)
 {
   PopplerPage *page;
   cairo_surface_t *surface;
@@ -1168,7 +1181,7 @@ get_thumb_surface (PopplerDocument *doc,
       width  *= scale;
       height *= scale;
 
-      surface = render_page_to_surface (page, width, height, scale, TRUE);
+      surface = render_page_to_surface (page, width, height, scale, TRUE, white_background);
     }
 
   g_object_unref (page);
@@ -1179,12 +1192,13 @@ get_thumb_surface (PopplerDocument *doc,
 static GdkPixbuf *
 get_thumb_pixbuf (PopplerDocument *doc,
                   gint             page_num,
-                  gint             preferred_size)
+                  gint             preferred_size,
+                  gboolean         white_background)
 {
   cairo_surface_t *surface;
   GdkPixbuf *pixbuf;
 
-  surface = get_thumb_surface (doc, page_num, preferred_size);
+  surface = get_thumb_surface (doc, page_num, preferred_size, white_background);
   pixbuf = gdk_pixbuf_get_from_surface (surface, 0, 0,
                                         cairo_image_surface_get_width (surface),
                                         cairo_image_surface_get_height (surface));
@@ -1197,7 +1211,12 @@ typedef struct
 {
   PopplerDocument  *document;
   GimpPageSelector *selector;
+  gboolean          white_background;
+
+  GMutex            mutex;
+  GCond             render_thumb;
   gboolean          stop_thumbnailing;
+  gboolean          render_thumbnails;
 } ThreadData;
 
 typedef struct
@@ -1224,30 +1243,84 @@ idle_set_thumbnail (gpointer data)
 static gpointer
 thumbnail_thread (gpointer data)
 {
-  ThreadData  *thread_data = data;
-  gint         n_pages;
-  gint         i;
+  ThreadData *thread_data = data;
+  gboolean    first_loop  = TRUE;
+  gint        n_pages;
+  gint        i;
 
   n_pages = poppler_document_get_n_pages (thread_data->document);
 
-  for (i = 0; i < n_pages; i++)
+  while (TRUE)
     {
-      IdleData *idle_data = g_new0 (IdleData, 1);
+      gboolean white_background;
+      gboolean stop_thumbnailing;
+      gboolean render_thumbnails;
 
-      idle_data->selector = thread_data->selector;
-      idle_data->page_no  = i;
+      g_mutex_lock (&thread_data->mutex);
+      if (first_loop)
+        first_loop = FALSE;
+      else
+        g_cond_wait (&thread_data->render_thumb, &thread_data->mutex);
 
-      /* FIXME get preferred size from somewhere? */
-      idle_data->pixbuf = get_thumb_pixbuf (thread_data->document, i,
-                                            THUMBNAIL_SIZE);
+      stop_thumbnailing = thread_data->stop_thumbnailing;
+      g_mutex_unlock (&thread_data->mutex);
 
-      g_idle_add (idle_set_thumbnail, idle_data);
+      if (stop_thumbnailing)
+        break;
 
-      if (thread_data->stop_thumbnailing)
+      g_mutex_lock (&thread_data->mutex);
+      render_thumbnails = thread_data->render_thumbnails;
+      white_background  = thread_data->white_background;
+      thread_data->render_thumbnails = FALSE;
+      g_mutex_unlock (&thread_data->mutex);
+
+      /* This handles "spurious wakeup", i.e. cases when g_cond_wait() returned
+       * even though there was no call asking us to re-render the thumbnails.
+       * See docs of g_cond_wait().
+       */
+      if (! render_thumbnails)
+        continue;
+
+      for (i = 0; i < n_pages; i++)
+        {
+          IdleData *idle_data = g_new0 (IdleData, 1);
+          gboolean  white_background2;
+
+          idle_data->selector = thread_data->selector;
+          idle_data->page_no  = i;
+
+          /* FIXME get preferred size from somewhere? */
+          idle_data->pixbuf = get_thumb_pixbuf (thread_data->document, i,
+                                                THUMBNAIL_SIZE,
+                                                white_background);
+
+          g_idle_add (idle_set_thumbnail, idle_data);
+
+          g_mutex_lock (&thread_data->mutex);
+          white_background2 = thread_data->white_background;
+          stop_thumbnailing = thread_data->stop_thumbnailing;
+          g_mutex_unlock (&thread_data->mutex);
+
+          if (stop_thumbnailing || white_background2 != white_background)
+            break;
+        }
+
+      if (stop_thumbnailing)
         break;
     }
 
   return NULL;
+}
+
+static void
+white_background_toggled (GtkToggleButton *widget,
+                          ThreadData      *thread_data)
+{
+  g_mutex_lock (&thread_data->mutex);
+  thread_data->white_background  = gtk_toggle_button_get_active (widget);
+  thread_data->render_thumbnails = TRUE;
+  g_cond_signal (&thread_data->render_thumb);
+  g_mutex_unlock (&thread_data->mutex);
 }
 
 static GimpPDBStatusType
@@ -1260,6 +1333,7 @@ load_dialog (PopplerDocument  *doc,
   GtkWidget  *selector;
   GtkWidget  *resolution;
   GtkWidget  *antialias;
+  GtkWidget  *white_bg;
   GtkWidget  *hbox;
   GtkWidget  *reverse_order;
   GtkWidget  *separator;
@@ -1349,7 +1423,11 @@ load_dialog (PopplerDocument  *doc,
 
   thread_data.document          = doc;
   thread_data.selector          = GIMP_PAGE_SELECTOR (selector);
+  thread_data.render_thumbnails = TRUE;
   thread_data.stop_thumbnailing = FALSE;
+  thread_data.white_background  = loadvals.white_background;
+  g_mutex_init (&thread_data.mutex);
+  g_cond_init (&thread_data.render_thumb);
 
   thread = g_thread_new ("thumbnailer", thumbnail_thread, &thread_data);
 
@@ -1394,6 +1472,17 @@ load_dialog (PopplerDocument  *doc,
                     G_CALLBACK (gimp_toggle_button_update), &loadvals.antialias);
   gtk_widget_show (antialias);
 
+  /* White Background */
+  white_bg = gtk_check_button_new_with_mnemonic (_("_Fill transparent areas with white"));
+  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (white_bg), loadvals.white_background);
+  gtk_box_pack_start (GTK_BOX (vbox), white_bg, FALSE, FALSE, 0);
+
+  g_signal_connect (white_bg, "toggled",
+                    G_CALLBACK (gimp_toggle_button_update), &loadvals.white_background);
+  g_signal_connect (white_bg, "toggled",
+                    G_CALLBACK (white_background_toggled), &thread_data);
+  gtk_widget_show (white_bg);
+
   /* Setup done; display the dialog */
   gtk_widget_show (dialog);
 
@@ -1418,8 +1507,14 @@ load_dialog (PopplerDocument  *doc,
     }
 
   /* cleanup */
+  g_mutex_lock (&thread_data.mutex);
   thread_data.stop_thumbnailing = TRUE;
+  g_cond_signal (&thread_data.render_thumb);
+  g_mutex_unlock (&thread_data.mutex);
   g_thread_join (thread);
+
+  g_mutex_clear (&thread_data.mutex);
+  g_cond_clear (&thread_data.render_thumb);
 
   return run ? GIMP_PDB_SUCCESS : GIMP_PDB_CANCEL;
 }

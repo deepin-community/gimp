@@ -53,6 +53,10 @@ gboolean gimp_drawable_curves_spline       (gint32                drawable_ID,
                                             GimpHistogramChannel  channel,
                                             gint                  num_points,
                                             const gdouble        *points);
+gboolean gimp_drawable_extract_component   (gint32                drawable_ID,
+                                            guint8                component,
+                                            gboolean              invert,
+                                            gboolean              linear);
 gboolean gimp_drawable_desaturate          (gint32                drawable_ID,
                                             GimpDesaturateMode    desaturate_mode);
 gboolean gimp_drawable_equalize            (gint32                drawable_ID,
@@ -85,6 +89,14 @@ gboolean gimp_drawable_levels              (gint32                drawable_ID,
                                             gdouble               high_output,
                                             gboolean              clamp_output);
 gboolean gimp_drawable_levels_stretch      (gint32                drawable_ID);
+gboolean gimp_drawable_shadows_highlights  (gint32                drawable_ID,
+                                            gdouble               shadows,
+                                            gdouble               highlights,
+                                            gdouble               whitepoint,
+                                            gdouble               radius,
+                                            gdouble               compress,
+                                            gdouble               shadows_ccorrect,
+                                            gdouble               highlights_ccorrect);
 gboolean gimp_drawable_posterize           (gint32                drawable_ID,
                                             gint                  levels);
 gboolean gimp_drawable_threshold           (gint32                drawable_ID,

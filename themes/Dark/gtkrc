@@ -784,6 +784,36 @@ style "gimp-dark-menu-item"
       image
         {
           function = OPTION
+          state = PRELIGHT
+          shadow = OUT
+          recolorable = TRUE
+          overlay_file = "ui/option1-prelight.png"
+          overlay_stretch = FALSE
+        }
+
+      image
+        {
+          function = OPTION
+          state = PRELIGHT
+          shadow = IN
+          recolorable = TRUE
+          overlay_file = "ui/option2-prelight.png"
+          overlay_stretch = FALSE
+        }
+        
+      image
+        {
+          function = OPTION
+          state = PRELIGHT
+          shadow = ETCHED_IN
+          recolorable = TRUE
+          overlay_file = "ui/option3-prelight.png"
+          overlay_stretch = FALSE
+        }
+
+      image
+        {
+          function = OPTION
           shadow = OUT
           recolorable = TRUE
           overlay_file = "ui/option1.png"
@@ -2342,7 +2372,7 @@ class "GimpSpinScale" style "gimp-dark-spin-scale-style"
 style "gimp-dark-treeview" = "gimp-dark-default-style"
 {
   xthickness = 2
-  ythickness = 0
+  ythickness = 2
 
   GtkTreeView::odd_row_color = "#383838"
   GtkTreeView::even_row_color = "#383838"
@@ -2363,8 +2393,8 @@ style "gimp-dark-treeview" = "gimp-dark-default-style"
       image
         {
           function = SHADOW
-          file = "ui/null.png"
-          border = { 0, 0, 0, 0 }
+          file = "ui/treeview-item-prelight.png"
+          border = { 1, 1, 1, 1 }
           stretch = TRUE
         }
      image
@@ -2416,4 +2446,30 @@ style "gimp-dark-treeview" = "gimp-dark-default-style"
 
 class "GtkTreeView" style "gimp-dark-treeview"
 
+style "highlight-layer-locks" = "gimp-gtkbutton-style"
+{
+  engine "pixmap"
+    {
+      image
+        {
+          function = BOX
+          state = PRELIGHT
+          recolorable = TRUE
+          file = "ui/gimp-lock-button-prelight.png"
+          border = { 8, 8, 8, 8}
+          stretch = TRUE
+        }
+      image
+        {
+          function = BOX
+          state = ACTIVE
+          recolorable = TRUE
+          file = "ui/gimp-lock-button-active.png"
+          border = { 8, 8, 8, 8}
+          stretch = TRUE
+        }
+    }
+}
+
+widget "*gimp_tree_view_lock_box.*Button*" style "highlight-layer-locks"
 # EOF

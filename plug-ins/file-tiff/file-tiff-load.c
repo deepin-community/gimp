@@ -153,11 +153,13 @@ static void               convert_int2uint (guchar            *buffer,
                                             gint               height,
                                             gint               stride);
 
-static gboolean           load_dialog      (TIFF              *tif,
-                                            const gchar       *help_id,
+static gboolean           load_dialog      (const gchar       *help_id,
                                             TiffSelectedPages *pages,
                                             const gchar       *extra_message,
                                             DefaultExtra      *default_extra);
+
+static void       tiff_dialog_show_reduced (GtkWidget         *toggle,
+                                            gpointer           data);
 
 
 static TiffSaveVals tsvals =
@@ -165,6 +167,43 @@ static TiffSaveVals tsvals =
   COMPRESSION_NONE,    /*  compression    */
   TRUE,                /*  alpha handling */
 };
+
+/* Grayscale conversion mappings */
+static const guchar _1_to_8_bitmap [2] =
+{
+  0, 255
+};
+
+static const guchar _1_to_8_bitmap_rev [2] =
+{
+  255, 0
+};
+
+static const guchar _2_to_8_bitmap [4] =
+{
+  0, 85, 170, 255
+};
+
+static const guchar _2_to_8_bitmap_rev [4] =
+{
+  255, 170, 85, 0
+};
+
+static const guchar _4_to_8_bitmap [16] =
+{
+  0,    17,  34,  51,  68,  85, 102, 119,
+  136, 153, 170, 187, 204, 221, 238, 255
+};
+
+static const guchar _4_to_8_bitmap_rev [16] =
+{
+  255, 238, 221, 204, 187, 170, 153, 136,
+  119, 102,  85,  68,  51,  34,  17,   0
+};
+
+static guchar   bit2byte[256 * 8];
+static guchar _2bit2byte[256 * 4];
+static guchar _4bit2byte[256 * 2];
 
 
 /* returns a pointer into the TIFF */
@@ -254,6 +293,7 @@ load_image (GFile        *file,
   GimpColorProfile  *first_profile      = NULL;
   const gchar       *extra_message      = NULL;
   gint               li;
+  gint               selectable_pages;
 
   *image = 0;
   gimp_progress_init_printf (_("Opening '%s'"),
@@ -314,14 +354,17 @@ load_image (GFile        *file,
 
   pages.pages = NULL;
   pages.n_filtered_pages = pages.n_pages;
+  pages.n_reducedimage_pages = pages.n_pages;
 
   pages.filtered_pages  = g_new0 (gint, pages.n_pages);
   for (li = 0; li < pages.n_pages; li++)
     pages.filtered_pages[li] = li;
 
-  if (pages.n_pages == 1)
+  if (pages.n_pages == 1 || run_mode != GIMP_RUN_INTERACTIVE)
     {
       pages.pages  = g_new0 (gint, pages.n_pages);
+      for (li = 0; li < pages.n_pages; li++)
+        pages.pages[li] = li;
       pages.target = GIMP_PAGE_SELECTOR_TARGET_LAYERS;
     }
 
@@ -393,7 +436,7 @@ load_image (GFile        *file,
             {
               /* file_type is a mask but we will only filter out pages
                * that only have FILETYPE_REDUCEDIMAGE set */
-              pages.filtered_pages[li] = -1;
+              pages.filtered_pages[li] = TIFF_REDUCEDFILE;
               pages.n_filtered_pages--;
               g_debug ("Page %d is a FILETYPE_REDUCEDIMAGE thumbnail.\n", li);
             }
@@ -408,8 +451,12 @@ load_image (GFile        *file,
               if (TIFFGetField (tif, TIFFTAG_COMPRESSION, &compression) &&
                   compression == COMPRESSION_OJPEG)
                 {
-                  pages.filtered_pages[li] = -1;
+                  pages.filtered_pages[li] = TIFF_MISC_THUMBNAIL;
                   pages.n_filtered_pages--;
+                  /* This is used to conditionally show reduced images
+                   * if they're not a thumbnail
+                   */
+                  pages.n_reducedimage_pages--;
                   g_debug ("Page %d is most likely a thumbnail.\n", li);
                 }
             }
@@ -443,9 +490,15 @@ load_image (GFile        *file,
     }
   TIFFSetDirectory (tif, 0);
 
+  pages.show_reduced = FALSE;
+  if (pages.n_reducedimage_pages - pages.n_filtered_pages > 1)
+    pages.show_reduced = TRUE;
+
+  pages.tif = tif;
+
   if (run_mode == GIMP_RUN_INTERACTIVE &&
       (pages.n_pages > 1 || extra_message) &&
-      ! load_dialog (tif, LOAD_PROC, &pages,
+      ! load_dialog (LOAD_PROC, &pages,
                      extra_message, &default_extra))
     {
       TIFFClose (tif);
@@ -453,8 +506,13 @@ load_image (GFile        *file,
 
       return GIMP_PDB_CANCEL;
     }
+
+  selectable_pages = pages.n_filtered_pages;
+  if (pages.show_reduced)
+    selectable_pages = pages.n_reducedimage_pages;
+
   /* Adjust pages to take filtered out pages into account. */
-  if (pages.o_pages > pages.n_filtered_pages)
+  if (pages.o_pages > selectable_pages)
     {
       gint fi;
       gint sel_index = 0;
@@ -462,7 +520,8 @@ load_image (GFile        *file,
 
       for (fi = 0; fi < pages.o_pages && sel_index < pages.n_pages; fi++)
         {
-          if (pages.filtered_pages[fi] == -1)
+          if ((pages.show_reduced && pages.filtered_pages[fi] == TIFF_MISC_THUMBNAIL) ||
+              (! pages.show_reduced && pages.filtered_pages[fi] <= TIFF_MISC_THUMBNAIL))
             {
               sel_add++;
             }
@@ -495,6 +554,7 @@ load_image (GFile        *file,
       GimpPrecision     image_precision;
       const Babl       *type;
       const Babl       *base_format = NULL;
+      const Babl       *space       = NULL;
       guint16           orientation;
       gint              cols;
       gint              rows;
@@ -791,26 +851,56 @@ load_image (GFile        *file,
 
       switch (photomet)
         {
+        case PHOTOMETRIC_PALETTE:
         case PHOTOMETRIC_MINISBLACK:
         case PHOTOMETRIC_MINISWHITE:
-          if (photomet == PHOTOMETRIC_MINISWHITE)
-            tiff_mode = GIMP_TIFF_GRAY_MINISWHITE;
-          else
+          /* Even for bps >= we may need to use tiff_mode, so always set it.
+           * Currently we use it to detect the need to convert 8 bps miniswhite. */
+          if (photomet == PHOTOMETRIC_PALETTE)
+            tiff_mode = GIMP_TIFF_INDEXED;
+          else if (photomet == PHOTOMETRIC_MINISBLACK)
             tiff_mode = GIMP_TIFF_GRAY;
+          else if (photomet == PHOTOMETRIC_MINISWHITE)
+            tiff_mode = GIMP_TIFF_GRAY_MINISWHITE;
 
-          if ((bps == 1 || bps == 2 || bps == 4) && ! alpha && spp == 1)
+          if (bps < 8)
             {
-              if (bps == 1)
-                fill_bit2byte (tiff_mode);
-              else if (bps == 2)
-                fill_2bit2byte (tiff_mode);
-              else if (bps == 4)
-                fill_4bit2byte (tiff_mode);
-            }
-          image_type = GIMP_GRAY;
-          layer_type = alpha ? GIMP_GRAYA_IMAGE : GIMP_GRAY_IMAGE;
+              /* FIXME: It should be a user choice whether this should be
+               * interpreted as indexed or grayscale. For now we will
+               * use indexed (see issue #6766). */
+              image_type = GIMP_INDEXED;
+              layer_type = alpha ? GIMP_INDEXEDA_IMAGE : GIMP_INDEXED_IMAGE;
 
-          if (alpha)
+              if ((bps == 1 || bps == 2 || bps == 4) && ! alpha && spp == 1)
+                {
+                  if (bps == 1)
+                    fill_bit2byte (tiff_mode);
+                  else if (bps == 2)
+                    fill_2bit2byte (tiff_mode);
+                  else if (bps == 4)
+                    fill_4bit2byte (tiff_mode);
+                }
+            }
+          else
+            {
+              if (photomet == PHOTOMETRIC_PALETTE)
+                {
+                  image_type = GIMP_INDEXED;
+                  layer_type = alpha ? GIMP_INDEXEDA_IMAGE : GIMP_INDEXED_IMAGE;
+                }
+              else
+                {
+                  image_type = GIMP_GRAY;
+                  layer_type = alpha ? GIMP_GRAYA_IMAGE : GIMP_GRAY_IMAGE;
+                }
+            }
+
+          if (photomet == PHOTOMETRIC_PALETTE)
+            {
+              /* Do nothing here, handled later.
+               * Didn't want more indenting in the next part. */
+            }
+          else if (alpha)
             {
               if (tsvals.save_transp_pixels)
                 {
@@ -946,19 +1036,45 @@ load_image (GFile        *file,
             }
           break;
 
-        case PHOTOMETRIC_PALETTE:
-          image_type = GIMP_INDEXED;
-          layer_type = alpha ? GIMP_INDEXEDA_IMAGE : GIMP_INDEXED_IMAGE;
+        case PHOTOMETRIC_SEPARATED:
+          layer_type = alpha ? GIMP_RGBA_IMAGE : GIMP_RGB_IMAGE;
+          /* It's possible that a CMYK image might not have an
+           * attached profile, so we'll check for it and set up
+           * space accordingly
+           */
+          if (profile && gimp_color_profile_is_cmyk (profile))
+            {
+              space = gimp_color_profile_get_space (profile,
+                                                    GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
+                                                    error);
+              g_clear_object (&profile);
+            }
+          else
+            {
+              space = NULL;
+            }
 
-          if (bps < 8)
-            tiff_mode = GIMP_TIFF_INDEXED; /* Only bps < 8 needs special handling. */
+          if (alpha)
+            base_format = babl_format_new (babl_model ("CMYKA"),
+                                           type,
+                                           babl_component ("Cyan"),
+                                           babl_component ("Magenta"),
+                                           babl_component ("Yellow"),
+                                           babl_component ("Key"),
+                                           babl_component ("A"),
+                                           NULL);
+          else
+            base_format = babl_format_new (babl_model ("CMYK"),
+                                           type,
+                                           babl_component ("Cyan"),
+                                           babl_component ("Magenta"),
+                                           babl_component ("Yellow"),
+                                           babl_component ("Key"),
+                                           NULL);
 
-          if (bps == 1)
-            fill_bit2byte (tiff_mode);
-          else if (bps == 2)
-            fill_2bit2byte (tiff_mode);
-          else if (bps == 4)
-            fill_4bit2byte (tiff_mode);
+          base_format =
+            babl_format_with_space (babl_format_get_encoding (base_format),
+                                    space);
           break;
 
         default:
@@ -1082,7 +1198,7 @@ load_image (GFile        *file,
             }
         }
 
-      /* attach color profile */
+      /* attach non-CMYK color profile */
       if (profile)
         {
           if (pages.target == GIMP_PAGE_SELECTOR_TARGET_IMAGES || profile == first_profile)
@@ -1244,11 +1360,25 @@ load_image (GFile        *file,
              */
             if (read_unit != RESUNIT_NONE)
               {
-                gimp_image_set_resolution (*image, xres, yres);
-                if (unit != GIMP_UNIT_PIXEL)
-                  gimp_image_set_unit (*image, unit);
+                if (! isfinite (xres) ||
+                    xres < GIMP_MIN_RESOLUTION || xres > GIMP_MAX_RESOLUTION ||
+                    ! isfinite (yres) ||
+                    yres < GIMP_MIN_RESOLUTION || yres > GIMP_MAX_RESOLUTION)
+                  {
+                    g_message (_("Invalid image resolution info, using default"));
+                    /* We need valid xres and yres for computing
+                     * layer_offset_x_pixel and layer_offset_y_pixel.
+                     */
+                    gimp_image_get_resolution (*image, &xres, &yres);
+                  }
+                else
+                  {
+                    gimp_image_set_resolution (*image, xres, yres);
+                    if (unit != GIMP_UNIT_PIXEL)
+                      gimp_image_set_unit (*image, unit);
 
-                *resolution_loaded = TRUE;
+                    *resolution_loaded = TRUE;
+                  }
               }
           }
 
@@ -1282,25 +1412,94 @@ load_image (GFile        *file,
       if (image_type == GIMP_INDEXED)
         {
           guchar   cmap[768];
-          gushort *redmap;
-          gushort *greenmap;
-          gushort *bluemap;
-          gint     i, j;
 
-          if (! TIFFGetField (tif, TIFFTAG_COLORMAP,
-                              &redmap, &greenmap, &bluemap))
+          if (photomet == PHOTOMETRIC_PALETTE)
             {
-              TIFFClose (tif);
-              g_message (_("Could not get colormaps from '%s'"),
-                         gimp_file_get_utf8_name (file));
-              return GIMP_PDB_EXECUTION_ERROR;
+              gushort *redmap;
+              gushort *greenmap;
+              gushort *bluemap;
+              gint     i, j;
+
+              if (! TIFFGetField (tif, TIFFTAG_COLORMAP,
+                                  &redmap, &greenmap, &bluemap))
+                {
+                  TIFFClose (tif);
+                  g_message (_("Could not get colormaps from '%s'"),
+                             gimp_file_get_utf8_name (file));
+                  return GIMP_PDB_EXECUTION_ERROR;
+                }
+
+              for (i = 0, j = 0; i < (1 << bps); i++)
+                {
+                  cmap[j++] = redmap[i] >> 8;
+                  cmap[j++] = greenmap[i] >> 8;
+                  cmap[j++] = bluemap[i] >> 8;
+                }
+
             }
-
-          for (i = 0, j = 0; i < (1 << bps); i++)
+          else if (photomet == PHOTOMETRIC_MINISBLACK)
             {
-              cmap[j++] = redmap[i] >> 8;
-              cmap[j++] = greenmap[i] >> 8;
-              cmap[j++] = bluemap[i] >> 8;
+              gint i, j;
+
+              if (bps == 1)
+                {
+                  for (i = 0, j = 0; i < (1 << bps); i++)
+                    {
+                      cmap[j++] = _1_to_8_bitmap[i];
+                      cmap[j++] = _1_to_8_bitmap[i];
+                      cmap[j++] = _1_to_8_bitmap[i];
+                    }
+                }
+              else if (bps == 2)
+                {
+                  for (i = 0, j = 0; i < (1 << bps); i++)
+                    {
+                      cmap[j++] = _2_to_8_bitmap[i];
+                      cmap[j++] = _2_to_8_bitmap[i];
+                      cmap[j++] = _2_to_8_bitmap[i];
+                    }
+                }
+              else if (bps == 4)
+                {
+                  for (i = 0, j = 0; i < (1 << bps); i++)
+                    {
+                      cmap[j++] = _4_to_8_bitmap[i];
+                      cmap[j++] = _4_to_8_bitmap[i];
+                      cmap[j++] = _4_to_8_bitmap[i];
+                    }
+                }
+            }
+          else if (photomet == PHOTOMETRIC_MINISWHITE)
+            {
+              gint i, j;
+
+              if (bps == 1)
+                {
+                  for (i = 0, j = 0; i < (1 << bps); i++)
+                    {
+                      cmap[j++] = _1_to_8_bitmap_rev[i];
+                      cmap[j++] = _1_to_8_bitmap_rev[i];
+                      cmap[j++] = _1_to_8_bitmap_rev[i];
+                    }
+                }
+              else if (bps == 2)
+                {
+                  for (i = 0, j = 0; i < (1 << bps); i++)
+                    {
+                      cmap[j++] = _2_to_8_bitmap_rev[i];
+                      cmap[j++] = _2_to_8_bitmap_rev[i];
+                      cmap[j++] = _2_to_8_bitmap_rev[i];
+                    }
+                }
+              else if (bps == 4)
+                {
+                  for (i = 0, j = 0; i < (1 << bps); i++)
+                    {
+                      cmap[j++] = _4_to_8_bitmap_rev[i];
+                      cmap[j++] = _4_to_8_bitmap_rev[i];
+                      cmap[j++] = _4_to_8_bitmap_rev[i];
+                    }
+                }
             }
 
           gimp_image_set_colormap (*image, cmap, (1 << bps));
@@ -1311,6 +1510,17 @@ load_image (GFile        *file,
                     layer_offset_x_pixel, layer_offset_y_pixel);
       else
         load_paths (tif, *image, cols, rows, 0, 0);
+
+      if (extra > 99)
+        {
+          /* Validate number of channels to the same maximum as we use for
+           * Photoshop. A higher number most likely means a corrupt image
+           * and can cause GIMP to become unresponsive and/or stuck.
+           * See m2-d0f86ab189cbe900ec389ca6d7464713.tif from imagetestsuite
+           */
+          g_message (_("Suspicious number of extra channels: %d. Possibly corrupt image."), extra);
+          extra = 99;
+        }
 
       /* Allocate ChannelData for all channels, even the background layer */
       channel = g_new0 (ChannelData, extra + 1);
@@ -1349,6 +1559,12 @@ load_image (GFile        *file,
            * an existing layer
            */
           base_format = gimp_drawable_get_format (layer);
+        }
+      else if (! space)
+        {
+          base_format =
+            babl_format_with_space (babl_format_get_encoding (base_format),
+                                    gimp_drawable_get_format (layer));
         }
 
       channel[0].ID     = layer;
@@ -2168,43 +2384,6 @@ load_separate (TIFF         *tif,
   g_free (bw_buffer);
 }
 
-
-static guchar   bit2byte[256 * 8];
-static guchar _2bit2byte[256 * 4];
-static guchar _4bit2byte[256 * 2];
-
-static const guchar _1_to_8_bitmap [2] =
-{
-  0, 255
-};
-
-static const guchar _1_to_8_bitmap_rev [2] =
-{
-  255, 0
-};
-
-static const guchar _2_to_8_bitmap [4] =
-{
-  0, 85, 170, 255
-};
-
-static const guchar _2_to_8_bitmap_rev [4] =
-{
-  255, 170, 85, 0
-};
-
-static const guchar _4_to_8_bitmap [16] =
-{
-  0,    17,  34,  51,  68,  85, 102, 119,
-  136, 153, 170, 187, 204, 221, 238, 255
-};
-
-static const guchar _4_to_8_bitmap_rev [16] =
-{
-  255, 238, 221, 204, 187, 170, 153, 136,
-  119, 102,  85,  68,  51,  34,  17,   0
-};
-
 static void
 fill_bit2byte (TiffColorMode tiff_mode)
 {
@@ -2348,26 +2527,21 @@ convert_bit2byte (const guchar *src,
                   gint          width,
                   gint          height)
 {
-  gint y;
+  gint64 x = width * height;
 
-  for (y = 0; y < height; y++)
+  while (x >= 8)
     {
-      gint x = width;
+      memcpy (dest, bit2byte + *src * 8, 8);
+      dest += 8;
+      x -= 8;
+      src++;
+    }
 
-      while (x >= 8)
-        {
-          memcpy (dest, bit2byte + *src * 8, 8);
-          dest += 8;
-          x -= 8;
-          src++;
-        }
-
-      if (x > 0)
-        {
-          memcpy (dest, bit2byte + *src * 8, x);
-          dest += x;
-          src++;
-        }
+  if (x > 0)
+    {
+      memcpy (dest, bit2byte + *src * 8, x);
+      dest += x;
+      src++;
     }
 }
 
@@ -2377,26 +2551,21 @@ convert_2bit2byte (const guchar *src,
                    gint          width,
                    gint          height)
 {
-  gint y;
+  gint64 x = width * height;
 
-  for (y = 0; y < height; y++)
+  while (x >= 4)
     {
-      gint x = width;
+      memcpy (dest, _2bit2byte + *src * 4, 4);
+      dest += 4;
+      x -= 4;
+      src++;
+    }
 
-      while (x >= 4)
-        {
-          memcpy (dest, _2bit2byte + *src * 4, 4);
-          dest += 4;
-          x -= 4;
-          src++;
-        }
-
-      if (x > 0)
-        {
-          memcpy (dest, _2bit2byte + *src * 4, x);
-          dest += x;
-          src++;
-        }
+  if (x > 0)
+    {
+      memcpy (dest, _2bit2byte + *src * 4, x);
+      dest += x;
+      src++;
     }
 }
 
@@ -2406,26 +2575,21 @@ convert_4bit2byte (const guchar *src,
                    gint          width,
                    gint          height)
 {
-  gint y;
+  gint64 x = width * height;
 
-  for (y = 0; y < height; y++)
+  while (x >= 2)
     {
-      gint x = width;
+      memcpy (dest, _4bit2byte + *src * 2, 2);
+      dest += 2;
+      x -= 2;
+      src++;
+    }
 
-      while (x >= 2)
-        {
-          memcpy (dest, _4bit2byte + *src * 2, 2);
-          dest += 2;
-          x -= 2;
-          src++;
-        }
-
-      if (x > 0)
-        {
-          memcpy (dest, _4bit2byte + *src * 2, x);
-          dest += x;
-          src++;
-        }
+  if (x > 0)
+    {
+      memcpy (dest, _4bit2byte + *src * 2, x);
+      dest += x;
+      src++;
     }
 }
 
@@ -2479,18 +2643,19 @@ convert_int2uint (guchar *buffer,
 }
 
 static gboolean
-load_dialog (TIFF              *tif,
-             const gchar       *help_id,
+load_dialog (const gchar       *help_id,
              TiffSelectedPages *pages,
              const gchar       *extra_message,
              DefaultExtra      *default_extra)
 {
   GtkWidget  *dialog;
   GtkWidget  *vbox;
-  GtkWidget  *selector    = NULL;
+  GtkWidget  *show_reduced = NULL;
   GtkWidget  *crop_option = NULL;
   GtkWidget  *extra_radio = NULL;
   gboolean    run;
+
+  pages->selector         = NULL;
 
   dialog = gimp_dialog_new (_("Import from TIFF"), PLUG_IN_ROLE,
                             NULL, 0,
@@ -2513,35 +2678,33 @@ load_dialog (TIFF              *tif,
   gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
                       vbox, TRUE, TRUE, 0);
 
+  show_reduced = gtk_check_button_new_with_mnemonic (_("_Show reduced images"));
+  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (show_reduced),
+                                pages->show_reduced);
+  gtk_box_pack_start (GTK_BOX (vbox), show_reduced, TRUE, TRUE, 0);
+
+  g_signal_connect (show_reduced, "toggled",
+                    G_CALLBACK (tiff_dialog_show_reduced),
+                    pages);
+
   if (pages->n_pages > 1)
     {
-      gint i, j;
-
       /* Page Selector */
-      selector = gimp_page_selector_new ();
-      gtk_widget_set_size_request (selector, 300, 200);
-      gtk_box_pack_start (GTK_BOX (vbox), selector, TRUE, TRUE, 0);
+      pages->selector = gimp_page_selector_new ();
+      gtk_widget_set_size_request (pages->selector, 300, 200);
+      gtk_box_pack_start (GTK_BOX (vbox), pages->selector, TRUE, TRUE, 0);
 
-      gimp_page_selector_set_n_pages (GIMP_PAGE_SELECTOR (selector),
+      gimp_page_selector_set_n_pages (GIMP_PAGE_SELECTOR (pages->selector),
                                       pages->n_filtered_pages);
-      gimp_page_selector_set_target (GIMP_PAGE_SELECTOR (selector), pages->target);
+      gimp_page_selector_set_target (GIMP_PAGE_SELECTOR (pages->selector),
+                                     pages->target);
 
-      for (i = 0, j = 0; i < pages->n_pages && j < pages->n_filtered_pages; i++)
-        {
-          if (pages->filtered_pages[i] != -1)
-            {
-              const gchar *name = tiff_get_page_name (tif);
+      /* Load a set number of pages, based on whether "Show Reduced Images"
+       * is checked
+       */
+      tiff_dialog_show_reduced (show_reduced, pages);
 
-              if (name)
-                gimp_page_selector_set_page_label (GIMP_PAGE_SELECTOR (selector),
-                                                   j, name);
-              j++;
-            }
-
-          TIFFReadDirectory (tif);
-        }
-
-      g_signal_connect_swapped (selector, "activate",
+      g_signal_connect_swapped (pages->selector, "activate",
                                 G_CALLBACK (gtk_window_activate_default),
                                 dialog);
 
@@ -2588,10 +2751,10 @@ load_dialog (TIFF              *tif,
       if (pages->n_pages > 1)
         {
           pages->target =
-            gimp_page_selector_get_target (GIMP_PAGE_SELECTOR (selector));
+            gimp_page_selector_get_target (GIMP_PAGE_SELECTOR (pages->selector));
 
           pages->pages =
-            gimp_page_selector_get_selected_pages (GIMP_PAGE_SELECTOR (selector),
+            gimp_page_selector_get_selected_pages (GIMP_PAGE_SELECTOR (pages->selector),
                                                    &pages->n_pages);
 
           pages->keep_empty_space =
@@ -2600,14 +2763,53 @@ load_dialog (TIFF              *tif,
           /* select all if none selected */
           if (pages->n_pages == 0)
             {
-              gimp_page_selector_select_all (GIMP_PAGE_SELECTOR (selector));
+              gimp_page_selector_select_all (GIMP_PAGE_SELECTOR (pages->selector));
 
               pages->pages =
-                gimp_page_selector_get_selected_pages (GIMP_PAGE_SELECTOR (selector),
+                gimp_page_selector_get_selected_pages (GIMP_PAGE_SELECTOR (pages->selector),
                                                        &pages->n_pages);
             }
         }
     }
 
   return run;
+}
+
+static void
+tiff_dialog_show_reduced (GtkWidget *toggle,
+                          gpointer   data)
+{
+  gint selectable_pages;
+  gint i, j;
+  TiffSelectedPages *pages = (TiffSelectedPages *) data;
+
+  pages->show_reduced = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (toggle));
+
+  /* Clear current pages from selection */
+  gimp_page_selector_set_n_pages (GIMP_PAGE_SELECTOR (pages->selector), 0);
+  /* Jump back to start of the TIFF file */
+  TIFFSetDirectory (pages->tif, 0);
+
+  selectable_pages = pages->n_filtered_pages;
+  if (pages->show_reduced)
+    selectable_pages = pages->n_reducedimage_pages;
+
+  gimp_page_selector_set_n_pages (GIMP_PAGE_SELECTOR (pages->selector),
+                                  selectable_pages);
+
+  for (i = 0, j = 0; i < pages->n_pages && j < selectable_pages; i++)
+    {
+      if ((pages->show_reduced && pages->filtered_pages[i] != TIFF_MISC_THUMBNAIL) ||
+          (! pages->show_reduced && pages->filtered_pages[i] > TIFF_MISC_THUMBNAIL))
+        {
+          const gchar *name = tiff_get_page_name (pages->tif);
+
+          if (name)
+            gimp_page_selector_set_page_label (GIMP_PAGE_SELECTOR (pages->selector),
+                                               j, name);
+          j++;
+        }
+
+      TIFFReadDirectory (pages->tif);
+    }
 }

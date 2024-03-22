@@ -743,12 +743,15 @@ raw_read_row (FILE   *fp,
               gint32  offset,
               gint32  size)
 {
+  size_t bread;
+
   fseek (fp, offset, SEEK_SET);
 
-  if (! fread (buf, size, 1, fp))
+  memset (buf, 0xFF, size);
+  bread = fread (buf, 1, size, fp);
+  if (bread < size)
     {
-      g_printerr ("fread failed\n");
-      memset (buf, 0xFF, size);
+      g_printerr ("fread failed: read %u instead of %u bytes\n", (guint) bread, (guint) size);
     }
 }
 
@@ -1143,29 +1146,7 @@ save_image (const gchar  *filename,
   /* get info about the current image */
   buffer = gimp_drawable_get_buffer (drawable_id);
 
-  switch (gimp_drawable_type (drawable_id))
-    {
-    case GIMP_RGB_IMAGE:
-      format = babl_format ("R'G'B' u8");
-      break;
-
-    case GIMP_RGBA_IMAGE:
-      format = babl_format ("R'G'B'A u8");
-      break;
-
-    case GIMP_GRAY_IMAGE:
-      format = babl_format ("Y' u8");
-      break;
-
-    case GIMP_GRAYA_IMAGE:
-      format = babl_format ("Y'A u8");
-      break;
-
-    case GIMP_INDEXED_IMAGE:
-    case GIMP_INDEXEDA_IMAGE:
-      format = gimp_drawable_get_format (drawable_id);
-      break;
-    }
+  format = gimp_drawable_get_format (drawable_id);
 
   n_components = babl_format_get_n_components (format);
   bpp          = babl_format_get_bytes_per_pixel (format);

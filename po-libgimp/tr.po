@@ -1,7 +1,6 @@
 # Turkish translation for GIMP
-#
 # Copyright (C) 2001 Free Software Foundation, Inc.
-# Copyright (C) 2002-2020 gimp's COPYRIGHT HOLDER
+# Copyright (C) 2002-2023 gimp's COPYRIGHT HOLDER
 # This file is distributed under the same license as the gimp package.
 #
 # Fatih Demir <kabalak@gtranslator>, 2001.
@@ -9,14 +8,15 @@
 # Bu tercüme Ubuntu Türkiye Çeviri Ekibi tarafından tamamlanmıştır, 2010.
 # Muhammet Kara <muhammetk@gmail.com>, 2012, 2014.
 # Simge Sezgin <simgesezgin88@gmail.com>, 2015.
-# Sabri Ünal <libreajans@gmail.com>, 2019-2020.
+# Sabri Ünal <libreajans@gmail.com>, 2019, 2020, 2022, 2023.
+# Emin Tufan Çetin <etcetin@gmail.com>, 2023.
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: GIMP libgimp gimp-2-10\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gimp/issues\n"
-"POT-Creation-Date: 2020-08-06 14:38+0000\n"
-"PO-Revision-Date: 2020-08-06 20:54+0300\n"
+"POT-Creation-Date: 2023-03-05 12:52+0000\n"
+"PO-Revision-Date: 2023-03-06 16:44+0300\n"
 "Last-Translator: Sabri Ünal <libreajans@gmail.com>\n"
 "Language-Team: Türkçe <gnome-turk@gnome.org>\n"
 "Language: tr\n"
@@ -24,7 +24,7 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
-"X-Generator: Poedit 2.0.6\n"
+"X-Generator: Poedit 3.1.1\n"
 "X-Launchpad-Export-Date: 2010-10-09 17:28+0000\n"
 "X-POOTLE-MTIME: 1436650713.000000\n"
 "X-Poedit-SourceCharset: UTF-8\n"
@@ -115,7 +115,7 @@ msgstr "%s eklentisi yalnızca RGB görüntülerini kullanabilir"
 #: ../libgimp/gimpexport.c:368 ../libgimp/gimpexport.c:406
 #: ../libgimp/gimpexport.c:415
 msgid "Convert to RGB"
-msgstr "RGB'ye çevir"
+msgstr "RGBʼye dönüştür"
 
 #: ../libgimp/gimpexport.c:376
 #, c-format
@@ -125,7 +125,7 @@ msgstr "%s eklentisi yalnızca gri tonlamalı görüntüleri kullanabilir"
 #: ../libgimp/gimpexport.c:377 ../libgimp/gimpexport.c:406
 #: ../libgimp/gimpexport.c:427
 msgid "Convert to Grayscale"
-msgstr "Gri Tonlamaya çevir"
+msgstr "Gri Tonlamaya dönüştür"
 
 #: ../libgimp/gimpexport.c:385
 #, c-format
@@ -138,7 +138,7 @@ msgid ""
 "Convert to Indexed using default settings\n"
 "(Do it manually to tune the result)"
 msgstr ""
-"Varsayılan ayarları kullanarak indeksliye dönüştür\n"
+"Öntanımlı ayarları kullanarak indeksliye dönüştür\n"
 "(Sonucu ayarlamak için bunu kendiniz yapın)"
 
 #: ../libgimp/gimpexport.c:395
@@ -152,7 +152,7 @@ msgid ""
 "Convert to Indexed using bitmap default settings\n"
 "(Do it manually to tune the result)"
 msgstr ""
-"Bit eşlem varsayılan ayarlarını kullanarak indeksliye dönüştür\n"
+"Bit eşlem öntanımlı ayarlarını kullanarak indeksliye dönüştür\n"
 "(Sonucu ayarlamak için bunu kendiniz yapın)"
 
 #: ../libgimp/gimpexport.c:405
@@ -270,44 +270,44 @@ msgstr "Yazı Tipi Seçimi"
 msgid "Gradient Selection"
 msgstr "Renk Geçişi Seçimi"
 
-#: ../libgimp/gimpimagemetadata.c:514
+#: ../libgimp/gimpimagemetadata.c:685
 msgid "GIMP 2.10"
 msgstr "GIMP 2.10"
 
-#: ../libgimp/gimpimagemetadata.c:703
+#: ../libgimp/gimpimagemetadata.c:881
 msgid "Background"
 msgstr "Artalan"
 
-#: ../libgimp/gimpimagemetadata.c:892
+#: ../libgimp/gimpimagemetadata.c:1070
 #, c-format
 msgid "Rotate %s?"
 msgstr "%s döndürülsün mü?"
 
-#: ../libgimp/gimpimagemetadata.c:898
+#: ../libgimp/gimpimagemetadata.c:1076
 msgid "_Keep Original"
 msgstr "Aslını _Koru"
 
-#: ../libgimp/gimpimagemetadata.c:899 ../libgimpwidgets/gimpicons.c:271
+#: ../libgimp/gimpimagemetadata.c:1077 ../libgimpwidgets/gimpicons.c:271
 msgid "_Rotate"
 msgstr "_Döndür"
 
-#: ../libgimp/gimpimagemetadata.c:940
+#: ../libgimp/gimpimagemetadata.c:1118
 msgid "Original"
 msgstr "Asıl Hali"
 
-#: ../libgimp/gimpimagemetadata.c:956
+#: ../libgimp/gimpimagemetadata.c:1134
 msgid "Rotated"
 msgstr "Döndürüldü"
 
-#: ../libgimp/gimpimagemetadata.c:974
+#: ../libgimp/gimpimagemetadata.c:1152
 msgid "This image contains Exif orientation metadata."
-msgstr "Bu görüntü Exif yönelim üstverisi içerir."
+msgstr "Bu görüntü Exif yönelim üst verisi içerir."
 
-#: ../libgimp/gimpimagemetadata.c:992
+#: ../libgimp/gimpimagemetadata.c:1170
 msgid "Would you like to rotate the image?"
 msgstr "Bu görüntünün döndürülmesini istiyor musunuz?"
 
-#: ../libgimp/gimpimagemetadata.c:1004
+#: ../libgimp/gimpimagemetadata.c:1182
 msgid "_Don't ask me again"
 msgstr "Bana tekrar _sorma"
 
@@ -1477,44 +1477,39 @@ msgctxt "transform-resize"
 msgid "Crop with aspect"
 msgstr "En boy oranı ile kırp"
 
-#: ../libgimpbase/gimpmetadata.c:878
+#: ../libgimpbase/gimpmetadata.c:982
 #, c-format
 msgid "Can load metadata only from local files"
-msgstr "Üstveriler yalnızca yerel dosyalardan yüklenebilir"
+msgstr "Üst veriler yalnızca yerel dosyalardan yüklenebilir"
 
-#: ../libgimpbase/gimpmetadata.c:892 ../libgimpbase/gimpmetadata.c:962
-#, c-format
-msgid "Conversion of the filename to system codepage failed."
-msgstr "Dosya adının sistem kod sayfasına dönüştürülmesi başarısız oldu."
-
-#: ../libgimpbase/gimpmetadata.c:949
+#: ../libgimpbase/gimpmetadata.c:1038
 #, c-format
 msgid "Can save metadata only to local files"
-msgstr "Üstveriler yalnızca yerel dosyalara kaydedilebilir"
+msgstr "Üst veriler yalnızca yerel dosyalara kaydedilebilir"
 
-#: ../libgimpbase/gimpmetadata.c:1011
+#: ../libgimpbase/gimpmetadata.c:1086
 #, c-format
 msgid "Invalid Exif data size."
 msgstr "Geçersiz Exif veri boyutu."
 
-#: ../libgimpbase/gimpmetadata.c:1040
+#: ../libgimpbase/gimpmetadata.c:1115
 #, c-format
 msgid "Parsing Exif data failed."
 msgstr "Exif veri ayrıştırma işlemi başarısız oldu."
 
-#: ../libgimpbase/gimpmetadata.c:1090
+#: ../libgimpbase/gimpmetadata.c:1165
 #, c-format
 msgid "Parsing IPTC data failed."
 msgstr "IPTC veri ayrıştırma işlemi başarısız oldu."
 
-#: ../libgimpbase/gimpmetadata.c:1138
+#: ../libgimpbase/gimpmetadata.c:1213
 #, c-format
 msgid "Parsing XMP data failed."
 msgstr "XMP veri ayrıştırma işlemi başarısız oldu."
 
 #: ../libgimpbase/gimputils.c:219 ../libgimpbase/gimputils.c:224
 msgid "(invalid UTF-8 string)"
-msgstr "(geçersiz UTF-8 satırı)"
+msgstr "(geçersiz UTF-8 dizgesi)"
 
 #: ../libgimpbase/gimputils.c:394
 msgid "File path is NULL"
@@ -1723,80 +1718,102 @@ msgstr ""
 msgid "The color to use for marking colors which are out of gamut."
 msgstr "Takımın dışındaki renkleri işaretlemek için kullanılacak renk."
 
-#: ../libgimpconfig/gimpcolorconfig.c:198
+#: ../libgimpconfig/gimpcolorconfig.c:114
+msgid ""
+"When enabled, set the color scales to display 0...255 instead of percentages"
+msgstr ""
+"Etkinleştirildiğinde, renk ölçeklerini yüzde yerine 0...255 gösterecek "
+"şekilde ayarlar"
+
+#: ../libgimpconfig/gimpcolorconfig.c:118
+msgid ""
+"When enabled, set the color scales to display HSV blend mode instead of LCh"
+msgstr ""
+"Etkinleştirildiğinde, renk ölçeklerini LCh yerine HSV harmanlama kipini "
+"gösterecek şekilde ayarlar"
+
+#: ../libgimpconfig/gimpcolorconfig.c:210
 msgid "Mode of operation"
 msgstr "İşlem kipi"
 
-#: ../libgimpconfig/gimpcolorconfig.c:206
+#: ../libgimpconfig/gimpcolorconfig.c:218
 msgid "Preferred RGB profile"
 msgstr "Yeğlenen GRB profili"
 
-#: ../libgimpconfig/gimpcolorconfig.c:213
+#: ../libgimpconfig/gimpcolorconfig.c:225
 msgid "Preferred grayscale profile"
 msgstr "Yeğlenen gri tonlamalı profil"
 
-#: ../libgimpconfig/gimpcolorconfig.c:220
+#: ../libgimpconfig/gimpcolorconfig.c:232
 msgid "CMYK profile"
 msgstr "CMYK profili"
 
-#: ../libgimpconfig/gimpcolorconfig.c:227
+#: ../libgimpconfig/gimpcolorconfig.c:239
 msgid "Monitor profile"
 msgstr "Ekran profili"
 
-#: ../libgimpconfig/gimpcolorconfig.c:234
+#: ../libgimpconfig/gimpcolorconfig.c:246
 msgid "Use the system monitor profile"
 msgstr "Sistem ekran profilini kullan"
 
-#: ../libgimpconfig/gimpcolorconfig.c:242
+#: ../libgimpconfig/gimpcolorconfig.c:254
 msgid "Simulation profile for soft-proofing"
 msgstr "Ekran provası için benzetim profili"
 
-#: ../libgimpconfig/gimpcolorconfig.c:249
+#: ../libgimpconfig/gimpcolorconfig.c:261
 msgid "Display rendering intent"
 msgstr "Ekran görselleştirme amacı"
 
-#: ../libgimpconfig/gimpcolorconfig.c:257
+#: ../libgimpconfig/gimpcolorconfig.c:269
 msgid "Use black point compensation for the display"
 msgstr "Ekran için siyah nokta dengelemesi kullan"
 
-#: ../libgimpconfig/gimpcolorconfig.c:264
+#: ../libgimpconfig/gimpcolorconfig.c:276
 msgid "Optimize display color transformations"
 msgstr "Ekran rengi dönüşümlerini eniyile"
 
-#: ../libgimpconfig/gimpcolorconfig.c:271
+#: ../libgimpconfig/gimpcolorconfig.c:283
 msgid "Soft-proofing rendering intent"
 msgstr "Ekran provası görselleştirme amacı"
 
-#: ../libgimpconfig/gimpcolorconfig.c:279
+#: ../libgimpconfig/gimpcolorconfig.c:291
 msgid "Use black point compensation for soft-proofing"
 msgstr "Ekran provası için siyah nokta dengelemesi kullan"
 
-#: ../libgimpconfig/gimpcolorconfig.c:286
+#: ../libgimpconfig/gimpcolorconfig.c:298
 msgid "Optimize soft-proofing color transformations"
 msgstr "Ekran provası renk dönüşümlerini eniyile"
 
-#: ../libgimpconfig/gimpcolorconfig.c:293
+#: ../libgimpconfig/gimpcolorconfig.c:305
 msgid "Mark out of gamut colors"
 msgstr "Dizi renklerinin dışındakileri işaretle"
 
-#: ../libgimpconfig/gimpcolorconfig.c:300
+#: ../libgimpconfig/gimpcolorconfig.c:312
 msgid "Out of gamut warning color"
 msgstr "Dizi dışı uyarı rengi"
 
-#: ../libgimpconfig/gimpcolorconfig.c:657
-#: ../libgimpconfig/gimpcolorconfig.c:841
+#: ../libgimpconfig/gimpcolorconfig.c:320
+msgid "Show RGB 0..255 scales"
+msgstr "RGB 0..255 ölçeklerini göster"
+
+#: ../libgimpconfig/gimpcolorconfig.c:327
+msgid "Show HSV instead of LCH"
+msgstr "LCH yerine HSV göster"
+
+#: ../libgimpconfig/gimpcolorconfig.c:695
+#: ../libgimpconfig/gimpcolorconfig.c:879
 #, c-format
 msgid "Color profile '%s' is not for RGB color space."
 msgstr "'%s' renk profili RGB renk uzayı için değildir."
 
-#: ../libgimpconfig/gimpcolorconfig.c:699
-#: ../libgimpconfig/gimpcolorconfig.c:891
+#: ../libgimpconfig/gimpcolorconfig.c:737
+#: ../libgimpconfig/gimpcolorconfig.c:929
 #, c-format
 msgid "Color profile '%s' is not for GRAY color space."
 msgstr "'%s' renk profili GRİ renk uzayı için değildir."
 
-#: ../libgimpconfig/gimpcolorconfig.c:741
-#: ../libgimpconfig/gimpcolorconfig.c:941
+#: ../libgimpconfig/gimpcolorconfig.c:779
+#: ../libgimpconfig/gimpcolorconfig.c:979
 #, c-format
 msgid "Color profile '%s' is not for CMYK color space."
 msgstr "'%s' renk profili CMYK renk uzayı için değildir."
@@ -1804,29 +1821,29 @@ msgstr "'%s' renk profili CMYK renk uzayı için değildir."
 #: ../libgimpconfig/gimpconfig-deserialize.c:113
 #, c-format
 msgid "value for token %s is not a valid UTF-8 string"
-msgstr "%s için alınan değer geçerli bir UTF-8 dizgisi değil"
+msgstr "%s için alınan jeton geçerli bir UTF-8 dizgesi değil"
 
 #. please don't translate 'yes' and 'no'
 #: ../libgimpconfig/gimpconfig-deserialize.c:473
 #, c-format
 msgid "expected 'yes' or 'no' for boolean token %s, got '%s'"
 msgstr ""
-"%s boolean anahtarı için beklenen değer 'yes' ya da 'no', alınan değer '%s'"
+"%s boolean jetonu için beklenen değer 'yes' ya da 'no', alınan değer '%s'"
 
 #: ../libgimpconfig/gimpconfig-deserialize.c:588
 #, c-format
 msgid "invalid value '%s' for token %s"
-msgstr "geçersiz değer '%s' (anahtar %s)"
+msgstr "geçersiz değer '%s' (jeton %s)"
 
 #: ../libgimpconfig/gimpconfig-deserialize.c:603
 #, c-format
 msgid "invalid value '%ld' for token %s"
-msgstr "geçersiz değer '%ld' (anahtar %s)"
+msgstr "geçersiz değer '%ld' (jeton %s)"
 
 #: ../libgimpconfig/gimpconfig-deserialize.c:672
 #, c-format
 msgid "while parsing token '%s': %s"
-msgstr "'%s' belirteci ayrıştırılırken: '%s"
+msgstr "'%s' jetonu ayrıştırılırken: '%s"
 
 #: ../libgimpconfig/gimpconfig-iface.c:682
 #: ../libgimpconfig/gimpconfig-iface.c:695 ../libgimpconfig/gimpscanner.c:756
@@ -1868,13 +1885,13 @@ msgstr "'%s' üzerine yazarken hata: %s"
 #: ../libgimpconfig/gimpscanner.c:409
 #, c-format
 msgid "invalid UTF-8 string"
-msgstr "geçersiz UTF-8 dizgisi"
+msgstr "geçersiz UTF-8 dizgesi"
 
 #. please don't translate 'yes' and 'no'
 #: ../libgimpconfig/gimpscanner.c:631
 #, c-format
 msgid "expected 'yes' or 'no' for boolean token, got '%s'"
-msgstr "beklenen değer 'yes' ya da 'no', alınan değer '%s'"
+msgstr "boolean jeton için beklenen değer 'yes' ya da 'no', alınan değer '%s'"
 
 #: ../libgimpconfig/gimpscanner.c:865
 #, c-format
@@ -2012,23 +2029,23 @@ msgstr "Üretici: "
 msgid "Copyright: "
 msgstr "Telif Hakkı: "
 
-#: ../libgimpwidgets/gimpcolorscales.c:205
+#: ../libgimpwidgets/gimpcolorscales.c:208
 msgid "Scales"
 msgstr "Ölçekler"
 
-#: ../libgimpwidgets/gimpcolorscales.c:437
+#: ../libgimpwidgets/gimpcolorscales.c:450
 msgid "0..100"
 msgstr "0..100"
 
-#: ../libgimpwidgets/gimpcolorscales.c:439
+#: ../libgimpwidgets/gimpcolorscales.c:452
 msgid "0..255"
 msgstr "0..255"
 
-#: ../libgimpwidgets/gimpcolorscales.c:460
+#: ../libgimpwidgets/gimpcolorscales.c:473
 msgid "LCh"
 msgstr "LCh"
 
-#: ../libgimpwidgets/gimpcolorscales.c:462
+#: ../libgimpwidgets/gimpcolorscales.c:475
 msgid "HSV"
 msgstr "HSV"
 
@@ -2223,7 +2240,7 @@ msgstr "Seçilen klasörü listeden kaldır"
 msgid "Writable"
 msgstr "Yazılabilir"
 
-#: ../libgimpwidgets/gimppickbutton.c:112
+#: ../libgimpwidgets/gimppickbutton.c:120
 msgid ""
 "Click the eyedropper, then click a color anywhere on your screen to select "
 "that color."
@@ -2983,154 +3000,3 @@ msgstr "Karşıtlık dönüşleri"
 #: ../modules/display-filter-high-contrast.c:128
 msgid "Contrast"
 msgstr "Karşıtlık"
-
-#~ msgctxt "bucket-fill-area"
-#~ msgid "Fill whole selection"
-#~ msgstr "Tüm seçimi doldur"
-
-#~ msgctxt "bucket-fill-area"
-#~ msgid "Fill similar colors"
-#~ msgstr "Benzer renklerle doldur"
-
-#~ msgctxt "bucket-fill-area"
-#~ msgid "Fill by line art detection"
-#~ msgstr "Çizgi sanatı saptama ile doldur"
-
-#~ msgid "Sans"
-#~ msgstr "Sans"
-
-#~ msgctxt "desaturate-mode"
-#~ msgid "Luminosity"
-#~ msgstr "Parlaklık"
-
-#~ msgctxt "desaturate-mode"
-#~ msgid "Average"
-#~ msgstr "Ortalama"
-
-#~| msgid "Hue"
-#~ msgctxt "select-criterion"
-#~ msgid "Hue"
-#~ msgstr "Renk Tonu"
-
-#~ msgid "Mode of operation for color management."
-#~ msgstr "Renk yönetimi için işlem kipi"
-
-#~ msgid "The default RGB working space color profile."
-#~ msgstr "Varsayılan RGB çalışma alanı renk profili."
-
-#~| msgid "Print simulation"
-#~ msgctxt "color-management-mode"
-#~ msgid "Print simulation"
-#~ msgstr "Yazdırma simülasyonu"
-
-#~ msgid "_Edit"
-#~ msgstr "_Düzenle"
-
-#~ msgid "Hue"
-#~ msgstr "Renk Özü"
-
-#~ msgid "_Gamma:"
-#~ msgstr "_Gama:"
-
-#~ msgid "Color management display filter using ICC color profiles"
-#~ msgstr "Renk yönetimi görüntüleme süzgeci ICC renk profillerini kullanıyor"
-
-#~ msgid "Color Management"
-#~ msgstr "Renk Yönetimi"
-
-#~ msgid ""
-#~ "This filter takes its configuration from the Color Management section in "
-#~ "the Preferences dialog."
-#~ msgstr ""
-#~ "Bu süzgeç yapılandırmasını Yeğlenenler kutusu içindeki Renk Yönetimi "
-#~ "bölümünden alır."
-
-#~ msgid "Image profile:"
-#~ msgstr "Görüntü profili:"
-
-#~ msgid "Print simulation profile:"
-#~ msgstr "Yazdırma benzetimi profili:"
-
-#~ msgid "Color proof filter using ICC color profile"
-#~ msgstr "ICC renk profilini kullanarak renk deneme filtresi"
-
-#~ msgid "Color Proof"
-#~ msgstr "Renk Denemesi"
-
-#~ msgid "Choose an ICC Color Profile"
-#~ msgstr "Bir ICC Renk Profili seçin"
-
-#~ msgid "_Profile:"
-#~ msgstr "_Profil:"
-
-#~ msgid "_Intent:"
-#~ msgstr "_Amaç:"
-
-#~ msgctxt "icon-type"
-#~ msgid "Stock ID"
-#~ msgstr "Depo Kimliği"
-
-#~ msgctxt "interpolation-type"
-#~ msgid "Sinc (Lanczos3)"
-#~ msgstr "Sinc (Lanczos3)"
-
-#~ msgctxt "repeat-mode"
-#~ msgid "None"
-#~ msgstr "Hiçbiri"
-
-#~ msgid "The color profile used for simulating a printed version (softproof)."
-#~ msgstr "Yazdırılmış sürümün bir benzetimi için renk profili."
-
-#~ msgid "Sets how colors are mapped for your display."
-#~ msgstr "Görüntülemeniz için renklerin nasıl eşleneceğini ayarlar."
-
-#~ msgid ""
-#~ "Sets how colors are converted from RGB working space to the print "
-#~ "simulation device."
-#~ msgstr ""
-#~ "RGB çalışma alanından yazdırma benzetimi aygıtına renklerin nasıl "
-#~ "dönüştürüleceğini ayarlar."
-
-#~ msgid "Could not open '%s' for writing: %s"
-#~ msgstr "Yazma için '%s' açılamadı: %s"
-
-#~ msgid ""
-#~ "Error writing to temporary file for '%s': %s\n"
-#~ "The original file has not been touched."
-#~ msgstr ""
-#~ "'%s' için geçici dosyaya yazma hatası: %s\n"
-#~ "Özgün dosyaya dokunulmamış."
-
-#~ msgid ""
-#~ "Error writing to temporary file for '%s': %s\n"
-#~ "No file has been created."
-#~ msgstr ""
-#~ "'%s' için geçici dosyaya yazma hatası: %s\n"
-#~ "Oluşturulmuş dosya yok."
-
-#~ msgid "Could not create '%s': %s"
-#~ msgstr "'%s' oluşturulamadı: %s"
-
-#~ msgid "CMYK color selector"
-#~ msgstr "CMYK renk seçici"
-
-#~ msgid "Black _pullout:"
-#~ msgstr "Siyah _çekilmesi:"
-
-#~ msgid "The percentage of black to pull out of the colored inks."
-#~ msgstr "Siyahın çekilmiş boyalı mürekkeplere olan yüzdesi."
-
-#~ msgid "Page 000"
-#~ msgstr "Sayfa 000"
-
-#~ msgid "gradient|Linear"
-#~ msgstr "Doğrusal"
-
-#~ msgid "interpolation|None"
-#~ msgstr "Hiçbiri"
-
-#~ msgid "interpolation|Linear"
-#~ msgstr "Doğrusal"
-
-#~ msgid "intent|Saturation"
-#~ msgstr "Doygunluk"

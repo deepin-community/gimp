@@ -413,7 +413,7 @@ gimp_dbus_service_ui_interface_info (void)
  * Returns: The last property id.
  */
 guint
-gimp_dbus_service_ui_override_properties (GObjectClass *klass G_GNUC_UNUSED, guint property_id_begin)
+gimp_dbus_service_ui_override_properties (GObjectClass *klass, guint property_id_begin)
 {
   return property_id_begin - 1;
 }
@@ -455,7 +455,7 @@ gimp_dbus_service_ui_default_init (GimpDBusServiceUIIface *iface)
    *
    * If a signal handler returns %TRUE, it means the signal handler will handle the invocation (e.g. take a reference to @invocation and eventually call gimp_dbus_service_ui_complete_open() or e.g. g_dbus_method_invocation_return_error() on it) and no order signal handlers will run. If no signal handler handles the invocation, the %G_DBUS_ERROR_UNKNOWN_METHOD error is returned.
    *
-   * Returns: %G_DBUS_METHOD_INVOCATION_HANDLED or %TRUE if the invocation was handled, %G_DBUS_METHOD_INVOCATION_UNHANDLED or %FALSE to let other signal handlers run.
+   * Returns: %TRUE if the invocation was handled, %FALSE to let other signal handlers run.
    */
   g_signal_new ("handle-open",
     G_TYPE_FROM_INTERFACE (iface),
@@ -478,7 +478,7 @@ gimp_dbus_service_ui_default_init (GimpDBusServiceUIIface *iface)
    *
    * If a signal handler returns %TRUE, it means the signal handler will handle the invocation (e.g. take a reference to @invocation and eventually call gimp_dbus_service_ui_complete_open_as_new() or e.g. g_dbus_method_invocation_return_error() on it) and no order signal handlers will run. If no signal handler handles the invocation, the %G_DBUS_ERROR_UNKNOWN_METHOD error is returned.
    *
-   * Returns: %G_DBUS_METHOD_INVOCATION_HANDLED or %TRUE if the invocation was handled, %G_DBUS_METHOD_INVOCATION_UNHANDLED or %FALSE to let other signal handlers run.
+   * Returns: %TRUE if the invocation was handled, %FALSE to let other signal handlers run.
    */
   g_signal_new ("handle-open-as-new",
     G_TYPE_FROM_INTERFACE (iface),
@@ -502,7 +502,7 @@ gimp_dbus_service_ui_default_init (GimpDBusServiceUIIface *iface)
    *
    * If a signal handler returns %TRUE, it means the signal handler will handle the invocation (e.g. take a reference to @invocation and eventually call gimp_dbus_service_ui_complete_batch_run() or e.g. g_dbus_method_invocation_return_error() on it) and no order signal handlers will run. If no signal handler handles the invocation, the %G_DBUS_ERROR_UNKNOWN_METHOD error is returned.
    *
-   * Returns: %G_DBUS_METHOD_INVOCATION_HANDLED or %TRUE if the invocation was handled, %G_DBUS_METHOD_INVOCATION_UNHANDLED or %FALSE to let other signal handlers run.
+   * Returns: %TRUE if the invocation was handled, %FALSE to let other signal handlers run.
    */
   g_signal_new ("handle-batch-run",
     G_TYPE_FROM_INTERFACE (iface),
@@ -524,7 +524,7 @@ gimp_dbus_service_ui_default_init (GimpDBusServiceUIIface *iface)
    *
    * If a signal handler returns %TRUE, it means the signal handler will handle the invocation (e.g. take a reference to @invocation and eventually call gimp_dbus_service_ui_complete_activate() or e.g. g_dbus_method_invocation_return_error() on it) and no order signal handlers will run. If no signal handler handles the invocation, the %G_DBUS_ERROR_UNKNOWN_METHOD error is returned.
    *
-   * Returns: %G_DBUS_METHOD_INVOCATION_HANDLED or %TRUE if the invocation was handled, %G_DBUS_METHOD_INVOCATION_UNHANDLED or %FALSE to let other signal handlers run.
+   * Returns: %TRUE if the invocation was handled, %FALSE to let other signal handlers run.
    */
   g_signal_new ("handle-activate",
     G_TYPE_FROM_INTERFACE (iface),
@@ -996,7 +996,7 @@ _out:
  */
 void
 gimp_dbus_service_ui_complete_open (
-    GimpDBusServiceUI *object G_GNUC_UNUSED,
+    GimpDBusServiceUI *object,
     GDBusMethodInvocation *invocation,
     gboolean success)
 {
@@ -1017,7 +1017,7 @@ gimp_dbus_service_ui_complete_open (
  */
 void
 gimp_dbus_service_ui_complete_open_as_new (
-    GimpDBusServiceUI *object G_GNUC_UNUSED,
+    GimpDBusServiceUI *object,
     GDBusMethodInvocation *invocation,
     gboolean success)
 {
@@ -1038,7 +1038,7 @@ gimp_dbus_service_ui_complete_open_as_new (
  */
 void
 gimp_dbus_service_ui_complete_batch_run (
-    GimpDBusServiceUI *object G_GNUC_UNUSED,
+    GimpDBusServiceUI *object,
     GDBusMethodInvocation *invocation,
     gboolean success)
 {
@@ -1058,7 +1058,7 @@ gimp_dbus_service_ui_complete_batch_run (
  */
 void
 gimp_dbus_service_ui_complete_activate (
-    GimpDBusServiceUI *object G_GNUC_UNUSED,
+    GimpDBusServiceUI *object,
     GDBusMethodInvocation *invocation)
 {
   g_dbus_method_invocation_return_value (invocation,
@@ -1106,17 +1106,17 @@ gimp_dbus_service_ui_proxy_finalize (GObject *object)
 }
 
 static void
-gimp_dbus_service_ui_proxy_get_property (GObject      *object G_GNUC_UNUSED,
-  guint         prop_id G_GNUC_UNUSED,
-  GValue       *value G_GNUC_UNUSED,
+gimp_dbus_service_ui_proxy_get_property (GObject      *object,
+  guint         prop_id,
+  GValue       *value,
   GParamSpec   *pspec G_GNUC_UNUSED)
 {
 }
 
 static void
-gimp_dbus_service_ui_proxy_set_property (GObject      *object G_GNUC_UNUSED,
-  guint         prop_id G_GNUC_UNUSED,
-  const GValue *value G_GNUC_UNUSED,
+gimp_dbus_service_ui_proxy_set_property (GObject      *object,
+  guint         prop_id,
+  const GValue *value,
   GParamSpec   *pspec G_GNUC_UNUSED)
 {
 }
@@ -1224,7 +1224,7 @@ gimp_dbus_service_ui_proxy_class_init (GimpDBusServiceUIProxyClass *klass)
 }
 
 static void
-gimp_dbus_service_ui_proxy_iface_init (GimpDBusServiceUIIface *iface G_GNUC_UNUSED)
+gimp_dbus_service_ui_proxy_iface_init (GimpDBusServiceUIIface *iface)
 {
 }
 
@@ -1616,7 +1616,7 @@ out:
 }
 
 static void
-gimp_dbus_service_ui_skeleton_dbus_interface_flush (GDBusInterfaceSkeleton *_skeleton G_GNUC_UNUSED)
+gimp_dbus_service_ui_skeleton_dbus_interface_flush (GDBusInterfaceSkeleton *_skeleton)
 {
 }
 

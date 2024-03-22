@@ -11,11 +11,11 @@ AC_PREREQ(2.54)
 
 m4_define([gimp_major_version], [2])
 m4_define([gimp_minor_version], [10])
-m4_define([gimp_micro_version], [28])
+m4_define([gimp_micro_version], [36])
 m4_define([gimp_real_version],
           [gimp_major_version.gimp_minor_version.gimp_micro_version])
 m4_define([gimp_version], [gimp_real_version])
-m4_define([gimp_interface_age], [28])
+m4_define([gimp_interface_age], [36])
 m4_define([gimp_binary_age],
           [m4_eval(100 * gimp_minor_version + gimp_micro_version)])
 
@@ -40,6 +40,9 @@ m4_define([gimp_unstable],
 m4_define([gimp_stable],
           m4_if(m4_eval(gimp_minor_version % 2), [0], [yes], [no]))
 
+m4_define([gimp_release],
+          m4_if(m4_eval(gimp_micro_version % 2), [0], [yes], [no]))
+
 m4_define([gimp_full_name], [GNU Image Manipulation Program])
 
 # required versions of other packages
@@ -52,7 +55,7 @@ m4_define([fontconfig_required_version], [2.12.4])
 m4_define([freetype2_required_version], [2.1.7])
 m4_define([gdk_pixbuf_required_version], [2.30.8])
 m4_define([gegl_major_minor_version], [0.4])
-m4_define([gegl_micro_version], [32])
+m4_define([gegl_micro_version], [38])
 m4_define([gegl_required_version],
           [gegl_major_minor_version.gegl_micro_version])
 m4_define([gexiv2_required_version], [0.10.6])
@@ -66,6 +69,7 @@ m4_define([json_glib_required_version], [1.2.6])
 m4_define([lcms_required_version], [2.8])
 m4_define([libgudev_required_version], [167])
 m4_define([libheif_required_version], [1.3.2])
+m4_define([libjxl_required_version], [0.7.0])
 m4_define([liblzma_required_version], [5.0.0])
 m4_define([libmypaint_required_version], [1.3.0])
 m4_define([libpng_required_version], [1.6.25])
@@ -119,6 +123,7 @@ GIMP_DATA_VERSION=gimp_data_version
 GIMP_SYSCONF_VERSION=gimp_sysconf_version
 GIMP_USER_VERSION=gimp_user_version
 GIMP_UNSTABLE=gimp_unstable
+GIMP_RELEASE=gimp_release
 GIMP_FULL_NAME="gimp_full_name"
 AC_SUBST(GIMP_MAJOR_VERSION)
 AC_SUBST(GIMP_MINOR_VERSION)
@@ -136,6 +141,7 @@ AC_SUBST(GIMP_DATA_VERSION)
 AC_SUBST(GIMP_SYSCONF_VERSION)
 AC_SUBST(GIMP_USER_VERSION)
 AC_SUBST(GIMP_UNSTABLE)
+AC_SUBST(GIMP_RELEASE)
 AC_SUBST(GIMP_FULL_NAME)
 
 # Version strings used in some source, though it seems unnecessary to
@@ -176,6 +182,7 @@ PERL_REQUIRED_VERSION=perl_required_version
 PYTHON2_REQUIRED_VERSION=python2_required_version
 WEBP_REQUIRED_VERSION=webp_required_version
 LIBHEIF_REQUIRED_VERSION=libheif_required_version
+LIBJXL_REQUIRED_VERSION=libjxl_required_version
 LIBUNWIND_REQUIRED_VERSION=libunwind_required_version
 XGETTEXT_REQUIRED_VERSION=xgettext_required_version
 AC_SUBST(GLIB_REQUIRED_VERSION)
@@ -208,6 +215,7 @@ AC_SUBST(PERL_REQUIRED_VERSION)
 AC_SUBST(PYTHON2_REQUIRED_VERSION)
 AC_SUBST(WEBP_REQUIRED_VERSION)
 AC_SUBST(LIBHEIF_REQUIRED_VERSION)
+AC_SUBST(LIBJXL_REQUIRED_VERSION)
 AC_SUBST(LIBUNWIND_REQUIRED_VERSION)
 AC_SUBST(XGETTEXT_REQUIRED_VERSION)
 
@@ -216,10 +224,15 @@ AC_SUBST(XGETTEXT_REQUIRED_VERSION)
 # and automake conditional.
 if test "x$GIMP_UNSTABLE" = "xyes"; then
   AC_DEFINE(GIMP_UNSTABLE, 1,
-            [Define to 1 if this is an unstable version of GIMP])
+            [Define to 1 if this is code from the unstable branch of GIMP])
 fi
 AM_CONDITIONAL(GIMP_UNSTABLE, test "x$GIMP_UNSTABLE" = "xyes")
 
+if test "x$GIMP_RELEASE" = "xyes"; then
+  AC_DEFINE(GIMP_RELEASE, 1,
+            [Define to 1 if this is a release version of GIMP])
+fi
+AM_CONDITIONAL(GIMP_RELEASE, test "x$GIMP_RELEASE" = "xyes")
 
 # libtool versioning
 m4_define([lt_current], [m4_eval(100 * gimp_minor_version + gimp_micro_version - gimp_interface_age)])
@@ -698,8 +711,11 @@ AC_SUBST(ISO_CODES_LOCALEDIR)
 # Checks for required libraries
 ###############################
 
-PKG_CHECK_MODULES(BABL, [babl >= babl_required_version],,
-                  [add_deps_error([babl >= babl_required_version])])
+PKG_CHECK_MODULES(BABL, [babl-0.1 >= babl_required_version],,
+                  [
+                   PKG_CHECK_MODULES(BABL, [babl >= babl_required_version],,
+                   [add_deps_error([babl-0.1 >= babl_required_version])])
+                  ])
 PKG_CHECK_MODULES(GEGL, gegl-gegl_major_minor_version >= gegl_required_version,,
                   [add_deps_error([gegl-gegl_major_minor_version >= gegl_required_version])])
 PKG_CHECK_MODULES(ATK, atk >= atk_required_version,,
@@ -1863,6 +1879,32 @@ if test "x$have_libheif_1_4_0" = xyes; then
     fi
   fi
 fi
+
+
+###################
+# Check for JPEG XL
+###################
+
+AC_ARG_WITH(jpegxl, [  --without-jpegxl        build without JPEG XL support])
+
+have_jpegxl=no
+if test "x$with_jpegxl" != xno; then
+  PKG_CHECK_MODULES(JXL, libjxl >= libjxl_required_version,
+    [
+      PKG_CHECK_MODULES(JXL_THREADS, libjxl_threads >= libjxl_required_version,
+        [have_jpegxl=yes],
+        [have_jpegxl="no (libjxl_threads not found)"])
+    ],
+    [have_jpegxl="no (libjxl not found)"])
+fi
+
+if test "x$have_jpegxl" = xyes; then
+  MIME_TYPES="$MIME_TYPES;image/jxl"
+  FILE_JPEGXL='file-jpegxl$(EXEEXT)'
+fi
+
+AM_CONDITIONAL(HAVE_JPEGXL, test "x$have_jpegxl" = xyes)
+AC_SUBST(FILE_JPEGXL)
 
 
 ########################
@@ -3155,6 +3197,7 @@ Optional Plug-Ins:
   Ghostscript:               $have_gs
   Help Browser:              $have_webkit
   JPEG 2000:                 $have_openjpeg
+  JPEG XL:                   $have_jpegxl
   MNG:                       $have_libmng
   OpenEXR:                   $have_openexr
   WebP:                      $have_webp

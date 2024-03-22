@@ -1199,6 +1199,7 @@ render_frame (gint32 whichframe)
 
   /* Display the preview buffer. */
   if (gtk_widget_get_realized (da))
+#ifndef PLATFORM_OSX
     gdk_draw_rgb_image (gtk_widget_get_window (da),
                         (gtk_widget_get_style (da))->white_gc,
                         (gint) ((drawing_width - drawing_scale * width) / 2),
@@ -1207,6 +1208,9 @@ render_frame (gint32 whichframe)
                         (total_frames == 1 ?
                          GDK_RGB_DITHER_MAX : DITHERTYPE),
                         preview_data, drawing_width * 3);
+#else
+    gtk_widget_queue_draw (da);
+#endif /* PLATFORM_OSX */
 
   /* clean up */
   g_object_unref (buffer);

@@ -56,7 +56,8 @@
 enum
 {
   PROP_0,
-  PROP_SHOW_RGB_U8
+  PROP_SHOW_RGB_U8,
+  PROP_SHOW_HSV
 };
 
 enum
@@ -103,6 +104,8 @@ struct _GimpColorScales
   GimpColorSelector  parent_instance;
 
   gboolean           show_rgb_u8;
+  GBinding          *show_rgb_u8_binding;
+  GBinding          *show_hsv_binding;
 
   GtkWidget         *lch_group;
   GtkWidget         *hsv_group;
@@ -217,6 +220,13 @@ gimp_color_scales_class_init (GimpColorScalesClass *klass)
                                    g_param_spec_boolean ("show-rgb-u8",
                                                          "Show RGB 0..255",
                                                          "Show RGB 0..255 scales",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE |
+                                                         G_PARAM_CONSTRUCT));
+  g_object_class_install_property (object_class, PROP_SHOW_HSV,
+                                   g_param_spec_boolean ("show-hsv",
+                                                         "Show HSV",
+                                                         "Show HSV instead of LCH",
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE |
                                                          G_PARAM_CONSTRUCT));
@@ -366,6 +376,9 @@ gimp_color_scales_init (GimpColorScales *scales)
 
   gtk_box_set_spacing (GTK_BOX (scales), 5);
 
+  scales->show_rgb_u8_binding = NULL;
+  scales->show_hsv_binding    = NULL;
+
   /*  don't need the toggles for our own operation  */
   selector->toggles_visible = FALSE;
 
@@ -474,6 +487,11 @@ gimp_color_scales_init (GimpColorScales *scales)
                                              GIMP_COLOR_SELECTOR_MODEL_HSV))
     gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (radio2), TRUE);
 
+  g_object_bind_property (G_OBJECT (radio2), "active",
+                          G_OBJECT (scales), "show-hsv",
+                          G_BINDING_SYNC_CREATE |
+                          G_BINDING_BIDIRECTIONAL);
+
   g_signal_connect (radio1, "toggled",
                     G_CALLBACK (gimp_color_scales_toggle_lch_hsv),
                     scales);
@@ -486,6 +504,9 @@ gimp_color_scales_dispose (GObject *object)
 
   g_clear_object (&scales->dummy_u8_toggle);
 
+  g_clear_pointer (&scales->show_rgb_u8_binding, g_binding_unbind);
+  g_clear_pointer (&scales->show_hsv_binding, g_binding_unbind);
+
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
 
@@ -496,11 +517,17 @@ gimp_color_scales_get_property (GObject    *object,
                                 GParamSpec *pspec)
 {
   GimpColorScales *scales = GIMP_COLOR_SCALES (object);
+  gboolean         hsv;
 
   switch (property_id)
     {
     case PROP_SHOW_RGB_U8:
       g_value_set_boolean (value, scales->show_rgb_u8);
+      break;
+    case PROP_SHOW_HSV:
+      hsv = gimp_color_selector_get_model_visible (GIMP_COLOR_SELECTOR (object),
+                                                   GIMP_COLOR_SELECTOR_MODEL_HSV);
+      g_value_set_boolean (value, hsv);
       break;
 
     default:
@@ -516,11 +543,22 @@ gimp_color_scales_set_property (GObject      *object,
                                 GParamSpec   *pspec)
 {
   GimpColorScales *scales = GIMP_COLOR_SCALES (object);
+  gboolean         show_hsv;
 
   switch (property_id)
     {
     case PROP_SHOW_RGB_U8:
       gimp_color_scales_set_show_rgb_u8 (scales, g_value_get_boolean (value));
+      break;
+    case PROP_SHOW_HSV:
+      show_hsv = g_value_get_boolean (value);
+
+      gimp_color_selector_set_model_visible (GIMP_COLOR_SELECTOR (object),
+                                             GIMP_COLOR_SELECTOR_MODEL_LCH,
+                                             ! show_hsv);
+      gimp_color_selector_set_model_visible (GIMP_COLOR_SELECTOR (object),
+                                             GIMP_COLOR_SELECTOR_MODEL_HSV,
+                                             show_hsv);
       break;
 
     default:
@@ -605,6 +643,19 @@ gimp_color_scales_set_config (GimpColorSelector *selector,
 {
   GimpColorScales *scales = GIMP_COLOR_SCALES (selector);
   gint             i;
+
+  g_clear_pointer (&scales->show_rgb_u8_binding, g_binding_unbind);
+  g_clear_pointer (&scales->show_hsv_binding, g_binding_unbind);
+
+  if (config)
+    {
+      scales->show_rgb_u8_binding = g_object_bind_property (config, "show-rgb-u8",
+                                                            scales, "show-rgb-u8",
+                                                            G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+      scales->show_hsv_binding = g_object_bind_property (config, "show-hsv",
+                                                         scales, "show-hsv",
+                                                         G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+    }
 
   for (i = 0; i < G_N_ELEMENTS (scale_defs); i++)
     {
@@ -862,23 +913,13 @@ gimp_color_scales_toggle_lch_hsv (GtkToggleButton *toggle,
                                   GimpColorScales *scales)
 {
   GimpColorSelector *selector = GIMP_COLOR_SELECTOR (scales);
+  gboolean           show_hsv = ! gtk_toggle_button_get_active (toggle);
 
-  if (gtk_toggle_button_get_active (toggle))
-    {
-      gimp_color_selector_set_model_visible (selector,
-                                             GIMP_COLOR_SELECTOR_MODEL_LCH,
-                                             TRUE);
-      gimp_color_selector_set_model_visible (selector,
-                                             GIMP_COLOR_SELECTOR_MODEL_HSV,
-                                             FALSE);
-    }
-  else
-    {
-      gimp_color_selector_set_model_visible (selector,
-                                             GIMP_COLOR_SELECTOR_MODEL_LCH,
-                                             FALSE);
-      gimp_color_selector_set_model_visible (selector,
-                                             GIMP_COLOR_SELECTOR_MODEL_HSV,
-                                             TRUE);
-    }
+  gimp_color_selector_set_model_visible (selector,
+                                         GIMP_COLOR_SELECTOR_MODEL_LCH,
+                                         ! show_hsv);
+  gimp_color_selector_set_model_visible (selector,
+                                         GIMP_COLOR_SELECTOR_MODEL_HSV,
+                                         show_hsv);
+  g_object_set (scales, "show-hsv", show_hsv, NULL);
 }

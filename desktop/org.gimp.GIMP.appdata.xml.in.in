@@ -73,6 +73,129 @@
   </provides>
 
   <releases>
+    <release version="2.10.36" date="2023-11-05">
+      <description>
+        <_p>
+            This new version of GIMP comes with many fixes, including
+            vulnerability corrections. It is highly recommended to update. It
+            also provides a few interesting changes, such as:
+        </_p>
+        <ul>
+          <_li>
+          Adobe ACB and ASE palette support
+          </_li>
+          <_li>
+          New gradient: FG to Transparent (Hardedge)
+          </_li>
+          <_li>
+          Some text tool algorithm enhancement when replacing formatted text
+          </_li>
+          <_li>
+          Better theming of item locks (when hovering them or setting them active)
+          </_li>
+          <_li>
+          Improvements in handling a few specific metadata
+          </_li>
+        </ul>
+      </description>
+    </release>
+    <release version="2.10.34" date="2023-02-21">
+      <description>
+        <_p>
+          A new stable releases with a lot of bug fixes and a few enhancements:
+        </_p>
+        <ul>
+          <_li>
+            New template selector in "Canvas Size" dialog
+          </_li>
+          <_li>
+            "Change Color" dialogs: color scale (0..255/0..100) and models (LCh/HSV) settings remembered across sessions
+          </_li>
+          <_li>
+            New header with "visible" and "link" icons in item dockables
+          </_li>
+          <_li>
+            Clipping layers better supported when importing PSD files
+          </_li>
+          <_li>
+            Paths are now exported to PSD
+          </_li>
+          <_li>
+            JPEG XL export added
+          </_li>
+          <_li>
+            Metadata in JPEG XL import
+          </_li>
+          <_li>
+            New option "Show reduced images" when loading TIFF images
+          </_li>
+          <_li>
+            16-bit per channel export for raw image data
+          </_li>
+          <_li>
+            More plug-ins got bug-fixes: DDS, WebP, Flame, Animation Playback, HEIF, Dicom and Help
+          </_li>
+          <_li>
+            Color picking on X11 will ignore the Wayland portal; new implementation for color picking on Windows
+          </_li>
+          <_li>
+            Check for updates fixed on macOS
+          </_li>
+        </ul>
+      </description>
+    </release>
+    <release version="2.10.32" date="2022-06-12">
+      <description>
+        <_p>
+          GIMP continues strengthening its bases with this new version 2.10.32 fixing many bugs and improving format support.
+          Notable changes:
+        </_p>
+        <ul>
+          <_li>
+            8 and 16-bit CMYK(A) TIFF files import is now supported
+          </_li>
+          <_li>
+            BIGTIFF import and export are now supported
+          </_li>
+          <_li>
+            JPEG XL files import is now supported
+          </_li>
+          <_li>
+            DDS export has new "Flip" (useful for some game engine) and "Visible layers" options
+          </_li>
+          <_li>
+            Other improved format supports: BMP, DICOM, EPS, RAW, TGA, WebP
+          </_li>
+          <_li>
+            The screenshot plug-in on Windows has now an option to capture the cursor
+          </_li>
+          <_li>
+            Several usability improvements in official themes and icons
+          </_li>
+          <_li>
+            New support for localized glyphs ('locl') in Text tool
+            depending on the value of the "Language" tool option
+          </_li>
+          <_li>
+            More robust XCF import
+          </_li>
+          <_li>
+            Several metadata handling improvements
+          </_li>
+        </ul>
+      </description>
+    </release>
+
+    <release version="2.10.30" date="2021-12-19">
+      <description>
+        <_p>
+          GIMP 2.10.30 fixes many bugs, updates backend implementations
+          to follow OS evolutions, improves metadata support as well as
+          support of several formats, such as PSD and AVIF.
+        </_p>
+      </description>
+    </release>
+
     <release version="2.10.28" date="2021-09-14">
       <description>
         <_p>

@@ -7,6 +7,7 @@ libgimpconfig = $(top_builddir)/libgimpconfig/libgimpconfig-$(GIMP_API_VERSION).
 if PLATFORM_WIN32
 no_undefined = -no-undefined
 libgdi32 = -lgdi32
+libmscms = -lmscms
 else
 libm = -lm
 endif
@@ -297,7 +298,8 @@ libgimpwidgets_@GIMP_API_VERSION@_la_LIBADD = \
 	$(GTK_LIBS)		\
 	$(LCMS_LIBS)		\
 	$(libm)			\
-	$(libgdi32)
+	$(libgdi32)		\
+	$(libmscms)
 
 BUILT_SOURCES = \
 	$(libgimpwidgets_built_sources)
@@ -315,11 +317,19 @@ if PLATFORM_OSX_QUARTZ
 libgimpwidgets_sources += gimppickbutton-quartz.c gimppickbutton-quartz.h
 AM_CPPFLAGS += "-xobjective-c"
 else
+
+if PLATFORM_WIN32
+libgimpwidgets_sources += gimppickbutton-win32.c gimppickbutton-win32.h
+else
 libgimpwidgets_sources += \
 	gimppickbutton-default.c 	\
 	gimppickbutton-default.h	\
 	gimppickbutton-kwin.c		\
-	gimppickbutton-kwin.h
+	gimppickbutton-kwin.h		\
+	gimppickbutton-xdg.c		\
+	gimppickbutton-xdg.h
+endif
+
 endif
 
 

@@ -66,7 +66,9 @@ print_draw_page (GtkPrintContext *context,
       scale_x = gtk_print_context_get_dpi_x (context) / data->xres;
       scale_y = gtk_print_context_get_dpi_y (context) / data->yres;
 
-      cairo_translate (cr, data->offset_x, data->offset_y);
+      cairo_translate (cr,
+                       data->offset_x / 72.0 * gtk_print_context_get_dpi_x (context),
+                       data->offset_y / 72.0 * gtk_print_context_get_dpi_y (context));
 
       if (data->draw_crop_marks)
         print_draw_crop_marks (context,
@@ -99,7 +101,7 @@ print_surface_from_drawable (gint32   drawable_ID,
   guchar             *pixels;
   gint                stride;
   guint               count    = 0;
-  guint               done     = 0;
+  guint64             done     = 0;
 
   if (gimp_drawable_has_alpha (drawable_ID))
     format = babl_format ("cairo-ARGB32");
@@ -145,7 +147,7 @@ print_surface_from_drawable (gint32   drawable_ID,
   while (gegl_buffer_iterator_next (iter))
     {
       const guchar *src  = iter->items[0].data;
-      guchar       *dest = pixels + iter->items[0].roi.y * stride + iter->items[0].roi.x * 4;
+      guchar       *dest = pixels + (guint64) iter->items[0].roi.y * stride + iter->items[0].roi.x * 4;
       gint          y;
 
       for (y = 0; y < iter->items[0].roi.height; y++)
@@ -156,10 +158,10 @@ print_surface_from_drawable (gint32   drawable_ID,
           dest += stride;
         }
 
-      done += iter->items[0].roi.height * iter->items[0].roi.width;
+      done += (guint64) iter->items[0].roi.height * iter->items[0].roi.width;
 
       if (count++ % 16 == 0)
-        gimp_progress_update ((gdouble) done / (width * height));
+        gimp_progress_update ((gdouble) done / ((gdouble) width * height));
     }
 
   g_object_unref (buffer);
