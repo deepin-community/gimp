@@ -169,6 +169,8 @@
     <keyword type="property" name="The “out-of-gamut-color” property" link="GimpColorConfig.html#GimpColorConfig--out-of-gamut-color"/>
     <keyword type="property" name="The “printer-profile” property" link="GimpColorConfig.html#GimpColorConfig--printer-profile"/>
     <keyword type="property" name="The “rgb-profile” property" link="GimpColorConfig.html#GimpColorConfig--rgb-profile"/>
+    <keyword type="property" name="The “show-hsv” property" link="GimpColorConfig.html#GimpColorConfig--show-hsv"/>
+    <keyword type="property" name="The “show-rgb-u8” property" link="GimpColorConfig.html#GimpColorConfig--show-rgb-u8"/>
     <keyword type="property" name="The “simulation-gamut-check” property" link="GimpColorConfig.html#GimpColorConfig--simulation-gamut-check"/>
     <keyword type="property" name="The “simulation-optimize” property" link="GimpColorConfig.html#GimpColorConfig--simulation-optimize"/>
     <keyword type="property" name="The “simulation-rendering-intent” property" link="GimpColorConfig.html#GimpColorConfig--simulation-rendering-intent"/>

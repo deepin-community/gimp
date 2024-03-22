@@ -22,7 +22,7 @@ sub drawable_brightness_contrast {
     $help = <<'HELP';
 This procedures allows the brightness and contrast of the specified drawable to
 be modified.  Both 'brightness' and 'contrast' parameters are defined between
--0.5 and 0.5.
+-1.0 and 1.0.
 HELP
 
     &std_pdb_misc;
@@ -32,9 +32,9 @@ HELP
     @inargs = (
 	{ name => 'drawable', type => 'drawable',
 	  desc => 'The drawable' },
-	{ name => 'brightness', type => '-0.5 <= float <= 0.5',
+	{ name => 'brightness', type => '-1.0 <= float <= 1.0',
 	  desc => 'Brightness adjustment' },
-	{ name => 'contrast', type => '-0.5 <= float <= 0.5',
+	{ name => 'contrast', type => '-1.0 <= float <= 1.0',
 	  desc => 'Contrast adjustment' }
     );
 
@@ -284,6 +284,56 @@ HELP
                                              "gimp:curves",
                                              config);
       g_object_unref (config);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub drawable_extract_component {
+    $blurb = 'Extract a color model component.';
+    $help = 'Extract a color model component.';
+
+    &std_pdb_compat('gegl:component-extract');
+    $date = '2021';
+    $since = '2.10.34';
+
+    @inargs = (
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'The drawable' },
+	{ name => 'component', type => '0 <= int8 <= 20',
+	  desc => 'Component (RGB Red (0), RGB Green (1), RGB Blue (2), Hue (3), HSV Saturation (4), HSV Value (5),' .
+                  ' HSL Saturation (6), HSL Lightness (7), CMYK Cyan (8), CMYK Magenta (9), CMYK Yellow (10), CMYK Key (11),' .
+                  ' Y\'CbCr Y\' (12), Y\'CbCr Cb (13), Y\'CbCr Cr (14), LAB L (15), LAB A (16), LAB B (17), LCH C(ab) (18),' .
+                  ' LCH H(ab) (19), Alpha (20))' },
+	{ name => 'invert', type => 'boolean',
+	  desc => 'Invert the extracted component' },
+	{ name => 'linear', type => 'boolean',
+	  desc => 'Use linear output instead of gamma corrected' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error) &&
+      gimp_drawable_is_rgb (drawable))
+    {
+      GeglNode *node =
+        gegl_node_new_child (NULL,
+                             "operation", "gegl:component-extract",
+                             "component", component,
+                             "invert",    invert,
+                             "linear",    linear,
+                             NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Extract Component"),
+                                     node);
+      g_object_unref (node);
     }
   else
     success = FALSE;
@@ -713,6 +763,69 @@ CODE
     );
 }
 
+sub drawable_shadows_highlights {
+    $blurb = 'Perform shadows and highlights correction.';
+
+    $help = <<'HELP';
+This filter allows adjusting shadows and highlights in the image
+separately. The implementation closely follow its counterpart in the
+Darktable photography software.
+HELP
+
+    &std_pdb_compat('gegl:shadows-highlights');
+    $date = '2021';
+    $since = '2.10.34';
+
+    @inargs = (
+	{ name => 'drawable', type => 'drawable',
+	  desc => 'The drawable' },
+	{ name => 'shadows', type => '-100 <= float <= 100',
+	  desc => 'Adjust exposure of shadows' },
+	{ name => 'highlights', type => '-100 <= float <= 100',
+	  desc => 'Adjust exposure of highlights' },
+	{ name => 'whitepoint', type => '-10 <= float <= 10',
+	  desc => 'Shift white point' },
+	{ name => 'radius', type => '0.1 <= float <= 1500',
+	  desc => 'Spatial extent' },
+	{ name => 'compress', type => '0 <= float <= 100',
+	  desc => 'Compress the effect on shadows/highlights and preserve midtones' },
+	{ name => 'shadows_ccorrect', type => '0 <= float <= 100',
+	  desc => 'Adjust saturation of shadows' },
+	{ name => 'highlights_ccorrect', type => '0 <= float <= 100',
+	  desc => 'Adjust saturation of highlights' },
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                 GIMP_PDB_ITEM_CONTENT, error) &&
+      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+    {
+      GeglNode  *node;
+      node = gegl_node_new_child (NULL,
+                                  "operation",           "gegl:shadows-highlights",
+                                  "shadows",             shadows,
+                                  "highlights",          highlights,
+                                  "whitepoint",          whitepoint,
+                                  "radius",              radius,
+                                  "compress",            compress,
+                                  "shadows-ccorrect",    shadows_ccorrect,
+                                  "highlights-ccorrect", highlights_ccorrect,
+                                  NULL);
+
+      gimp_drawable_apply_operation (drawable, progress,
+                                     C_("undo-type", "Shadows-Highlights"),
+                                     node);
+      g_object_unref (node);
+    }
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
 sub drawable_posterize {
     $blurb = 'Posterize the specified drawable.';
 
@@ -824,6 +937,7 @@ CODE
             drawable_colorize_hsl
             drawable_curves_explicit
             drawable_curves_spline
+            drawable_extract_component
             drawable_desaturate
             drawable_equalize
             drawable_histogram
@@ -831,6 +945,7 @@ CODE
             drawable_invert
             drawable_levels
             drawable_levels_stretch
+            drawable_shadows_highlights
             drawable_posterize
             drawable_threshold);
 

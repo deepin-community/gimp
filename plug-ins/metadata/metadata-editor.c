@@ -2073,89 +2073,174 @@ metadata_dialog_editor_set_metadata (GExiv2Metadata *metadata,
           continue;
         }
 
-      value = gexiv2_metadata_get_tag_interpreted_string (metadata,
-                                                          default_metadata_tags[i].tag);
-
-      if (value)
-        {
-          gchar *value_utf8 = clean_xmp_string (value);
-
-          g_free (value);
-
-          if (value_utf8 && value_utf8[0] != '\0')
-            {
-              value = g_strdup (value_utf8);
-            }
-          else
-            {
-              value = NULL;
-            }
-
-          g_free (value_utf8);
-        }
-
       index = default_metadata_tags[i].other_tag_index;
-      if (index > -1)
+
+      if (default_metadata_tags[i].xmp_type == GIMP_XMP_BAG ||
+          default_metadata_tags[i].xmp_type == GIMP_XMP_SEQ)
         {
           gchar **values;
 
-          /* These are all IPTC tags some of which can appear multiple times so
-            * we will use get_tag_multiple. Also IPTC most commonly uses UTF-8
-            * not current locale so get_tag_interpreted was wrong anyway.
-            * FIXME For now lets interpret as UTF-8 and in the future read
-            * and interpret based on the CharacterSet tag.
-            */
+          value = NULL;
           values = gexiv2_metadata_get_tag_multiple (metadata,
-                                                     equivalent_metadata_tags[index].tag);
+                                                     default_metadata_tags[i].tag);
 
           if (values)
             {
-              gint     i;
-              GString *str = NULL;
+              gint vi;
 
-              for (i = 0; values[i] != NULL; i++)
+              for (vi = 0; values[vi] != NULL; vi++)
                 {
-                  if (values[i][0] != '\0')
+                  gchar *value_clean;
+
+                  value_clean = clean_xmp_string (values[vi]);
+
+                  if (value_clean != NULL && value_clean[0] != '\0')
                     {
-                      if (! str)
+                      if (! value)
                         {
-                          str = g_string_new (values[i]);
+                          value = g_strdup (value_clean);
                         }
                       else
                         {
-                          if (! strcmp ("multi", equivalent_metadata_tags[index].mode))
+                          gchar *tmpvalue;
+
+                          tmpvalue = value;
+                          value = g_strconcat (value, "\n", value_clean, NULL);
+                          g_free (tmpvalue);
+                        }
+                    }
+                  g_free (value_clean);
+                }
+            }
+
+          if (index > -1)
+            {
+              gchar **equiv_values;
+
+              /* These are all IPTC tags some of which can appear multiple times so
+                * we will use get_tag_multiple. Also IPTC most commonly uses UTF-8
+                * not current locale so get_tag_interpreted was wrong anyway.
+                * FIXME For now lets interpret as UTF-8 and in the future read
+                * and interpret based on the CharacterSet tag.
+                */
+              equiv_values = gexiv2_metadata_get_tag_multiple (metadata,
+                                                        equivalent_metadata_tags[index].tag);
+
+              if (equiv_values)
+                {
+                  gint evi;
+
+                  for (evi = 0; equiv_values[evi] != NULL; evi++)
+                    {
+                      if (equiv_values[evi][0] != '\0')
+                        {
+                          if (! value)
                             {
-                              g_string_append (str, "\n");
+                              value = g_strdup (equiv_values[evi]);
                             }
                           else
                             {
-                              g_string_append (str, ", ");
+                              if (! g_strv_contains (values, equiv_values[evi]))
+                                {
+                                  gchar *tmpvalue;
+
+                                  tmpvalue = value;
+                                  value = g_strconcat (value, "\n", equiv_values[evi], NULL);
+                                  g_free (tmpvalue);
+                                }
                             }
-                          g_string_append (str, values[i]);
                         }
                     }
                 }
+            }
+          g_strfreev (values);
+        }
+      else
+        {
+          value = gexiv2_metadata_get_tag_interpreted_string (metadata,
+                                                              default_metadata_tags[i].tag);
 
-              if (str)
+          if (value)
+            {
+              gchar *value_utf8 = clean_xmp_string (value);
+
+              g_free (value);
+
+              if (value_utf8 && value_utf8[0] != '\0')
                 {
-                  /* If we got values from both Xmp and Iptc then compare those
-                    * values and if they are different concatenate them. Usually they
-                    * should be the same in which case we won't duplicate the string.
-                    */
-                  if (value && strcmp (value, str->str))
+                  value = g_strdup (value_utf8);
+                }
+              else
+                {
+                  value = NULL;
+                }
+
+              g_free (value_utf8);
+            }
+
+          if (index > -1)
+            {
+              gchar **values;
+
+              /* It's not very likely we will have an XMP tag that can only
+               * have a single value instead of an array, which corresponds to
+               * an IPTC tag that can have multiple values, but since we
+               * already have this code it can't hurt to keep testing for it.
+               * FIXME For now lets interpret as UTF-8 and in the future read
+               * and interpret based on the CharacterSet tag.
+               */
+              values = gexiv2_metadata_get_tag_multiple (metadata,
+                                                        equivalent_metadata_tags[index].tag);
+
+              if (values)
+                {
+                  gint     i;
+                  GString *str = NULL;
+
+                  for (i = 0; values[i] != NULL; i++)
                     {
-                      if (! strcmp ("multi", equivalent_metadata_tags[index].mode))
+                      if (values[i][0] != '\0')
                         {
-                          g_string_prepend (str, "\n");
+                          if (! str)
+                            {
+                              str = g_string_new (values[i]);
+                            }
+                          else
+                            {
+                              if (! strcmp ("multi", equivalent_metadata_tags[index].mode))
+                                {
+                                  g_string_append (str, "\n");
+                                }
+                              else
+                                {
+                                  g_string_append (str, ", ");
+                                }
+                              g_string_append (str, values[i]);
+                            }
                         }
-                      else
-                        {
-                          g_string_prepend (str, ", ");
-                        }
-                      g_string_prepend (str, value);
-                      g_free (value);
                     }
-                  value = g_string_free (str, FALSE);
+
+                  if (str)
+                    {
+                      /* If we got values from both Xmp and Iptc then compare those
+                       * values and if they are different concatenate them. Usually they
+                       * should be the same in which case we won't duplicate the string.
+                       */
+                      if (value && strcmp (value, str->str))
+                        {
+                          if (! strcmp ("multi", equivalent_metadata_tags[index].mode))
+                            {
+                              g_string_prepend (str, "\n");
+                            }
+                          else
+                            {
+                              g_string_prepend (str, ", ");
+                            }
+                          g_string_prepend (str, value);
+                          g_free (value);
+                        }
+                      value = g_string_free (str, FALSE);
+                    }
                 }
             }
         }
@@ -4139,27 +4224,10 @@ metadata_editor_write_callback (GtkWidget  *dialog,
                       set_tag_failed (default_metadata_tags[i].tag);
                     }
                 }
-              else if (default_metadata_tags[i].xmp_type == GIMP_XMP_BAG)
+              else
                 {
                   gexiv2_metadata_clear_tag (GEXIV2_METADATA (g_metadata),
                                              default_metadata_tags[i].tag);
-                  gexiv2_metadata_set_xmp_tag_struct (GEXIV2_METADATA (g_metadata),
-                                                      default_metadata_tags[i].tag,
-                                                      GEXIV2_STRUCTURE_XA_BAG);
-                  if (! gexiv2_metadata_set_tag_string (GEXIV2_METADATA (g_metadata),
-                                                        default_metadata_tags[i].tag,
-                                                        text_value))
-                    {
-                      set_tag_failed (default_metadata_tags[i].tag);
-                    }
-                }
-              else if (default_metadata_tags[i].xmp_type == GIMP_XMP_SEQ)
-                {
-                  gexiv2_metadata_clear_tag (GEXIV2_METADATA (g_metadata),
-                                             default_metadata_tags[i].tag);
-                  gexiv2_metadata_set_xmp_tag_struct (GEXIV2_METADATA (g_metadata),
-                                                      default_metadata_tags[i].tag,
-                                                      GEXIV2_STRUCTURE_XA_SEQ);
                   if (! gexiv2_metadata_set_tag_string (GEXIV2_METADATA (g_metadata),
                                                         default_metadata_tags[i].tag,
                                                         text_value))
@@ -4201,86 +4269,84 @@ metadata_editor_write_callback (GtkWidget  *dialog,
 
           text = gtk_text_buffer_get_text (buffer, &start, &end, TRUE);
 
-          if (default_metadata_tags[i].xmp_type == GIMP_XMP_TEXT ||
-              default_metadata_tags[i].xmp_type == GIMP_XMP_NONE)
+          gexiv2_metadata_clear_tag (GEXIV2_METADATA (g_metadata),
+                                     default_metadata_tags[i].tag);
+
+          if (text && *text)
             {
-              gexiv2_metadata_clear_tag (GEXIV2_METADATA (g_metadata),
-                                         default_metadata_tags[i].tag);
-              gexiv2_metadata_set_xmp_tag_struct (GEXIV2_METADATA (g_metadata),
-                                                  default_metadata_tags[i].tag,
-                                                  GEXIV2_STRUCTURE_XA_NONE);
-              if (! gexiv2_metadata_set_tag_string (GEXIV2_METADATA (g_metadata),
-                                                    default_metadata_tags[i].tag,
-                                                    text))
+              if (default_metadata_tags[i].xmp_type == GIMP_XMP_TEXT ||
+                  default_metadata_tags[i].xmp_type == GIMP_XMP_NONE)
                 {
-                  set_tag_failed (default_metadata_tags[i].tag);
+                  gexiv2_metadata_set_xmp_tag_struct (GEXIV2_METADATA (g_metadata),
+                                                      default_metadata_tags[i].tag,
+                                                      GEXIV2_STRUCTURE_XA_NONE);
+                  if (! gexiv2_metadata_set_tag_string (GEXIV2_METADATA (g_metadata),
+                                                        default_metadata_tags[i].tag,
+                                                        text))
+                    {
+                      set_tag_failed (default_metadata_tags[i].tag);
+                    }
                 }
-            }
-          else if (default_metadata_tags[i].xmp_type == GIMP_XMP_BAG)
-            {
-              gexiv2_metadata_clear_tag (GEXIV2_METADATA (g_metadata),
-                                         default_metadata_tags[i].tag);
-              gexiv2_metadata_set_xmp_tag_struct (GEXIV2_METADATA (g_metadata),
-                                                  default_metadata_tags[i].tag,
-                                                  GEXIV2_STRUCTURE_XA_BAG);
-              if (! gexiv2_metadata_set_tag_string (GEXIV2_METADATA (g_metadata),
-                                                    default_metadata_tags[i].tag,
-                                                    text))
+              else
                 {
-                  set_tag_failed (default_metadata_tags[i].tag);
-                }
-            }
-          else if (default_metadata_tags[i].xmp_type == GIMP_XMP_SEQ)
-            {
-              gexiv2_metadata_clear_tag (GEXIV2_METADATA (g_metadata),
-                                         default_metadata_tags[i].tag);
-              gexiv2_metadata_set_xmp_tag_struct (GEXIV2_METADATA (g_metadata),
-                                                  default_metadata_tags[i].tag,
-                                                  GEXIV2_STRUCTURE_XA_SEQ);
-              if (! gexiv2_metadata_set_tag_string (GEXIV2_METADATA (g_metadata),
-                                                    default_metadata_tags[i].tag,
-                                                    text))
-                {
-                  set_tag_failed (default_metadata_tags[i].tag);
+                  gchar **multi;
+
+                  gexiv2_metadata_clear_tag (GEXIV2_METADATA (g_metadata),
+                                             default_metadata_tags[i].tag);
+
+                  /* We have one value per line. */
+                  multi = g_strsplit (text, "\n", 0);
+
+                  if (! gexiv2_metadata_set_tag_multiple (GEXIV2_METADATA (g_metadata),
+                                                          default_metadata_tags[i].tag,
+                                                          (const gchar **) multi))
+                    {
+                      set_tag_failed (default_metadata_tags[i].tag);
+                    }
+                  g_strfreev (multi);
                 }
             }
 
             index = default_metadata_tags[i].other_tag_index;
             if (index > -1)
               {
-                gchar **multi;
-
                 gexiv2_metadata_clear_tag (GEXIV2_METADATA (g_metadata),
                                            equivalent_metadata_tags[index].tag);
-                if (! strcmp ("multi", equivalent_metadata_tags[index].mode))
-                  {
-                    multi = g_strsplit (text, "\n", 0);
-                    if (! gexiv2_metadata_set_tag_multiple (GEXIV2_METADATA (g_metadata),
-                                                            equivalent_metadata_tags[index].tag,
-                                                            (const gchar **) multi))
-                      {
-                        set_tag_failed (equivalent_metadata_tags[index].tag);
-                      }
 
-                    g_strfreev (multi);
-                  }
-                else if (! strcmp ("single", equivalent_metadata_tags[index].mode))
+                if (text && *text)
                   {
-                    /* Convert from multiline to single line: keep the \n and just add the whole text. */
-                    if (*text &&
-                        ! gexiv2_metadata_set_tag_string (GEXIV2_METADATA (g_metadata),
-                                                          equivalent_metadata_tags[index].tag,
-                                                          text))
+                    if (! strcmp ("multi", equivalent_metadata_tags[index].mode))
                       {
-                        set_tag_failed (equivalent_metadata_tags[index].tag);
+                        gchar **multi;
+
+                        multi = g_strsplit (text, "\n", 0);
+
+                        if (! gexiv2_metadata_set_tag_multiple (GEXIV2_METADATA (g_metadata),
+                                                                equivalent_metadata_tags[index].tag,
+                                                                (const gchar **) multi))
+                          {
+                            set_tag_failed (equivalent_metadata_tags[index].tag);
+                          }
+
+                        g_strfreev (multi);
                       }
-                  }
-                else
-                  {
-                    g_warning ("Copying from multiline tag %s to %s tag %s not implemented!",
-                               default_metadata_tags[i].tag,
-                               equivalent_metadata_tags[index].mode,
-                               equivalent_metadata_tags[index].tag);
+                    else if (! strcmp ("single", equivalent_metadata_tags[index].mode))
+                      {
+                        /* Convert from multiline to single line: keep the \n and just add the whole text. */
+                        if (! gexiv2_metadata_set_tag_string (GEXIV2_METADATA (g_metadata),
+                                                              equivalent_metadata_tags[index].tag,
+                                                              text))
+                          {
+                            set_tag_failed (equivalent_metadata_tags[index].tag);
+                          }
+                      }
+                    else
+                      {
+                        g_warning ("Copying from multiline tag %s to %s tag %s not implemented!",
+                                   default_metadata_tags[i].tag,
+                                   equivalent_metadata_tags[index].mode,
+                                   equivalent_metadata_tags[index].tag);
+                      }
                   }
               }
 

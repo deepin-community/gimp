@@ -38,7 +38,7 @@ header files installed.
      You also need gettext version 0.19 or over. Earlier gettext had
      issues with script-fu localization, ending up in incomplete GIMP localization.
 
-  3. You need to have GEGL version 0.4.32 or newer and babl version
+  3. You need to have GEGL version 0.4.38 or newer and babl version
      0.1.78 or newer. You can get them from https://gegl.org/ or clone
      them from the GNOME git repository:
 
@@ -149,7 +149,7 @@ header files installed.
      Fontconfig           2.12.4
      freetype2            2.1.7
      GDK-PixBuf           2.30.8
-     GEGL                 0.4.32
+     GEGL                 0.4.38
      GIO
      GLib                 2.56.2
      glib-networking
@@ -207,8 +207,8 @@ packages are included below. Here is an illustration of commands that
 might be used to build and install GIMP. The actual configuration,
 compilation and installation output is not shown.
 
-  % tar xvfz gimp-2.10.28.tar.gz   # unpack the sources
-  % cd gimp-2.10.28                # change to the toplevel directory
+  % tar xvfz gimp-2.10.36.tar.gz   # unpack the sources
+  % cd gimp-2.10.36                # change to the toplevel directory
   % ./configure                   # run the `configure' script
   % make                          # build GIMP
   % make install                  # install GIMP

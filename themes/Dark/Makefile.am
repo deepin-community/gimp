@@ -94,6 +94,8 @@ themeui_DATA =	\
 	ui/gimp-handle-v.png	\
 	ui/gimp-line-h.png	\
 	ui/gimp-line-v.png	\
+	ui/gimp-lock-button-active.png	\
+	ui/gimp-lock-button-prelight.png	\
 	ui/gimp-menu-line-h.png	\
 	ui/gimp-tooltip-bg.png	\
 	ui/list_header.png	\
@@ -107,8 +109,11 @@ themeui_DATA =	\
 	ui/notebook.png	\
 	ui/null.png	\
 	ui/option1.png	\
+	ui/option1-prelight.png	\
 	ui/option2.png	\
+	ui/option2-prelight.png	\
 	ui/option3.png	\
+	ui/option3-prelight.png	\
 	ui/plus.png	\
 	ui/progressbar.png	\
 	ui/progressbar-trough.png	\
@@ -127,6 +132,7 @@ themeui_DATA =	\
 	ui/spin-up-normal.png	\
 	ui/spin-up-pressed.png	\
 	ui/toolbar.png	\
-	ui/transparent.png
+	ui/transparent.png \
+	ui/treeview-item-prelight.png
 
 EXTRA_DIST = $(themedata_DATA) $(themeui_DATA)

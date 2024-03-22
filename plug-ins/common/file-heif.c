@@ -110,6 +110,10 @@ init (void)
     { GIMP_PDB_INT32,    "lossless", "Use lossless compression (0 = lossy, 1 = lossless)" }
   };
 
+#if LIBHEIF_HAVE_VERSION(1,13,0)
+  heif_init (NULL);
+#endif
+
   if (heif_have_decoder_for_format (heif_compression_HEVC)
 #if LIBHEIF_HAVE_VERSION(1,8,0)
       || heif_have_decoder_for_format (heif_compression_AV1)
@@ -207,6 +211,10 @@ init (void)
       gimp_register_file_handler_uri (SAVE_PROC_AV1);
     }
 #endif
+
+#if LIBHEIF_HAVE_VERSION(1,13,0)
+  heif_deinit ();
+#endif
 }
 
 #define LOAD_HEIF_CANCEL -2
@@ -252,7 +260,15 @@ run (const gchar      *name,
         {
           gint32 image_ID;
 
+#if LIBHEIF_HAVE_VERSION(1,13,0)
+          heif_init (NULL);
+#endif
+
           image_ID = load_image (file, interactive, &error);
+
+#if LIBHEIF_HAVE_VERSION(1,13,0)
+          heif_deinit ();
+#endif
 
           if (image_ID >= 0)
             {
@@ -341,6 +357,10 @@ run (const gchar      *name,
         {
           GFile *file = g_file_new_for_uri (param[3].data.d_string);
 
+#if LIBHEIF_HAVE_VERSION(1,13,0)
+          heif_init (NULL);
+#endif
+
           if (save_image (file, image_ID, drawable_ID,
                           &params,
                           &error,
@@ -359,8 +379,16 @@ run (const gchar      *name,
             {
               status = GIMP_PDB_EXECUTION_ERROR;
             }
+
+#if LIBHEIF_HAVE_VERSION(1,13,0)
+          heif_deinit ();
+#endif
+
           g_object_unref (file);
         }
+
+      if (export == GIMP_EXPORT_EXPORT)
+        gimp_image_delete (image_ID);
 
       g_clear_object (&metadata);
     }
@@ -434,6 +462,10 @@ run (const gchar      *name,
         {
           GFile *file = g_file_new_for_uri (param[3].data.d_string);
 
+#if LIBHEIF_HAVE_VERSION(1,13,0)
+          heif_init (NULL);
+#endif
+
           if (save_image (file, image_ID, drawable_ID,
                           &params,
                           &error,
@@ -445,8 +477,16 @@ run (const gchar      *name,
             {
               status = GIMP_PDB_EXECUTION_ERROR;
             }
+
+#if LIBHEIF_HAVE_VERSION(1,13,0)
+          heif_deinit ();
+#endif
+
           g_object_unref (file);
         }
+
+      if (export == GIMP_EXPORT_EXPORT)
+        gimp_image_delete (image_ID);
 
       g_clear_object (&metadata);
     }
@@ -692,9 +732,11 @@ load_image (GFile     *file,
   GimpPrecision             precision;
   gboolean                  load_linear;
   const char               *encoding;
+  char                     *filename = g_file_get_parse_name (file);
 
   gimp_progress_init_printf (_("Opening '%s'"),
-                             g_file_get_parse_name (file));
+                             filename);
+  g_free (filename);
 
   file_size = get_file_size (file, error);
   if (file_size <= 0)
@@ -1191,6 +1233,12 @@ load_image (GFile     *file,
               }
           }
 
+        gexiv2_metadata_set_orientation (GEXIV2_METADATA (metadata),
+                                         GEXIV2_ORIENTATION_NORMAL);
+        gexiv2_metadata_set_metadata_pixel_width (GEXIV2_METADATA (metadata),
+                                                  width);
+        gexiv2_metadata_set_metadata_pixel_height (GEXIV2_METADATA (metadata),
+                                                   height);
         gimp_image_metadata_load_finish (image_ID, "image/heif",
                                          metadata, flags,
                                          interactive);
@@ -1240,23 +1288,25 @@ save_image (GFile                        *file,
             GError                      **error,
             enum heif_compression_format  compression)
 {
-  struct heif_image        *image   = NULL;
-  struct heif_context      *context = heif_context_alloc ();
-  struct heif_encoder      *encoder = NULL;
-  struct heif_image_handle *handle  = NULL;
-  struct heif_writer        writer;
-  struct heif_error         err;
-  GOutputStream            *output;
-  GeglBuffer               *buffer;
-  const gchar              *encoding;
-  const Babl               *format;
-  const Babl               *space   = NULL;
-  guint8                   *data;
-  gint                      stride;
-  gint                      width;
-  gint                      height;
-  gboolean                  has_alpha;
-  gboolean                  out_linear = FALSE;
+  struct heif_image                    *image   = NULL;
+  struct heif_context                  *context = heif_context_alloc ();
+  struct heif_encoder                  *encoder = NULL;
+  const struct heif_encoder_descriptor *encoder_descriptor;
+  const char                           *encoder_name;
+  struct heif_image_handle             *handle  = NULL;
+  struct heif_writer                    writer;
+  struct heif_error                     err;
+  GOutputStream                        *output;
+  GeglBuffer                           *buffer;
+  const gchar                          *encoding;
+  const Babl                           *format;
+  guint8                               *data;
+  gint                                  stride;
+  gint                                  width;
+  gint                                  height;
+  gboolean                              has_alpha;
+  gboolean                              out_linear = FALSE;
+  char                                 *filename;
 
   if (!context)
     {
@@ -1265,8 +1315,52 @@ save_image (GFile                        *file,
       return FALSE;
     }
 
-  gimp_progress_init_printf (_("Exporting '%s'"),
-                             g_file_get_parse_name (file));
+  if (compression == heif_compression_HEVC)
+    {
+      if (heif_context_get_encoder_descriptors (context,
+                                                heif_compression_HEVC,
+                                                NULL,
+                                                &encoder_descriptor, 1) == 1)
+        {
+          encoder_name = heif_encoder_descriptor_get_id_name (encoder_descriptor);
+        }
+      else
+        {
+          g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                       "Unable to find suitable HEIF encoder");
+          heif_context_free (context);
+          return FALSE;
+        }
+    }
+  else /* AV1 compression */
+    {
+      if (heif_context_get_encoder_descriptors (context,
+                                                compression,
+                                                "aom", /* we prefer aom rather than rav1e */
+                                                &encoder_descriptor, 1) == 1)
+        {
+          encoder_name = heif_encoder_descriptor_get_id_name (encoder_descriptor);
+        }
+      else if (heif_context_get_encoder_descriptors (context,
+                                                     compression,
+                                                     NULL,
+                                                     &encoder_descriptor, 1) == 1)
+        {
+          encoder_name = heif_encoder_descriptor_get_id_name (encoder_descriptor);
+        }
+      else
+        {
+          g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                       "Unable to find suitable AVIF encoder");
+          heif_context_free (context);
+          return FALSE;
+        }
+    }
+
+  filename = g_file_get_parse_name (file);
+  gimp_progress_init_printf (_("Exporting '%s' using %s encoder"),
+                             filename, encoder_name);
+  g_free (filename);
 
   width   = gimp_drawable_width  (drawable_ID);
   height  = gimp_drawable_height (drawable_ID);
@@ -1357,16 +1451,6 @@ save_image (GFile                        *file,
 
       icc_data = gimp_color_profile_get_icc_profile (profile, &icc_length);
       heif_image_set_raw_color_profile (image, "prof", icc_data, icc_length);
-      space = gimp_color_profile_get_space (profile,
-                                            GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
-                                            error);
-      if (error && *error)
-        {
-          /* Don't make this a hard failure yet output the error. */
-          g_printerr ("%s: error getting the profile space: %s",
-                      G_STRFUNC, (*error)->message);
-          g_clear_error (error);
-        }
 
       g_object_unref (profile);
     }
@@ -1384,14 +1468,10 @@ save_image (GFile                        *file,
 
       heif_image_set_nclx_color_profile (image, &nclx_profile);
 
-      space = babl_space ("sRGB");
       out_linear = FALSE;
 #endif
     }
 #endif /* LIBHEIF_HAVE_VERSION(1,4,0) */
-
-  if (! space)
-    space = gimp_drawable_get_format (drawable_ID);
 
   if (params->save_bit_depth > 8)
     {
@@ -1423,7 +1503,7 @@ save_image (GFile                        *file,
       data16 = g_malloc_n (height, rowentries * 2);
       src16 = data16;
 
-      format = babl_format_with_space (encoding, space);
+      format = babl_format (encoding);
 
       buffer = gimp_drawable_get_buffer (drawable_ID);
 
@@ -1510,7 +1590,7 @@ save_image (GFile                        *file,
           else
             encoding = "R'G'B' u8";
         }
-      format = babl_format_with_space (encoding, space);
+      format = babl_format (encoding);
 
       gegl_buffer_get (buffer,
                        GEGL_RECTANGLE (0, 0, width, height),
@@ -1523,14 +1603,14 @@ save_image (GFile                        *file,
 
   /*  encode to HEIF file  */
 
-  err = heif_context_get_encoder_for_format (context,
-                                             compression,
-                                             &encoder);
+  err = heif_context_get_encoder (context,
+                                  encoder_descriptor,
+                                  &encoder);
 
   if (err.code != 0)
     {
       g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                   "Unable to find suitable HEIF encoder");
+                   "Unable to get an encoder instance");
       heif_image_release (image);
       heif_context_free (context);
       return FALSE;
@@ -1556,7 +1636,7 @@ save_image (GFile                        *file,
       err = heif_encoder_set_parameter_string (encoder, "chroma", "444");
       if (err.code != 0)
         {
-          g_printerr ("Failed to set chroma=444 for %s encoder: %s", heif_encoder_get_name (encoder), err.message);
+          g_printerr ("Failed to set chroma=444 for %s encoder: %s", encoder_name, err.message);
         }
     }
 #endif

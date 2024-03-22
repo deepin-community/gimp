@@ -531,6 +531,7 @@
     <keyword type="function" name="gimp_color_scales_set_show_rgb_u8 ()" link="GimpColorScales.html#gimp-color-scales-set-show-rgb-u8"/>
     <keyword type="function" name="gimp_color_scales_get_show_rgb_u8 ()" link="GimpColorScales.html#gimp-color-scales-get-show-rgb-u8"/>
     <keyword type="struct" name="GimpColorScales" link="GimpColorScales.html#GimpColorScales-struct"/>
+    <keyword type="property" name="The “show-hsv” property" link="GimpColorScales.html#GimpColorScales--show-hsv"/>
     <keyword type="property" name="The “show-rgb-u8” property" link="GimpColorScales.html#GimpColorScales--show-rgb-u8"/>
     <keyword type="struct" name="GimpColorSelect" link="GimpColorSelect.html#GimpColorSelect-struct"/>
     <keyword type="function" name="gimp_controller_new ()" link="GimpController.html#gimp-controller-new"/>

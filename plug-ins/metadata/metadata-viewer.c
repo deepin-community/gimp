@@ -85,6 +85,11 @@ static gboolean   metadata_viewer_dialog           (gint32          image_id,
                                                     GError        **error);
 static void       metadata_dialog_set_metadata     (GExiv2Metadata *metadata,
                                                     GtkBuilder     *builder);
+static void metadata_dialog_add_multiple_values    (GExiv2Metadata *metadata,
+                                                    const gchar    *tag,
+                                                    GtkListStore   *store,
+                                                    gint            tag_column,
+                                                    gint            value_column);
 static void       metadata_dialog_append_tags      (GExiv2Metadata  *metadata,
                                                     gchar          **tags,
                                                     GtkListStore    *store,
@@ -425,6 +430,42 @@ metadata_interpret_user_comment (gchar *comment)
 }
 
 static void
+metadata_dialog_add_multiple_values (GExiv2Metadata  *metadata,
+                                     const gchar     *tag,
+                                     GtkListStore    *store,
+                                     gint             tag_column,
+                                     gint             value_column)
+{
+  gchar **values;
+
+  values = gexiv2_metadata_get_tag_multiple (GEXIV2_METADATA (metadata), tag);
+
+  if (values)
+    {
+      gint i;
+
+      for (i = 0; values[i] != NULL; i++)
+        {
+          gchar       *value;
+          GtkTreeIter  iter;
+
+          gtk_list_store_append (store, &iter);
+
+          value = metadata_format_string_value (values[i], /* truncate = */ TRUE);
+
+          gtk_list_store_set (store, &iter,
+                              tag_column,   tag,
+                              value_column, value,
+                              -1);
+
+          g_free (value);
+        }
+
+      g_strfreev (values);
+    }
+}
+
+static void
 metadata_dialog_append_tags (GExiv2Metadata  *metadata,
                              gchar          **tags,
                              GtkListStore    *store,
@@ -457,29 +498,10 @@ metadata_dialog_append_tags (GExiv2Metadata  *metadata,
             }
           last_tag = tag;
 
-          values = gexiv2_metadata_get_tag_multiple (GEXIV2_METADATA (metadata),
-                                                     tag);
-
-          if (values)
-            {
-              gint i;
-
-              for (i = 0; values[i] != NULL; i++)
-                {
-                  gtk_list_store_append (store, &iter);
-
-                  value = metadata_format_string_value (values[i], /* truncate = */ TRUE);
-
-                  gtk_list_store_set (store, &iter,
-                                      tag_column,   tag,
-                                      value_column, value,
-                                      -1);
-
-                  g_free (value);
-                }
-
-              g_strfreev (values);
-            }
+          metadata_dialog_add_multiple_values (GEXIV2_METADATA (metadata),
+                                               tag, store,
+                                               tag_column,
+                                               value_column);
         }
       else if (! strcmp ("Exif.GPSInfo.GPSLongitude",    tag) ||
                ! strcmp ("Exif.GPSInfo.GPSLongitudeRef", tag) ||
@@ -575,12 +597,23 @@ metadata_dialog_append_tags (GExiv2Metadata  *metadata,
         }
       else
         {
-          value = metadata_dialog_format_tag_value (metadata, tag,
-                                                    /* truncate = */ TRUE);
-          metadata_dialog_add_tag (store, iter,
-                                   tag_column, value_column,
-                                   tag, value);
-          g_free (value);
+          if (g_str_has_prefix (tag, "Xmp.") &&
+              g_strcmp0 (gexiv2_metadata_get_tag_type (tag), "XmpText") != 0)
+            {
+              metadata_dialog_add_multiple_values (GEXIV2_METADATA (metadata),
+                                                   tag, store,
+                                                   tag_column,
+                                                   value_column);
+            }
+          else
+            {
+              value = metadata_dialog_format_tag_value (metadata, tag,
+                                                        /* truncate = */ TRUE);
+              metadata_dialog_add_tag (store, iter,
+                                       tag_column, value_column,
+                                       tag, value);
+              g_free (value);
+            }
         }
     }
 }

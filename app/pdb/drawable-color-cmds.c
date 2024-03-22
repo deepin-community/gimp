@@ -294,6 +294,53 @@ drawable_curves_spline_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
+drawable_extract_component_invoker (GimpProcedure         *procedure,
+                                    Gimp                  *gimp,
+                                    GimpContext           *context,
+                                    GimpProgress          *progress,
+                                    const GimpValueArray  *args,
+                                    GError               **error)
+{
+  gboolean success = TRUE;
+  GimpDrawable *drawable;
+  guint8 component;
+  gboolean invert;
+  gboolean linear;
+
+  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  component = g_value_get_uint (gimp_value_array_index (args, 1));
+  invert = g_value_get_boolean (gimp_value_array_index (args, 2));
+  linear = g_value_get_boolean (gimp_value_array_index (args, 3));
+
+  if (success)
+    {
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                     GIMP_PDB_ITEM_CONTENT, error) &&
+          gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error) &&
+          gimp_drawable_is_rgb (drawable))
+        {
+          GeglNode *node =
+            gegl_node_new_child (NULL,
+                                 "operation", "gegl:component-extract",
+                                 "component", component,
+                                 "invert",    invert,
+                                 "linear",    linear,
+                                 NULL);
+
+          gimp_drawable_apply_operation (drawable, progress,
+                                         C_("undo-type", "Extract Component"),
+                                         node);
+          g_object_unref (node);
+        }
+      else
+        success = FALSE;
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
 drawable_desaturate_invoker (GimpProcedure         *procedure,
                              Gimp                  *gimp,
                              GimpContext           *context,
@@ -650,6 +697,64 @@ drawable_levels_stretch_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
+drawable_shadows_highlights_invoker (GimpProcedure         *procedure,
+                                     Gimp                  *gimp,
+                                     GimpContext           *context,
+                                     GimpProgress          *progress,
+                                     const GimpValueArray  *args,
+                                     GError               **error)
+{
+  gboolean success = TRUE;
+  GimpDrawable *drawable;
+  gdouble shadows;
+  gdouble highlights;
+  gdouble whitepoint;
+  gdouble radius;
+  gdouble compress;
+  gdouble shadows_ccorrect;
+  gdouble highlights_ccorrect;
+
+  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  shadows = g_value_get_double (gimp_value_array_index (args, 1));
+  highlights = g_value_get_double (gimp_value_array_index (args, 2));
+  whitepoint = g_value_get_double (gimp_value_array_index (args, 3));
+  radius = g_value_get_double (gimp_value_array_index (args, 4));
+  compress = g_value_get_double (gimp_value_array_index (args, 5));
+  shadows_ccorrect = g_value_get_double (gimp_value_array_index (args, 6));
+  highlights_ccorrect = g_value_get_double (gimp_value_array_index (args, 7));
+
+  if (success)
+    {
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
+                                     GIMP_PDB_ITEM_CONTENT, error) &&
+          gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+        {
+          GeglNode  *node;
+          node = gegl_node_new_child (NULL,
+                                      "operation",           "gegl:shadows-highlights",
+                                      "shadows",             shadows,
+                                      "highlights",          highlights,
+                                      "whitepoint",          whitepoint,
+                                      "radius",              radius,
+                                      "compress",            compress,
+                                      "shadows-ccorrect",    shadows_ccorrect,
+                                      "highlights-ccorrect", highlights_ccorrect,
+                                      NULL);
+
+          gimp_drawable_apply_operation (drawable, progress,
+                                         C_("undo-type", "Shadows-Highlights"),
+                                         node);
+          g_object_unref (node);
+        }
+      else
+        success = FALSE;
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
 drawable_posterize_invoker (GimpProcedure         *procedure,
                             Gimp                  *gimp,
                             GimpContext           *context,
@@ -749,7 +854,7 @@ register_drawable_color_procs (GimpPDB *pdb)
   gimp_procedure_set_static_strings (procedure,
                                      "gimp-drawable-brightness-contrast",
                                      "Modify brightness/contrast in the specified drawable.",
-                                     "This procedures allows the brightness and contrast of the specified drawable to be modified. Both 'brightness' and 'contrast' parameters are defined between -0.5 and 0.5.",
+                                     "This procedures allows the brightness and contrast of the specified drawable to be modified. Both 'brightness' and 'contrast' parameters are defined between -1.0 and 1.0.",
                                      "Spencer Kimball & Peter Mattis",
                                      "Spencer Kimball & Peter Mattis",
                                      "1997",
@@ -764,13 +869,13 @@ register_drawable_color_procs (GimpPDB *pdb)
                                g_param_spec_double ("brightness",
                                                     "brightness",
                                                     "Brightness adjustment",
-                                                    -0.5, 0.5, -0.5,
+                                                    -1.0, 1.0, -1.0,
                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_double ("contrast",
                                                     "contrast",
                                                     "Contrast adjustment",
-                                                    -0.5, 0.5, -0.5,
+                                                    -1.0, 1.0, -1.0,
                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -949,6 +1054,47 @@ register_drawable_color_procs (GimpPDB *pdb)
                                                             "points",
                                                             "The spline control points: { cp1.x, cp1.y, cp2.x, cp2.y, ... }",
                                                             GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-drawable-extract-component
+   */
+  procedure = gimp_procedure_new (drawable_extract_component_invoker);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-drawable-extract-component");
+  gimp_procedure_set_static_strings (procedure,
+                                     "gimp-drawable-extract-component",
+                                     "Extract a color model component.",
+                                     "Extract a color model component.",
+                                     "Compatibility procedure. Please see 'gegl:component-extract' for credits.",
+                                     "Compatibility procedure. Please see 'gegl:component-extract' for credits.",
+                                     "2021",
+                                     NULL);
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable_id ("drawable",
+                                                            "drawable",
+                                                            "The drawable",
+                                                            pdb->gimp, FALSE,
+                                                            GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_int8 ("component",
+                                                     "component",
+                                                     "Component (RGB Red (0), RGB Green (1), RGB Blue (2), Hue (3), HSV Saturation (4), HSV Value (5), HSL Saturation (6), HSL Lightness (7), CMYK Cyan (8), CMYK Magenta (9), CMYK Yellow (10), CMYK Key (11), Y'CbCr Y' (12), Y'CbCr Cb (13), Y'CbCr Cr (14), LAB L (15), LAB A (16), LAB B (17), LCH C(ab) (18), LCH H(ab) (19), Alpha (20))",
+                                                     0, 20, 0,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boolean ("invert",
+                                                     "invert",
+                                                     "Invert the extracted component",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boolean ("linear",
+                                                     "linear",
+                                                     "Use linear output instead of gamma corrected",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
@@ -1264,6 +1410,71 @@ register_drawable_color_procs (GimpPDB *pdb)
                                                             "The drawable",
                                                             pdb->gimp, FALSE,
                                                             GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-drawable-shadows-highlights
+   */
+  procedure = gimp_procedure_new (drawable_shadows_highlights_invoker);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-drawable-shadows-highlights");
+  gimp_procedure_set_static_strings (procedure,
+                                     "gimp-drawable-shadows-highlights",
+                                     "Perform shadows and highlights correction.",
+                                     "This filter allows adjusting shadows and highlights in the image separately. The implementation closely follow its counterpart in the Darktable photography software.",
+                                     "Compatibility procedure. Please see 'gegl:shadows-highlights' for credits.",
+                                     "Compatibility procedure. Please see 'gegl:shadows-highlights' for credits.",
+                                     "2021",
+                                     NULL);
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable_id ("drawable",
+                                                            "drawable",
+                                                            "The drawable",
+                                                            pdb->gimp, FALSE,
+                                                            GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_double ("shadows",
+                                                    "shadows",
+                                                    "Adjust exposure of shadows",
+                                                    -100, 100, -100,
+                                                    GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_double ("highlights",
+                                                    "highlights",
+                                                    "Adjust exposure of highlights",
+                                                    -100, 100, -100,
+                                                    GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_double ("whitepoint",
+                                                    "whitepoint",
+                                                    "Shift white point",
+                                                    -10, 10, -10,
+                                                    GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_double ("radius",
+                                                    "radius",
+                                                    "Spatial extent",
+                                                    0.1, 1500, 0.1,
+                                                    GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_double ("compress",
+                                                    "compress",
+                                                    "Compress the effect on shadows/highlights and preserve midtones",
+                                                    0, 100, 0,
+                                                    GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_double ("shadows-ccorrect",
+                                                    "shadows ccorrect",
+                                                    "Adjust saturation of shadows",
+                                                    0, 100, 0,
+                                                    GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_double ("highlights-ccorrect",
+                                                    "highlights ccorrect",
+                                                    "Adjust saturation of highlights",
+                                                    0, 100, 0,
+                                                    GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 

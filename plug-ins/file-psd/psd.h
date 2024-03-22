@@ -434,11 +434,11 @@ typedef struct
 /* Image resolution data */
 typedef struct {
   Fixed         hRes;                   /* Horizontal resolution pixels/inch */
-  gint16        hResUnit;               /* Horizontal display resolution unit */
-  gint16        widthUnit;              /* Width unit ?? */
+  gint16        hResUnit;               /* Horizontal display resolution unit (1=pixels per inch, 2=pixels per cm) */
+  gint16        widthUnit;              /* Display width unit (1=inches; 2=cm; 3=points; 4=picas; 5=columns) */
   Fixed         vRes;                   /* Vertical resolution pixels/inch */
   gint16        vResUnit;               /* Vertical display resolution unit */
-  gint16        heightUnit;             /* Height unit ?? */
+  gint16        heightUnit;             /* Display height unit */
 } ResolutionInfo;
 
 /* Grid & guide header */
@@ -588,6 +588,7 @@ typedef struct
   gchar                 blend_mode[4];          /* Blend mode */
   guchar                opacity;                /* Opacity - 0 = transparent ... 255 = opaque */
   guchar                clipping;               /* Clipping */
+  guchar                clipping_group_type;    /* Used to track group needed for clipping (1 = group start, 2 = group end) */
   guchar                flags;                  /* Layer flags */
   guchar                filler;                 /* Filler */
   guint32               extra_len;              /* Extra data length */

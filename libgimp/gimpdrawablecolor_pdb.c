@@ -45,7 +45,7 @@
  *
  * This procedures allows the brightness and contrast of the specified
  * drawable to be modified. Both 'brightness' and 'contrast' parameters
- * are defined between -0.5 and 0.5.
+ * are defined between -1.0 and 1.0.
  *
  * Returns: TRUE on success.
  *
@@ -251,6 +251,46 @@ gimp_drawable_curves_spline (gint32                drawable_ID,
                                     GIMP_PDB_INT32, channel,
                                     GIMP_PDB_INT32, num_points,
                                     GIMP_PDB_FLOATARRAY, points,
+                                    GIMP_PDB_END);
+
+  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+
+  gimp_destroy_params (return_vals, nreturn_vals);
+
+  return success;
+}
+
+/**
+ * gimp_drawable_extract_component:
+ * @drawable_ID: The drawable.
+ * @component: Component (RGB Red (0), RGB Green (1), RGB Blue (2), Hue (3), HSV Saturation (4), HSV Value (5), HSL Saturation (6), HSL Lightness (7), CMYK Cyan (8), CMYK Magenta (9), CMYK Yellow (10), CMYK Key (11), Y'CbCr Y' (12), Y'CbCr Cb (13), Y'CbCr Cr (14), LAB L (15), LAB A (16), LAB B (17), LCH C(ab) (18), LCH H(ab) (19), Alpha (20)).
+ * @invert: Invert the extracted component.
+ * @linear: Use linear output instead of gamma corrected.
+ *
+ * Extract a color model component.
+ *
+ * Extract a color model component.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 2.10.34
+ **/
+gboolean
+gimp_drawable_extract_component (gint32   drawable_ID,
+                                 guint8   component,
+                                 gboolean invert,
+                                 gboolean linear)
+{
+  GimpParam *return_vals;
+  gint nreturn_vals;
+  gboolean success = TRUE;
+
+  return_vals = gimp_run_procedure ("gimp-drawable-extract-component",
+                                    &nreturn_vals,
+                                    GIMP_PDB_DRAWABLE, drawable_ID,
+                                    GIMP_PDB_INT8, component,
+                                    GIMP_PDB_INT32, invert,
+                                    GIMP_PDB_INT32, linear,
                                     GIMP_PDB_END);
 
   success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
@@ -598,6 +638,60 @@ gimp_drawable_levels_stretch (gint32 drawable_ID)
   return_vals = gimp_run_procedure ("gimp-drawable-levels-stretch",
                                     &nreturn_vals,
                                     GIMP_PDB_DRAWABLE, drawable_ID,
+                                    GIMP_PDB_END);
+
+  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+
+  gimp_destroy_params (return_vals, nreturn_vals);
+
+  return success;
+}
+
+/**
+ * gimp_drawable_shadows_highlights:
+ * @drawable_ID: The drawable.
+ * @shadows: Adjust exposure of shadows.
+ * @highlights: Adjust exposure of highlights.
+ * @whitepoint: Shift white point.
+ * @radius: Spatial extent.
+ * @compress: Compress the effect on shadows/highlights and preserve midtones.
+ * @shadows_ccorrect: Adjust saturation of shadows.
+ * @highlights_ccorrect: Adjust saturation of highlights.
+ *
+ * Perform shadows and highlights correction.
+ *
+ * This filter allows adjusting shadows and highlights in the image
+ * separately. The implementation closely follow its counterpart in the
+ * Darktable photography software.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 2.10.34
+ **/
+gboolean
+gimp_drawable_shadows_highlights (gint32  drawable_ID,
+                                  gdouble shadows,
+                                  gdouble highlights,
+                                  gdouble whitepoint,
+                                  gdouble radius,
+                                  gdouble compress,
+                                  gdouble shadows_ccorrect,
+                                  gdouble highlights_ccorrect)
+{
+  GimpParam *return_vals;
+  gint nreturn_vals;
+  gboolean success = TRUE;
+
+  return_vals = gimp_run_procedure ("gimp-drawable-shadows-highlights",
+                                    &nreturn_vals,
+                                    GIMP_PDB_DRAWABLE, drawable_ID,
+                                    GIMP_PDB_FLOAT, shadows,
+                                    GIMP_PDB_FLOAT, highlights,
+                                    GIMP_PDB_FLOAT, whitepoint,
+                                    GIMP_PDB_FLOAT, radius,
+                                    GIMP_PDB_FLOAT, compress,
+                                    GIMP_PDB_FLOAT, shadows_ccorrect,
+                                    GIMP_PDB_FLOAT, highlights_ccorrect,
                                     GIMP_PDB_END);
 
   success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;

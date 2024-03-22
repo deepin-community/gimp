@@ -346,7 +346,8 @@ class _ReadLine(object):
         cursor line.'''
 
         iter = self.__get_cursor()
-        iter.set_line_offset(len(self.ps))
+        iter.set_line(iter.get_line())
+        iter.forward_chars(len(self.ps))
         return iter
 
     def __get_end(self):
@@ -569,6 +570,7 @@ class _Console(_ReadLine, code.InteractiveInterpreter):
 
         self.__start()
         self.run_on_raw_input = start_script
+        self.raw_input(self.ps1)
 
     def do_raw_input(self, text):
         if self.cmd_buffer:

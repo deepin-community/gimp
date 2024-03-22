@@ -31,6 +31,7 @@
 
 #include "file-tiff-io.h"
 
+static gboolean tiff_file_size_error = FALSE;
 
 typedef struct
 {
@@ -107,7 +108,11 @@ tiff_open (GFile        *file,
 
       tiff_io.stream = G_OBJECT (tiff_io.input);
     }
+#ifdef TIFF_VERSION_BIG
+  else if(! strcmp (mode, "w") || ! strcmp (mode, "w8"))
+#else
   else if(! strcmp (mode, "w"))
+#endif
     {
       tiff_io.output = G_OUTPUT_STREAM (g_file_replace (file,
                                                         NULL, FALSE,
@@ -150,6 +155,18 @@ tiff_open (GFile        *file,
                          NULL, NULL);
 }
 
+gboolean
+tiff_got_file_size_error (void)
+{
+  return tiff_file_size_error;
+}
+
+void
+tiff_reset_file_size_error (void)
+{
+  tiff_file_size_error = FALSE;
+}
+
 static void
 tiff_io_warning (const gchar *module,
                  const gchar *fmt,
@@ -175,13 +192,37 @@ tiff_io_warning (const gchar *module,
   /* for older versions of libtiff? */
   else if (! strcmp (fmt, "unknown field with tag %d (0x%x) ignored") ||
            /* Since libtiff 4.0.0alpha. */
-           ! strcmp (fmt, "Unknown field with tag %d (0x%x) encountered"))
+           ! strcmp (fmt, "Unknown field with tag %d (0x%x) encountered") ||
+           /* Since libtiff 4.3.0rc1. */
+           ! strcmp (fmt, "Unknown field with tag %u (0x%x) encountered"))
     {
       va_list ap_test;
 
       G_VA_COPY (ap_test, ap);
 
       tag = va_arg (ap_test, int);
+
+      va_end (ap_test);
+    }
+  else if (! strcmp (fmt, "Incorrect value for \"%s\"; tag ignored"))
+    {
+      va_list ap_test;
+      const char *stag;
+
+      G_VA_COPY (ap_test, ap);
+
+      stag = va_arg (ap_test, const char *);
+
+      if (! strcmp (stag, "RichTIFFIPTC"))
+        {
+          gchar *msg = g_strdup_vprintf (fmt, ap);
+
+          /* This is an error in Adobe products. Just report to stderr. */
+          g_printerr ("[%s] %s\n", module, msg);
+          g_free (msg);
+
+          return;
+        }
 
       va_end (ap_test);
     }
@@ -241,13 +282,29 @@ tiff_io_error (const gchar *module,
                const gchar *fmt,
                va_list      ap)
 {
+  gchar *msg;
+
   /* Workaround for: http://bugzilla.gnome.org/show_bug.cgi?id=132297
    * Ignore the errors related to random access and JPEG compression
    */
   if (! strcmp (fmt, "Compression algorithm does not support random access"))
     return;
 
-  g_logv (G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, fmt, ap);
+  msg = g_strdup_vprintf (fmt, ap);
+
+#ifdef TIFF_VERSION_BIG
+  if (g_strcmp0 (fmt, "Maximum TIFF file size exceeded") == 0)
+    /* @module in my tests were "TIFFAppendToStrip" but I wonder if
+     * this same error could not happen with other "modules".
+     */
+    tiff_file_size_error = TRUE;
+  else
+    /* Easier for debugging to at least print messages on stderr. */
+    g_printerr ("LibTiff error: [%s] %s\n", module, msg);
+#endif
+
+  g_log (G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, "%s", msg);
+  g_free (msg);
 }
 
 static tsize_t

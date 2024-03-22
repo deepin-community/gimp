@@ -508,6 +508,15 @@ gimp_text_layout_apply_tags (GimpTextLayout *layout,
     result = g_strdup_printf ("<span color=\"#%02x%02x%02x\">%s</span>",
                               r, g, b, markup);
   }
+  /* Updating font 'locl' (if supported) with 'lang' feature tag */
+  if (text->language)
+    {
+      gchar *tmp = g_strdup_printf ("<span lang=\"%s\">%s</span>",
+                                    text->language,
+                                    result);
+      g_free (result);
+      result = tmp;
+    }
 
   if (fabs (text->letter_spacing) > 0.1)
     {
@@ -701,7 +710,7 @@ gimp_text_get_font_options (GimpText *text)
   cairo_font_options_t *options = cairo_font_options_create ();
 
   cairo_font_options_set_antialias (options, (text->antialias ?
-                                              CAIRO_ANTIALIAS_DEFAULT :
+                                              CAIRO_ANTIALIAS_GRAY :
                                               CAIRO_ANTIALIAS_NONE));
 
   switch (text->hint_style)

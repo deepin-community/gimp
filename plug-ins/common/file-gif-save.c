@@ -193,6 +193,7 @@ query (void)
   gimp_register_save_handler (SAVE_PROC, "gif", "");
   gimp_register_file_handler_uri (SAVE_PROC);
 
+  gimp_register_save_handler (SAVE2_PROC, "gif", "");
   gimp_register_file_handler_uri (SAVE2_PROC);
 }
 
@@ -323,6 +324,20 @@ run (const gchar      *name,
               break;
             default:
               break;
+            }
+
+          /* Load comment from parasite for non-interactive export */
+          if (run_mode != GIMP_RUN_INTERACTIVE)
+            {
+              GimpParasite  *parasite;
+
+              parasite = gimp_image_get_parasite (image_ID, "gimp-comment");
+              if (parasite)
+                {
+                  globalcomment = g_strndup (gimp_parasite_data (parasite),
+                                             gimp_parasite_data_size (parasite));
+                  gimp_parasite_free (parasite);
+                }
             }
 
           /* Write the image to file */

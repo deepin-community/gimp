@@ -548,11 +548,19 @@ load_image (const gchar  *filename,
   /* hack to handle yet another flavor of incorrect headers, see bug #540969 */
   if (info.alphaBits == 0)
     {
+      if (info.imageType == TGA_TYPE_MAPPED && info.colorMapSize == 32)
+        info.alphaBits = 8;
+
       if (info.imageType == TGA_TYPE_COLOR && info.bpp == 32)
         info.alphaBits = 8;
 
       if (info.imageType == TGA_TYPE_GRAY && info.bpp == 16)
         info.alphaBits = 8;
+    }
+  else if (info.alphaBits == 4 && info.imageType == TGA_TYPE_COLOR && info.bpp == 32)
+    {
+      /* Incorrect TGA saved by Krita, see issue #9067*/
+      info.alphaBits = 8;
     }
 
   switch (info.imageType)
@@ -1341,7 +1349,10 @@ save_image (const gchar  *filename,
       fputc (0, fp);
     }
 
-  pixels = g_new (guchar, width * out_bpp);
+  if (dtype == GIMP_INDEXEDA_IMAGE)
+    pixels = g_new (guchar, width * 2);
+  else
+    pixels = g_new (guchar, width * out_bpp);
   data   = g_new (guchar, width * out_bpp);
 
   for (row = 0; row < height; ++row)

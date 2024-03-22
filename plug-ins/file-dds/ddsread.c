@@ -109,6 +109,7 @@ read_dds (gchar    *filename,
   guchar *pixels;
   gchar *tmp;
   FILE *fp;
+  gsize file_size;
   dds_header_t hdr;
   dds_header_dx10_t dx10hdr;
   dds_load_info_t d;
@@ -129,6 +130,10 @@ read_dds (gchar    *filename,
       g_message ("Error opening file.\n");
       return GIMP_PDB_EXECUTION_ERROR;
     }
+
+  fseek (fp, 0L, SEEK_END);
+  file_size = ftell (fp);
+  fseek (fp, 0, SEEK_SET);
 
   if (strrchr (filename, '/'))
     tmp = g_strdup_printf ("Loading %s:", strrchr (filename, '/') + 1);
@@ -293,6 +298,15 @@ read_dds (gchar    *filename,
   else
     {
       precision = GIMP_PRECISION_U8_GAMMA;
+    }
+
+  /* verify header information is accurate */
+  if (d.bpp < 1 ||
+      (hdr.pitch_or_linsize > (file_size - sizeof (hdr))))
+    {
+      fclose (fp);
+      g_message ("Invalid or corrupted DDS header\n");
+      return GIMP_PDB_EXECUTION_ERROR;
     }
 
   image = gimp_image_new_with_precision (hdr.width, hdr.height, type, precision);
@@ -908,6 +922,14 @@ load_layer (FILE            *fp,
   unsigned int   size = hdr->pitch_or_linsize >> (2 * level);
   unsigned int   layerw;
   int            format = DDS_COMPRESS_NONE;
+  gsize          file_size;
+  gsize          current_position;
+
+  current_position = ftell (fp);
+  fseek (fp, 0L, SEEK_END);
+  file_size = ftell (fp);
+  fseek (fp, 0, SEEK_SET);
+  fseek (fp, current_position, SEEK_SET);
 
   if (width < 1) width = 1;
   if (height < 1) height = 1;
@@ -918,7 +940,6 @@ load_layer (FILE            *fp,
       if (hdr->pixelfmt.flags & DDPF_PALETTEINDEXED8)
         {
           type = GIMP_INDEXED_IMAGE;
-          bablfmt = babl_format ("R'G'B' u8");
         }
       else if (hdr->pixelfmt.rmask == 0xe0)
         {
@@ -937,7 +958,12 @@ load_layer (FILE            *fp,
         }
       break;
     case 2:
-      if (hdr->pixelfmt.amask == 0xf000) /* RGBA4 */
+      if ((hdr->pixelfmt.flags & (DDPF_PALETTEINDEXED8 + DDPF_ALPHA)) ==
+          DDPF_PALETTEINDEXED8 + DDPF_ALPHA)
+        {
+          type = GIMP_INDEXEDA_IMAGE;
+        }
+      else if (hdr->pixelfmt.amask == 0xf000) /* RGBA4 */
         {
           type = GIMP_RGBA_IMAGE;
           bablfmt = babl_format ("R'G'B'A u8");
@@ -971,6 +997,9 @@ load_layer (FILE            *fp,
 
   gimp_image_insert_layer (image, layer, 0, *l);
 
+  if (type == GIMP_INDEXED_IMAGE || type == GIMP_INDEXEDA_IMAGE)
+    bablfmt = gimp_drawable_get_format (layer);
+
   if ((*l)++) gimp_item_set_visible (layer, FALSE);
 
   buffer = gimp_drawable_get_buffer (layer);
@@ -1003,6 +1032,13 @@ load_layer (FILE            *fp,
         size *= 8;
       else
         size *= 16;
+    }
+
+  if (size > (file_size - current_position) ||
+      size > hdr->pitch_or_linsize)
+    {
+      g_message ("Requested data exceeds size of file.\n");
+      return 0;
     }
 
   if ((hdr->flags & DDSD_LINEARSIZE) &&
@@ -1041,6 +1077,15 @@ load_layer (FILE            *fp,
                                bablfmt, pixels, GEGL_AUTO_ROWSTRIDE);
               n = 0;
               gimp_progress_update ((double)y / (double)hdr->height);
+            }
+
+          current_position = ftell (fp);
+          if ((hdr->flags & DDSD_PITCH)                          &&
+              ((width * d->bpp) > (file_size - current_position) ||
+               (width * d->bpp) > hdr->pitch_or_linsize))
+            {
+              g_message ("Requested data exceeds size of file.\n");
+              return 0;
             }
 
           if ((hdr->flags & DDSD_PITCH) &&

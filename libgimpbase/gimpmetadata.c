@@ -143,7 +143,22 @@ static const gchar *unsupported_tags[] =
      (PreviewResolution, PreviewLength, PreviewImageBorders) also make no sense because
      we are not including a Pentax specific preview image. */
   "Exif.Pentax.Preview",
-  "Exif.PentaxDng.Preview"
+  "Exif.PentaxDng.Preview",
+  /* Never save the complete brand specific MakerNote data. We load and
+   * should only save the specific brand tags inside the MakerNote.
+   * Sometimes the MakerNote is invalid or exiv2 doesn't know how to parse
+   * it. In that case we still get the (invalid) MakerNote, but not the
+   * individual tags or just a subset of them.
+   * If there are recognized brand specific tags, exiv2 will create the
+   * required MakerNote itself (which in can still be invalid but that's an
+   * exiv2 issue not ours). */
+  "Exif.Photo.MakerNote",
+  "Exif.MakerNote.ByteOrder",
+  "Exif.MakerNote.Offset",
+  /* Photoshop resources can contain sensitive data. We should not save the
+   * unedited original state. */
+  "Exif.Image.ImageResources",
+  "Exif.Image.0x935c",
 };
 
 static const guint8 minimal_exif[] =
@@ -540,6 +555,7 @@ typedef struct
 {
   gchar         name[1024];
   gboolean      base64;
+  gboolean      excessive_message_shown;
   GimpMetadata *metadata;
 } GimpMetadataParseData;
 
@@ -653,13 +669,32 @@ gimp_metadata_deserialize_text (GMarkupParseContext  *context,
             {
               guint length = g_strv_length (values);
 
-              values = g_renew (gchar *, values, length + 2);
-              values[length]     = value;
-              values[length + 1] = NULL;
+              if (length > 1000 &&
+                  ! g_strcmp0 (parse_data->name, "Xmp.photoshop.DocumentAncestors"))
+                {
+                  /* Issue #8025, see also #7464 Some XCF images can have huge
+                   * amounts of this tag, apparently due to a bug in PhotoShop.
+                   * This makes deserializing it in the way we currently do
+                   * too slow. Until we can change this let's ignore everything
+                   * but the first 1000 values when serializing. */
 
-              gexiv2_metadata_set_tag_multiple (g2_metadata,
-                                                parse_data->name,
-                                                (const gchar **) values);
+                  if (! parse_data->excessive_message_shown)
+                    {
+                      g_message ("Excessive number of Xmp.photoshop.DocumentAncestors tags found. "
+                                 "Only keeping the first 1000 values.");
+                      parse_data->excessive_message_shown = TRUE;
+                    }
+                }
+              else
+                {
+                  values = g_renew (gchar *, values, length + 2);
+                  values[length]     = value;
+                  values[length + 1] = NULL;
+
+                  gexiv2_metadata_set_tag_multiple (g2_metadata,
+                                                    parse_data->name,
+                                                    (const gchar **) values);
+                }
               g_strfreev (values);
             }
           else
@@ -705,6 +740,7 @@ gimp_metadata_deserialize (const gchar *metadata_xml)
   metadata = gimp_metadata_new ();
 
   parse_data.metadata = metadata;
+  parse_data.excessive_message_shown = FALSE;
 
   markup_parser.start_element = gimp_metadata_deserialize_start_element;
   markup_parser.end_element   = gimp_metadata_deserialize_end_element;
@@ -823,14 +859,57 @@ gimp_metadata_serialize (GimpMetadata *metadata)
     {
       for (i = 0; xmp_data[i] != NULL; i++)
         {
-          value = gexiv2_metadata_get_tag_string (GEXIV2_METADATA (metadata),
-                                                  xmp_data[i]);
-          escaped = gimp_metadata_escape (xmp_data[i], value, &base64);
-          g_free (value);
+          /* XmpText is always a single value, but structures like
+           * XmpBag and XmpSeq can have multiple values that need to be
+           * treated separately or else saving will do things wrong. */
+          if (! g_strcmp0 (gexiv2_metadata_get_tag_type (xmp_data[i]), "XmpText"))
+            {
+              value = gexiv2_metadata_get_tag_string (GEXIV2_METADATA (metadata),
+                                                      xmp_data[i]);
+              escaped = gimp_metadata_escape (xmp_data[i], value, &base64);
+              g_free (value);
 
-          gimp_metadata_append_tag (string, xmp_data[i], escaped, base64);
+              gimp_metadata_append_tag (string, xmp_data[i], escaped, base64);
+            }
+          else
+            {
+              gchar **values;
+
+              values = gexiv2_metadata_get_tag_multiple (GEXIV2_METADATA (metadata),
+                                                         xmp_data[i]);
+
+              if (values)
+                {
+                  gint  vi;
+                  gint  cnt = 0;
+
+                  if (! g_strcmp0 (xmp_data[i], "Xmp.photoshop.DocumentAncestors"))
+                    {
+                      /* Issue #7464 Some images can have huge amounts of this
+                       * tag (more than 100000 in certain cases), apparently
+                       * due to a bug in PhotoShop. This makes deserializing it
+                       * in the way we currently do too slow. Until we can
+                       * change this let's remove everything but the first 1000
+                       * values when serializing. */
+                      cnt = g_strv_length (values);
+
+                      if (cnt > 1000)
+                        {
+                          g_message ("Excessive number of Xmp.photoshop.DocumentAncestors tags found: %d. "
+                                     "Only keeping the first 1000 values.", cnt);
+                        }
+                    }
+
+                  for (vi = 0; values[vi] != NULL && (cnt <= 1000 || vi < 1000); vi++)
+                    {
+                      escaped = gimp_metadata_escape (xmp_data[i], values[vi], &base64);
+                      gimp_metadata_append_tag (string, xmp_data[i], escaped, base64);
+                    }
+
+                  g_strfreev (values);
+                }
+            }
         }
-
       g_strfreev (xmp_data);
     }
 
@@ -964,21 +1043,7 @@ gimp_metadata_save_to_file (GimpMetadata  *metadata,
       return FALSE;
     }
 
-#ifdef G_OS_WIN32
-  filename = g_win32_locale_filename_from_utf8 (path);
-  /* FIXME!
-   * This call can return NULL.
-   */
-  if (! filename)
-    {
-      g_free (path);
-      g_set_error (error, GIMP_METADATA_ERROR, 0,
-                   _("Conversion of the filename to system codepage failed."));
-      return FALSE;
-    }
-#else
   filename = g_strdup (path);
-#endif
 
   g_free (path);
 
@@ -1167,6 +1232,8 @@ gimp_metadata_set_from_xmp (GimpMetadata  *metadata,
  * @height:   Height in pixels
  *
  * Sets Exif.Image.ImageWidth and Exif.Image.ImageLength on @metadata.
+ * If already present, also sets Exif.Photo.PixelXDimension and
+ * Exif.Photo.PixelYDimension.
  *
  * Since: 2.10
  */
@@ -1182,10 +1249,24 @@ gimp_metadata_set_pixel_size (GimpMetadata *metadata,
   g_snprintf (buffer, sizeof (buffer), "%d", width);
   gexiv2_metadata_set_tag_string (GEXIV2_METADATA (metadata),
                                   "Exif.Image.ImageWidth", buffer);
+  if (gexiv2_metadata_has_tag (GEXIV2_METADATA (metadata),
+                               "Exif.Photo.PixelXDimension"))
+    {
+      gexiv2_metadata_set_tag_string (GEXIV2_METADATA (metadata),
+                                      "Exif.Photo.PixelXDimension",
+                                      buffer);
+    }
 
   g_snprintf (buffer, sizeof (buffer), "%d", height);
   gexiv2_metadata_set_tag_string (GEXIV2_METADATA (metadata),
                                   "Exif.Image.ImageLength", buffer);
+  if (gexiv2_metadata_has_tag (GEXIV2_METADATA (metadata),
+                               "Exif.Photo.PixelYDimension"))
+    {
+      gexiv2_metadata_set_tag_string (GEXIV2_METADATA (metadata),
+                                      "Exif.Photo.PixelYDimension",
+                                      buffer);
+    }
 }
 
 /**
@@ -1603,6 +1684,53 @@ gimp_metadata_copy_tag (GExiv2Metadata *src,
                         GExiv2Metadata *dest,
                         const gchar    *tag)
 {
+#if GEXIV2_CHECK_VERSION(0, 12, 2)
+  gchar  **values;
+  GError  *error = NULL;
+
+  values = gexiv2_metadata_try_get_tag_multiple (src, tag, &error);
+
+  if (error)
+    {
+      g_printerr ("%s: %s\n", G_STRFUNC, error->message);
+      g_clear_error (&error);
+      g_strfreev (values);
+    }
+  else if (values)
+    {
+      gexiv2_metadata_try_set_tag_multiple (dest, tag, (const gchar **) values, &error);
+      if (error)
+        {
+          g_warning ("%s: failed to set multiple metadata '%s': %s\n",
+                     G_STRFUNC, tag, error->message);
+          g_clear_error (&error);
+        }
+
+      g_strfreev (values);
+    }
+  else
+    {
+      gchar *value = gexiv2_metadata_try_get_tag_string (src, tag, &error);
+
+      if (value)
+        {
+          gexiv2_metadata_try_set_tag_string (dest, tag, value, &error);
+          if (error)
+            {
+              g_warning ("%s: failed to set metadata '%s': %s\n",
+                         G_STRFUNC, tag, error->message);
+              g_clear_error (&error);
+            }
+          g_free (value);
+        }
+      else if (error)
+        {
+          g_warning ("%s: failed to get metadata '%s': %s\n",
+                     G_STRFUNC, tag, error->message);
+          g_clear_error (&error);
+        }
+    }
+#else
   gchar **values = gexiv2_metadata_get_tag_multiple (src, tag);
 
   if (values)
@@ -1620,6 +1748,7 @@ gimp_metadata_copy_tag (GExiv2Metadata *src,
           g_free (value);
         }
     }
+#endif
 }
 
 static void

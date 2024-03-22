@@ -692,6 +692,8 @@ interpolate (control_point  cps[],
   int i, j, i1, i2;
   double c0, c1, t;
 
+  g_return_if_fail (ncps > 0);
+
   if (ncps == 1)
     {
       *result = cps[0];
@@ -710,12 +712,14 @@ interpolate (control_point  cps[],
   else
     {
       i1 = 0;
-      while (cps[i1].time < time)
+      while (i1 < ncps && cps[i1].time < time)
         i1++;
       i1--;
       i2 = i1 + 1;
-      if (time - cps[i1].time > -1e-7 &&
-          time - cps[i1].time < 1e-7)
+
+      if (i2 == ncps ||
+          (time - cps[i1].time > -1e-7 &&
+           time - cps[i1].time < 1e-7))
         {
           *result = cps[i1];
           return;
@@ -842,10 +846,12 @@ tokenize (char **ss,
           char  *argv[],
           int   *argc)
 {
-  char *s = *ss;
-  int   i = 0, state = 0;
+  char *s   = *ss;
+  int   i   = 0, state = 0;
+  gint  len = 0;
 
-  while (*s != ';')
+  len = strlen (s);
+  while (*s != ';' && len > 0)
     {
       char c = *s;
       switch (state)
@@ -859,17 +865,21 @@ tokenize (char **ss,
               i++;
               state = 1;
             }
+          break;
         case 1:
           if (g_ascii_isspace (c))
             {
               *s = 0;
               state = 0;
             }
+          break;
         case 2:
           if (c == '\n')
             state = 0;
+          break;
         }
       s++;
+      len--;
     }
   *s = 0;
   *ss = s + 1;
@@ -908,8 +918,6 @@ compare_xforms (const void *va,
 
 /*
  * given a pointer to a string SS, fill fields of a control point CP.
- * return a pointer to the first unused char in SS.  totally barfucious,
- * must integrate with tcl soon...
  */
 
 void
@@ -918,10 +926,9 @@ parse_control_point (char          **ss,
 {
   char *argv[MAXARGS];
   int argc, i, j;
-  int set_cm = 0, set_image_size = 0, set_nbatches = 0, set_white_level = 0, set_cmap_inter = 0;
-  int set_spatial_oversample = 0;
-  double *slot = NULL, xf, cm, t, nbatches, white_level, spatial_oversample, cmap_inter;
-  double image_size[2];
+  gint64  xf_index     = 0;
+  gint    parse_errors = 0;
+  double *slot = NULL, t;
 
   for (i = 0; i < NXFORMS; i++)
     {
@@ -946,94 +953,258 @@ parse_control_point (char          **ss,
     }
 
   tokenize (ss, argv, &argc);
-  for (i = 0; i < argc; i++)
+
+  i = 0;
+  while (i < argc)
     {
-      if (streql("xform", argv[i]))
-        slot = &xf;
-      else if (streql("time", argv[i]))
-        slot = &cp->time;
-      else if (streql("brightness", argv[i]))
-        slot = &cp->brightness;
-      else if (streql("contrast", argv[i]))
-        slot = &cp->contrast;
-      else if (streql("gamma", argv[i]))
-        slot = &cp->gamma;
-      else if (streql("zoom", argv[i]))
-        slot = &cp->zoom;
-      else if (streql("image_size", argv[i]))
+      gint itoken;
+
+      itoken = i;
+      if (i < argc)
         {
-          slot = image_size;
-          set_image_size = 1;
-        }
-      else if (streql("center", argv[i]))
-        slot = cp->center;
-      else if (streql("pulse", argv[i]))
-        slot = (double *) cp->pulse;
-      else if (streql("wiggle", argv[i]))
-        slot = (double *) cp->wiggle;
-      else if (streql("pixels_per_unit", argv[i]))
-        slot = &cp->pixels_per_unit;
-      else if (streql("spatial_filter_radius", argv[i]))
-        slot = &cp->spatial_filter_radius;
-      else if (streql("sample_density", argv[i]))
-        slot = &cp->sample_density;
-      else if (streql("nbatches", argv[i]))
-        {
-          slot = &nbatches;
-          set_nbatches = 1;
-        }
-      else if (streql("white_level", argv[i]))
-        {
-          slot = &white_level;
-          set_white_level = 1;
-        }
-      else if (streql("spatial_oversample", argv[i]))
-        {
-          slot = &spatial_oversample;
-          set_spatial_oversample = 1;
-        }
-      else if (streql("cmap", argv[i]))
-        {
-          slot = &cm;
-          set_cm = 1;
-        }
-      else if (streql("density", argv[i]))
-        slot = &cp->xform[(int)xf].density;
-      else if (streql("color", argv[i]))
-        slot = &cp->xform[(int)xf].color;
-      else if (streql("coefs", argv[i]))
-        {
-          slot = cp->xform[(int)xf].c[0];
-          cp->xform[(int)xf].density = 1.0;
-        }
-      else if (streql("var", argv[i]))
-        slot = cp->xform[(int)xf].var;
-      else if (streql("cmap_inter", argv[i]))
-        {
-          slot = &cmap_inter;
-          set_cmap_inter = 1;
+          /* First value belonging to token. */
+          i++;
         }
       else
-        *slot++ = g_strtod(argv[i], NULL);
+        {
+          g_printerr ("Not enough parameters. File may be corrupt!\n");
+          parse_errors++;
+          break;
+        }
+
+      if (streql ("xform", argv[itoken]))
+        {
+          if (! g_ascii_string_to_signed (argv[i++], 10, 0, NXFORMS-1, &xf_index, NULL))
+            {
+              g_printerr ("Invalid xform index '%s'\n", argv[i-1]);
+              parse_errors++;
+              xf_index = 0;
+            }
+        }
+      else if (streql ("density", argv[itoken]))
+        {
+          cp->xform[xf_index].density = g_strtod (argv[i++], NULL);
+        }
+      else if (streql ("color", argv[itoken]))
+        {
+          cp->xform[xf_index].color = g_strtod (argv[i++], NULL);
+        }
+      else if (streql ("coefs", argv[itoken]))
+        {
+          /* We need 6 coef values and we know are at the first */
+          if (i + 5 >= argc)
+            {
+              g_printerr ("Not enough parameters. File may be corrupt!\n");
+              parse_errors++;
+              break;
+            }
+          slot = cp->xform[xf_index].c[0];
+          for (j = 0; j < 6; j++)
+            {
+              *slot++ = g_strtod (argv[i++], NULL);
+            }
+          cp->xform[xf_index].density = 1.0;
+        }
+      else if (streql ("var", argv[itoken]))
+        {
+          /* We need NVARS var values and we know are at the first */
+          if (i + NVARS > argc)
+            {
+              g_printerr ("Not enough parameters. File may be corrupt!\n");
+              parse_errors++;
+              break;
+            }
+          slot = cp->xform[xf_index].var;
+          for (j = 0; j < NVARS; j++)
+            {
+              *slot++ = g_strtod (argv[i++], NULL);
+            }
+        }
+      else if (streql ("time", argv[itoken]))
+        {
+          cp->time = g_strtod (argv[i++], NULL);
+        }
+      else if (streql ("brightness", argv[itoken]))
+        {
+          cp->brightness = g_strtod (argv[i++], NULL);
+        }
+      else if (streql ("contrast", argv[itoken]))
+        {
+          cp->contrast = g_strtod (argv[i++], NULL);
+        }
+      else if (streql ("gamma", argv[itoken]))
+        {
+          cp->gamma = g_strtod (argv[i++], NULL);
+        }
+      else if (streql ("zoom", argv[itoken]))
+        {
+          cp->zoom = g_strtod (argv[i++], NULL);
+        }
+      else if (streql ("image_size", argv[itoken]))
+        {
+          gint64 w, h;
+
+          /* We need 2 values and we know are at the first */
+          if (i + 1 >= argc)
+            {
+              g_printerr ("Not enough parameters. File may be corrupt!\n");
+              parse_errors++;
+              break;
+            }
+          if (! g_ascii_string_to_signed (argv[i++], 10, 1, GIMP_MAX_IMAGE_SIZE, &w, NULL))
+            {
+              g_printerr ("Ignoring invalid image width '%s'\n", argv[i-1]);
+              parse_errors++;
+            }
+          else if (! g_ascii_string_to_signed (argv[i++], 10, 1, GIMP_MAX_IMAGE_SIZE, &h, NULL))
+            {
+              g_printerr ("Ignoring invalid image_size heigth '%s'\n", argv[i-1]);
+              parse_errors++;
+            }
+          else
+            {
+              cp->width  = w;
+              cp->height = h;
+            }
+        }
+      else if (streql ("center", argv[itoken]))
+        {
+          /* We need 2 values and we know are at the first */
+          if (i + 1 >= argc)
+            {
+              g_printerr ("Not enough parameters. File may be corrupt!\n");
+              parse_errors++;
+              break;
+            }
+          cp->center[0] = g_strtod (argv[i++], NULL);
+          cp->center[1] = g_strtod (argv[i++], NULL);
+        }
+      else if (streql ("pixels_per_unit", argv[itoken]))
+        {
+          cp->pixels_per_unit = g_strtod (argv[i++], NULL);
+        }
+      else if (streql ("pulse", argv[itoken]))
+        {
+          /* We need 4 values and we know are at the first */
+          if (i + 3 >= argc)
+            {
+              g_printerr ("Not enough parameters. File may be corrupt!\n");
+              parse_errors++;
+              break;
+            }
+          slot = &cp->pulse[0][0];
+          for (j = 0; j < 4; j++)
+            {
+              *slot++ = g_strtod (argv[i++], NULL);
+            }
+        }
+      else if (streql ("wiggle", argv[itoken]))
+        {
+          /* We need 4 values and we know are at the first */
+          if (i + 3 >= argc)
+            {
+              g_printerr ("Not enough parameters. File may be corrupt!\n");
+              parse_errors++;
+              break;
+            }
+          slot = &cp->wiggle[0][0];
+          for (j = 0; j < 4; j++)
+            {
+              *slot++ = g_strtod (argv[i++], NULL);
+            }
+        }
+      else if (streql ("spatial_oversample", argv[itoken]))
+        {
+          gint64 oversample;
+
+          /* Values in the gui seem to be between 1 and 4 */
+          if (! g_ascii_string_to_signed (argv[i++], 10, 1, 4, &oversample, NULL))
+            {
+              g_printerr ("Ignoring invalid spatial oversample value '%s'\n", argv[i-1]);
+              parse_errors++;
+            }
+          else
+            {
+              cp->spatial_oversample = oversample;
+            }
+        }
+      else if (streql ("spatial_filter_radius", argv[itoken]))
+        {
+          cp->spatial_filter_radius = g_strtod (argv[i++], NULL);
+        }
+      else if (streql ("sample_density", argv[itoken]))
+        {
+          cp->sample_density = g_strtod (argv[i++], NULL);
+        }
+      else if (streql ("nbatches", argv[itoken]))
+        {
+          gint64 nbatches;
+
+          /* Not sure what the maximum should be. It always seems to be set to 1. */
+          if (! g_ascii_string_to_signed (argv[i++], 10, 0, 2, &nbatches, NULL))
+            {
+              g_printerr ("Ignoring invalid nbatches value '%s'\n", argv[i-1]);
+              parse_errors++;
+            }
+          else
+            {
+              cp->nbatches = nbatches;
+            }
+        }
+      else if (streql ("white_level", argv[itoken]))
+        {
+          gint64 wl;
+
+          if (! g_ascii_string_to_signed (argv[i++], 10, 0, 255, &wl, NULL))
+            {
+              g_printerr ("Ignoring invalid white level value '%s'\n", argv[i-1]);
+              parse_errors++;
+            }
+          else
+            {
+              cp->white_level = wl;
+            }
+        }
+      else if (streql ("cmap", argv[itoken]))
+        {
+          gint64 cmi;
+
+          /* -1 = random */
+          if (! g_ascii_string_to_signed (argv[i++], 10, -1, 255, &cmi, NULL))
+            {
+              g_printerr ("Ignoring invalid color map value '%s'\n", argv[i-1]);
+              parse_errors++;
+            }
+          else
+            {
+              cp->cmap_index = cmi;
+            }
+        }
+      else if (streql ("cmap_inter", argv[itoken]))
+        {
+          gint64 cmi;
+
+          /* 0 or 1 */
+          if (! g_ascii_string_to_signed (argv[i++], 10, 0, 1, &cmi, NULL))
+            {
+              g_printerr ("Ignoring invalid color interpolate value '%s'\n", argv[i-1]);
+              parse_errors++;
+            }
+          else
+            {
+              cp->cmap_inter = cmi;
+            }
+        }
+      else
+        {
+          g_printerr ("Invalid token '%s'. File may be corrupt!\n", argv[itoken]);
+          parse_errors++;
+        }
     }
-  if (set_cm)
-    {
-      cp->cmap_index = (int) cm;
-      get_cmap(cp->cmap_index, cp->cmap, 256);
-    }
-  if (set_image_size)
-    {
-      cp->width  = (int) image_size[0];
-      cp->height = (int) image_size[1];
-    }
-  if (set_cmap_inter)
-    cp->cmap_inter  = (int) cmap_inter;
-  if (set_nbatches)
-    cp->nbatches = (int) nbatches;
-  if (set_spatial_oversample)
-    cp->spatial_oversample = (int) spatial_oversample;
-  if (set_white_level)
-    cp->white_level = (int) white_level;
+
+  if (parse_errors > 0)
+    g_warning ("Input file contains %d errors. File may be corrupt!", parse_errors);
+
   for (i = 0; i < NXFORMS; i++)
     {
       t = 0.0;
@@ -1209,7 +1380,8 @@ estimate_bounding_box (control_point *cp,
   int    low_target = batch * eps;
   int    high_target = batch - low_target;
   point  min, max, delta;
-  point *points = malloc (sizeof (point) * batch);
+  point *points = g_malloc0 (sizeof (point) * batch);
+
   iterate (cp, batch, 20, points);
 
   min[0] = min[1] =  1e10;
@@ -1256,6 +1428,7 @@ estimate_bounding_box (control_point *cp,
       delta[0] = delta[0] / 2.0;
       delta[1] = delta[1] / 2.0;
     }
+  g_free (points);
 }
 
 /* this has serious flaws in it */

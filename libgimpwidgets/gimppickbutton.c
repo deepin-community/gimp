@@ -22,6 +22,10 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
 
+#ifdef GDK_WINDOWING_X11
+#include <gdk/gdkx.h>
+#endif
+
 #include "libgimpcolor/gimpcolor.h"
 
 #include "gimpwidgetstypes.h"
@@ -30,11 +34,15 @@
 #include "gimphelpui.h"
 #include "gimpicons.h"
 #include "gimppickbutton.h"
+
+#if defined (GDK_WINDOWING_QUARTZ)
+#include "gimppickbutton-quartz.h"
+#elif defined (GDK_WINDOWING_WIN32)
+#include "gimppickbutton-win32.h"
+#else
 #include "gimppickbutton-default.h"
 #include "gimppickbutton-kwin.h"
-
-#ifdef GDK_WINDOWING_QUARTZ
-#include "gimppickbutton-quartz.h"
+#include "gimppickbutton-xdg.h"
 #endif
 
 #include "libgimp/libgimp-intl.h"
@@ -137,10 +145,26 @@ gimp_pick_button_dispose (GObject *object)
 static void
 gimp_pick_button_clicked (GtkButton *button)
 {
-#ifdef GDK_WINDOWING_QUARTZ
+#if defined (GDK_WINDOWING_QUARTZ)
   _gimp_pick_button_quartz_pick (GIMP_PICK_BUTTON (button));
+#elif defined (GDK_WINDOWING_WIN32)
+  _gimp_pick_button_win32_pick (GIMP_PICK_BUTTON (button));
+#elif defined (GDK_WINDOWING_X11)
+  /* It's a bit weird as we use the default pick code both in first and
+   * last cases. It's because when running GIMP on X11 in particular,
+   * the portals don't return color space information. So the returned
+   * color is in the display space, not in the current image space and
+   * we have no way to convert the data back (well if running on X11, we
+   * could still get a profile from the display, but if there are
+   * several displays, we can't know for sure where the color was picked
+   * from.).
+   * See: https://github.com/flatpak/xdg-desktop-portal/issues/862
+   */
+  _gimp_pick_button_default_pick (GIMP_PICK_BUTTON (button));
 #else
-  if (_gimp_pick_button_kwin_available ())
+  if (_gimp_pick_button_xdg_available ())
+    _gimp_pick_button_xdg_pick (GIMP_PICK_BUTTON (button));
+  else if (_gimp_pick_button_kwin_available ())
     _gimp_pick_button_kwin_pick (GIMP_PICK_BUTTON (button));
   else
     _gimp_pick_button_default_pick (GIMP_PICK_BUTTON (button));

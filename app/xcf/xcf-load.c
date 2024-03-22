@@ -183,9 +183,18 @@ xcf_load_image (Gimp     *gimp,
   xcf_read_int32 (info, (guint32 *) &width, 1);
   xcf_read_int32 (info, (guint32 *) &height, 1);
   xcf_read_int32 (info, (guint32 *) &image_type, 1);
-  if (image_type < GIMP_RGB || image_type > GIMP_INDEXED ||
-      width <= 0 || height <= 0)
+  if (image_type < GIMP_RGB || image_type > GIMP_INDEXED)
     goto hard_error;
+
+  /* Be lenient with corrupt image dimensions.
+   * Hopefully layer dimensions will be valid. */
+  if (width <= 0 || height <= 0 ||
+      width > GIMP_MAX_IMAGE_SIZE || height > GIMP_MAX_IMAGE_SIZE)
+    {
+      GIMP_LOG (XCF, "Invalid image size %d x %d, setting to 1x1.", width, height);
+      width  = 1;
+      height = 1;
+    }
 
   if (info->file_version >= 4)
     {
@@ -476,6 +485,13 @@ xcf_load_image (Gimp     *gimp,
        */
       saved_pos = info->cp;
 
+      if (offset < saved_pos)
+        {
+          GIMP_LOG (XCF, "Invalid layer offset: %" G_GOFFSET_FORMAT
+                    " at offset: %" G_GOFFSET_FORMAT, offset, saved_pos);
+          goto error;
+        }
+
       /* seek to the layer offset */
       if (! xcf_seek_pos (info, offset, NULL))
         goto error;
@@ -616,6 +632,13 @@ xcf_load_image (Gimp     *gimp,
        */
       saved_pos = info->cp;
 
+      if (offset < saved_pos)
+        {
+          GIMP_LOG (XCF, "Invalid channel offset: %" G_GOFFSET_FORMAT
+                    " at offset: % "G_GOFFSET_FORMAT, offset, saved_pos);
+          goto error;
+        }
+
       /* seek to the channel offset */
       if (! xcf_seek_pos (info, offset, NULL))
         goto error;
@@ -625,6 +648,7 @@ xcf_load_image (Gimp     *gimp,
       if (!channel)
         {
           n_broken_channels++;
+          GIMP_LOG (XCF, "Failed to load channel.");
 
           if (! xcf_seek_pos (info, saved_pos, NULL))
             goto error;
@@ -1004,7 +1028,15 @@ xcf_load_image_props (XcfInfo   *info,
                 GError       *error = NULL;
 
                 if (! p)
-                  return FALSE;
+                  {
+                    gimp_message (info->gimp, G_OBJECT (info->progress),
+                                  GIMP_MESSAGE_WARNING,
+                                  "Invalid image parasite found. "
+                                  "Possibly corrupt XCF file.");
+
+                    xcf_seek_pos (info, base + prop_size, NULL);
+                    continue;
+                  }
 
                 if (! gimp_image_parasite_validate (image, p, &error))
                   {
@@ -1052,7 +1084,12 @@ xcf_load_image_props (XcfInfo   *info,
           break;
 
         case PROP_PATHS:
-          xcf_load_old_paths (info, image);
+          {
+            goffset base = info->cp;
+
+            if (! xcf_load_old_paths (info, image))
+              xcf_seek_pos (info, base + prop_size, NULL);
+          }
           break;
 
         case PROP_USER_UNIT:
@@ -1840,6 +1877,8 @@ xcf_load_prop (XcfInfo  *info,
   if (G_UNLIKELY (xcf_read_int32 (info, (guint32 *) prop_size, 1) != 4))
     return FALSE;
 
+  GIMP_LOG (XCF, "prop type=%d size=%u", *prop_type, *prop_size);
+
   return TRUE;
 }
 
@@ -1867,6 +1906,7 @@ xcf_load_layer (XcfInfo    *info,
   const Babl        *format;
   gboolean           is_fs_drawable;
   gchar             *name;
+  goffset            cur_offset;
 
   /* check and see if this is the drawable the floating selection
    *  is attached to. if it is then we'll do the attachment in our caller.
@@ -1918,7 +1958,8 @@ xcf_load_layer (XcfInfo    *info,
       return NULL;
     }
 
-  if (width <= 0 || height <= 0)
+  if (width <= 0 || height <= 0 ||
+      width > GIMP_MAX_IMAGE_SIZE || height > GIMP_MAX_IMAGE_SIZE)
     {
       gboolean is_group_layer = FALSE;
       gboolean is_text_layer  = FALSE;
@@ -1983,6 +2024,7 @@ xcf_load_layer (XcfInfo    *info,
     }
 
   /* read the hierarchy and layer mask offsets */
+  cur_offset = info->cp;
   xcf_read_offset (info, &hierarchy_offset,  1);
   xcf_read_offset (info, &layer_mask_offset, 1);
 
@@ -1992,6 +2034,11 @@ xcf_load_layer (XcfInfo    *info,
    */
   if (! gimp_viewable_get_children (GIMP_VIEWABLE (layer)))
     {
+      if (hierarchy_offset < cur_offset)
+        {
+          GIMP_LOG (XCF, "Invalid layer hierarchy offset!");
+          goto error;
+        }
       if (! xcf_seek_pos (info, hierarchy_offset, NULL))
         goto error;
 
@@ -2015,6 +2062,11 @@ xcf_load_layer (XcfInfo    *info,
   /* read in the layer mask */
   if (layer_mask_offset != 0)
     {
+      if (layer_mask_offset < cur_offset)
+        {
+          GIMP_LOG (XCF, "Invalid layer mask offset!");
+          goto error;
+        }
       if (! xcf_seek_pos (info, layer_mask_offset, NULL))
         goto error;
 
@@ -2071,6 +2123,7 @@ xcf_load_channel (XcfInfo   *info,
   gboolean     is_fs_drawable;
   gchar       *name;
   GimpRGB      color = { 0.0, 0.0, 0.0, GIMP_OPACITY_OPAQUE };
+  goffset      cur_offset;
 
   /* check and see if this is the drawable the floating selection
    *  is attached to. if it is then we'll do the attachment in our caller.
@@ -2080,10 +2133,16 @@ xcf_load_channel (XcfInfo   *info,
   /* read in the layer width, height and name */
   xcf_read_int32 (info, (guint32 *) &width,  1);
   xcf_read_int32 (info, (guint32 *) &height, 1);
-  if (width <= 0 || height <= 0)
-    return NULL;
+  if (width <= 0 || height <= 0 ||
+      width > GIMP_MAX_IMAGE_SIZE || height > GIMP_MAX_IMAGE_SIZE)
+    {
+      GIMP_LOG (XCF, "Invalid channel size %d x %d.", width, height);
+      return NULL;
+    }
 
   xcf_read_string (info, &name, 1);
+  GIMP_LOG (XCF, "Channel width=%d, height=%d, name='%s'",
+            width, height, name);
 
   /* create a new channel */
   channel = gimp_channel_new (image, width, height, name, &color);
@@ -2097,8 +2156,15 @@ xcf_load_channel (XcfInfo   *info,
 
   xcf_progress_update (info);
 
-  /* read the hierarchy and layer mask offsets */
+  /* read the hierarchy offset */
+  cur_offset = info->cp;
   xcf_read_offset (info, &hierarchy_offset, 1);
+
+  if (hierarchy_offset < cur_offset)
+    {
+      GIMP_LOG (XCF, "Invalid hierarchy offset!");
+      goto error;
+    }
 
   /* read in the hierarchy */
   if (! xcf_seek_pos (info, hierarchy_offset, NULL))
@@ -2143,6 +2209,7 @@ xcf_load_layer_mask (XcfInfo   *info,
   gboolean       is_fs_drawable;
   gchar         *name;
   GimpRGB        color = { 0.0, 0.0, 0.0, GIMP_OPACITY_OPAQUE };
+  goffset        cur_offset;
 
   /* check and see if this is the drawable the floating selection
    *  is attached to. if it is then we'll do the attachment in our caller.
@@ -2152,10 +2219,16 @@ xcf_load_layer_mask (XcfInfo   *info,
   /* read in the layer width, height and name */
   xcf_read_int32 (info, (guint32 *) &width,  1);
   xcf_read_int32 (info, (guint32 *) &height, 1);
-  if (width <= 0 || height <= 0)
-    return NULL;
+  if (width <= 0 || height <= 0 ||
+      width > GIMP_MAX_IMAGE_SIZE || height > GIMP_MAX_IMAGE_SIZE)
+    {
+      GIMP_LOG (XCF, "Invalid layer mask size %d x %d.", width, height);
+      return NULL;
+    }
 
   xcf_read_string (info, &name, 1);
+  GIMP_LOG (XCF, "Layer mask width=%d, height=%d, name='%s'",
+            width, height, name);
 
   /* create a new layer mask */
   layer_mask = gimp_layer_mask_new (image, width, height, name, &color);
@@ -2170,8 +2243,15 @@ xcf_load_layer_mask (XcfInfo   *info,
 
   xcf_progress_update (info);
 
-  /* read the hierarchy and layer mask offsets */
+  /* read the hierarchy offset */
+  cur_offset = info->cp;
   xcf_read_offset (info, &hierarchy_offset, 1);
+
+  if (hierarchy_offset < cur_offset)
+    {
+      GIMP_LOG (XCF, "Invalid hierarchy offset!");
+      goto error;
+    }
 
   /* read in the hierarchy */
   if (! xcf_seek_pos (info, hierarchy_offset, NULL))
@@ -2210,6 +2290,7 @@ xcf_load_buffer (XcfInfo    *info,
   gint        width;
   gint        height;
   gint        bpp;
+  goffset     cur_offset;
 
   format = gegl_buffer_get_format (buffer);
 
@@ -2225,7 +2306,14 @@ xcf_load_buffer (XcfInfo    *info,
       bpp    != babl_format_get_bytes_per_pixel (format))
     return FALSE;
 
+  cur_offset = info->cp;
   xcf_read_offset (info, &offset, 1); /* top level */
+
+  if (offset < cur_offset)
+    {
+      GIMP_LOG (XCF, "Invalid buffer offset!");
+      return FALSE;
+    }
 
   /* seek to the level offset */
   if (! xcf_seek_pos (info, offset, NULL))
@@ -2680,15 +2768,17 @@ xcf_load_tile_zlib (XcfInfo       *info,
 static GimpParasite *
 xcf_load_parasite (XcfInfo *info)
 {
-  GimpParasite *parasite;
+  GimpParasite *parasite = NULL;
   gchar        *name;
   guint32       flags;
-  guint32       size;
+  guint32       size, size_read;
   gpointer      data;
 
   xcf_read_string (info, &name,  1);
   xcf_read_int32  (info, &flags, 1);
   xcf_read_int32  (info, &size,  1);
+
+  GIMP_LOG (XCF, "Parasite name: %s, flags: %d, size: %d", name, flags, size);
 
   if (size > MAX_XCF_PARASITE_DATA_LEN)
     {
@@ -2698,10 +2788,25 @@ xcf_load_parasite (XcfInfo *info)
       return NULL;
     }
 
-  data = g_new (gchar, size);
-  xcf_read_int8 (info, data, size);
+  if (!name)
+    {
+      g_printerr ("Parasite has no name! Possibly corrupt XCF file.\n");
+      return NULL;
+    }
 
-  parasite = gimp_parasite_new (name, flags, size, data);
+  data = g_new (gchar, size);
+  size_read = xcf_read_int8 (info, data, size);
+
+  if (size_read != size)
+    {
+      g_printerr ("Incorrect parasite data size: read %u bytes instead of %u. "
+                  "Possibly corrupt XCF file.\n",
+                  size_read, size);
+    }
+  else
+    {
+      parasite = gimp_parasite_new (name, flags, size, data);
+    }
 
   g_free (name);
   g_free (data);
@@ -2720,8 +2825,11 @@ xcf_load_old_paths (XcfInfo   *info,
   xcf_read_int32 (info, &last_selected_row, 1);
   xcf_read_int32 (info, &num_paths,         1);
 
+  GIMP_LOG (XCF, "Number of old paths: %u", num_paths);
+
   while (num_paths-- > 0)
-    xcf_load_old_path (info, image);
+    if (! xcf_load_old_path (info, image))
+      return FALSE;
 
   active_vectors =
     GIMP_VECTORS (gimp_container_get_child_by_index (gimp_image_get_vectors (image),
@@ -2772,7 +2880,7 @@ xcf_load_old_path (XcfInfo   *info,
     }
   else if (version != 1)
     {
-      g_printerr ("Unknown path type. Possibly corrupt XCF file");
+      g_printerr ("Unknown path type (version: %u). Possibly corrupt XCF file.\n", version);
 
       return FALSE;
     }
