@@ -73,6 +73,17 @@
   </provides>
 
   <releases>
+    <release version="2.10.38" date="2024-05-02">
+      <description>
+        <_p>
+            GIMP 2.10.38 has been the first bug-fix only release for a long
+            time, correcting various bugs, some more annoying than others.
+        </_p>
+        <_p>
+            On Windows, the Windows Ink API support has been backported.
+        </_p>
+      </description>
+    </release>
     <release version="2.10.36" date="2023-11-05">
       <description>
         <_p>
