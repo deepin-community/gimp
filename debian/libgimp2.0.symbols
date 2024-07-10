@@ -1,5 +1,5 @@
-libgimp-2.0.so.0 libgimp2.0t64 #MINVER#
-* Build-Depends-Package: libgimp2.0t64-dev
+libgimp-2.0.so.0 libgimp2.0 #MINVER#
+* Build-Depends-Package: libgimp2.0-dev
  _gimp_tile_backend_plugin_get_type@Base 2.10.0
  _gimp_tile_backend_plugin_new@Base 2.10.0
  _writechannel@Base 2.4.0
@@ -941,8 +941,8 @@ libgimp-2.0.so.0 libgimp2.0t64 #MINVER#
  gimp_vectors_to_selection@Base 2.4.0
  gimp_version@Base 2.4.0
  gimp_wm_class@Base 2.4.0
-libgimpbase-2.0.so.0 libgimp2.0t64 #MINVER#
-* Build-Depends-Package: libgimp2.0t64-dev
+libgimpbase-2.0.so.0 libgimp2.0 #MINVER#
+* Build-Depends-Package: libgimp2.0-dev
  _gimp_unit_vtable@Base 2.4.0
  gimp_add_mask_type_compat_get_type@Base 2.10.0
  gimp_add_mask_type_get_type@Base 2.4.0
@@ -1187,8 +1187,8 @@ libgimpbase-2.0.so.0 libgimp2.0t64 #MINVER#
  gp_tile_ack_write@Base 2.4.0
  gp_tile_data_write@Base 2.4.0
  gp_tile_req_write@Base 2.4.0
-libgimpcolor-2.0.so.0 libgimp2.0t64 #MINVER#
-* Build-Depends-Package: libgimp2.0t64-dev
+libgimpcolor-2.0.so.0 libgimp2.0 #MINVER#
+* Build-Depends-Package: libgimp2.0-dev
  gimp_adaptive_supersample_area@Base 2.4.0
  gimp_bilinear@Base 2.4.0
  gimp_bilinear_16@Base 2.4.0
@@ -1316,8 +1316,8 @@ libgimpcolor-2.0.so.0 libgimp2.0t64 #MINVER#
  gimp_rgba_subtract@Base 2.4.0
  gimp_value_get_rgb@Base 2.4.0
  gimp_value_set_rgb@Base 2.4.0
-libgimpconfig-2.0.so.0 libgimp2.0t64 #MINVER#
-* Build-Depends-Package: libgimp2.0t64-dev
+libgimpconfig-2.0.so.0 libgimp2.0 #MINVER#
+* Build-Depends-Package: libgimp2.0-dev
  gimp_color_config_get_cmyk_color_profile@Base 2.10.0
  gimp_color_config_get_display_bpc@Base 2.10.0
  gimp_color_config_get_display_color_profile@Base 2.10.0
@@ -1411,8 +1411,8 @@ libgimpconfig-2.0.so.0 libgimp2.0t64 #MINVER#
  gimp_scanner_parse_string@Base 2.4.0
  gimp_scanner_parse_string_no_validate@Base 2.4.0
  gimp_scanner_parse_token@Base 2.4.0
-libgimpmath-2.0.so.0 libgimp2.0t64 #MINVER#
-* Build-Depends-Package: libgimp2.0t64-dev
+libgimpmath-2.0.so.0 libgimp2.0 #MINVER#
+* Build-Depends-Package: libgimp2.0-dev
  gimp_matrix2_determinant@Base 2.10.18
  gimp_matrix2_get_type@Base 2.4.0
  gimp_matrix2_identity@Base 2.4.0
@@ -1490,8 +1490,8 @@ libgimpmath-2.0.so.0 libgimp2.0t64 #MINVER#
  gimp_vector_2d_to_3d@Base 2.4.0
  gimp_vector_2d_to_3d_val@Base 2.4.0
  gimp_vector_3d_to_2d@Base 2.4.0
-libgimpmodule-2.0.so.0 libgimp2.0t64 #MINVER#
-* Build-Depends-Package: libgimp2.0t64-dev
+libgimpmodule-2.0.so.0 libgimp2.0 #MINVER#
+* Build-Depends-Package: libgimp2.0-dev
  gimp_module_db_get_load_inhibit@Base 2.4.0
  gimp_module_db_get_type@Base 2.4.0
  gimp_module_db_load@Base 2.4.0
@@ -1509,8 +1509,8 @@ libgimpmodule-2.0.so.0 libgimp2.0t64 #MINVER#
  gimp_module_register_enum@Base 2.4.0
  gimp_module_set_load_inhibit@Base 2.4.0
  gimp_module_state_name@Base 2.4.0
-libgimpthumb-2.0.so.0 libgimp2.0t64 #MINVER#
-* Build-Depends-Package: libgimp2.0t64-dev
+libgimpthumb-2.0.so.0 libgimp2.0 #MINVER#
+* Build-Depends-Package: libgimp2.0-dev
  gimp_thumb_ensure_thumb_dir@Base 2.4.0
  gimp_thumb_ensure_thumb_dir_local@Base 2.4.0
  gimp_thumb_error_quark@Base 2.4.0
@@ -1542,8 +1542,8 @@ libgimpthumb-2.0.so.0 libgimp2.0t64 #MINVER#
  gimp_thumbnail_set_uri@Base 2.4.0
  gimp_thumbs_delete_for_uri@Base 2.4.0
  gimp_thumbs_delete_for_uri_local@Base 2.4.0
-libgimpui-2.0.so.0 libgimp2.0t64 #MINVER#
-* Build-Depends-Package: libgimp2.0t64-dev
+libgimpui-2.0.so.0 libgimp2.0 #MINVER#
+* Build-Depends-Package: libgimp2.0-dev
  _gimpui_marshal_VOID__STRING_BOOLEAN@Base 2.4.0
  _gimpui_marshal_VOID__STRING_DOUBLE_INT_INT_INT_INT_POINTER_BOOLEAN@Base 2.4.0
  _gimpui_marshal_VOID__STRING_INT_INT_INT_POINTER_BOOLEAN@Base 2.4.0
@@ -1637,8 +1637,8 @@ libgimpui-2.0.so.0 libgimp2.0t64 #MINVER#
  gimp_zoom_preview_new_from_drawable_id@Base 2.10.0
  gimp_zoom_preview_new_with_model@Base 2.4.0
  gimp_zoom_preview_new_with_model_from_drawable_id@Base 2.10.0
-libgimpwidgets-2.0.so.0 libgimp2.0t64 #MINVER#
-* Build-Depends-Package: libgimp2.0t64-dev
+libgimpwidgets-2.0.so.0 libgimp2.0 #MINVER#
+* Build-Depends-Package: libgimp2.0-dev
  _gimp_ensure_modules_func@Base 2.4.0
  _gimp_get_background_func@Base 2.4.0
  _gimp_get_foreground_func@Base 2.4.0

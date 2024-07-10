@@ -5,7 +5,6 @@ Maintainer: Debian GNOME Maintainers <pkg-gnome-maintainers@lists.alioth.debian.
 Uploaders: Hideki Yamane <henrich@debian.org>, Jeremy Bícha <jbicha@ubuntu.com>, Jordi Mallach <jordi@debian.org>, Laurent Bigonville <bigon@debian.org>, Ari Pollak <ari@debian.org>
 Build-Depends: debhelper-compat (= 13),
                desktop-file-utils <!nocheck>,
-               dpkg-dev (>= 1.22.5),
                gegl (>= 1:0.4.38),
                gettext,
                glib-networking,
@@ -66,8 +65,8 @@ Homepage: https://www.gimp.org/
 
 Package: gimp
 Architecture: any
-Depends: libgimp2.0t64 (>= ${source:Upstream-Version}),
-         libgimp2.0t64 (<= ${source:Upstream-Version}-z),
+Depends: libgimp2.0 (>= ${source:Upstream-Version}),
+         libgimp2.0 (<= ${source:Upstream-Version}-z),
          gimp-data (>= ${source:Upstream-Version}),
          gimp-data (<= ${source:Upstream-Version}-z),
          graphviz,
@@ -109,10 +108,7 @@ Description: Data files for GIMP
  This package contains architecture-independent supporting data files
  for use with GIMP.
 
-Package: libgimp2.0t64
-Provides: ${t64:Provides}
-Replaces: libgimp2.0
-Breaks: libgimp2.0 (<< ${source:Version})
+Package: libgimp2.0
 Architecture: any
 Multi-Arch: same
 Section: libs
@@ -130,7 +126,7 @@ Section: libdevel
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          libgegl-dev (>= 1:0.4.38),
-         libgimp2.0t64 (= ${binary:Version}),
+         libgimp2.0 (= ${binary:Version}),
          libgtk2.0-dev (>= 2.12.5),
          pkg-config
 Suggests: libgimp2.0-doc
