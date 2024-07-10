@@ -66,8 +66,8 @@ Homepage: https://www.gimp.org/
 
 Package: gimp
 Architecture: any
-Depends: libgimp2.0t64 (>= ${source:Upstream-Version}),
-         libgimp2.0t64 (<= ${source:Upstream-Version}-z),
+Depends: libgimp2.0 (>= ${source:Upstream-Version}),
+         libgimp2.0 (<= ${source:Upstream-Version}-z),
          gimp-data (>= ${source:Upstream-Version}),
          gimp-data (<= ${source:Upstream-Version}-z),
          graphviz,
@@ -109,10 +109,7 @@ Description: Data files for GIMP
  This package contains architecture-independent supporting data files
  for use with GIMP.
 
-Package: libgimp2.0t64
-Provides: ${t64:Provides}
-Replaces: libgimp2.0
-Breaks: libgimp2.0 (<< ${source:Version})
+Package: libgimp2.0
 Architecture: any
 Multi-Arch: same
 Section: libs
@@ -130,7 +127,7 @@ Section: libdevel
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          libgegl-dev (>= 1:0.4.38),
-         libgimp2.0t64 (= ${binary:Version}),
+         libgimp2.0 (= ${binary:Version}),
          libgtk2.0-dev (>= 2.12.5),
          pkgconf
 Suggests: libgimp2.0-doc

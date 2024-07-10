@@ -1,3 +1,9 @@
+gimp (2.10.38-1deepin1) unstable; urgency=medium
+
+  * Revert 64-bit time_t changes.
+
+ -- Tianyu Chen <sweetyfish@deepin.org>  Wed, 10 Jul 2024 11:26:38 +0200
+
 gimp (2.10.38-1) unstable; urgency=medium
 
   * New upstream release
