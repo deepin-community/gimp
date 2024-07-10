@@ -120,8 +120,8 @@ am__objects_1 = config-enums.$(OBJEXT)
 am__objects_2 = gimpconfig-dump.$(OBJEXT) gimpconfig-file.$(OBJEXT) \
 	gimpconfig-utils.$(OBJEXT) gimpcoreconfig.$(OBJEXT) \
 	gimpdialogconfig.$(OBJEXT) gimpdisplayconfig.$(OBJEXT) \
-	gimpdisplayoptions.$(OBJEXT) gimpgeglconfig.$(OBJEXT) \
-	gimpguiconfig.$(OBJEXT) gimplangrc.$(OBJEXT) \
+	gimpdisplayoptions.$(OBJEXT) gimpearlyrc.$(OBJEXT) \
+	gimpgeglconfig.$(OBJEXT) gimpguiconfig.$(OBJEXT) \
 	gimppluginconfig.$(OBJEXT) gimprc.$(OBJEXT) \
 	gimprc-deserialize.$(OBJEXT) gimprc-serialize.$(OBJEXT) \
 	gimprc-unknown.$(OBJEXT) gimpxmlparser.$(OBJEXT)
@@ -157,9 +157,9 @@ am__depfiles_remade = ./$(DEPDIR)/config-enums.Po \
 	./$(DEPDIR)/gimpconfig-utils.Po ./$(DEPDIR)/gimpcoreconfig.Po \
 	./$(DEPDIR)/gimpdialogconfig.Po \
 	./$(DEPDIR)/gimpdisplayconfig.Po \
-	./$(DEPDIR)/gimpdisplayoptions.Po \
+	./$(DEPDIR)/gimpdisplayoptions.Po ./$(DEPDIR)/gimpearlyrc.Po \
 	./$(DEPDIR)/gimpgeglconfig.Po ./$(DEPDIR)/gimpguiconfig.Po \
-	./$(DEPDIR)/gimplangrc.Po ./$(DEPDIR)/gimppluginconfig.Po \
+	./$(DEPDIR)/gimppluginconfig.Po \
 	./$(DEPDIR)/gimprc-deserialize.Po \
 	./$(DEPDIR)/gimprc-serialize.Po ./$(DEPDIR)/gimprc-unknown.Po \
 	./$(DEPDIR)/gimprc.Po ./$(DEPDIR)/gimpxmlparser.Po \
@@ -876,12 +876,12 @@ libappconfig_a_sources = \
 	gimpdisplayconfig.h		\
 	gimpdisplayoptions.c		\
 	gimpdisplayoptions.h		\
+	gimpearlyrc.c			\
+	gimpearlyrc.h			\
 	gimpgeglconfig.c		\
 	gimpgeglconfig.h		\
 	gimpguiconfig.c			\
 	gimpguiconfig.h			\
-	gimplangrc.c			\
-	gimplangrc.h			\
 	gimppluginconfig.c		\
 	gimppluginconfig.h		\
 	gimprc.c			\
@@ -1020,9 +1020,9 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gimpdialogconfig.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gimpdisplayconfig.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gimpdisplayoptions.Po@am__quote@ # am--include-marker
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gimpearlyrc.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gimpgeglconfig.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gimpguiconfig.Po@am__quote@ # am--include-marker
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gimplangrc.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gimppluginconfig.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gimprc-deserialize.Po@am__quote@ # am--include-marker
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/gimprc-serialize.Po@am__quote@ # am--include-marker
@@ -1365,9 +1365,9 @@ distclean: distclean-am
 	-rm -f ./$(DEPDIR)/gimpdialogconfig.Po
 	-rm -f ./$(DEPDIR)/gimpdisplayconfig.Po
 	-rm -f ./$(DEPDIR)/gimpdisplayoptions.Po
+	-rm -f ./$(DEPDIR)/gimpearlyrc.Po
 	-rm -f ./$(DEPDIR)/gimpgeglconfig.Po
 	-rm -f ./$(DEPDIR)/gimpguiconfig.Po
-	-rm -f ./$(DEPDIR)/gimplangrc.Po
 	-rm -f ./$(DEPDIR)/gimppluginconfig.Po
 	-rm -f ./$(DEPDIR)/gimprc-deserialize.Po
 	-rm -f ./$(DEPDIR)/gimprc-serialize.Po
@@ -1428,9 +1428,9 @@ maintainer-clean: maintainer-clean-am
 	-rm -f ./$(DEPDIR)/gimpdialogconfig.Po
 	-rm -f ./$(DEPDIR)/gimpdisplayconfig.Po
 	-rm -f ./$(DEPDIR)/gimpdisplayoptions.Po
+	-rm -f ./$(DEPDIR)/gimpearlyrc.Po
 	-rm -f ./$(DEPDIR)/gimpgeglconfig.Po
 	-rm -f ./$(DEPDIR)/gimpguiconfig.Po
-	-rm -f ./$(DEPDIR)/gimplangrc.Po
 	-rm -f ./$(DEPDIR)/gimppluginconfig.Po
 	-rm -f ./$(DEPDIR)/gimprc-deserialize.Po
 	-rm -f ./$(DEPDIR)/gimprc-serialize.Po

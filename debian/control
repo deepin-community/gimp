@@ -20,8 +20,8 @@ Build-Depends: debhelper-compat (= 13),
                libcairo2-dev (>= 1.12.2),
                libcurl4-gnutls-dev (>= 7.15.1),
                libexif-dev (>= 0.6.15),
-               libfreetype6-dev (>= 2.2),
-               libfontconfig1-dev (>= 2.12.4),
+               libfreetype-dev,
+               libfontconfig-dev,
                libgegl-dev (>= 1:0.4.38),
                libgexiv2-dev (>= 0.10.6),
                libglib2.0-dev (>= 2.56.2),
@@ -132,7 +132,7 @@ Depends: ${shlibs:Depends},
          libgegl-dev (>= 1:0.4.38),
          libgimp2.0t64 (= ${binary:Version}),
          libgtk2.0-dev (>= 2.12.5),
-         pkg-config
+         pkgconf
 Suggests: libgimp2.0-doc
 Description: Headers and other files for compiling plugins for GIMP
  This package contains the header files for the GNU Image Manipulation
