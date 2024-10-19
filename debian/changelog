@@ -1,8 +1,8 @@
-gimp (2.10.38-1deepin1) unstable; urgency=medium
+gimp (2.10.38-2) unstable; urgency=medium
 
-  * Revert 64-bit time_t changes.
+  * Cherry-pick patch to fix build with gcc-14 (Closes: #1074998)
 
- -- Tianyu Chen <sweetyfish@deepin.org>  Wed, 10 Jul 2024 11:26:38 +0200
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Fri, 26 Jul 2024 14:26:20 -0400
 
 gimp (2.10.38-1) unstable; urgency=medium
 
