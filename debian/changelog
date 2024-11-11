@@ -1,3 +1,9 @@
+gimp (2.10.38-1deepin2) unstable; urgency=medium
+
+  * fix-libheif-detection.
+
+ -- lichenggang <lichenggang@deepin.org>  Mon, 11 Nov 2024 11:39:21 +0800
+
 gimp (2.10.38-1deepin1) unstable; urgency=medium
 
   * Revert 64-bit time_t changes.

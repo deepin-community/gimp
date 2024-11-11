@@ -1,2 +1,3 @@
 01_hurd_ftbfs.patch
 02_hurd_ftbfs.patch
+fix-libheif-detection.patch
