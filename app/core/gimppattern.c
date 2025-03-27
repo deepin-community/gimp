@@ -172,6 +172,9 @@ gimp_pattern_get_new_preview (GimpViewable *viewable,
       else if (true_width < true_height)
         copy_width = copy_height * aspect;
 
+      copy_width  = MAX (1, copy_width);
+      copy_height = MAX (1, copy_height);
+
       temp_buf = gimp_temp_buf_new (copy_width, copy_height,
                                     gimp_temp_buf_get_format (pattern->mask));
 
@@ -299,13 +302,11 @@ gimp_pattern_get_standard (GimpContext *context)
 
   if (! standard_pattern)
     {
-      standard_pattern = gimp_pattern_new (context, "Standard");
+      g_set_weak_pointer (&standard_pattern,
+                          gimp_pattern_new (context, "Standard"));
 
       gimp_data_clean (standard_pattern);
       gimp_data_make_internal (standard_pattern, "gimp-pattern-standard");
-
-      g_object_add_weak_pointer (G_OBJECT (standard_pattern),
-                                 (gpointer *) &standard_pattern);
     }
 
   return standard_pattern;

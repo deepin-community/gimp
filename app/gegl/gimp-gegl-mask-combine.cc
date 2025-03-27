@@ -542,8 +542,8 @@ gimp_gegl_mask_combine_buffer (GeglBuffer     *mask,
        */
       gegl_buffer_set_format (
         add_on,
-        gimp_babl_format_change_linear (
-          add_on_format, gimp_babl_format_get_linear (mask_format)));
+        gimp_babl_format_change_trc (
+          add_on_format, gimp_babl_format_get_trc (mask_format)));
 
       gimp_gegl_buffer_copy (add_on, &add_on_rect, GEGL_ABYSS_NONE,
                              mask,   &mask_rect);

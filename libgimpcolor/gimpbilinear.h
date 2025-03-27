@@ -43,20 +43,12 @@ guint16   gimp_bilinear_16       (gdouble    x,
 guint32   gimp_bilinear_32       (gdouble    x,
                                   gdouble    y,
                                   guint32   *values);
-GimpRGB   gimp_bilinear_rgb      (gdouble    x,
+void      gimp_bilinear_rgb      (gdouble    x,
                                   gdouble    y,
-                                  GimpRGB   *values);
-GimpRGB   gimp_bilinear_rgba     (gdouble    x,
-                                  gdouble    y,
-                                  GimpRGB   *values);
-
-GIMP_DEPRECATED
-void      gimp_bilinear_pixels_8 (guchar    *dest,
-                                  gdouble    x,
-                                  gdouble    y,
-                                  guint      bpp,
+                                  gdouble   *values,
                                   gboolean   has_alpha,
-                                  guchar   **values);
+                                  gdouble   *retvalues);
+
 
 G_END_DECLS
 

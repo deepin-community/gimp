@@ -47,6 +47,7 @@ enum
   PROP_GIMP,
 
   PROP_COLOR_PROFILE_POLICY,
+  PROP_METADATA_ROTATION_POLICY,
 
   PROP_COLOR_PROFILE_PATH,
 
@@ -154,7 +155,9 @@ static void
 gimp_dialog_config_class_init (GimpDialogConfigClass *klass)
 {
   GObjectClass *object_class     = G_OBJECT_CLASS (klass);
-  GimpRGB       half_transparent = { 0.0, 0.0, 0.0, 0.5 };
+  GeglColor    *half_transparent = gegl_color_new ("black");
+
+  gimp_color_set_alpha (half_transparent, 0.5);
 
   object_class->constructed  = gimp_dialog_config_constructed;
   object_class->finalize     = gimp_dialog_config_finalize;
@@ -174,6 +177,14 @@ gimp_dialog_config_class_init (GimpDialogConfigClass *klass)
                          COLOR_PROFILE_POLICY_BLURB,
                          GIMP_TYPE_COLOR_PROFILE_POLICY,
                          GIMP_COLOR_PROFILE_POLICY_ASK,
+                         GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_ENUM (object_class, PROP_METADATA_ROTATION_POLICY,
+                         "metadata-rotation-policy",
+                         "Metadata rotation policy",
+                         METADATA_ROTATION_POLICY_BLURB,
+                         GIMP_TYPE_METADATA_ROTATION_POLICY,
+                         GIMP_METADATA_ROTATION_POLICY_ASK,
                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_PATH (object_class, PROP_COLOR_PROFILE_PATH,
@@ -388,7 +399,7 @@ gimp_dialog_config_class_init (GimpDialogConfigClass *klass)
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_LAYER_MERGE_ACTIVE_GROUP_ONLY,
                             "layer-merge-active-group-only",
-                            "Default layer merge active group only",
+                            "Default layer merge active groups only",
                             LAYER_MERGE_ACTIVE_GROUP_ONLY_BLURB,
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS);
@@ -407,13 +418,12 @@ gimp_dialog_config_class_init (GimpDialogConfigClass *klass)
                            _("Channel"),
                            GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_RGB (object_class, PROP_CHANNEL_NEW_COLOR,
-                        "channel-new-color",
-                        "Default new channel color and opacity",
-                        CHANNEL_NEW_COLOR_BLURB,
-                        TRUE,
-                        &half_transparent,
-                        GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_COLOR (object_class, PROP_CHANNEL_NEW_COLOR,
+                          "channel-new-color",
+                          "Default new channel color and opacity",
+                          CHANNEL_NEW_COLOR_BLURB,
+                          TRUE, half_transparent,
+                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_STRING (object_class, PROP_VECTORS_NEW_NAME,
                            "path-new-name",
@@ -432,7 +442,7 @@ gimp_dialog_config_class_init (GimpDialogConfigClass *klass)
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_VECTORS_EXPORT_ACTIVE_ONLY,
                             "path-export-active-only",
-                            "Default export only the active path",
+                            "Default export only the selected paths",
                             VECTORS_EXPORT_ACTIVE_ONLY_BLURB,
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS);
@@ -447,14 +457,14 @@ gimp_dialog_config_class_init (GimpDialogConfigClass *klass)
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_VECTORS_IMPORT_MERGE,
                             "path-import-merge",
-                            "Default merge imported vectors",
+                            "Default merge imported path",
                             VECTORS_IMPORT_MERGE_BLURB,
                             FALSE,
                             GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_VECTORS_IMPORT_SCALE,
                             "path-import-scale",
-                            "Default scale imported vectors",
+                            "Default scale imported path",
                             VECTORS_IMPORT_SCALE_BLURB,
                             FALSE,
                             GIMP_PARAM_STATIC_STRINGS);
@@ -463,7 +473,13 @@ gimp_dialog_config_class_init (GimpDialogConfigClass *klass)
                            "selection-feather-radius",
                            "Selection feather radius",
                            SELECTION_FEATHER_RADIUS_BLURB,
-                           0.0, 32767.0, 5.0,
+                           /* NOTE: the max value is the max value of
+                            * "std-dev-x|y" arguments in operation
+                            * "gegl:gaussian-blur", multiplied by magic
+                            * number 3.5 (see gimp_gegl_apply_feather())
+                            * code).
+                            */
+                            0.0, 5250.0, 5.0,
                            GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_SELECTION_FEATHER_EDGE_LOCK,
@@ -531,11 +547,17 @@ gimp_dialog_config_class_init (GimpDialogConfigClass *klass)
                            GIMP_TYPE_STROKE_OPTIONS,
                            GIMP_PARAM_STATIC_STRINGS |
                            GIMP_CONFIG_PARAM_AGGREGATE);
+
+  g_object_unref (half_transparent);
 }
 
 static void
 gimp_dialog_config_init (GimpDialogConfig *config)
 {
+  GeglColor *half_transparent = gegl_color_new ("black");
+
+  gimp_color_set_alpha (half_transparent, 0.5);
+  config->channel_new_color = half_transparent;
 }
 
 static void
@@ -576,12 +598,13 @@ gimp_dialog_config_finalize (GObject *object)
   g_clear_pointer (&config->color_profile_path,  g_free);
   g_clear_pointer (&config->layer_new_name,      g_free);
   g_clear_pointer (&config->channel_new_name,    g_free);
-  g_clear_pointer (&config->vectors_new_name,    g_free);
-  g_clear_pointer (&config->vectors_export_path, g_free);
-  g_clear_pointer (&config->vectors_import_path, g_free);
+  g_clear_pointer (&config->path_new_name,    g_free);
+  g_clear_pointer (&config->path_export_path, g_free);
+  g_clear_pointer (&config->path_import_path, g_free);
 
   g_clear_object (&config->fill_options);
   g_clear_object (&config->stroke_options);
+  g_clear_object (&config->channel_new_color);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -603,6 +626,9 @@ gimp_dialog_config_set_property (GObject      *object,
 
     case PROP_COLOR_PROFILE_POLICY:
       config->color_profile_policy = g_value_get_enum (value);
+      break;
+    case PROP_METADATA_ROTATION_POLICY:
+      config->metadata_rotation_policy = g_value_get_enum (value);
       break;
 
     case PROP_COLOR_PROFILE_PATH:
@@ -711,34 +737,35 @@ gimp_dialog_config_set_property (GObject      *object,
       config->channel_new_name = g_value_dup_string (value);
       break;
     case PROP_CHANNEL_NEW_COLOR:
-      gimp_value_get_rgb (value, &config->channel_new_color);
+      g_clear_object (&config->channel_new_color);
+      config->channel_new_color = gegl_color_duplicate (g_value_get_object (value));
       break;
 
     case PROP_VECTORS_NEW_NAME:
-      if (config->vectors_new_name)
-        g_free (config->vectors_new_name);
-      config->vectors_new_name = g_value_dup_string (value);
+      if (config->path_new_name)
+        g_free (config->path_new_name);
+      config->path_new_name = g_value_dup_string (value);
       break;
 
     case PROP_VECTORS_EXPORT_PATH:
-      if (config->vectors_export_path)
-        g_free (config->vectors_export_path);
-      config->vectors_export_path = g_value_dup_string (value);
+      if (config->path_export_path)
+        g_free (config->path_export_path);
+      config->path_export_path = g_value_dup_string (value);
       break;
     case PROP_VECTORS_EXPORT_ACTIVE_ONLY:
-      config->vectors_export_active_only = g_value_get_boolean (value);
+      config->path_export_active_only = g_value_get_boolean (value);
       break;
 
     case PROP_VECTORS_IMPORT_PATH:
-      if (config->vectors_import_path)
-        g_free (config->vectors_import_path);
-      config->vectors_import_path = g_value_dup_string (value);
+      if (config->path_import_path)
+        g_free (config->path_import_path);
+      config->path_import_path = g_value_dup_string (value);
       break;
     case PROP_VECTORS_IMPORT_MERGE:
-      config->vectors_import_merge = g_value_get_boolean (value);
+      config->path_import_merge = g_value_get_boolean (value);
       break;
     case PROP_VECTORS_IMPORT_SCALE:
-      config->vectors_import_scale = g_value_get_boolean (value);
+      config->path_import_scale = g_value_get_boolean (value);
       break;
 
     case PROP_SELECTION_FEATHER_RADIUS:
@@ -803,6 +830,9 @@ gimp_dialog_config_get_property (GObject    *object,
 
     case PROP_COLOR_PROFILE_POLICY:
       g_value_set_enum (value, config->color_profile_policy);
+      break;
+    case PROP_METADATA_ROTATION_POLICY:
+      g_value_set_enum (value, config->metadata_rotation_policy);
       break;
 
     case PROP_COLOR_PROFILE_PATH:
@@ -905,28 +935,28 @@ gimp_dialog_config_get_property (GObject    *object,
       g_value_set_string (value, config->channel_new_name);
       break;
     case PROP_CHANNEL_NEW_COLOR:
-      gimp_value_set_rgb (value, &config->channel_new_color);
+      g_value_set_object (value, config->channel_new_color);
       break;
 
     case PROP_VECTORS_NEW_NAME:
-      g_value_set_string (value, config->vectors_new_name);
+      g_value_set_string (value, config->path_new_name);
       break;
 
     case PROP_VECTORS_EXPORT_PATH:
-      g_value_set_string (value, config->vectors_export_path);
+      g_value_set_string (value, config->path_export_path);
       break;
     case PROP_VECTORS_EXPORT_ACTIVE_ONLY:
-      g_value_set_boolean (value, config->vectors_export_active_only);
+      g_value_set_boolean (value, config->path_export_active_only);
       break;
 
     case PROP_VECTORS_IMPORT_PATH:
-      g_value_set_string (value, config->vectors_import_path);
+      g_value_set_string (value, config->path_import_path);
       break;
     case PROP_VECTORS_IMPORT_MERGE:
-      g_value_set_boolean (value, config->vectors_import_merge);
+      g_value_set_boolean (value, config->path_import_merge);
       break;
     case PROP_VECTORS_IMPORT_SCALE:
-      g_value_set_boolean (value, config->vectors_import_scale);
+      g_value_set_boolean (value, config->path_import_scale);
       break;
 
     case PROP_SELECTION_FEATHER_RADIUS:

@@ -32,36 +32,36 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-gboolean gimp_drawable_brightness_contrast (gint32                drawable_ID,
+gboolean gimp_drawable_brightness_contrast (GimpDrawable         *drawable,
                                             gdouble               brightness,
                                             gdouble               contrast);
-gboolean gimp_drawable_color_balance       (gint32                drawable_ID,
+gboolean gimp_drawable_color_balance       (GimpDrawable         *drawable,
                                             GimpTransferMode      transfer_mode,
                                             gboolean              preserve_lum,
                                             gdouble               cyan_red,
                                             gdouble               magenta_green,
                                             gdouble               yellow_blue);
-gboolean gimp_drawable_colorize_hsl        (gint32                drawable_ID,
+gboolean gimp_drawable_colorize_hsl        (GimpDrawable         *drawable,
                                             gdouble               hue,
                                             gdouble               saturation,
                                             gdouble               lightness);
-gboolean gimp_drawable_curves_explicit     (gint32                drawable_ID,
+gboolean gimp_drawable_curves_explicit     (GimpDrawable         *drawable,
                                             GimpHistogramChannel  channel,
-                                            gint                  num_values,
+                                            gsize                 num_values,
                                             const gdouble        *values);
-gboolean gimp_drawable_curves_spline       (gint32                drawable_ID,
+gboolean gimp_drawable_curves_spline       (GimpDrawable         *drawable,
                                             GimpHistogramChannel  channel,
-                                            gint                  num_points,
+                                            gsize                 num_points,
                                             const gdouble        *points);
-gboolean gimp_drawable_extract_component   (gint32                drawable_ID,
-                                            guint8                component,
+gboolean gimp_drawable_extract_component   (GimpDrawable         *drawable,
+                                            gint                  component,
                                             gboolean              invert,
                                             gboolean              linear);
-gboolean gimp_drawable_desaturate          (gint32                drawable_ID,
+gboolean gimp_drawable_desaturate          (GimpDrawable         *drawable,
                                             GimpDesaturateMode    desaturate_mode);
-gboolean gimp_drawable_equalize            (gint32                drawable_ID,
+gboolean gimp_drawable_equalize            (GimpDrawable         *drawable,
                                             gboolean              mask_only);
-gboolean gimp_drawable_histogram           (gint32                drawable_ID,
+gboolean gimp_drawable_histogram           (GimpDrawable         *drawable,
                                             GimpHistogramChannel  channel,
                                             gdouble               start_range,
                                             gdouble               end_range,
@@ -71,15 +71,15 @@ gboolean gimp_drawable_histogram           (gint32                drawable_ID,
                                             gdouble              *pixels,
                                             gdouble              *count,
                                             gdouble              *percentile);
-gboolean gimp_drawable_hue_saturation      (gint32                drawable_ID,
+gboolean gimp_drawable_hue_saturation      (GimpDrawable         *drawable,
                                             GimpHueRange          hue_range,
                                             gdouble               hue_offset,
                                             gdouble               lightness,
                                             gdouble               saturation,
                                             gdouble               overlap);
-gboolean gimp_drawable_invert              (gint32                drawable_ID,
+gboolean gimp_drawable_invert              (GimpDrawable         *drawable,
                                             gboolean              linear);
-gboolean gimp_drawable_levels              (gint32                drawable_ID,
+gboolean gimp_drawable_levels              (GimpDrawable         *drawable,
                                             GimpHistogramChannel  channel,
                                             gdouble               low_input,
                                             gdouble               high_input,
@@ -88,8 +88,8 @@ gboolean gimp_drawable_levels              (gint32                drawable_ID,
                                             gdouble               low_output,
                                             gdouble               high_output,
                                             gboolean              clamp_output);
-gboolean gimp_drawable_levels_stretch      (gint32                drawable_ID);
-gboolean gimp_drawable_shadows_highlights  (gint32                drawable_ID,
+gboolean gimp_drawable_levels_stretch      (GimpDrawable         *drawable);
+gboolean gimp_drawable_shadows_highlights  (GimpDrawable         *drawable,
                                             gdouble               shadows,
                                             gdouble               highlights,
                                             gdouble               whitepoint,
@@ -97,9 +97,9 @@ gboolean gimp_drawable_shadows_highlights  (gint32                drawable_ID,
                                             gdouble               compress,
                                             gdouble               shadows_ccorrect,
                                             gdouble               highlights_ccorrect);
-gboolean gimp_drawable_posterize           (gint32                drawable_ID,
+gboolean gimp_drawable_posterize           (GimpDrawable         *drawable,
                                             gint                  levels);
-gboolean gimp_drawable_threshold           (gint32                drawable_ID,
+gboolean gimp_drawable_threshold           (GimpDrawable         *drawable,
                                             GimpHistogramChannel  channel,
                                             gdouble               low_threshold,
                                             gdouble               high_threshold);

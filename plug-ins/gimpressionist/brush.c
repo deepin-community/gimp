@@ -24,9 +24,6 @@
 
 #include <libgimpmath/gimpmath.h>
 
-#include <gtk/gtklist.h>
-#include <gtk/gtkpreview.h>
-
 #include "gimpressionist.h"
 #include "ppmtool.h"
 #include "brush.h"
@@ -42,8 +39,8 @@ static GtkWidget    *brush_preview    = NULL;
 static GtkListStore *brush_list_store = NULL;
 
 static GtkWidget     *brush_list          = NULL;
-static GtkAdjustment *brush_relief_adjust = NULL;
-static GtkAdjustment *brush_aspect_adjust = NULL;
+static GtkWidget     *brush_relief_scale  = NULL;
+static GtkWidget     *brush_aspect_scale  = NULL;
 static GtkAdjustment *brush_gamma_adjust  = NULL;
 static gboolean       brush_dont_update   = FALSE;
 
@@ -58,8 +55,8 @@ brush_restore (void)
 {
   reselect (brush_list, pcvals.selected_brush);
   gtk_adjustment_set_value (brush_gamma_adjust, pcvals.brushgamma);
-  gtk_adjustment_set_value (brush_relief_adjust, pcvals.brush_relief);
-  gtk_adjustment_set_value (brush_aspect_adjust, pcvals.brush_aspect);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (brush_relief_scale), pcvals.brush_relief);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (brush_aspect_scale), pcvals.brush_aspect);
 }
 
 void
@@ -96,18 +93,18 @@ set_colorbrushes (const gchar *fn)
 }
 
 static const Babl *
-get_u8_format (gint32 drawable_id)
+get_u8_format (GimpDrawable *drawable)
 {
-  if (gimp_drawable_is_rgb (drawable_id))
+  if (gimp_drawable_is_rgb (drawable))
     {
-      if (gimp_drawable_has_alpha (drawable_id))
+      if (gimp_drawable_has_alpha (drawable))
         return babl_format ("R'G'B'A u8");
       else
         return babl_format ("R'G'B' u8");
     }
   else
     {
-      if (gimp_drawable_has_alpha (drawable_id))
+      if (gimp_drawable_has_alpha (drawable))
         return babl_format ("Y'A u8");
       else
         return babl_format ("Y' u8");
@@ -118,21 +115,24 @@ static void
 brushdmenuselect (GtkWidget *widget,
                   gpointer   data)
 {
-  GeglBuffer *src_buffer;
-  const Babl *format;
-  guchar     *src_row;
-  guchar     *src;
-  gint        bpp;
-  gint        x, y;
-  ppm_t      *p;
-  gint        x1, y1, w, h;
-  gint        row;
-  gint32      drawable_id;
-  gint        rowstride;
+  GeglBuffer   *src_buffer;
+  const Babl   *format;
+  guchar       *src_row;
+  guchar       *src;
+  gint          bpp;
+  gint          x, y;
+  ppm_t        *p;
+  gint          x1, y1, w, h;
+  gint          row;
+  gint32        drawable_id = -1;
+  GimpDrawable *drawable;
+  gint          rowstride;
 
   gimp_int_combo_box_get_active (GIMP_INT_COMBO_BOX (widget), &drawable_id);
 
-  if (drawable_id == -1)
+  drawable = gimp_drawable_get_by_id (drawable_id);
+
+  if (! drawable)
     return;
 
   if (brush_from_file == 2)
@@ -147,12 +147,12 @@ brushdmenuselect (GtkWidget *widget,
     }
 
   gtk_adjustment_set_value (brush_gamma_adjust, 1.0);
-  gtk_adjustment_set_value (brush_aspect_adjust, 0.0);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (brush_aspect_scale), 0.0);
 
-  if (! gimp_drawable_mask_intersect (drawable_id, &x1, &y1, &w, &h))
+  if (! gimp_drawable_mask_intersect (drawable, &x1, &y1, &w, &h))
     return;
 
-  format = get_u8_format (drawable_id);
+  format = get_u8_format (drawable);
   bpp    = babl_format_get_bytes_per_pixel (format);
 
   ppm_kill (&brushppm);
@@ -163,7 +163,7 @@ brushdmenuselect (GtkWidget *widget,
 
   src_row = g_new (guchar, w * bpp);
 
-  src_buffer = gimp_drawable_get_buffer (drawable_id);
+  src_buffer = gimp_drawable_get_buffer (drawable);
 
   if (bpp == 3)
     { /* RGB */
@@ -186,9 +186,9 @@ brushdmenuselect (GtkWidget *widget,
 
       for (row = 0, y = y1; y < y2; row++, y++)
         {
-          guchar *tmprow = p->col + row * rowstride;
           guchar *tmprow_ptr;
-	  gint x2 = x1 + w;
+          guchar *tmprow = p->col + row * rowstride;
+          gint    x2     = x1 + w;
 
           gegl_buffer_get (src_buffer, GEGL_RECTANGLE (x1, y, w, 1), 1.0,
                            format, src_row,
@@ -222,17 +222,6 @@ brushdmenuselect (GtkWidget *widget,
   brush_from_file = 0;
   update_brush_preview (NULL);
 }
-
-#if 0
-void
-dummybrushdmenuselect (GtkWidget *w, gpointer data)
-{
-  ppm_kill (&brushppm);
-  ppm_new (&brushppm, 10,10);
-  brush_from_file = 0;
-  update_brush_preview (NULL);
-}
-#endif
 
 static void
 brushlistrefresh (void)
@@ -284,7 +273,7 @@ savebrush (GtkWidget *wg,
                                  NULL);
 
   gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
                                            -1);
@@ -309,12 +298,12 @@ savebrush (GtkWidget *wg,
 }
 
 static gboolean
-validdrawable (gint32    imageid,
-               gint32    drawableid,
-               gpointer  data)
+validdrawable (GimpImage *image,
+               GimpItem  *item,
+               gpointer   data)
 {
-  return (gimp_drawable_is_rgb (drawableid) ||
-          gimp_drawable_is_gray (drawableid));
+  return (gimp_drawable_is_rgb  (GIMP_DRAWABLE (item)) ||
+          gimp_drawable_is_gray (GIMP_DRAWABLE (item)));
 }
 
 /*
@@ -398,7 +387,7 @@ update_brush_preview (const gchar *fn)
           gammatable[i] = i;
 
       newheight = p.height *
-        pow (10, gtk_adjustment_get_value (brush_aspect_adjust));
+        pow (10, gimp_label_spin_get_value (GIMP_LABEL_SPIN (brush_aspect_scale)));
 
       sc = p.width > newheight ? p.width : newheight;
       sc = 100.0 / sc;
@@ -474,7 +463,7 @@ brush_select (GtkTreeSelection *selection, gboolean force)
 
       brush_dont_update = TRUE;
       gtk_adjustment_set_value (brush_gamma_adjust, 1.0);
-      gtk_adjustment_set_value (brush_aspect_adjust, 0.0);
+      gimp_label_spin_set_value (GIMP_LABEL_SPIN (brush_aspect_scale), 0.0);
       brush_dont_update = FALSE;
 
       if (brush)
@@ -511,9 +500,10 @@ brush_preview_size_allocate (GtkWidget *preview)
 }
 
 static void
-brush_asepct_adjust_cb (GtkWidget *w, gpointer data)
+brush_aspect_adjust_cb (GimpLabelSpin *scale,
+                        gdouble       *value)
 {
-  gimp_double_adjustment_update (GTK_ADJUSTMENT (w), data);
+  gimpressionist_scale_entry_update_double (scale, value);
   update_brush_preview (pcvals.selected_brush);
 }
 
@@ -522,7 +512,7 @@ create_brushpage (GtkNotebook *notebook)
 {
   GtkWidget        *box1, *box2, *box3, *thispage;
   GtkWidget        *view;
-  GtkWidget        *tmpw, *table;
+  GtkWidget        *tmpw, *grid;
   GtkWidget        *frame;
   GtkWidget        *combo;
   GtkWidget        *label;
@@ -571,8 +561,8 @@ create_brushpage (GtkNotebook *notebook)
   gtk_box_pack_start (GTK_BOX (box3), tmpw, FALSE, FALSE,0);
   gtk_widget_show (tmpw);
 
-  brush_gamma_adjust = GTK_ADJUSTMENT (gtk_adjustment_new (pcvals.brushgamma,
-                                                           0.5, 3.0, 0.1, 0.1, 1.0));
+  brush_gamma_adjust = gtk_adjustment_new (pcvals.brushgamma,
+                                           0.5, 3.0, 0.1, 0.1, 1.0);
   tmpw = gtk_scale_new (GTK_ORIENTATION_HORIZONTAL, brush_gamma_adjust);
   gtk_widget_set_size_request (GTK_WIDGET (tmpw), 100, 30);
   gtk_scale_set_draw_value (GTK_SCALE (tmpw), FALSE);
@@ -600,10 +590,10 @@ create_brushpage (GtkNotebook *notebook)
   gtk_size_group_add_widget (group, tmpw);
   g_object_unref (group);
 
-  combo = gimp_drawable_combo_box_new (validdrawable, NULL);
+  combo = gimp_drawable_combo_box_new (validdrawable, NULL, NULL);
   gimp_int_combo_box_connect (GIMP_INT_COMBO_BOX (combo), -1,
                               G_CALLBACK (brushdmenuselect),
-                              NULL);
+                              NULL, NULL);
 
   gtk_box_pack_start (GTK_BOX (box3), combo, TRUE, TRUE, 0);
   gtk_widget_show (combo);
@@ -613,38 +603,37 @@ create_brushpage (GtkNotebook *notebook)
   g_signal_connect (tmpw, "clicked", G_CALLBACK (savebrush), NULL);
   gtk_widget_show (tmpw);
 
-  table = gtk_table_new (2, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_box_pack_start (GTK_BOX (thispage), table, FALSE, FALSE, 0);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+  gtk_box_pack_start (GTK_BOX (thispage), grid, FALSE, FALSE, 0);
+  gtk_widget_show (grid);
 
-  brush_aspect_adjust = (GtkAdjustment *)
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 0,
-                          _("Aspect ratio:"),
-                          150, -1, pcvals.brush_aspect,
-                          -1.0, 1.0, 0.1, 0.1, 2,
-                          TRUE, 0, 0,
-                          _("Specifies the aspect ratio of the brush"),
-                          NULL);
+  brush_aspect_scale =
+    gimp_scale_entry_new (_("Aspect ratio:"), pcvals.brush_aspect, -1.0, 1.0, 2);
+  gimp_help_set_help_data (brush_aspect_scale,
+                           _("Specifies the aspect ratio of the brush"),
+                           NULL);
   gtk_size_group_add_widget (group,
-                             GIMP_SCALE_ENTRY_LABEL (brush_aspect_adjust));
-  g_signal_connect (brush_aspect_adjust, "value-changed",
-                    G_CALLBACK (brush_asepct_adjust_cb), &pcvals.brush_aspect);
+                             gimp_labeled_get_label (GIMP_LABELED (brush_aspect_scale)));
+  g_signal_connect (brush_aspect_scale, "value-changed",
+                    G_CALLBACK (brush_aspect_adjust_cb),
+                    &pcvals.brush_aspect);
+  gtk_grid_attach (GTK_GRID (grid), brush_aspect_scale, 0, 0, 3, 1);
+  gtk_widget_show (brush_aspect_scale);
 
-  brush_relief_adjust = (GtkAdjustment *)
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 1,
-                          _("Relief:"),
-                          150, -1, pcvals.brush_relief,
-                          0.0, 100.0, 1.0, 10.0, 1,
-                          TRUE, 0, 0,
-                          _("Specifies the amount of embossing to apply to the image (in percent)"),
-                          NULL);
+  brush_relief_scale =
+    gimp_scale_entry_new (_("Relief:"), pcvals.brush_relief, 0.0, 100.0, 1);
+  gimp_help_set_help_data (brush_relief_scale,
+                           _("Specifies the amount of embossing to apply to the image (in percent)"),
+                           NULL);
   gtk_size_group_add_widget (group,
-                             GIMP_SCALE_ENTRY_LABEL (brush_relief_adjust));
-  g_signal_connect (brush_relief_adjust, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
+                             gimp_labeled_get_label (GIMP_LABELED (brush_relief_scale)));
+  g_signal_connect (brush_relief_scale, "value-changed",
+                    G_CALLBACK (gimpressionist_scale_entry_update_double),
                     &pcvals.brush_relief);
+  gtk_grid_attach (GTK_GRID (grid), brush_relief_scale, 0, 1, 3, 1);
+  gtk_widget_show (brush_relief_scale);
 
   brush_select (selection, FALSE);
   readdirintolist ("Brushes", view, pcvals.selected_brush);

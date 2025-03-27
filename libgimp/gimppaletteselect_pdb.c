@@ -22,49 +22,59 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
 /**
  * SECTION: gimppaletteselect
  * @title: gimppaletteselect
- * @short_description: Functions providing a palette selection dialog.
+ * @short_description: Methods of a palette chooser dialog
  *
- * Functions providing a palette selection dialog.
+ * A dialog letting a user choose a palette.  Read more at
+ * gimpfontselect.
  **/
 
 
 /**
  * gimp_palettes_popup:
- * @palette_callback: The callback PDB proc to call when palette selection is made.
+ * @palette_callback: The callback PDB proc to call when user chooses a palette.
  * @popup_title: Title of the palette selection dialog.
- * @initial_palette: The name of the palette to set as the first selected.
+ * @initial_palette: (nullable): The palette to set as the initial choice.
+ * @parent_window: (nullable): An optional parent window handle for the popup to be set transient to.
  *
- * Invokes the Gimp palette selection.
+ * Invokes the Gimp palette selection dialog.
  *
- * This procedure opens the palette selection dialog.
+ * Opens a dialog letting a user choose a palette.
  *
  * Returns: TRUE on success.
  **/
 gboolean
 gimp_palettes_popup (const gchar *palette_callback,
                      const gchar *popup_title,
-                     const gchar *initial_palette)
+                     GimpPalette *initial_palette,
+                     GBytes      *parent_window)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-palettes-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, palette_callback,
-                                    GIMP_PDB_STRING, popup_title,
-                                    GIMP_PDB_STRING, initial_palette,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, palette_callback,
+                                          G_TYPE_STRING, popup_title,
+                                          GIMP_TYPE_PALETTE, initial_palette,
+                                          G_TYPE_BYTES, parent_window,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-palettes-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -75,25 +85,29 @@ gimp_palettes_popup (const gchar *palette_callback,
  *
  * Close the palette selection dialog.
  *
- * This procedure closes an opened palette selection dialog.
+ * Closes an open palette selection dialog.
  *
  * Returns: TRUE on success.
  **/
 gboolean
 gimp_palettes_close_popup (const gchar *palette_callback)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-palettes-close-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, palette_callback,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, palette_callback,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-palettes-close-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -101,7 +115,7 @@ gimp_palettes_close_popup (const gchar *palette_callback)
 /**
  * gimp_palettes_set_popup:
  * @palette_callback: The name of the callback registered for this pop-up.
- * @palette_name: The name of the palette to set as selected.
+ * @palette: The palette to set as selected.
  *
  * Sets the current palette in a palette selection dialog.
  *
@@ -111,21 +125,25 @@ gimp_palettes_close_popup (const gchar *palette_callback)
  **/
 gboolean
 gimp_palettes_set_popup (const gchar *palette_callback,
-                         const gchar *palette_name)
+                         GimpPalette *palette)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-palettes-set-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, palette_callback,
-                                    GIMP_PDB_STRING, palette_name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, palette_callback,
+                                          GIMP_TYPE_PALETTE, palette,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-palettes-set-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

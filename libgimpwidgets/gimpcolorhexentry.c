@@ -43,7 +43,8 @@
  * @title: GimpColorHexEntry
  * @short_description: Widget for entering a color's hex triplet.
  *
- * Widget for entering a color's hex triplet.
+ * Widget for entering a color's hex triplet. The syntax follows CSS and
+ * SVG specifications, which means that only sRGB colors are supported.
  **/
 
 
@@ -61,7 +62,16 @@ enum
 };
 
 
+struct _GimpColorHexEntry
+{
+  GtkEntry   parent_instance;
+
+  GeglColor *color;
+};
+
+
 static void      gimp_color_hex_entry_constructed (GObject            *object);
+static void      gimp_color_hex_entry_finalize    (GObject            *object);
 
 static gboolean  gimp_color_hex_entry_events      (GtkWidget          *widget,
                                                    GdkEvent           *event);
@@ -88,14 +98,12 @@ gimp_color_hex_entry_class_init (GimpColorHexEntryClass *klass)
     g_signal_new ("color-changed",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (GimpColorHexEntryClass, color_changed),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
+                  0,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->constructed = gimp_color_hex_entry_constructed;
-
-  klass->color_changed      = NULL;
+  object_class->finalize    = gimp_color_hex_entry_finalize;
 }
 
 static void
@@ -104,9 +112,8 @@ gimp_color_hex_entry_init (GimpColorHexEntry *entry)
   GtkEntryCompletion  *completion;
   GtkCellRenderer     *cell;
   GtkListStore        *store;
-  GimpRGB             *colors;
+  GeglColor          **colors;
   const gchar        **names;
-  gint                 num_colors;
   gint                 i;
 
   /* GtkEntry's minimum size is way too large, set a reasonable one
@@ -119,24 +126,25 @@ gimp_color_hex_entry_init (GimpColorHexEntry *entry)
                              "CSS.  This entry also accepts CSS color names."),
                            NULL);
 
-  gimp_rgba_set (&entry->color, 0.0, 0.0, 0.0, 1.0);
+  entry->color = gegl_color_new ("black");
 
-  store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_STRING, GIMP_TYPE_RGB);
+  store = gtk_list_store_new (NUM_COLUMNS, G_TYPE_STRING, GEGL_TYPE_COLOR);
 
-  num_colors = gimp_rgb_list_names (&names, &colors);
+  names = gimp_color_list_names (&colors);
 
-  for (i = 0; i < num_colors; i++)
+  for (i = 0; names[i] != NULL; i++)
     {
       GtkTreeIter  iter;
+      GeglColor   *named_color = colors[i];
 
       gtk_list_store_append (store, &iter);
       gtk_list_store_set (store, &iter,
                           COLUMN_NAME,  names[i],
-                          COLUMN_COLOR, colors + i,
+                          COLUMN_COLOR, named_color,
                           -1);
     }
 
-  g_free (colors);
+  gimp_color_array_free (colors);
   g_free (names);
 
   completion = g_object_new (GTK_TYPE_ENTRY_COMPLETION,
@@ -175,10 +183,20 @@ gimp_color_hex_entry_constructed (GObject *object)
   gtk_entry_set_text (GTK_ENTRY (object), "000000");
 }
 
+static void
+gimp_color_hex_entry_finalize (GObject *object)
+{
+  GimpColorHexEntry *entry = GIMP_COLOR_HEX_ENTRY (object);
+
+  g_object_unref (entry->color);
+
+  G_OBJECT_CLASS (parent_class)->finalize (object);
+}
+
 /**
  * gimp_color_hex_entry_new:
  *
- * Return value: a new #GimpColorHexEntry widget
+ * Returns: a new #GimpColorHexEntry widget
  *
  * Since: 2.2
  **/
@@ -191,7 +209,7 @@ gimp_color_hex_entry_new (void)
 /**
  * gimp_color_hex_entry_set_color:
  * @entry: a #GimpColorHexEntry widget
- * @color: pointer to a #GimpRGB
+ * @color: the color to set.
  *
  * Sets the color displayed by a #GimpColorHexEntry. If the new color
  * is different to the previously set color, the "color-changed"
@@ -201,48 +219,44 @@ gimp_color_hex_entry_new (void)
  **/
 void
 gimp_color_hex_entry_set_color (GimpColorHexEntry *entry,
-                                const GimpRGB     *color)
+                                GeglColor         *color)
 {
+  gchar  buffer[8];
+  guchar rgb[3];
+
   g_return_if_fail (GIMP_IS_COLOR_HEX_ENTRY (entry));
-  g_return_if_fail (color != NULL);
+  g_return_if_fail (GEGL_IS_COLOR (color));
 
-  if (gimp_rgb_distance (&entry->color, color) > 0.0)
-    {
-      gchar   buffer[8];
-      guchar  r, g, b;
+  g_object_unref (entry->color);
+  entry->color = gegl_color_duplicate (color);
 
-      gimp_rgb_set (&entry->color, color->r, color->g, color->b);
-      gimp_rgb_clamp (&entry->color);
+  gegl_color_get_pixel (color, babl_format ("R'G'B' u8"), rgb);
+  g_snprintf (buffer, sizeof (buffer), "%.2x%.2x%.2x", rgb[0], rgb[1], rgb[2]);
 
-      gimp_rgb_get_uchar (&entry->color, &r, &g, &b);
-      g_snprintf (buffer, sizeof (buffer), "%.2x%.2x%.2x", r, g, b);
+  gtk_entry_set_text (GTK_ENTRY (entry), buffer);
 
-      gtk_entry_set_text (GTK_ENTRY (entry), buffer);
+  /* move cursor to the end */
+  gtk_editable_set_position (GTK_EDITABLE (entry), -1);
 
-      /* move cursor to the end */
-      gtk_editable_set_position (GTK_EDITABLE (entry), -1);
-
-     g_signal_emit (entry, entry_signals[COLOR_CHANGED], 0);
-    }
+  g_signal_emit (entry, entry_signals[COLOR_CHANGED], 0);
 }
 
 /**
  * gimp_color_hex_entry_get_color:
  * @entry: a #GimpColorHexEntry widget
- * @color: pointer to a #GimpRGB
  *
  * Retrieves the color value displayed by a #GimpColorHexEntry.
  *
+ * Returns: (transfer full): the color stored in @entry.
+ *
  * Since: 2.2
  **/
-void
-gimp_color_hex_entry_get_color (GimpColorHexEntry *entry,
-                                GimpRGB           *color)
+GeglColor *
+gimp_color_hex_entry_get_color (GimpColorHexEntry *entry)
 {
-  g_return_if_fail (GIMP_IS_COLOR_HEX_ENTRY (entry));
-  g_return_if_fail (color != NULL);
+  g_return_val_if_fail (GIMP_IS_COLOR_HEX_ENTRY (entry), NULL);
 
-  *color = entry->color;
+  return gegl_color_duplicate (entry->color);
 }
 
 static gboolean
@@ -268,23 +282,24 @@ gimp_color_hex_entry_events (GtkWidget *widget,
       {
         const gchar *text;
         gchar        buffer[8];
-        guchar       r, g, b;
+        guchar       rgb[3];
 
         text = gtk_entry_get_text (GTK_ENTRY (widget));
 
-        gimp_rgb_get_uchar (&entry->color, &r, &g, &b);
-        g_snprintf (buffer, sizeof (buffer), "%.2x%.2x%.2x", r, g, b);
+        gegl_color_get_pixel (entry->color, babl_format ("R'G'B' u8"), rgb);
+        g_snprintf (buffer, sizeof (buffer), "%.2x%.2x%.2x", rgb[0], rgb[1], rgb[2]);
 
         if (g_ascii_strcasecmp (buffer, text) != 0)
           {
-            GimpRGB  color;
-            gsize    len = strlen (text);
+            GeglColor *color = NULL;
+            gsize      len   = strlen (text);
 
             if (len > 0 &&
-                (gimp_rgb_parse_hex (&color, text, len) ||
-                 gimp_rgb_parse_name (&color, text, -1)))
+                ((color = gimp_color_parse_hex_substring (text, len)) ||
+                 (color = gimp_color_parse_name (text))))
               {
-                gimp_color_hex_entry_set_color (entry, &color);
+                gimp_color_hex_entry_set_color (entry, color);
+                g_object_unref (color);
               }
             else
               {
@@ -308,17 +323,18 @@ gimp_color_hex_entry_matched (GtkEntryCompletion *completion,
                               GtkTreeIter        *iter,
                               GimpColorHexEntry  *entry)
 {
-  gchar   *name;
-  GimpRGB  color;
+  gchar     *name  = NULL;
+  GeglColor *color = NULL;
 
   gtk_tree_model_get (model, iter,
                       COLUMN_NAME, &name,
                       -1);
 
-  if (gimp_rgb_parse_name (&color, name, -1))
-    gimp_color_hex_entry_set_color (entry, &color);
+  if ((color = gimp_color_parse_name (name)))
+    gimp_color_hex_entry_set_color (entry, color);
 
   g_free (name);
+  g_clear_object (&color);
 
   return TRUE;
 }

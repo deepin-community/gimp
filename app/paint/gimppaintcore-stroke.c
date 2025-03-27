@@ -29,8 +29,8 @@
 #include "core/gimperror.h"
 #include "core/gimpcoords.h"
 
+#include "vectors/gimppath.h"
 #include "vectors/gimpstroke.h"
-#include "vectors/gimpvectors.h"
 
 #include "gimppaintcore.h"
 #include "gimppaintcore-stroke.h"
@@ -51,10 +51,13 @@ gimp_paint_core_stroke (GimpPaintCore     *core,
                         GimpDrawable      *drawable,
                         GimpPaintOptions  *paint_options,
                         GimpCoords        *strokes,
-                        gint               n_strokes,
+                        gsize              n_strokes,
                         gboolean           push_undo,
                         GError           **error)
 {
+  GList    *drawables;
+  gboolean  success = FALSE;
+
   g_return_val_if_fail (GIMP_IS_PAINT_CORE (core), FALSE);
   g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), FALSE);
   g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (drawable)), FALSE);
@@ -63,36 +66,40 @@ gimp_paint_core_stroke (GimpPaintCore     *core,
   g_return_val_if_fail (n_strokes > 0, FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
-  if (gimp_paint_core_start (core, drawable, paint_options, &strokes[0],
+  drawables = g_list_prepend (NULL, drawable);
+
+  if (gimp_paint_core_start (core, drawables, paint_options, &strokes[0],
                              error))
     {
       gint i;
 
       core->last_coords = strokes[0];
 
-      gimp_paint_core_paint (core, drawable, paint_options,
+      gimp_paint_core_paint (core, drawables, paint_options,
                              GIMP_PAINT_STATE_INIT, 0);
 
-      gimp_paint_core_paint (core, drawable, paint_options,
+      gimp_paint_core_paint (core, drawables, paint_options,
                              GIMP_PAINT_STATE_MOTION, 0);
 
       for (i = 1; i < n_strokes; i++)
         {
-          gimp_paint_core_interpolate (core, drawable, paint_options,
+          gimp_paint_core_interpolate (core, drawables, paint_options,
                                        &strokes[i], 0);
         }
 
-      gimp_paint_core_paint (core, drawable, paint_options,
+      gimp_paint_core_paint (core, drawables, paint_options,
                              GIMP_PAINT_STATE_FINISH, 0);
 
-      gimp_paint_core_finish (core, drawable, push_undo);
+      gimp_paint_core_finish (core, drawables, push_undo);
 
       gimp_paint_core_cleanup (core);
 
-      return TRUE;
+      success = TRUE;
     }
 
-  return FALSE;
+  g_list_free (drawables);
+
+  return success;
 }
 
 gboolean
@@ -107,10 +114,9 @@ gimp_paint_core_stroke_boundary (GimpPaintCore      *core,
                                  gboolean            push_undo,
                                  GError            **error)
 {
+  GList        *drawables;
   GimpBoundSeg *stroke_segs;
   gint          n_stroke_segs;
-  gint          off_x;
-  gint          off_y;
   GimpCoords   *coords;
   gboolean      initialized = FALSE;
   gint          n_coords;
@@ -130,11 +136,6 @@ gimp_paint_core_stroke_boundary (GimpPaintCore      *core,
   if (n_stroke_segs == 0)
     return TRUE;
 
-  gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
-
-  off_x -= offset_x;
-  off_y -= offset_y;
-
   coords = g_new0 (GimpCoords, n_bound_segs + 4);
 
   seg      = 0;
@@ -143,10 +144,12 @@ gimp_paint_core_stroke_boundary (GimpPaintCore      *core,
   /* we offset all coordinates by 0.5 to align the brush with the path */
 
   coords[n_coords]   = default_coords;
-  coords[n_coords].x = (gdouble) (stroke_segs[0].x1 - off_x + 0.5);
-  coords[n_coords].y = (gdouble) (stroke_segs[0].y1 - off_y + 0.5);
+  coords[n_coords].x = (gdouble) (stroke_segs[0].x1 + offset_x + 0.5);
+  coords[n_coords].y = (gdouble) (stroke_segs[0].y1 + offset_y + 0.5);
 
   n_coords++;
+
+  drawables = g_list_prepend (NULL, drawable);
 
   for (s = 0; s < n_stroke_segs; s++)
     {
@@ -156,8 +159,8 @@ gimp_paint_core_stroke_boundary (GimpPaintCore      *core,
              stroke_segs[seg].y2 != -1)
         {
           coords[n_coords]   = default_coords;
-          coords[n_coords].x = (gdouble) (stroke_segs[seg].x1 - off_x + 0.5);
-          coords[n_coords].y = (gdouble) (stroke_segs[seg].y1 - off_y + 0.5);
+          coords[n_coords].x = (gdouble) (stroke_segs[seg].x1 + offset_x + 0.5);
+          coords[n_coords].y = (gdouble) (stroke_segs[seg].y1 + offset_y + 0.5);
 
           n_coords++;
           seg++;
@@ -172,7 +175,7 @@ gimp_paint_core_stroke_boundary (GimpPaintCore      *core,
         gimp_paint_core_stroke_emulate_dynamics (coords, n_coords);
 
       if (initialized ||
-          gimp_paint_core_start (core, drawable, paint_options, &coords[0],
+          gimp_paint_core_start (core, drawables, paint_options, &coords[0],
                                  error))
         {
           gint i;
@@ -182,19 +185,19 @@ gimp_paint_core_stroke_boundary (GimpPaintCore      *core,
           core->cur_coords  = coords[0];
           core->last_coords = coords[0];
 
-          gimp_paint_core_paint (core, drawable, paint_options,
+          gimp_paint_core_paint (core, drawables, paint_options,
                                  GIMP_PAINT_STATE_INIT, 0);
 
-          gimp_paint_core_paint (core, drawable, paint_options,
+          gimp_paint_core_paint (core, drawables, paint_options,
                                  GIMP_PAINT_STATE_MOTION, 0);
 
           for (i = 1; i < n_coords; i++)
             {
-              gimp_paint_core_interpolate (core, drawable, paint_options,
+              gimp_paint_core_interpolate (core, drawables, paint_options,
                                            &coords[i], 0);
             }
 
-          gimp_paint_core_paint (core, drawable, paint_options,
+          gimp_paint_core_paint (core, drawables, paint_options,
                                  GIMP_PAINT_STATE_FINISH, 0);
         }
       else
@@ -206,19 +209,20 @@ gimp_paint_core_stroke_boundary (GimpPaintCore      *core,
       seg++;
 
       coords[n_coords]   = default_coords;
-      coords[n_coords].x = (gdouble) (stroke_segs[seg].x1 - off_x + 0.5);
-      coords[n_coords].y = (gdouble) (stroke_segs[seg].y1 - off_y + 0.5);
+      coords[n_coords].x = (gdouble) (stroke_segs[seg].x1 + offset_x + 0.5);
+      coords[n_coords].y = (gdouble) (stroke_segs[seg].y1 + offset_y + 0.5);
 
       n_coords++;
     }
 
   if (initialized)
     {
-      gimp_paint_core_finish (core, drawable, push_undo);
+      gimp_paint_core_finish (core, drawables, push_undo);
 
       gimp_paint_core_cleanup (core);
     }
 
+  g_list_free (drawables);
   g_free (coords);
   g_free (stroke_segs);
 
@@ -226,34 +230,32 @@ gimp_paint_core_stroke_boundary (GimpPaintCore      *core,
 }
 
 gboolean
-gimp_paint_core_stroke_vectors (GimpPaintCore     *core,
-                                GimpDrawable      *drawable,
-                                GimpPaintOptions  *paint_options,
-                                gboolean           emulate_dynamics,
-                                GimpVectors       *vectors,
-                                gboolean           push_undo,
-                                GError           **error)
+gimp_paint_core_stroke_path (GimpPaintCore     *core,
+                             GimpDrawable      *drawable,
+                             GimpPaintOptions  *paint_options,
+                             gboolean           emulate_dynamics,
+                             GimpPath          *path,
+                             gboolean           push_undo,
+                             GError           **error)
 {
+  GList    *drawables;
   GList    *stroke;
   gboolean  initialized = FALSE;
   gboolean  due_to_lack_of_points = FALSE;
   gint      off_x, off_y;
-  gint      vectors_off_x, vectors_off_y;
 
   g_return_val_if_fail (GIMP_IS_PAINT_CORE (core), FALSE);
   g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), FALSE);
   g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (drawable)), FALSE);
   g_return_val_if_fail (GIMP_IS_PAINT_OPTIONS (paint_options), FALSE);
-  g_return_val_if_fail (GIMP_IS_VECTORS (vectors), FALSE);
+  g_return_val_if_fail (GIMP_IS_PATH (path), FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
-  gimp_item_get_offset (GIMP_ITEM (vectors),  &vectors_off_x, &vectors_off_y);
-  gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
+  gimp_item_get_offset (GIMP_ITEM (path),  &off_x, &off_y);
 
-  off_x -= vectors_off_x;
-  off_y -= vectors_off_y;
+  drawables = g_list_prepend (NULL, drawable);
 
-  for (stroke = vectors->strokes->head;
+  for (stroke = path->strokes->head;
        stroke;
        stroke = stroke->next)
     {
@@ -269,8 +271,8 @@ gimp_paint_core_stroke_vectors (GimpPaintCore     *core,
 
           for (i = 0; i < coords->len; i++)
             {
-              g_array_index (coords, GimpCoords, i).x -= off_x;
-              g_array_index (coords, GimpCoords, i).y -= off_y;
+              g_array_index (coords, GimpCoords, i).x += off_x;
+              g_array_index (coords, GimpCoords, i).y += off_y;
             }
 
           if (emulate_dynamics)
@@ -278,7 +280,7 @@ gimp_paint_core_stroke_vectors (GimpPaintCore     *core,
                                                      coords->len);
 
           if (initialized ||
-              gimp_paint_core_start (core, drawable, paint_options,
+              gimp_paint_core_start (core, drawables, paint_options,
                                      &g_array_index (coords, GimpCoords, 0),
                                      error))
             {
@@ -287,20 +289,20 @@ gimp_paint_core_stroke_vectors (GimpPaintCore     *core,
               core->cur_coords  = g_array_index (coords, GimpCoords, 0);
               core->last_coords = g_array_index (coords, GimpCoords, 0);
 
-              gimp_paint_core_paint (core, drawable, paint_options,
+              gimp_paint_core_paint (core, drawables, paint_options,
                                      GIMP_PAINT_STATE_INIT, 0);
 
-              gimp_paint_core_paint (core, drawable, paint_options,
+              gimp_paint_core_paint (core, drawables, paint_options,
                                      GIMP_PAINT_STATE_MOTION, 0);
 
               for (i = 1; i < coords->len; i++)
                 {
-                  gimp_paint_core_interpolate (core, drawable, paint_options,
+                  gimp_paint_core_interpolate (core, drawables, paint_options,
                                                &g_array_index (coords, GimpCoords, i),
                                                0);
                 }
 
-              gimp_paint_core_paint (core, drawable, paint_options,
+              gimp_paint_core_paint (core, drawables, paint_options,
                                      GIMP_PAINT_STATE_FINISH, 0);
             }
           else
@@ -322,7 +324,7 @@ gimp_paint_core_stroke_vectors (GimpPaintCore     *core,
 
   if (initialized)
     {
-      gimp_paint_core_finish (core, drawable, push_undo);
+      gimp_paint_core_finish (core, drawables, push_undo);
 
       gimp_paint_core_cleanup (core);
     }
@@ -332,6 +334,8 @@ gimp_paint_core_stroke_vectors (GimpPaintCore     *core,
       g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
                            _("Not enough points to stroke"));
     }
+
+  g_list_free (drawables);
 
   return initialized;
 }

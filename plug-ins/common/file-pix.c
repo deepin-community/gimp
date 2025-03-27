@@ -53,7 +53,7 @@
 
 
 #define LOAD_PROC      "file-pix-load"
-#define SAVE_PROC      "file-pix-save"
+#define EXPORT_PROC    "file-pix-export"
 #define PLUG_IN_BINARY "file-pix"
 #define PLUG_IN_ROLE   "gimp-file-pix"
 
@@ -67,217 +67,228 @@
 #endif
 
 
-/**************
- * Prototypes *
- **************/
+typedef struct _Pix      Pix;
+typedef struct _PixClass PixClass;
 
-static void      query      (void);
-static void      run        (const gchar      *name,
-                             gint              nparams,
-                             const GimpParam  *param,
-                             gint             *nreturn_vals,
-                             GimpParam       **return_vals);
-
-static gint32    load_image (GFile           *file,
-                             GError         **error);
-static gboolean  save_image (GFile           *file,
-                             gint32           image_ID,
-                             gint32           drawable_ID,
-                             GError         **error);
-
-static gboolean  get_short  (GInputStream    *input,
-                             guint16         *value,
-                             GError         **error);
-static gboolean  put_short  (GOutputStream   *output,
-                             guint16          value,
-                             GError         **error);
-
-
-/******************
- * Implementation *
- ******************/
-
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _Pix
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
+  GimpPlugIn      parent_instance;
 };
 
-MAIN ()
+struct _PixClass
+{
+  GimpPlugInClass parent_class;
+};
+
+
+#define PIX_TYPE  (pix_get_type ())
+#define PIX(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), PIX_TYPE, Pix))
+
+GType                   pix_get_type         (void) G_GNUC_CONST;
+
+static GList          * pix_query_procedures (GimpPlugIn            *plug_in);
+static GimpProcedure  * pix_create_procedure (GimpPlugIn            *plug_in,
+                                              const gchar           *name);
+
+static GimpValueArray * pix_load             (GimpProcedure         *procedure,
+                                              GimpRunMode            run_mode,
+                                              GFile                 *file,
+                                              GimpMetadata          *metadata,
+                                              GimpMetadataLoadFlags *flags,
+                                              GimpProcedureConfig   *config,
+                                              gpointer               run_data);
+static GimpValueArray * pix_export           (GimpProcedure         *procedure,
+                                              GimpRunMode            run_mode,
+                                              GimpImage             *image,
+                                              GFile                 *file,
+                                              GimpExportOptions     *options,
+                                              GimpMetadata          *metadata,
+                                              GimpProcedureConfig   *config,
+                                              gpointer               run_data);
+
+static GimpImage      * load_image           (GFile                 *file,
+                                              GError               **error);
+static GimpImage      * load_esm_image       (GInputStream          *input,
+                                              GError               **error);
+static gboolean         export_image         (GFile                 *file,
+                                              GimpImage             *image,
+                                              GimpDrawable          *drawable,
+                                              GError               **error);
+
+static gboolean         get_short            (GInputStream          *input,
+                                              guint16               *value,
+                                              GError               **error);
+static gboolean         put_short            (GOutputStream         *output,
+                                              guint16                value,
+                                              GError               **error);
+
+
+G_DEFINE_TYPE (Pix, pix, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (PIX_TYPE)
+DEFINE_STD_SET_I18N
+
 
 static void
-query (void)
+pix_class_init (PixClass *klass)
 {
-  /*
-   * Description:
-   *     Register the services provided by this plug-in
-   */
-  static const GimpParamDef load_args[] =
-  {
-    { GIMP_PDB_INT32,  "run-mode",      "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_STRING, "filename",      "The name of the file to load" },
-    { GIMP_PDB_STRING, "raw-filename",   "The name entered"            }
-  };
-  static const GimpParamDef load_return_vals[] =
-  {
-    { GIMP_PDB_IMAGE, "image", "Output image" }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  static const GimpParamDef save_args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode",     "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",        "Input image"                  },
-    { GIMP_PDB_DRAWABLE, "drawable",     "Drawable to export"           },
-    { GIMP_PDB_STRING,   "filename",     "The name of the file to export the image in" },
-    { GIMP_PDB_STRING,   "raw-filename", "The name of the file to export the image in" }
-  };
-
-  gimp_install_procedure (LOAD_PROC,
-                          "loads files of the Alias|Wavefront Pix file format",
-                          "loads files of the Alias|Wavefront Pix file format",
-                          "Michael Taylor",
-                          "Michael Taylor",
-                          "1997",
-                          N_("Alias Pix image"),
-                          NULL,
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (load_args),
-                          G_N_ELEMENTS (load_return_vals),
-                          load_args, load_return_vals);
-
-  gimp_register_file_handler_uri (LOAD_PROC);
-  gimp_register_load_handler (LOAD_PROC, "pix,matte,mask,alpha,als", "");
-
-  gimp_install_procedure (SAVE_PROC,
-                          "export file in the Alias|Wavefront pix/matte file format",
-                          "export file in the Alias|Wavefront pix/matte file format",
-                          "Michael Taylor",
-                          "Michael Taylor",
-                          "1997",
-                          N_("Alias Pix image"),
-                          "RGB*, GRAY*, INDEXED*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (save_args), 0,
-                          save_args, NULL);
-
-  gimp_register_file_handler_uri (SAVE_PROC);
-  gimp_register_save_handler (SAVE_PROC, "pix,matte,mask,alpha,als", "");
+  plug_in_class->query_procedures = pix_query_procedures;
+  plug_in_class->create_procedure = pix_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
-/*
- *  Description:
- *      perform registered plug-in function
- *
- *  Arguments:
- *      name         - name of the function to perform
- *      nparams      - number of parameters passed to the function
- *      param        - parameters passed to the function
- *      nreturn_vals - number of parameters returned by the function
- *      return_vals  - parameters returned by the function
- */
-
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+pix_init (Pix *pix)
 {
-  static GimpParam  values[2];
-  GimpRunMode       run_mode;
-  GimpPDBStatusType status = GIMP_PDB_SUCCESS;
-  gint32            image_ID;
-  gint32            drawable_ID;
-  GimpExportReturn  export = GIMP_EXPORT_CANCEL;
-  GError           *error  = NULL;
+}
 
-  INIT_I18N ();
+static GList *
+pix_query_procedures (GimpPlugIn *plug_in)
+{
+  GList *list = NULL;
+
+  list = g_list_append (list, g_strdup (LOAD_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
+
+  return list;
+}
+
+static GimpProcedure *
+pix_create_procedure (GimpPlugIn  *plug_in,
+                      const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, LOAD_PROC))
+    {
+      procedure = gimp_load_procedure_new (plug_in, name,
+                                           GIMP_PDB_PROC_TYPE_PLUGIN,
+                                           pix_load, NULL, NULL);
+
+      gimp_file_procedure_set_handles_remote (GIMP_FILE_PROCEDURE (procedure),
+                                              TRUE);
+
+      gimp_procedure_set_menu_label (procedure, _("Alias Pix image"));
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Loads files of the Alias|Wavefront "
+                                          "or Esm Software Pix file format"),
+                                        _("Loads files of the Alias|Wavefront "
+                                          "or Esm Software Pix file format"),
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Michael Taylor",
+                                      "Michael Taylor",
+                                      "1997");
+
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "pix,matte,mask,alpha,als");
+      /* Magic Number for Esm Software PIX files */
+      gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
+                                      "0,string,Esm Software PIX file");
+
+    }
+  else if (! strcmp (name, EXPORT_PROC))
+    {
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, pix_export, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "*");
+
+      gimp_file_procedure_set_handles_remote (GIMP_FILE_PROCEDURE (procedure),
+                                              TRUE);
+
+      gimp_procedure_set_menu_label (procedure, _("Alias Pix image"));
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Export file in the Alias|Wavefront "
+                                          "pix/matte file format"),
+                                        _("Export file in the Alias|Wavefront "
+                                          "pix/matte file format"),
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Michael Taylor",
+                                      "Michael Taylor",
+                                      "1997");
+
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "pix,matte,mask,alpha,als");
+
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB  |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED,
+                                              NULL, NULL, NULL);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+pix_load (GimpProcedure         *procedure,
+          GimpRunMode            run_mode,
+          GFile                 *file,
+          GimpMetadata          *metadata,
+          GimpMetadataLoadFlags *flags,
+          GimpProcedureConfig   *config,
+          gpointer               run_data)
+{
+  GimpValueArray *return_vals;
+  GimpImage      *image;
+  GError         *error = NULL;
+
   gegl_init (NULL, NULL);
 
-  run_mode = param[0].data.d_int32;
+  image = load_image (file, &error);
 
-  *nreturn_vals = 1;
-  *return_vals  = values;
+  if (! image)
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_EXECUTION_ERROR,
+                                             error);
 
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
+  return_vals = gimp_procedure_new_return_values (procedure,
+                                                  GIMP_PDB_SUCCESS,
+                                                  NULL);
 
-  if (strcmp (name, LOAD_PROC) == 0)
-    {
-      /* Perform the image load */
-      image_ID = load_image (g_file_new_for_uri (param[1].data.d_string),
-                             &error);
+  GIMP_VALUES_SET_IMAGE (return_vals, 1, image);
 
-      if (image_ID != -1)
-        {
-          /* The image load was successful */
-          *nreturn_vals = 2;
-          values[1].type         = GIMP_PDB_IMAGE;
-          values[1].data.d_image = image_ID;
-        }
-      else
-        {
-          /* The image load failed */
-          status = GIMP_PDB_EXECUTION_ERROR;
-        }
-    }
-  else if (strcmp (name, SAVE_PROC) == 0)
-    {
-      image_ID    = param[1].data.d_int32;
-      drawable_ID = param[2].data.d_int32;
-
-      /*  eventually export the image */
-      switch (run_mode)
-        {
-        case GIMP_RUN_INTERACTIVE:
-        case GIMP_RUN_WITH_LAST_VALS:
-          gimp_ui_init (PLUG_IN_BINARY, FALSE);
-
-          export = gimp_export_image (&image_ID, &drawable_ID, "PIX",
-                                      GIMP_EXPORT_CAN_HANDLE_RGB  |
-                                      GIMP_EXPORT_CAN_HANDLE_GRAY |
-                                      GIMP_EXPORT_CAN_HANDLE_INDEXED);
-
-          if (export == GIMP_EXPORT_CANCEL)
-            {
-              values[0].data.d_status = GIMP_PDB_CANCEL;
-              return;
-            }
-          break;
-        default:
-          break;
-        }
-
-      if (status == GIMP_PDB_SUCCESS)
-        {
-          if (! save_image (g_file_new_for_uri (param[3].data.d_string),
-                            image_ID, drawable_ID,
-                            &error))
-            {
-              status = GIMP_PDB_EXECUTION_ERROR;
-            }
-        }
-
-      if (export == GIMP_EXPORT_EXPORT)
-        gimp_image_delete (image_ID);
-    }
-  else
-    {
-      status = GIMP_PDB_CALLING_ERROR;
-    }
-
-  if (status != GIMP_PDB_SUCCESS && error)
-    {
-      *nreturn_vals = 2;
-      values[1].type          = GIMP_PDB_STRING;
-      values[1].data.d_string = error->message;
-    }
-
-  values[0].data.d_status = status;
+  return return_vals;
 }
 
+static GimpValueArray *
+pix_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
+{
+  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
+  GError            *error  = NULL;
+
+  gegl_init (NULL, NULL);
+
+  export    = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
+
+  if (! export_image (file, image, drawables->data, &error))
+    {
+      status = GIMP_PDB_EXECUTION_ERROR;
+    }
+
+  if (export == GIMP_EXPORT_EXPORT)
+    gimp_image_delete (image);
+
+  g_list_free (drawables);
+  return gimp_procedure_new_return_values (procedure, status, error);
+}
 
 /*
  * Description:
@@ -337,7 +348,7 @@ put_short (GOutputStream  *output,
  *
  */
 
-static gint32
+static GimpImage *
 load_image (GFile   *file,
             GError **error)
 {
@@ -347,19 +358,19 @@ load_image (GFile   *file,
   GimpImageType      gdtype;
   guchar            *dest;
   guchar            *dest_base;
-  gint32             image_ID;
-  gint32             layer_ID;
+  GimpImage         *image = NULL;
+  GimpLayer         *layer;
   gushort            width, height, depth;
   gint               i, j, tile_height, row;
 
-  PIX_DEBUG_PRINT ("Opening file: %s\n", filename);
+  PIX_DEBUG_PRINT ("Opening file: %s\n", gimp_file_get_utf8_name (file));
 
   gimp_progress_init_printf (_("Opening '%s'"),
                              g_file_get_parse_name (file));
 
   input = G_INPUT_STREAM (g_file_read (file, NULL, error));
   if (! input)
-    return -1;
+    return NULL;
 
   /* Read header information */
   if (! get_short (input, &width,  error) ||
@@ -369,7 +380,7 @@ load_image (GFile   *file,
       ! get_short (input, &depth,  error))
     {
       g_object_unref (input);
-      return -1;
+      return NULL;
     }
 
   PIX_DEBUG_PRINT ("Width %hu\n",  width);
@@ -389,22 +400,42 @@ load_image (GFile   *file,
     }
   else
     {
+      /* Check if this is Esm Software PIX file format */
+      gchar esm_header[22];
+      gsize bytes_read;
+
+      g_seekable_seek (G_SEEKABLE (input), 0, G_SEEK_SET, NULL, NULL);
+      if (g_input_stream_read_all (input, &esm_header, sizeof (esm_header),
+                                   &bytes_read, NULL, NULL))
+        {
+          esm_header[21] = '\0';
+
+          if (g_str_has_prefix (esm_header, "Esm Software PIX file"))
+            image = load_esm_image (input, error);
+
+          if (image)
+            {
+              g_object_unref (input);
+              gimp_progress_update (1.0);
+
+              return image;
+            }
+        }
+
       /* Header is invalid */
       g_object_unref (input);
-      return -1;
+      return NULL;
     }
 
-  image_ID = gimp_image_new (width, height, imgtype);
-  gimp_image_set_filename (image_ID, g_file_get_uri (file));
+  image = gimp_image_new (width, height, imgtype);
+  layer = gimp_layer_new (image, _("Background"),
+                          width, height,
+                          gdtype,
+                          100,
+                          gimp_image_get_default_new_layer_mode (image));
+  gimp_image_insert_layer (image, layer, NULL, 0);
 
-  layer_ID = gimp_layer_new (image_ID, _("Background"),
-                             width, height,
-                             gdtype,
-                             100,
-                             gimp_image_get_default_new_layer_mode (image_ID));
-  gimp_image_insert_layer (image_ID, layer_ID, -1, 0);
-
-  buffer = gimp_drawable_get_buffer (layer_ID);
+  buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
 
   tile_height = gimp_tile_height ();
 
@@ -505,24 +536,91 @@ load_image (GFile   *file,
 
   gimp_progress_update (1.0);
 
-  return image_ID;
+  return image;
+}
+
+static GimpImage *
+load_esm_image (GInputStream  *input,
+                GError       **error)
+{
+  GimpImage      *image       = NULL;
+  GFile          *temp_file   = NULL;
+  FILE           *fp;
+  goffset         file_size;
+
+  g_seekable_seek (G_SEEKABLE (input), 0, G_SEEK_END, NULL, error);
+  file_size = g_seekable_tell (G_SEEKABLE (input));
+  g_seekable_seek (G_SEEKABLE (input), 21, G_SEEK_SET, NULL, error);
+
+  /* Esm Software PIX format is just a JPEG with an extra 21 byte header */
+  temp_file = gimp_temp_file ("jpeg");
+  fp = g_fopen (g_file_peek_path (temp_file), "wb");
+
+  if (! fp)
+    {
+      g_file_delete (temp_file, NULL, NULL);
+      g_object_unref (temp_file);
+
+      g_message (_("Error trying to open temporary JPEG file '%s' "
+                   "for Esm Software pix loading: %s"),
+                 gimp_file_get_utf8_name (temp_file),
+                 g_strerror (errno));
+      return NULL;
+    }
+  else
+    {
+      GimpProcedure  *procedure;
+      GimpValueArray *return_vals;
+      guchar          buffer[file_size - 21];
+
+      if (! g_input_stream_read_all (input, buffer, sizeof (buffer),
+                                     NULL, NULL, error))
+        {
+          g_file_delete (temp_file, NULL, NULL);
+          g_object_unref (temp_file);
+
+          g_printerr (_("Invalid Esm Software PIX file"));
+          return NULL;
+        }
+
+      fwrite (buffer, sizeof (guchar), file_size, fp);
+      fclose (fp);
+
+      procedure   = gimp_pdb_lookup_procedure (gimp_get_pdb (), "file-jpeg-load");
+      return_vals = gimp_procedure_run (procedure,
+                                        "run-mode", GIMP_RUN_NONINTERACTIVE,
+                                        "file",     temp_file,
+                                        NULL);
+
+      if (return_vals)
+        {
+          image = g_value_get_object (gimp_value_array_index (return_vals, 1));
+
+          gimp_value_array_unref (return_vals);
+        }
+
+      g_file_delete (temp_file, NULL, NULL);
+      g_object_unref (temp_file);
+    }
+
+  return image;
 }
 
 /*
  *  Description:
- *      save the given file out as an alias pix or matte file
+ *      export the given file out as an alias pix or matte file
  *
  *  Arguments:
- *      filename    - name of file to save to
- *      image_ID    - ID of image to save
- *      drawable_ID - current drawable
+ *      filename    - name of file to export to
+ *      image       - image to export
+ *      drawable    - current drawable
  */
 
 static gboolean
-save_image (GFile   *file,
-            gint32   image_ID,
-            gint32   drawable_ID,
-            GError **error)
+export_image (GFile         *file,
+              GimpImage     *image,
+             GimpDrawable  *drawable,
+              GError       **error)
 {
   GOutputStream *output;
   GeglBuffer    *buffer;
@@ -545,12 +643,12 @@ save_image (GFile   *file,
     return FALSE;
 
   /* Get info about image */
-  buffer = gimp_drawable_get_buffer (drawable_ID);
+  buffer = gimp_drawable_get_buffer (drawable);
 
   width  = gegl_buffer_get_width  (buffer);
   height = gegl_buffer_get_height (buffer);
 
-  savingColor = ! gimp_drawable_is_gray (drawable_ID);
+  savingColor = ! gimp_drawable_is_gray (drawable);
 
   if (savingColor)
     format = babl_format ("R'G'B' u8");

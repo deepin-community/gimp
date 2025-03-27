@@ -256,8 +256,7 @@ gimp_gegl_apply_cached_operation (GeglBuffer          *src_buffer,
                                            "height",    (gdouble) dest_rect->height,
                                            NULL);
 
-          gegl_node_connect_to (src_node,  "output",
-                                crop_node, "input");
+          gegl_node_link (src_node, crop_node);
 
           src_node = crop_node;
         }
@@ -268,12 +267,10 @@ gimp_gegl_apply_cached_operation (GeglBuffer          *src_buffer,
                                         "operation", "gimp:normal",
                                         NULL);
 
-          gegl_node_connect_to (operation, "output",
-                                effect,    "aux");
+          gegl_node_connect (operation, "output", effect,    "aux");
         }
 
-      gegl_node_connect_to (src_node, "output",
-                            effect,   "input");
+      gegl_node_link (src_node, effect);
     }
 
   dest_node = gegl_node_new_child (gegl,
@@ -281,8 +278,7 @@ gimp_gegl_apply_cached_operation (GeglBuffer          *src_buffer,
                                    "buffer",    result_buffer,
                                    NULL);
 
-  gegl_node_connect_to (effect,    "output",
-                        dest_node, "input");
+  gegl_node_link (effect, dest_node);
 
   iter = gimp_chunk_iterator_new (region);
 
@@ -317,7 +313,7 @@ gimp_gegl_apply_cached_operation (GeglBuffer          *src_buffer,
     {
       GeglRectangle render_rect;
 
-      if (cancelable)
+      if (progress)
         {
           while (! cancel && g_main_context_pending (NULL))
             g_main_context_iteration (NULL, FALSE);
@@ -358,8 +354,7 @@ gimp_gegl_apply_cached_operation (GeglBuffer          *src_buffer,
 
   if (operation_src_node)
     {
-      gegl_node_connect_to (operation_src_node, "output",
-                            operation,          "input");
+      gegl_node_link (operation_src_node, operation);
     }
 
   if (progress_started)
@@ -410,7 +405,7 @@ gimp_gegl_apply_flatten (GeglBuffer          *src_buffer,
                          GimpProgress        *progress,
                          const gchar         *undo_desc,
                          GeglBuffer          *dest_buffer,
-                         const GimpRGB       *background,
+                         GeglColor           *background,
                          GimpLayerColorSpace  composite_space)
 {
   GeglNode *node;
@@ -418,7 +413,7 @@ gimp_gegl_apply_flatten (GeglBuffer          *src_buffer,
   g_return_if_fail (GEGL_IS_BUFFER (src_buffer));
   g_return_if_fail (progress == NULL || GIMP_IS_PROGRESS (progress));
   g_return_if_fail (GEGL_IS_BUFFER (dest_buffer));
-  g_return_if_fail (background != NULL);
+  g_return_if_fail (GEGL_IS_COLOR (background));
 
   node = gimp_gegl_create_flatten_node (background, composite_space);
 
@@ -537,7 +532,7 @@ gimp_gegl_apply_border (GeglBuffer             *src_buffer,
 
         gegl_node_link_many (input, grow, subtract, output, NULL);
         gegl_node_link (input, shrink);
-        gegl_node_connect_to (shrink, "output", subtract, "aux");
+        gegl_node_connect (shrink, "output", subtract, "aux");
       }
       break;
 

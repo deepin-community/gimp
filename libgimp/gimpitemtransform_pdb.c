@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -36,7 +38,7 @@
 
 /**
  * gimp_item_transform_translate:
- * @item_ID: The item.
+ * @item: The item.
  * @off_x: Offset in x direction.
  * @off_y: Offset in y direction.
  *
@@ -47,42 +49,41 @@
  * offsets from the current position. The offsets will be rounded to
  * the nearest pixel unless the item is a path.
  *
- * If the item is attached to an image and has its linked flag set to
- * TRUE, all additional items contained in the image which have the
- * linked flag set to TRUE will also be translated by the specified
- * offsets.
- *
- * Returns: The translated item.
+ * Returns: (transfer none): The translated item.
  *
  * Since: 2.10
  **/
-gint32
-gimp_item_transform_translate (gint32  item_ID,
-                               gdouble off_x,
-                               gdouble off_y)
+GimpItem *
+gimp_item_transform_translate (GimpItem *item,
+                               gdouble   off_x,
+                               gdouble   off_y)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 ret_item_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpItem *ret_item = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-transform-translate",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_FLOAT, off_x,
-                                    GIMP_PDB_FLOAT, off_y,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_DOUBLE, off_x,
+                                          G_TYPE_DOUBLE, off_y,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    ret_item_ID = return_vals[1].data.d_item;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-transform-translate",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    ret_item = GIMP_VALUES_GET_ITEM (return_vals, 1);
 
-  return ret_item_ID;
+  gimp_value_array_unref (return_vals);
+
+  return ret_item;
 }
 
 /**
  * gimp_item_transform_flip_simple:
- * @item_ID: The affected item.
+ * @item: The affected item.
  * @flip_type: Type of flip.
  * @auto_center: Whether to automatically position the axis in the selection center.
  * @axis: coord. of flip axis.
@@ -101,47 +102,48 @@ gimp_item_transform_translate (gint32  item_ID,
  * If there is no selection or the item is not a drawable, the entire
  * item will be flipped around its center if auto_center is set to
  * TRUE, otherwise the coordinate of the axis needs to be specified.
- * Additionally, if the item has its linked flag set to TRUE, all
- * additional items contained in the image which have the linked flag
- * set to TRUE will also be flipped around the same axis. The return
- * value will be equal to the item ID supplied as input.
+ * The return value will be equal to the item ID supplied as input.
  *
  * This procedure is affected by the following context setters:
  * gimp_context_set_transform_resize().
  *
- * Returns: The flipped item.
+ * Returns: (transfer none): The flipped item.
  *
  * Since: 2.2
  **/
-gint32
-gimp_item_transform_flip_simple (gint32              item_ID,
-                                 GimpOrientationType flip_type,
-                                 gboolean            auto_center,
-                                 gdouble             axis)
+GimpItem *
+gimp_item_transform_flip_simple (GimpItem            *item,
+                                 GimpOrientationType  flip_type,
+                                 gboolean             auto_center,
+                                 gdouble              axis)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 ret_item_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpItem *ret_item = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-transform-flip-simple",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_INT32, flip_type,
-                                    GIMP_PDB_INT32, auto_center,
-                                    GIMP_PDB_FLOAT, axis,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          GIMP_TYPE_ORIENTATION_TYPE, flip_type,
+                                          G_TYPE_BOOLEAN, auto_center,
+                                          G_TYPE_DOUBLE, axis,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    ret_item_ID = return_vals[1].data.d_item;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-transform-flip-simple",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    ret_item = GIMP_VALUES_GET_ITEM (return_vals, 1);
 
-  return ret_item_ID;
+  gimp_value_array_unref (return_vals);
+
+  return ret_item;
 }
 
 /**
  * gimp_item_transform_flip:
- * @item_ID: The affected item.
+ * @item: The affected item.
  * @x0: horz. coord. of one end of axis.
  * @y0: vert. coord. of one end of axis.
  * @x1: horz. coord. of other end of axis.
@@ -158,52 +160,53 @@ gimp_item_transform_flip_simple (gint32              item_ID,
  * The return value is the ID of the flipped floating selection.
  *
  * If there is no selection or the item is not a drawable, the entire
- * item will be flipped around the specified axis. Additionally, if the
- * item has its linked flag set to TRUE, all additional items contained
- * in the image which have the linked flag set to TRUE will also be
- * flipped around the same axis. The return value will be equal to the
- * item ID supplied as input.
+ * item will be flipped around the specified axis. The return value
+ * will be equal to the item ID supplied as input.
  *
  * This procedure is affected by the following context setters:
  * gimp_context_set_interpolation(),
  * gimp_context_set_transform_direction(),
  * gimp_context_set_transform_resize().
  *
- * Returns: The flipped item.
+ * Returns: (transfer none): The flipped item.
  *
  * Since: 2.8
  **/
-gint32
-gimp_item_transform_flip (gint32  item_ID,
-                          gdouble x0,
-                          gdouble y0,
-                          gdouble x1,
-                          gdouble y1)
+GimpItem *
+gimp_item_transform_flip (GimpItem *item,
+                          gdouble   x0,
+                          gdouble   y0,
+                          gdouble   x1,
+                          gdouble   y1)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 ret_item_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpItem *ret_item = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-transform-flip",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_FLOAT, x0,
-                                    GIMP_PDB_FLOAT, y0,
-                                    GIMP_PDB_FLOAT, x1,
-                                    GIMP_PDB_FLOAT, y1,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_DOUBLE, x0,
+                                          G_TYPE_DOUBLE, y0,
+                                          G_TYPE_DOUBLE, x1,
+                                          G_TYPE_DOUBLE, y1,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    ret_item_ID = return_vals[1].data.d_item;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-transform-flip",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    ret_item = GIMP_VALUES_GET_ITEM (return_vals, 1);
 
-  return ret_item_ID;
+  gimp_value_array_unref (return_vals);
+
+  return ret_item;
 }
 
 /**
  * gimp_item_transform_perspective:
- * @item_ID: The affected item.
+ * @item: The affected item.
  * @x0: The new x coordinate of upper-left corner of original bounding box.
  * @y0: The new y coordinate of upper-left corner of original bounding box.
  * @x1: The new x coordinate of upper-right corner of original bounding box.
@@ -234,59 +237,60 @@ gimp_item_transform_flip (gint32  item_ID,
  *
  * If there is no selection or the item is not a drawable, the entire
  * item will be transformed according to the specified mapping.
- * Additionally, if the item has its linked flag set to TRUE, all
- * additional items contained in the image which have the linked flag
- * set to TRUE will also be transformed the same way. The return value
- * will be equal to the item ID supplied as input.
+ * The return value will be equal to the item ID supplied as input.
  *
  * This procedure is affected by the following context setters:
  * gimp_context_set_interpolation(),
  * gimp_context_set_transform_direction(),
  * gimp_context_set_transform_resize().
  *
- * Returns: The transformed item.
+ * Returns: (transfer none): The transformed item.
  *
  * Since: 2.8
  **/
-gint32
-gimp_item_transform_perspective (gint32  item_ID,
-                                 gdouble x0,
-                                 gdouble y0,
-                                 gdouble x1,
-                                 gdouble y1,
-                                 gdouble x2,
-                                 gdouble y2,
-                                 gdouble x3,
-                                 gdouble y3)
+GimpItem *
+gimp_item_transform_perspective (GimpItem *item,
+                                 gdouble   x0,
+                                 gdouble   y0,
+                                 gdouble   x1,
+                                 gdouble   y1,
+                                 gdouble   x2,
+                                 gdouble   y2,
+                                 gdouble   x3,
+                                 gdouble   y3)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 ret_item_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpItem *ret_item = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-transform-perspective",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_FLOAT, x0,
-                                    GIMP_PDB_FLOAT, y0,
-                                    GIMP_PDB_FLOAT, x1,
-                                    GIMP_PDB_FLOAT, y1,
-                                    GIMP_PDB_FLOAT, x2,
-                                    GIMP_PDB_FLOAT, y2,
-                                    GIMP_PDB_FLOAT, x3,
-                                    GIMP_PDB_FLOAT, y3,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_DOUBLE, x0,
+                                          G_TYPE_DOUBLE, y0,
+                                          G_TYPE_DOUBLE, x1,
+                                          G_TYPE_DOUBLE, y1,
+                                          G_TYPE_DOUBLE, x2,
+                                          G_TYPE_DOUBLE, y2,
+                                          G_TYPE_DOUBLE, x3,
+                                          G_TYPE_DOUBLE, y3,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    ret_item_ID = return_vals[1].data.d_item;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-transform-perspective",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    ret_item = GIMP_VALUES_GET_ITEM (return_vals, 1);
 
-  return ret_item_ID;
+  gimp_value_array_unref (return_vals);
+
+  return ret_item;
 }
 
 /**
  * gimp_item_transform_rotate_simple:
- * @item_ID: The affected item.
+ * @item: The affected item.
  * @rotate_type: Type of rotation.
  * @auto_center: Whether to automatically rotate around the selection center.
  * @center_x: The hor. coordinate of the center of rotation.
@@ -308,50 +312,51 @@ gimp_item_transform_perspective (gint32  item_ID,
  * If there is no selection or the item is not a drawable, the entire
  * item will be rotated around its center if auto_center is set to
  * TRUE, otherwise the coordinate of the center point needs to be
- * specified. Additionally, if the item has its linked flag set to
- * TRUE, all additional items contained in the image which have the
- * linked flag set to TRUE will also be rotated around the same center
- * point. The return value will be equal to the item ID supplied as
- * input.
+ * specified.
+ * The return value will be equal to the item ID supplied as input.
  *
  * This procedure is affected by the following context setters:
  * gimp_context_set_transform_resize().
  *
- * Returns: The rotated item.
+ * Returns: (transfer none): The rotated item.
  *
  * Since: 2.8
  **/
-gint32
-gimp_item_transform_rotate_simple (gint32           item_ID,
-                                   GimpRotationType rotate_type,
-                                   gboolean         auto_center,
-                                   gdouble          center_x,
-                                   gdouble          center_y)
+GimpItem *
+gimp_item_transform_rotate_simple (GimpItem         *item,
+                                   GimpRotationType  rotate_type,
+                                   gboolean          auto_center,
+                                   gdouble           center_x,
+                                   gdouble           center_y)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 ret_item_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpItem *ret_item = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-transform-rotate-simple",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_INT32, rotate_type,
-                                    GIMP_PDB_INT32, auto_center,
-                                    GIMP_PDB_FLOAT, center_x,
-                                    GIMP_PDB_FLOAT, center_y,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          GIMP_TYPE_ROTATION_TYPE, rotate_type,
+                                          G_TYPE_BOOLEAN, auto_center,
+                                          G_TYPE_DOUBLE, center_x,
+                                          G_TYPE_DOUBLE, center_y,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    ret_item_ID = return_vals[1].data.d_item;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-transform-rotate-simple",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    ret_item = GIMP_VALUES_GET_ITEM (return_vals, 1);
 
-  return ret_item_ID;
+  gimp_value_array_unref (return_vals);
+
+  return ret_item;
 }
 
 /**
  * gimp_item_transform_rotate:
- * @item_ID: The affected item.
+ * @item: The affected item.
  * @angle: The angle of rotation (radians).
  * @auto_center: Whether to automatically rotate around the selection center.
  * @center_x: The hor. coordinate of the center of rotation.
@@ -373,52 +378,53 @@ gimp_item_transform_rotate_simple (gint32           item_ID,
  * If there is no selection or the item is not a drawable, the entire
  * item will be rotated around its center if auto_center is set to
  * TRUE, otherwise the coordinate of the center point needs to be
- * specified. Additionally, if the item has its linked flag set to
- * TRUE, all additional items contained in the image which have the
- * linked flag set to TRUE will also be rotated around the same center
- * point. The return value will be equal to the item ID supplied as
- * input.
+ * specified.
+ * The return value will be equal to the item ID supplied as input.
  *
  * This procedure is affected by the following context setters:
  * gimp_context_set_interpolation(),
  * gimp_context_set_transform_direction(),
  * gimp_context_set_transform_resize().
  *
- * Returns: The rotated item.
+ * Returns: (transfer none): The rotated item.
  *
  * Since: 2.8
  **/
-gint32
-gimp_item_transform_rotate (gint32   item_ID,
-                            gdouble  angle,
-                            gboolean auto_center,
-                            gdouble  center_x,
-                            gdouble  center_y)
+GimpItem *
+gimp_item_transform_rotate (GimpItem *item,
+                            gdouble   angle,
+                            gboolean  auto_center,
+                            gdouble   center_x,
+                            gdouble   center_y)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 ret_item_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpItem *ret_item = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-transform-rotate",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_FLOAT, angle,
-                                    GIMP_PDB_INT32, auto_center,
-                                    GIMP_PDB_FLOAT, center_x,
-                                    GIMP_PDB_FLOAT, center_y,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_DOUBLE, angle,
+                                          G_TYPE_BOOLEAN, auto_center,
+                                          G_TYPE_DOUBLE, center_x,
+                                          G_TYPE_DOUBLE, center_y,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    ret_item_ID = return_vals[1].data.d_item;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-transform-rotate",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    ret_item = GIMP_VALUES_GET_ITEM (return_vals, 1);
 
-  return ret_item_ID;
+  gimp_value_array_unref (return_vals);
+
+  return ret_item;
 }
 
 /**
  * gimp_item_transform_scale:
- * @item_ID: The affected item.
+ * @item: The affected item.
  * @x0: The new x coordinate of the upper-left corner of the scaled region.
  * @y0: The new y coordinate of the upper-left corner of the scaled region.
  * @x1: The new x coordinate of the lower-right corner of the scaled region.
@@ -438,51 +444,52 @@ gimp_item_transform_rotate (gint32   item_ID,
  *
  * If there is no selection or the item is not a drawable, the entire
  * item will be scaled according to the specified coordinates.
- * Additionally, if the item has its linked flag set to TRUE, all
- * additional items contained in the image which have the linked flag
- * set to TRUE will also be scaled the same way. The return value will
- * be equal to the item ID supplied as input.
+ * The return value will be equal to the item ID supplied as input.
  *
  * This procedure is affected by the following context setters:
  * gimp_context_set_interpolation(),
  * gimp_context_set_transform_direction(),
  * gimp_context_set_transform_resize().
  *
- * Returns: The scaled item.
+ * Returns: (transfer none): The scaled item.
  *
  * Since: 2.8
  **/
-gint32
-gimp_item_transform_scale (gint32  item_ID,
-                           gdouble x0,
-                           gdouble y0,
-                           gdouble x1,
-                           gdouble y1)
+GimpItem *
+gimp_item_transform_scale (GimpItem *item,
+                           gdouble   x0,
+                           gdouble   y0,
+                           gdouble   x1,
+                           gdouble   y1)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 ret_item_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpItem *ret_item = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-transform-scale",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_FLOAT, x0,
-                                    GIMP_PDB_FLOAT, y0,
-                                    GIMP_PDB_FLOAT, x1,
-                                    GIMP_PDB_FLOAT, y1,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_DOUBLE, x0,
+                                          G_TYPE_DOUBLE, y0,
+                                          G_TYPE_DOUBLE, x1,
+                                          G_TYPE_DOUBLE, y1,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    ret_item_ID = return_vals[1].data.d_item;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-transform-scale",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    ret_item = GIMP_VALUES_GET_ITEM (return_vals, 1);
 
-  return ret_item_ID;
+  gimp_value_array_unref (return_vals);
+
+  return ret_item;
 }
 
 /**
  * gimp_item_transform_shear:
- * @item_ID: The affected item.
+ * @item: The affected item.
  * @shear_type: Type of shear.
  * @magnitude: The magnitude of the shear.
  *
@@ -502,47 +509,48 @@ gimp_item_transform_scale (gint32  item_ID,
  *
  * If there is no selection or the item is not a drawable, the entire
  * item will be sheared according to the specified parameters.
- * Additionally, if the item has its linked flag set to TRUE, all
- * additional items contained in the image which have the linked flag
- * set to TRUE will also be sheared the same way. The return value will
- * be equal to the item ID supplied as input.
+ * The return value will be equal to the item ID supplied as input.
  *
  * This procedure is affected by the following context setters:
  * gimp_context_set_interpolation(),
  * gimp_context_set_transform_direction(),
  * gimp_context_set_transform_resize().
  *
- * Returns: The sheared item.
+ * Returns: (transfer none): The sheared item.
  *
  * Since: 2.8
  **/
-gint32
-gimp_item_transform_shear (gint32              item_ID,
-                           GimpOrientationType shear_type,
-                           gdouble             magnitude)
+GimpItem *
+gimp_item_transform_shear (GimpItem            *item,
+                           GimpOrientationType  shear_type,
+                           gdouble              magnitude)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 ret_item_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpItem *ret_item = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-transform-shear",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_INT32, shear_type,
-                                    GIMP_PDB_FLOAT, magnitude,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          GIMP_TYPE_ORIENTATION_TYPE, shear_type,
+                                          G_TYPE_DOUBLE, magnitude,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    ret_item_ID = return_vals[1].data.d_item;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-transform-shear",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    ret_item = GIMP_VALUES_GET_ITEM (return_vals, 1);
 
-  return ret_item_ID;
+  gimp_value_array_unref (return_vals);
+
+  return ret_item;
 }
 
 /**
  * gimp_item_transform_2d:
- * @item_ID: The affected item.
+ * @item: The affected item.
  * @source_x: X coordinate of the transformation center.
  * @source_y: Y coordinate of the transformation center.
  * @scale_x: Amount to scale in x direction.
@@ -568,57 +576,58 @@ gimp_item_transform_shear (gint32              item_ID,
  *
  * If there is no selection or the item is not a drawable, the entire
  * item will be transformed according to the specified parameters.
- * Additionally, if the item has its linked flag set to TRUE, all
- * additional items contained in the image which have the linked flag
- * set to TRUE will also be transformed the same way. The return value
- * will be equal to the item ID supplied as input.
+ * The return value will be equal to the item ID supplied as input.
  *
  * This procedure is affected by the following context setters:
  * gimp_context_set_interpolation(),
  * gimp_context_set_transform_direction(),
  * gimp_context_set_transform_resize().
  *
- * Returns: The transformed item.
+ * Returns: (transfer none): The transformed item.
  *
  * Since: 2.8
  **/
-gint32
-gimp_item_transform_2d (gint32  item_ID,
-                        gdouble source_x,
-                        gdouble source_y,
-                        gdouble scale_x,
-                        gdouble scale_y,
-                        gdouble angle,
-                        gdouble dest_x,
-                        gdouble dest_y)
+GimpItem *
+gimp_item_transform_2d (GimpItem *item,
+                        gdouble   source_x,
+                        gdouble   source_y,
+                        gdouble   scale_x,
+                        gdouble   scale_y,
+                        gdouble   angle,
+                        gdouble   dest_x,
+                        gdouble   dest_y)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 ret_item_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpItem *ret_item = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-transform-2d",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_FLOAT, source_x,
-                                    GIMP_PDB_FLOAT, source_y,
-                                    GIMP_PDB_FLOAT, scale_x,
-                                    GIMP_PDB_FLOAT, scale_y,
-                                    GIMP_PDB_FLOAT, angle,
-                                    GIMP_PDB_FLOAT, dest_x,
-                                    GIMP_PDB_FLOAT, dest_y,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_DOUBLE, source_x,
+                                          G_TYPE_DOUBLE, source_y,
+                                          G_TYPE_DOUBLE, scale_x,
+                                          G_TYPE_DOUBLE, scale_y,
+                                          G_TYPE_DOUBLE, angle,
+                                          G_TYPE_DOUBLE, dest_x,
+                                          G_TYPE_DOUBLE, dest_y,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    ret_item_ID = return_vals[1].data.d_item;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-transform-2d",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    ret_item = GIMP_VALUES_GET_ITEM (return_vals, 1);
 
-  return ret_item_ID;
+  gimp_value_array_unref (return_vals);
+
+  return ret_item;
 }
 
 /**
  * gimp_item_transform_matrix:
- * @item_ID: The affected item.
+ * @item: The affected item.
  * @coeff_0_0: coefficient (0,0) of the transformation matrix.
  * @coeff_0_1: coefficient (0,1) of the transformation matrix.
  * @coeff_0_2: coefficient (0,2) of the transformation matrix.
@@ -644,54 +653,55 @@ gimp_item_transform_2d (gint32  item_ID,
  *
  * If there is no selection or the item is not a drawable, the entire
  * item will be transformed according to the specified matrix.
- * Additionally, if the item has its linked flag set to TRUE, all
- * additional items contained in the image which have the linked flag
- * set to TRUE will also be transformed the same way. The return value
- * will be equal to the item ID supplied as input.
+ * The return value will be equal to the item ID supplied as input.
  *
  * This procedure is affected by the following context setters:
  * gimp_context_set_interpolation(),
  * gimp_context_set_transform_direction(),
  * gimp_context_set_transform_resize().
  *
- * Returns: The transformed item.
+ * Returns: (transfer none): The transformed item.
  *
  * Since: 2.8
  **/
-gint32
-gimp_item_transform_matrix (gint32  item_ID,
-                            gdouble coeff_0_0,
-                            gdouble coeff_0_1,
-                            gdouble coeff_0_2,
-                            gdouble coeff_1_0,
-                            gdouble coeff_1_1,
-                            gdouble coeff_1_2,
-                            gdouble coeff_2_0,
-                            gdouble coeff_2_1,
-                            gdouble coeff_2_2)
+GimpItem *
+gimp_item_transform_matrix (GimpItem *item,
+                            gdouble   coeff_0_0,
+                            gdouble   coeff_0_1,
+                            gdouble   coeff_0_2,
+                            gdouble   coeff_1_0,
+                            gdouble   coeff_1_1,
+                            gdouble   coeff_1_2,
+                            gdouble   coeff_2_0,
+                            gdouble   coeff_2_1,
+                            gdouble   coeff_2_2)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 ret_item_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpItem *ret_item = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-transform-matrix",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_FLOAT, coeff_0_0,
-                                    GIMP_PDB_FLOAT, coeff_0_1,
-                                    GIMP_PDB_FLOAT, coeff_0_2,
-                                    GIMP_PDB_FLOAT, coeff_1_0,
-                                    GIMP_PDB_FLOAT, coeff_1_1,
-                                    GIMP_PDB_FLOAT, coeff_1_2,
-                                    GIMP_PDB_FLOAT, coeff_2_0,
-                                    GIMP_PDB_FLOAT, coeff_2_1,
-                                    GIMP_PDB_FLOAT, coeff_2_2,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_DOUBLE, coeff_0_0,
+                                          G_TYPE_DOUBLE, coeff_0_1,
+                                          G_TYPE_DOUBLE, coeff_0_2,
+                                          G_TYPE_DOUBLE, coeff_1_0,
+                                          G_TYPE_DOUBLE, coeff_1_1,
+                                          G_TYPE_DOUBLE, coeff_1_2,
+                                          G_TYPE_DOUBLE, coeff_2_0,
+                                          G_TYPE_DOUBLE, coeff_2_1,
+                                          G_TYPE_DOUBLE, coeff_2_2,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    ret_item_ID = return_vals[1].data.d_item;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-transform-matrix",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    ret_item = GIMP_VALUES_GET_ITEM (return_vals, 1);
 
-  return ret_item_ID;
+  gimp_value_array_unref (return_vals);
+
+  return ret_item;
 }

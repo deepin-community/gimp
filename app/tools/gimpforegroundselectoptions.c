@@ -20,6 +20,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
 #include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
@@ -28,7 +29,6 @@
 
 #include "widgets/gimpcolorpanel.h"
 #include "widgets/gimppropwidgets.h"
-#include "widgets/gimpspinscale.h"
 #include "widgets/gimpwidgets-constructors.h"
 #include "widgets/gimpwidgets-utils.h"
 
@@ -57,6 +57,7 @@ enum
 };
 
 
+static void   gimp_foreground_select_options_finalize     (GObject      *object);
 static void   gimp_foreground_select_options_set_property (GObject      *object,
                                                            guint         property_id,
                                                            const GValue *value,
@@ -71,12 +72,15 @@ G_DEFINE_TYPE (GimpForegroundSelectOptions, gimp_foreground_select_options,
                GIMP_TYPE_SELECTION_OPTIONS)
 
 
+#define parent_class gimp_foreground_select_options_parent_class
+
 static void
 gimp_foreground_select_options_class_init (GimpForegroundSelectOptionsClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
-  GimpRGB blue = {0.0, 0.0, 1.0, 0.5};
+  GeglColor    *blue         = gegl_color_new ("blue");
 
+  object_class->finalize     = gimp_foreground_select_options_finalize;
   object_class->set_property = gimp_foreground_select_options_set_property;
   object_class->get_property = gimp_foreground_select_options_get_property;
 
@@ -106,13 +110,14 @@ gimp_foreground_select_options_class_init (GimpForegroundSelectOptionsClass *kla
                          1, 6000, 10,
                          GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_RGB  (object_class, PROP_MASK_COLOR,
-                         "mask-color",
-                         _("Preview color"),
-                         _("Color of selection preview mask"),
-                         GIMP_TYPE_RGB,
-                         &blue,
-                         GIMP_PARAM_STATIC_STRINGS);
+  gimp_color_set_alpha (blue, 0.5);
+  GIMP_CONFIG_PROP_COLOR  (object_class, PROP_MASK_COLOR,
+                           "mask-color",
+                           _("Preview color"),
+                           _("Color of selection preview mask"),
+                           TRUE, blue,
+                           GIMP_PARAM_STATIC_STRINGS);
+  g_object_unref (blue);
 
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_ENGINE,
                          "engine",
@@ -124,7 +129,7 @@ gimp_foreground_select_options_class_init (GimpForegroundSelectOptionsClass *kla
 
   GIMP_CONFIG_PROP_INT  (object_class, PROP_LEVELS,
                          "levels",
-                         _("Levels"),
+                         C_("measurement", "Levels"),
                          _("Number of downsampled levels to use"),
                          1, 10, 2,
                          GIMP_PARAM_STATIC_STRINGS);
@@ -147,6 +152,15 @@ gimp_foreground_select_options_class_init (GimpForegroundSelectOptionsClass *kla
 static void
 gimp_foreground_select_options_init (GimpForegroundSelectOptions *options)
 {
+  options->mask_color = gegl_color_new ("blue");
+}
+
+static void
+gimp_foreground_select_options_finalize (GObject *object)
+{
+  g_clear_object (&(GIMP_FOREGROUND_SELECT_OPTIONS (object)->mask_color));
+
+  G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
 static void
@@ -156,7 +170,6 @@ gimp_foreground_select_options_set_property (GObject      *object,
                                              GParamSpec   *pspec)
 {
   GimpForegroundSelectOptions *options = GIMP_FOREGROUND_SELECT_OPTIONS (object);
-  GimpRGB *color;
 
   switch (property_id)
     {
@@ -173,8 +186,8 @@ gimp_foreground_select_options_set_property (GObject      *object,
       break;
 
     case PROP_MASK_COLOR:
-      color = g_value_get_boxed (value);
-      options->mask_color = *color;
+      g_clear_object (&options->mask_color);
+      options->mask_color = gegl_color_duplicate (g_value_get_object (value));
       break;
 
     case PROP_ENGINE:
@@ -227,7 +240,7 @@ gimp_foreground_select_options_get_property (GObject    *object,
       break;
 
     case PROP_MASK_COLOR:
-      g_value_set_boxed (value, &options->mask_color);
+      g_value_set_object (value, options->mask_color);
       break;
 
     case PROP_ENGINE:
@@ -292,19 +305,17 @@ gimp_foreground_select_options_gui (GimpToolOptions *tool_options)
   frame = gimp_prop_enum_radio_frame_new (config, "draw-mode", NULL,
                                           0, 0);
   gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 2);
   gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
   gtk_widget_show (hbox);
 
   /* stroke width */
-  scale = gimp_prop_spin_scale_new (config, "stroke-width", NULL,
+  scale = gimp_prop_spin_scale_new (config, "stroke-width",
                                     1.0, 10.0, 2);
   gimp_spin_scale_set_scale_limits (GIMP_SPIN_SCALE (scale), 1.0, 1000.0);
   gimp_spin_scale_set_gamma (GIMP_SPIN_SCALE (scale), 1.7);
   gtk_box_pack_start (GTK_BOX (hbox), scale, TRUE, TRUE, 0);
-  gtk_widget_show (scale);
 
   button = gimp_icon_button_new (GIMP_ICON_RESET, NULL);
   gtk_button_set_relief (GTK_BUTTON (button), GTK_RELIEF_NONE);
@@ -325,16 +336,15 @@ gimp_foreground_select_options_gui (GimpToolOptions *tool_options)
   frame = gimp_prop_enum_radio_frame_new (config, "preview-mode", NULL,
                                           0, 0);
   gtk_box_pack_start (GTK_BOX (vbox), frame, TRUE, TRUE, 0);
-  gtk_widget_show (frame);
 
   /*  mask color */
   button = gimp_prop_color_button_new (config, "mask-color",
                                        NULL,
                                        128, 24,
                                        GIMP_COLOR_AREA_SMALL_CHECKS);
-  gimp_color_panel_set_context (GIMP_COLOR_PANEL (button), GIMP_CONTEXT (config));
+  gimp_color_panel_set_context (GIMP_COLOR_PANEL (button),
+                                GIMP_CONTEXT (config));
   gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   /* engine */
   frame = gimp_frame_new (NULL);
@@ -346,16 +356,15 @@ gimp_foreground_select_options_gui (GimpToolOptions *tool_options)
   g_object_set (combo, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
   gtk_frame_set_label_widget (GTK_FRAME (frame), combo);
 
-  if (!gegl_has_operation ("gegl:matting-levin"))
+  if (! gegl_has_operation ("gegl:matting-levin"))
     gtk_widget_set_sensitive (combo, FALSE);
-  gtk_widget_show (combo);
 
   inner_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
   gtk_container_add (GTK_CONTAINER (frame), inner_vbox);
   gtk_widget_show (inner_vbox);
 
   /*  engine parameters  */
-  scale = gimp_prop_spin_scale_new (config, "levels", NULL,
+  scale = gimp_prop_spin_scale_new (config, "levels",
                                     1.0, 1.0, 0);
   gtk_box_pack_start (GTK_BOX (inner_vbox), scale, FALSE, FALSE, 0);
 
@@ -367,7 +376,7 @@ gimp_foreground_select_options_gui (GimpToolOptions *tool_options)
                                GINT_TO_POINTER (GIMP_MATTING_ENGINE_LEVIN),
                                NULL);
 
-  scale = gimp_prop_spin_scale_new (config, "active-levels", NULL,
+  scale = gimp_prop_spin_scale_new (config, "active-levels",
                                     1.0, 1.0, 0);
   gtk_box_pack_start (GTK_BOX (inner_vbox), scale, FALSE, FALSE, 0);
 
@@ -379,7 +388,7 @@ gimp_foreground_select_options_gui (GimpToolOptions *tool_options)
                                GINT_TO_POINTER (GIMP_MATTING_ENGINE_LEVIN),
                                NULL);
 
-  scale = gimp_prop_spin_scale_new (config, "iterations", NULL,
+  scale = gimp_prop_spin_scale_new (config, "iterations",
                                     1.0, 1.0, 0);
   gtk_box_pack_start (GTK_BOX (inner_vbox), scale, FALSE, FALSE, 0);
 

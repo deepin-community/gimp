@@ -123,6 +123,9 @@ gboolean     gimp_stroke_real_connect_stroke (GimpStroke          *stroke,
 
 
 static gboolean     gimp_stroke_real_is_empty        (GimpStroke       *stroke);
+static gboolean     gimp_stroke_real_reverse         (GimpStroke       *stroke);
+static gboolean     gimp_stroke_real_shift_start     (GimpStroke       *stroke,
+                                                      GimpAnchor       *anchor);
 
 static gdouble      gimp_stroke_real_get_length      (GimpStroke       *stroke,
                                                       gdouble           precision);
@@ -213,6 +216,8 @@ gimp_stroke_class_init (GimpStrokeClass *klass)
   klass->connect_stroke           = gimp_stroke_real_connect_stroke;
 
   klass->is_empty                 = gimp_stroke_real_is_empty;
+  klass->reverse                  = gimp_stroke_real_reverse;
+  klass->shift_start              = gimp_stroke_real_shift_start;
   klass->get_length               = gimp_stroke_real_get_length;
   klass->get_distance             = gimp_stroke_real_get_distance;
   klass->get_point_at_dist        = gimp_stroke_real_get_point_at_dist;
@@ -357,21 +362,21 @@ gimp_stroke_get_memsize (GimpObject *object,
 }
 
 void
-gimp_stroke_set_ID (GimpStroke *stroke,
+gimp_stroke_set_id (GimpStroke *stroke,
                     gint        id)
 {
   g_return_if_fail (GIMP_IS_STROKE (stroke));
-  g_return_if_fail (stroke->ID == 0 /* we don't want changing IDs... */);
+  g_return_if_fail (stroke->id == 0 /* we don't want changing IDs... */);
 
-  stroke->ID = id;
+  stroke->id = id;
 }
 
 gint
-gimp_stroke_get_ID (GimpStroke *stroke)
+gimp_stroke_get_id (GimpStroke *stroke)
 {
   g_return_val_if_fail (GIMP_IS_STROKE (stroke), -1);
 
-  return stroke->ID;
+  return stroke->id;
 }
 
 
@@ -893,6 +898,63 @@ gimp_stroke_real_is_empty (GimpStroke *stroke)
 }
 
 
+gboolean
+gimp_stroke_reverse (GimpStroke *stroke)
+{
+  g_return_val_if_fail (GIMP_IS_STROKE (stroke), FALSE);
+
+  return GIMP_STROKE_GET_CLASS (stroke)->reverse (stroke);
+}
+
+
+static gboolean
+gimp_stroke_real_reverse (GimpStroke *stroke)
+{
+  g_queue_reverse (stroke->anchors);
+
+  /* keep the first node the same for closed strokes */
+  if (stroke->closed && stroke->anchors->length > 0)
+    g_queue_push_head_link (stroke->anchors,
+                            g_queue_pop_tail_link (stroke->anchors));
+
+  return TRUE;
+}
+
+
+gboolean
+gimp_stroke_shift_start (GimpStroke *stroke,
+                         GimpAnchor *new_start)
+{
+  g_return_val_if_fail (GIMP_IS_STROKE (stroke), FALSE);
+  g_return_val_if_fail (new_start != NULL, FALSE);
+
+  return GIMP_STROKE_GET_CLASS (stroke)->shift_start (stroke, new_start);
+}
+
+static gboolean
+gimp_stroke_real_shift_start (GimpStroke *stroke,
+                              GimpAnchor *new_start)
+{
+  GList *link;
+
+  link = g_queue_find (stroke->anchors, new_start);
+  if (!link)
+    return FALSE;
+
+  if (link == stroke->anchors->head)
+    return TRUE;
+
+  stroke->anchors->tail->next = stroke->anchors->head;
+  stroke->anchors->head->prev = stroke->anchors->tail;
+  stroke->anchors->tail = link->prev;
+  stroke->anchors->head = link;
+  stroke->anchors->tail->next = NULL;
+  stroke->anchors->head->prev = NULL;
+
+  return TRUE;
+}
+
+
 gdouble
 gimp_stroke_get_length (GimpStroke *stroke,
                         gdouble     precision)
@@ -1194,7 +1256,7 @@ gimp_stroke_real_transform (GimpStroke        *stroke,
 
   if (ret_strokes)
     {
-      stroke->ID = 0;
+      stroke->id = 0;
 
       g_queue_push_tail (ret_strokes, g_object_ref (stroke));
     }

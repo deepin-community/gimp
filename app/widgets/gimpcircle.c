@@ -27,6 +27,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 #include "libgimpcolor/gimpcolor.h"
 #include "libgimpwidgets/gimpwidgets.h"
@@ -72,12 +73,16 @@ static void        gimp_circle_realize              (GtkWidget            *widge
 static void        gimp_circle_unrealize            (GtkWidget            *widget);
 static void        gimp_circle_map                  (GtkWidget            *widget);
 static void        gimp_circle_unmap                (GtkWidget            *widget);
-static void        gimp_circle_size_request         (GtkWidget            *widget,
-                                                     GtkRequisition       *requisition);
+static void        gimp_circle_get_preferred_width  (GtkWidget            *widget,
+                                                     gint                 *minimum_width,
+                                                     gint                 *natural_width);
+static void        gimp_circle_get_preferred_height (GtkWidget            *widget,
+                                                     gint                 *minimum_height,
+                                                     gint                 *natural_height);
 static void        gimp_circle_size_allocate        (GtkWidget            *widget,
                                                      GtkAllocation        *allocation);
-static gboolean    gimp_circle_expose_event         (GtkWidget            *widget,
-                                                     GdkEventExpose       *event);
+static gboolean    gimp_circle_draw                 (GtkWidget            *widget,
+                                                     cairo_t              *cr);
 static gboolean    gimp_circle_button_press_event   (GtkWidget            *widget,
                                                      GdkEventButton       *bevent);
 static gboolean    gimp_circle_button_release_event (GtkWidget            *widget,
@@ -118,9 +123,10 @@ gimp_circle_class_init (GimpCircleClass *klass)
   widget_class->unrealize            = gimp_circle_unrealize;
   widget_class->map                  = gimp_circle_map;
   widget_class->unmap                = gimp_circle_unmap;
-  widget_class->size_request         = gimp_circle_size_request;
+  widget_class->get_preferred_width  = gimp_circle_get_preferred_width;
+  widget_class->get_preferred_height = gimp_circle_get_preferred_height;
   widget_class->size_allocate        = gimp_circle_size_allocate;
-  widget_class->expose_event         = gimp_circle_expose_event;
+  widget_class->draw                 = gimp_circle_draw;
   widget_class->button_press_event   = gimp_circle_button_press_event;
   widget_class->button_release_event = gimp_circle_button_release_event;
   widget_class->enter_notify_event   = gimp_circle_enter_notify_event;
@@ -307,13 +313,23 @@ gimp_circle_unmap (GtkWidget *widget)
 }
 
 static void
-gimp_circle_size_request (GtkWidget      *widget,
-                        GtkRequisition *requisition)
+gimp_circle_get_preferred_width (GtkWidget *widget,
+                                 gint      *minimum_width,
+                                 gint      *natural_width)
 {
   GimpCircle *circle = GIMP_CIRCLE (widget);
 
-  requisition->width  = 2 * circle->priv->border_width + circle->priv->size;
-  requisition->height = 2 * circle->priv->border_width + circle->priv->size;
+  *minimum_width = *natural_width = 2 * circle->priv->border_width + circle->priv->size;
+}
+
+static void
+gimp_circle_get_preferred_height (GtkWidget *widget,
+                                  gint      *minimum_height,
+                                  gint      *natural_height)
+{
+  GimpCircle *circle = GIMP_CIRCLE (widget);
+
+  *minimum_height = *natural_height = 2 * circle->priv->border_width + circle->priv->size;
 }
 
 static void
@@ -335,31 +351,24 @@ gimp_circle_size_allocate (GtkWidget     *widget,
 }
 
 static gboolean
-gimp_circle_expose_event (GtkWidget      *widget,
-                          GdkEventExpose *event)
+gimp_circle_draw (GtkWidget *widget,
+                  cairo_t   *cr)
 {
-  GimpCircle *circle = GIMP_CIRCLE (widget);
+  GimpCircle    *circle = GIMP_CIRCLE (widget);
+  GtkAllocation  allocation;
+  gint           size = circle->priv->size;
 
-  if (gtk_widget_is_drawable (widget))
-    {
-      GtkAllocation  allocation;
-      gint           size = circle->priv->size;
-      cairo_t       *cr;
+  gtk_widget_get_allocation (widget, &allocation);
 
-      cr = gdk_cairo_create (event->window);
-      gdk_cairo_region (cr, event->region);
-      cairo_clip (cr);
+  cairo_save (cr);
 
-      gtk_widget_get_allocation (widget, &allocation);
+  cairo_translate (cr,
+                   (allocation.width  - size) / 2,
+                   (allocation.height - size) / 2);
 
-      cairo_translate (cr,
-                       allocation.x + (allocation.width  - size) / 2,
-                       allocation.y + (allocation.height - size) / 2);
+  gimp_circle_draw_background (circle, cr, size, circle->priv->background);
 
-      gimp_circle_draw_background (circle, cr, size, circle->priv->background);
-
-      cairo_destroy (cr);
-    }
+  cairo_restore (cr);
 
   return FALSE;
 }
@@ -499,17 +508,16 @@ gimp_circle_background_hsv (gdouble  angle,
                             gdouble  distance,
                             guchar  *rgb)
 {
-  GimpHSV hsv;
-  GimpRGB color;
+  gfloat     hsv[3];
+  GeglColor *color = gegl_color_new ("black");
 
-  gimp_hsv_set (&hsv,
-                angle / (2.0 * G_PI),
-                distance,
-                1 - sqrt (distance) / 4 /* it just looks nicer this way */);
+  hsv[0] = angle / (2.0 * G_PI);
+  hsv[1] = distance;
+  hsv[2] = 1 - sqrt (distance) / 4;
 
-  gimp_hsv_to_rgb (&hsv, &color);
-
-  gimp_rgb_get_uchar (&color, rgb, rgb + 1, rgb + 2);
+  gegl_color_set_pixel (color, babl_format ("HSV float"), hsv);
+  gegl_color_get_pixel (color, babl_format ("R'G'B' u8"), rgb);
+  g_object_unref (color);
 }
 
 static void

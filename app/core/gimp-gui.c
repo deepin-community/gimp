@@ -28,8 +28,11 @@
 #include "gimp-gui.h"
 #include "gimpcontainer.h"
 #include "gimpcontext.h"
+#include "gimpdisplay.h"
+#include "gimpdrawable.h"
 #include "gimpimage.h"
 #include "gimpprogress.h"
+#include "gimpresource.h"
 #include "gimpwaitable.h"
 
 #include "about.h"
@@ -43,8 +46,6 @@ gimp_gui_init (Gimp *gimp)
   g_return_if_fail (GIMP_IS_GIMP (gimp));
 
   gimp->gui.ungrab                 = NULL;
-  gimp->gui.threads_enter          = NULL;
-  gimp->gui.threads_leave          = NULL;
   gimp->gui.set_busy               = NULL;
   gimp->gui.unset_busy             = NULL;
   gimp->gui.show_message           = NULL;
@@ -54,8 +55,6 @@ gimp_gui_init (Gimp *gimp)
   gimp->gui.get_user_time          = NULL;
   gimp->gui.get_theme_dir          = NULL;
   gimp->gui.get_icon_theme_dir     = NULL;
-  gimp->gui.display_get_by_id      = NULL;
-  gimp->gui.display_get_id         = NULL;
   gimp->gui.display_get_window_id  = NULL;
   gimp->gui.display_create         = NULL;
   gimp->gui.display_delete         = NULL;
@@ -68,6 +67,7 @@ gimp_gui_init (Gimp *gimp)
   gimp->gui.recent_list_load       = NULL;
   gimp->gui.get_mount_operation    = NULL;
   gimp->gui.query_profile_policy   = NULL;
+  gimp->gui.query_rotation_policy  = NULL;
 }
 
 void
@@ -77,24 +77,6 @@ gimp_gui_ungrab (Gimp *gimp)
 
   if (gimp->gui.ungrab)
     gimp->gui.ungrab (gimp);
-}
-
-void
-gimp_threads_enter (Gimp *gimp)
-{
-  g_return_if_fail (GIMP_IS_GIMP (gimp));
-
-  if (gimp->gui.threads_enter)
-    gimp->gui.threads_enter (gimp);
-}
-
-void
-gimp_threads_leave (Gimp *gimp)
-{
-  g_return_if_fail (GIMP_IS_GIMP (gimp));
-
-  if (gimp->gui.threads_leave)
-    gimp->gui.threads_leave (gimp);
 }
 
 void
@@ -259,19 +241,19 @@ gimp_get_program_class (Gimp *gimp)
 
 gchar *
 gimp_get_display_name (Gimp     *gimp,
-                       gint      display_ID,
-                       GObject **screen,
-                       gint     *monitor)
+                       gint      display_id,
+                       GObject **monitor,
+                       gint     *monitor_number)
 {
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
-  g_return_val_if_fail (screen != NULL, NULL);
   g_return_val_if_fail (monitor != NULL, NULL);
+  g_return_val_if_fail (monitor_number != NULL, NULL);
 
   if (gimp->gui.get_display_name)
-    return gimp->gui.get_display_name (gimp, display_ID, screen, monitor);
+    return gimp->gui.get_display_name (gimp, display_id,
+                                       monitor, monitor_number);
 
-  *screen  = NULL;
-  *monitor = 0;
+  *monitor = NULL;
 
   return NULL;
 }
@@ -284,7 +266,7 @@ gimp_get_display_name (Gimp     *gimp,
  * taken from events caused by user interaction such as key presses or
  * pointer movements. See gdk_x11_display_get_user_time().
  *
- * Return value: the timestamp of the last user interaction
+ * Returns: the timestamp of the last user interaction
  */
 guint32
 gimp_get_user_time (Gimp *gimp)
@@ -330,7 +312,7 @@ gimp_get_window_strategy (Gimp *gimp)
   return NULL;
 }
 
-GimpObject *
+GimpDisplay *
 gimp_get_empty_display (Gimp *gimp)
 {
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
@@ -341,68 +323,42 @@ gimp_get_empty_display (Gimp *gimp)
   return NULL;
 }
 
-GimpObject *
-gimp_get_display_by_ID (Gimp *gimp,
-                        gint  ID)
+GBytes *
+gimp_get_display_window_id (Gimp        *gimp,
+                            GimpDisplay *display)
 {
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
-
-  if (gimp->gui.display_get_by_id)
-    return gimp->gui.display_get_by_id (gimp, ID);
-
-  return NULL;
-}
-
-gint
-gimp_get_display_ID (Gimp       *gimp,
-                     GimpObject *display)
-{
-  g_return_val_if_fail (GIMP_IS_GIMP (gimp), -1);
-  g_return_val_if_fail (GIMP_IS_OBJECT (display), -1);
-
-  if (gimp->gui.display_get_id)
-    return gimp->gui.display_get_id (display);
-
-  return -1;
-}
-
-guint32
-gimp_get_display_window_id (Gimp       *gimp,
-                            GimpObject *display)
-{
-  g_return_val_if_fail (GIMP_IS_GIMP (gimp), -1);
-  g_return_val_if_fail (GIMP_IS_OBJECT (display), -1);
+  g_return_val_if_fail (GIMP_IS_DISPLAY (display), NULL);
 
   if (gimp->gui.display_get_window_id)
     return gimp->gui.display_get_window_id (display);
 
-  return -1;
+  return NULL;
 }
 
-GimpObject *
+GimpDisplay *
 gimp_create_display (Gimp      *gimp,
                      GimpImage *image,
-                     GimpUnit   unit,
+                     GimpUnit  *unit,
                      gdouble    scale,
-                     GObject   *screen,
-                     gint       monitor)
+                     GObject   *monitor)
 {
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
   g_return_val_if_fail (image == NULL || GIMP_IS_IMAGE (image), NULL);
-  g_return_val_if_fail (screen == NULL || G_IS_OBJECT (screen), NULL);
+  g_return_val_if_fail (monitor == NULL || G_IS_OBJECT (monitor), NULL);
 
   if (gimp->gui.display_create)
-    return gimp->gui.display_create (gimp, image, unit, scale, screen, monitor);
+    return gimp->gui.display_create (gimp, image, unit, scale, monitor);
 
   return NULL;
 }
 
 void
-gimp_delete_display (Gimp       *gimp,
-                     GimpObject *display)
+gimp_delete_display (Gimp        *gimp,
+                     GimpDisplay *display)
 {
   g_return_if_fail (GIMP_IS_GIMP (gimp));
-  g_return_if_fail (GIMP_IS_OBJECT (display));
+  g_return_if_fail (GIMP_IS_DISPLAY (display));
 
   if (gimp->gui.display_delete)
     gimp->gui.display_delete (display);
@@ -422,11 +378,11 @@ gimp_reconnect_displays (Gimp      *gimp,
 }
 
 GimpProgress *
-gimp_new_progress (Gimp       *gimp,
-                   GimpObject *display)
+gimp_new_progress (Gimp        *gimp,
+                   GimpDisplay *display)
 {
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
-  g_return_val_if_fail (display == NULL || GIMP_IS_OBJECT (display), NULL);
+  g_return_val_if_fail (display == NULL || GIMP_IS_DISPLAY (display), NULL);
 
   if (gimp->gui.progress_new)
     return gimp->gui.progress_new (gimp, display);
@@ -449,10 +405,11 @@ gboolean
 gimp_pdb_dialog_new (Gimp          *gimp,
                      GimpContext   *context,
                      GimpProgress  *progress,
-                     GimpContainer *container,
+                     GType          contents_type,
+                     GBytes        *parent_handle,
                      const gchar   *title,
                      const gchar   *callback_name,
-                     const gchar   *object_name,
+                     GimpObject    *object,
                      ...)
 {
   gboolean retval = FALSE;
@@ -460,7 +417,10 @@ gimp_pdb_dialog_new (Gimp          *gimp,
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), FALSE);
   g_return_val_if_fail (GIMP_IS_CONTEXT (context), FALSE);
   g_return_val_if_fail (progress == NULL || GIMP_IS_PROGRESS (progress), FALSE);
-  g_return_val_if_fail (GIMP_IS_CONTAINER (container), FALSE);
+  g_return_val_if_fail (g_type_is_a (contents_type, GIMP_TYPE_RESOURCE) ||
+                        g_type_is_a (contents_type, GIMP_TYPE_DRAWABLE), FALSE);
+  g_return_val_if_fail (object == NULL ||
+                        g_type_is_a (G_TYPE_FROM_INSTANCE (object), contents_type), FALSE);
   g_return_val_if_fail (title != NULL, FALSE);
   g_return_val_if_fail (callback_name != NULL, FALSE);
 
@@ -468,12 +428,11 @@ gimp_pdb_dialog_new (Gimp          *gimp,
     {
       va_list args;
 
-      va_start (args, object_name);
+      va_start (args, object);
 
       retval = gimp->gui.pdb_dialog_new (gimp, context, progress,
-                                         container, title,
-                                         callback_name, object_name,
-                                         args);
+                                         contents_type, parent_handle, title,
+                                         callback_name, object, args);
 
       va_end (args);
     }
@@ -482,27 +441,28 @@ gimp_pdb_dialog_new (Gimp          *gimp,
 }
 
 gboolean
-gimp_pdb_dialog_set (Gimp          *gimp,
-                     GimpContainer *container,
-                     const gchar   *callback_name,
-                     const gchar   *object_name,
+gimp_pdb_dialog_set (Gimp        *gimp,
+                     GType        contents_type,
+                     const gchar *callback_name,
+                     GimpObject  *object,
                      ...)
 {
   gboolean retval = FALSE;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), FALSE);
-  g_return_val_if_fail (GIMP_IS_CONTAINER (container), FALSE);
+  g_return_val_if_fail (g_type_is_a (contents_type, GIMP_TYPE_RESOURCE) ||
+                        contents_type == GIMP_TYPE_DRAWABLE, FALSE);
   g_return_val_if_fail (callback_name != NULL, FALSE);
-  g_return_val_if_fail (object_name != NULL, FALSE);
+  g_return_val_if_fail (object == NULL || g_type_is_a (G_TYPE_FROM_INSTANCE (object), contents_type), FALSE);
 
   if (gimp->gui.pdb_dialog_set)
     {
       va_list args;
 
-      va_start (args, object_name);
+      va_start (args, object);
 
-      retval = gimp->gui.pdb_dialog_set (gimp, container, callback_name,
-                                         object_name, args);
+      retval = gimp->gui.pdb_dialog_set (gimp, contents_type, callback_name,
+                                         object, args);
 
       va_end (args);
     }
@@ -512,15 +472,16 @@ gimp_pdb_dialog_set (Gimp          *gimp,
 
 gboolean
 gimp_pdb_dialog_close (Gimp          *gimp,
-                       GimpContainer *container,
+                       GType          contents_type,
                        const gchar   *callback_name)
 {
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), FALSE);
-  g_return_val_if_fail (GIMP_IS_CONTAINER (container), FALSE);
+  g_return_val_if_fail (g_type_is_a (contents_type, GIMP_TYPE_RESOURCE) ||
+                        contents_type == GIMP_TYPE_DRAWABLE, FALSE);
   g_return_val_if_fail (callback_name != NULL, FALSE);
 
   if (gimp->gui.pdb_dialog_close)
-    return gimp->gui.pdb_dialog_close (gimp, container, callback_name);
+    return gimp->gui.pdb_dialog_close (gimp, contents_type, callback_name);
 
   return FALSE;
 }
@@ -582,4 +543,20 @@ gimp_query_profile_policy (Gimp                      *gimp,
                                            dont_ask);
 
   return GIMP_COLOR_PROFILE_POLICY_KEEP;
+}
+
+GimpMetadataRotationPolicy
+gimp_query_rotation_policy (Gimp        *gimp,
+                            GimpImage   *image,
+                            GimpContext *context,
+                            gboolean    *dont_ask)
+{
+  g_return_val_if_fail (GIMP_IS_GIMP (gimp), GIMP_METADATA_ROTATION_POLICY_ROTATE);
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), GIMP_METADATA_ROTATION_POLICY_ROTATE);
+  g_return_val_if_fail (GIMP_IS_CONTEXT (context), GIMP_METADATA_ROTATION_POLICY_ROTATE);
+
+  if (gimp->gui.query_rotation_policy)
+    return gimp->gui.query_rotation_policy (gimp, image, context, dont_ask);
+
+  return GIMP_METADATA_ROTATION_POLICY_ROTATE;
 }

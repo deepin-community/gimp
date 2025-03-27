@@ -23,11 +23,14 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "widgets-types.h"
 
 #include "core/gimp.h"
 #include "core/gimpcontext.h"
-#include "core/gimpmarshal.h"
+
+#include "menus/menus.h"
 
 #include "gimpdialogfactory.h"
 #include "gimpdock.h"
@@ -79,7 +82,8 @@ static void      gimp_dock_columns_get_property      (GObject         *object,
                                                       guint            property_id,
                                                       GValue          *value,
                                                       GParamSpec      *pspec);
-static gboolean  gimp_dock_columns_dropped_cb        (GtkWidget       *source,
+static gboolean  gimp_dock_columns_dropped_cb        (GtkWidget       *notebook,
+                                                      GtkWidget       *child,
                                                       gint             insert_index,
                                                       gpointer         data);
 static void      gimp_dock_columns_real_dock_added   (GimpDockColumns *dock_columns,
@@ -136,8 +140,7 @@ gimp_dock_columns_class_init (GimpDockColumnsClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpDockColumnsClass, dock_added),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_DOCK);
 
@@ -146,8 +149,7 @@ gimp_dock_columns_class_init (GimpDockColumnsClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpDockColumnsClass, dock_removed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_DOCK);
 }
@@ -185,26 +187,9 @@ gimp_dock_columns_dispose (GObject *object)
       g_object_unref (dock);
     }
 
-  if (dock_columns->p->context)
-    {
-      g_object_remove_weak_pointer (G_OBJECT (dock_columns->p->context),
-                                    (gpointer) &dock_columns->p->context);
-      dock_columns->p->context = NULL;
-    }
-
-  if (dock_columns->p->dialog_factory)
-    {
-      g_object_remove_weak_pointer (G_OBJECT (dock_columns->p->dialog_factory),
-                                    (gpointer) &dock_columns->p->dialog_factory);
-      dock_columns->p->dialog_factory = NULL;
-    }
-
-  if (dock_columns->p->ui_manager)
-    {
-      g_object_remove_weak_pointer (G_OBJECT (dock_columns->p->ui_manager),
-                                    (gpointer)&dock_columns->p->ui_manager);
-      dock_columns->p->ui_manager = NULL;
-    }
+  g_clear_weak_pointer (&dock_columns->p->context);
+  g_clear_weak_pointer (&dock_columns->p->dialog_factory);
+  g_clear_weak_pointer (&dock_columns->p->ui_manager);
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
@@ -220,33 +205,18 @@ gimp_dock_columns_set_property (GObject      *object,
   switch (property_id)
     {
     case PROP_CONTEXT:
-      if (dock_columns->p->context)
-        g_object_remove_weak_pointer (G_OBJECT (dock_columns->p->context),
-                                      (gpointer) &dock_columns->p->context);
-      dock_columns->p->context = g_value_get_object (value);
-      if (dock_columns->p->context)
-        g_object_add_weak_pointer (G_OBJECT (dock_columns->p->context),
-                                   (gpointer) &dock_columns->p->context);
+      g_set_weak_pointer (&dock_columns->p->context,
+                          g_value_get_object (value));
       break;
 
     case PROP_DIALOG_FACTORY:
-      if (dock_columns->p->dialog_factory)
-        g_object_remove_weak_pointer (G_OBJECT (dock_columns->p->dialog_factory),
-                                      (gpointer) &dock_columns->p->dialog_factory);
-      dock_columns->p->dialog_factory = g_value_get_object (value);
-      if (dock_columns->p->dialog_factory)
-        g_object_add_weak_pointer (G_OBJECT (dock_columns->p->dialog_factory),
-                                   (gpointer) &dock_columns->p->dialog_factory);
+      g_set_weak_pointer (&dock_columns->p->dialog_factory,
+                          g_value_get_object (value));
       break;
 
     case PROP_UI_MANAGER:
-      if (dock_columns->p->ui_manager)
-        g_object_remove_weak_pointer (G_OBJECT (dock_columns->p->ui_manager),
-                                      (gpointer) &dock_columns->p->ui_manager);
-      dock_columns->p->ui_manager = g_value_get_object (value);
-      if (dock_columns->p->ui_manager)
-        g_object_add_weak_pointer (G_OBJECT (dock_columns->p->ui_manager),
-                                   (gpointer) &dock_columns->p->ui_manager);
+      g_set_weak_pointer (&dock_columns->p->ui_manager,
+                          g_value_get_object (value));
       break;
 
     default:
@@ -282,29 +252,29 @@ gimp_dock_columns_get_property (GObject    *object,
 }
 
 static gboolean
-gimp_dock_columns_dropped_cb (GtkWidget *source,
+gimp_dock_columns_dropped_cb (GtkWidget *notebook,
+                              GtkWidget *child,
                               gint       insert_index,
                               gpointer   data)
 {
   GimpDockColumns *dock_columns = GIMP_DOCK_COLUMNS (data);
-  GimpDockable    *dockable     = gimp_dockbook_drag_source_to_dockable (source);
-  GtkWidget       *dockbook     = NULL;
-
-  if (! dockable)
-    return FALSE;
+  GimpDockable    *dockable     = GIMP_DOCKABLE (child);
+  GtkWidget       *new_dockbook = NULL;
 
   /* Create a new dock (including a new dockbook) */
   gimp_dock_columns_prepare_dockbook (dock_columns,
                                       insert_index,
-                                      &dockbook);
+                                      &new_dockbook);
 
   /* Move the dockable to the new dockbook */
-  g_object_ref (dockbook);
+  g_object_ref (new_dockbook);
   g_object_ref (dockable);
-  gimp_dockbook_remove (gimp_dockable_get_dockbook (dockable), dockable);
-  gimp_dockbook_add (GIMP_DOCKBOOK (dockbook), dockable, -1);
+
+  gtk_notebook_detach_tab (GTK_NOTEBOOK (notebook), child);
+  gtk_notebook_append_page (GTK_NOTEBOOK (new_dockbook), child, NULL);
+
   g_object_unref (dockable);
-  g_object_unref (dockbook);
+  g_object_unref (new_dockbook);
 
   return TRUE;
 }
@@ -405,14 +375,16 @@ gimp_dock_columns_prepare_dockbook (GimpDockColumns  *dock_columns,
                                     gint              dock_index,
                                     GtkWidget       **dockbook_p)
 {
-  GimpMenuFactory *menu_factory;
-  GtkWidget       *dock;
-  GtkWidget       *dockbook;
+  GimpDialogFactory *dialog_factory;
+  GimpMenuFactory   *menu_factory;
+  GtkWidget         *dock;
+  GtkWidget         *dockbook;
 
   dock = gimp_menu_dock_new ();
   gimp_dock_columns_add_dock (dock_columns, GIMP_DOCK (dock), dock_index);
 
-  menu_factory = gimp_dialog_factory_get_menu_factory (dock_columns->p->dialog_factory);
+  dialog_factory = dock_columns->p->dialog_factory;
+  menu_factory   = menus_get_global_menu_factory (gimp_dialog_factory_get_context (dialog_factory)->gimp);
   dockbook = gimp_dockbook_new (menu_factory);
   gimp_dock_add_book (GIMP_DOCK (dock), GIMP_DOCKBOOK (dockbook), -1);
 

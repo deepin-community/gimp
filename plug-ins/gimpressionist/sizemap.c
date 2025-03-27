@@ -36,19 +36,19 @@
 
 #define MAPFILE "data.out"
 
-static GtkWidget *smwindow;
-static GtkWidget *smvectorprev;
-static GtkWidget *smpreviewprev;
-static GtkWidget *prev_button;
-static GtkWidget *next_button;
-static GtkWidget *add_button;
-static GtkWidget *kill_button;
+static GtkWidget     *smwindow;
+static GtkWidget     *smvectorprev;
+static GtkWidget     *smpreviewprev;
+static GtkWidget     *prev_button;
+static GtkWidget     *next_button;
+static GtkWidget     *add_button;
+static GtkWidget     *kill_button;
 
 static GtkAdjustment *smvectprevbrightadjust = NULL;
 
-static GtkAdjustment *sizadjust = NULL;
-static GtkAdjustment *smstradjust = NULL;
-static GtkAdjustment *smstrexpadjust = NULL;
+static GtkWidget     *sizadjust = NULL;
+static GtkWidget     *smstradjust = NULL;
+static GtkWidget     *smstrexpadjust = NULL;
 static GtkWidget     *size_voronoi = NULL;
 
 #define OMWIDTH 150
@@ -61,7 +61,7 @@ static double
 getsiz_from_gui (double x, double y)
 {
   return getsiz_proto (x,y, numsmvect, smvector,
-                       gtk_adjustment_get_value (smstrexpadjust),
+                       gimp_label_spin_get_value (GIMP_LABEL_SPIN (smstrexpadjust)),
                        gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (size_voronoi)));
 }
 
@@ -181,8 +181,8 @@ static void
 updatesmsliders (void)
 {
   smadjignore = TRUE;
-  gtk_adjustment_set_value (sizadjust, smvector[selectedsmvector].siz);
-  gtk_adjustment_set_value (smstradjust, smvector[selectedsmvector].str);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (sizadjust), smvector[selectedsmvector].siz);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (smstradjust), smvector[selectedsmvector].str);
   smadjignore = FALSE;
 }
 
@@ -278,7 +278,7 @@ angsmadjmove (GtkWidget *w, gpointer data)
 {
   if (!smadjignore)
     {
-      smvector[selectedsmvector].siz = gtk_adjustment_get_value (sizadjust);
+      smvector[selectedsmvector].siz = gimp_label_spin_get_value (GIMP_LABEL_SPIN (sizadjust));
       updatesmvectorprev ();
       updatesmpreviewprev ();
     }
@@ -289,7 +289,7 @@ strsmadjmove (GtkWidget *w, gpointer data)
 {
   if (!smadjignore)
     {
-      smvector[selectedsmvector].str = gtk_adjustment_get_value (smstradjust);
+      smvector[selectedsmvector].str = gimp_label_spin_get_value (GIMP_LABEL_SPIN (smstradjust));
       updatesmvectorprev ();
       updatesmpreviewprev ();
     }
@@ -321,7 +321,7 @@ smresponse (GtkWidget *widget,
           pcvals.size_vectors[i] = smvector[i];
 
         pcvals.num_size_vectors = numsmvect;
-        pcvals.size_strength_exponent  = gtk_adjustment_get_value (smstrexpadjust);
+        pcvals.size_strength_exponent = gimp_label_spin_get_value (GIMP_LABEL_SPIN (smstrexpadjust));
         pcvals.size_voronoi = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (size_voronoi));
       }
       break;
@@ -379,8 +379,8 @@ void
 create_sizemap_dialog (GtkWidget *parent)
 {
   GtkWidget *tmpw, *tmpw2;
-  GtkWidget *table1;
-  GtkWidget *table2;
+  GtkWidget *grid1;
+  GtkWidget *grid2;
   GtkWidget *hbox;
 
   initsmvectors ();
@@ -403,7 +403,7 @@ create_sizemap_dialog (GtkWidget *parent)
 
                               NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (smwindow),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (smwindow),
                                            GTK_RESPONSE_OK,
                                            RESPONSE_APPLY,
                                            GTK_RESPONSE_CANCEL,
@@ -416,15 +416,15 @@ create_sizemap_dialog (GtkWidget *parent)
                     G_CALLBACK (gtk_widget_destroyed),
                     &smwindow);
 
-  table1 = gtk_table_new (2, 5, FALSE);
-  gtk_container_set_border_width (GTK_CONTAINER (table1), 6);
+  grid1 = gtk_grid_new ();
+  gtk_container_set_border_width (GTK_CONTAINER (grid1), 6);
   gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (smwindow))),
-                      table1, TRUE, TRUE, 0);
-  gtk_widget_show (table1);
+                      grid1, TRUE, TRUE, 0);
+  gtk_widget_show (grid1);
 
   tmpw2 = tmpw = gtk_frame_new (_("Smvectors"));
   gtk_container_set_border_width (GTK_CONTAINER (tmpw), 2);
-  gtk_table_attach (GTK_TABLE (table1), tmpw, 0,1,0,1,GTK_EXPAND,GTK_EXPAND,0,0);
+  gtk_grid_attach (GTK_GRID (grid1), tmpw, 0, 0, 1, 1);
   gtk_widget_show (tmpw);
 
   tmpw = hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL,0);
@@ -445,7 +445,7 @@ create_sizemap_dialog (GtkWidget *parent)
                     G_CALLBACK (smmapclick), NULL);
   gtk_widget_show (tmpw2);
 
-  smvectprevbrightadjust = (GtkAdjustment *)
+  smvectprevbrightadjust =
     gtk_adjustment_new (50.0, 0.0, 100.0, 1.0, 1.0, 1.0);
   tmpw = gtk_scale_new (GTK_ORIENTATION_VERTICAL, smvectprevbrightadjust);
   gtk_scale_set_draw_value (GTK_SCALE (tmpw), FALSE);
@@ -457,7 +457,7 @@ create_sizemap_dialog (GtkWidget *parent)
 
   tmpw2 = tmpw = gtk_frame_new (_("Preview"));
   gtk_container_set_border_width (GTK_CONTAINER (tmpw), 2);
-  gtk_table_attach (GTK_TABLE (table1), tmpw, 1,2,0,1,GTK_EXPAND,GTK_EXPAND,0,0);
+  gtk_grid_attach (GTK_GRID (grid1), tmpw, 1, 0, 1, 1);
   gtk_widget_show (tmpw);
 
   tmpw = smpreviewprev = gimp_preview_area_new ();
@@ -468,7 +468,7 @@ create_sizemap_dialog (GtkWidget *parent)
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_set_homogeneous (GTK_BOX (hbox), TRUE);
   gtk_container_set_border_width (GTK_CONTAINER (hbox), 2);
-  gtk_table_attach_defaults (GTK_TABLE (table1), hbox, 0, 1, 1, 2);
+  gtk_grid_attach (GTK_GRID (grid1), hbox, 0, 1, 1, 1);
   gtk_widget_show (hbox);
 
   prev_button = tmpw = gtk_button_new_with_mnemonic ("_<<");
@@ -499,46 +499,45 @@ create_sizemap_dialog (GtkWidget *parent)
                     G_CALLBACK (smdeleteclick), NULL);
   gimp_help_set_help_data (tmpw, _("Delete selected smvector"), NULL);
 
-  table2 = gtk_table_new (3, 4, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table2), 4);
-  gtk_table_attach_defaults (GTK_TABLE (table1), table2, 0, 2, 2, 3);
-  gtk_widget_show (table2);
+  grid2 = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid2), 4);
+  gtk_grid_attach (GTK_GRID (grid1), grid2, 0, 2, 2, 1);
+  gtk_widget_show (grid2);
 
-  sizadjust = (GtkAdjustment *)
-    gimp_scale_entry_new (GTK_TABLE (table2), 0, 0,
-                          _("_Size:"),
-                          150, 6, 50.0,
-                          0.0, 100.0, 1.0, 10.0, 1,
-                          TRUE, 0, 0,
-                          _("Change the angle of the selected smvector"),
-                          NULL);
+  sizadjust =
+    gimp_scale_entry_new (_("_Size:"), 50.0, 0.0, 100.0, 1);
+  gimp_help_set_help_data (sizadjust,
+                           _("Change the angle of the selected smvector"),
+                           NULL);
   g_signal_connect (sizadjust, "value-changed",
                     G_CALLBACK (angsmadjmove), NULL);
+  gtk_grid_attach (GTK_GRID (grid2), sizadjust, 0, 0, 3, 1);
+  gtk_widget_show (sizadjust);
 
-  smstradjust = (GtkAdjustment *)
-    gimp_scale_entry_new (GTK_TABLE (table2), 0, 1,
-                          _("S_trength:"),
-                          150, 6, 1.0,
-                          0.1, 5.0, 0.1, 0.5, 1,
-                          TRUE, 0, 0,
-                          _("Change the strength of the selected smvector"),
-                          NULL);
+  smstradjust =
+    gimp_scale_entry_new (_("S_trength:"), 1.0, 0.1, 5.0, 1);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (smstradjust), 0.1, 0.5);
+  gimp_help_set_help_data (smstradjust,
+                           _("Change the strength of the selected smvector"),
+                           NULL);
   g_signal_connect (smstradjust, "value-changed",
                     G_CALLBACK (strsmadjmove), NULL);
+  gtk_grid_attach (GTK_GRID (grid2), smstradjust, 0, 1, 3, 1);
+  gtk_widget_show (smstradjust);
 
-  smstrexpadjust = (GtkAdjustment *)
-    gimp_scale_entry_new (GTK_TABLE (table2), 0, 2,
-                          _("St_rength exp.:"),
-                          150, 6, 1.0,
-                          0.1, 10.9, 0.1, 0.5, 1,
-                          TRUE, 0, 0,
-                          _("Change the exponent of the strength"),
-                          NULL);
+  smstrexpadjust =
+    gimp_scale_entry_new (_("St_rength exp.:"), 1.0, 0.1, 10.9, 1);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (smstradjust), 0.1, 0.5);
+  gimp_help_set_help_data (smstrexpadjust,
+                           _("Change the exponent of the strength"),
+                           NULL);
   g_signal_connect (smstrexpadjust, "value-changed",
                     G_CALLBACK (smstrexpsmadjmove), NULL);
+  gtk_grid_attach (GTK_GRID (grid2), smstrexpadjust, 0, 2, 3, 1);
+  gtk_widget_show (smstrexpadjust);
 
   size_voronoi = tmpw = gtk_check_button_new_with_mnemonic ( _("_Voronoi"));
-  gtk_table_attach_defaults (GTK_TABLE (table2), tmpw, 3, 4, 0, 1);
+  gtk_grid_attach (GTK_GRID (grid2), tmpw, 3, 0, 1, 1);
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (tmpw), FALSE);
   gtk_widget_show (tmpw);
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (tmpw), pcvals.size_voronoi);

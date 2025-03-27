@@ -285,30 +285,29 @@ void
 gimp_component_editor_set_view_size (GimpComponentEditor *editor,
                                      gint                 view_size)
 {
-  GtkWidget   *tree_widget;
-  GtkStyle    *tree_style;
-  GtkIconSize  icon_size;
-  GtkTreeIter  iter;
-  gboolean     iter_valid;
+  GtkWidget       *tree_widget;
+  GtkStyleContext *tree_style;
+  GtkBorder        border;
+  GtkTreeIter      iter;
+  gboolean         iter_valid;
+  gint             icon_size;
 
   g_return_if_fail (GIMP_IS_COMPONENT_EDITOR (editor));
   g_return_if_fail (view_size >  0 &&
                     view_size <= GIMP_VIEWABLE_MAX_PREVIEW_SIZE);
 
   tree_widget = GTK_WIDGET (editor->view);
-  tree_style  = gtk_widget_get_style (tree_widget);
+  tree_style  = gtk_widget_get_style_context (tree_widget);
 
-  icon_size = gimp_get_icon_size (tree_widget,
-                                  GIMP_ICON_VISIBLE,
-                                  GTK_ICON_SIZE_BUTTON,
-                                  view_size -
-                                  2 * tree_style->xthickness,
-                                  view_size -
-                                  2 * tree_style->ythickness);
+  gtk_style_context_save (tree_style);
+  gtk_style_context_add_class (tree_style, GTK_STYLE_CLASS_BUTTON);
+  gtk_style_context_get_border (tree_style, 0, &border);
+  gtk_style_context_restore (tree_style);
 
-  g_object_set (editor->eye_cell,
-                "stock-size", icon_size,
-                NULL);
+  g_object_get (editor->eye_cell, "icon-size", &icon_size, NULL);
+  icon_size = MIN (icon_size, MAX (view_size - (border.left + border.right),
+                                   view_size - (border.top + border.bottom)));
+  g_object_set (editor->eye_cell, "icon-size", icon_size, NULL);
 
   for (iter_valid = gtk_tree_model_get_iter_first (editor->model, &iter);
        iter_valid;
@@ -504,7 +503,7 @@ gimp_component_editor_button_press (GtkWidget           *widget,
 
       if (gdk_event_triggers_context_menu ((GdkEvent *) bevent))
         {
-          gimp_editor_popup_menu (GIMP_EDITOR (editor), NULL, NULL);
+          gimp_editor_popup_menu_at_pointer (GIMP_EDITOR (editor), (GdkEvent *) bevent);
         }
       else if (bevent->type == GDK_BUTTON_PRESS && bevent->button == 1 &&
                column != editor->eye_column)

@@ -31,51 +31,9 @@ G_BEGIN_DECLS
 /* For information look at the html documentation */
 
 
-#define GIMP_TYPE_COLOR_SELECTION            (gimp_color_selection_get_type ())
-#define GIMP_COLOR_SELECTION(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_COLOR_SELECTION, GimpColorSelection))
-#define GIMP_COLOR_SELECTION_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_COLOR_SELECTION, GimpColorSelectionClass))
-#define GIMP_IS_COLOR_SELECTION(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_COLOR_SELECTION))
-#define GIMP_IS_COLOR_SELECTION_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_COLOR_SELECTION))
-#define GIMP_COLOR_SELECTION_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_COLOR_SELECTION, GimpColorSelectionClass))
+#define GIMP_TYPE_COLOR_SELECTION (gimp_color_selection_get_type ())
+G_DECLARE_FINAL_TYPE (GimpColorSelection, gimp_color_selection, GIMP, COLOR_SELECTION, GtkBox)
 
-
-typedef struct _GimpColorSelectionClass GimpColorSelectionClass;
-
-struct _GimpColorSelection
-{
-  GtkBox                    parent_instance;
-
-  gboolean                  show_alpha;
-
-  GimpHSV                   hsv;
-  GimpRGB                   rgb;
-  GimpColorSelectorChannel  channel;
-
-  GtkWidget                *left_vbox;
-  GtkWidget                *right_vbox;
-
-  GtkWidget                *notebook;
-  GtkWidget                *scales;
-
-  GtkWidget                *new_color;
-  GtkWidget                *old_color;
-};
-
-struct _GimpColorSelectionClass
-{
-  GtkBoxClass  parent_class;
-
-  void (* color_changed) (GimpColorSelection *selection);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-};
-
-
-GType       gimp_color_selection_get_type       (void) G_GNUC_CONST;
 
 GtkWidget * gimp_color_selection_new            (void);
 
@@ -84,21 +42,29 @@ void        gimp_color_selection_set_show_alpha (GimpColorSelection *selection,
 gboolean    gimp_color_selection_get_show_alpha (GimpColorSelection *selection);
 
 void        gimp_color_selection_set_color      (GimpColorSelection *selection,
-                                                 const GimpRGB      *color);
-void        gimp_color_selection_get_color      (GimpColorSelection *selection,
-                                                 GimpRGB            *color);
+                                                 GeglColor          *color);
+GeglColor * gimp_color_selection_get_color      (GimpColorSelection *selection);
 
 void        gimp_color_selection_set_old_color  (GimpColorSelection *selection,
-                                                 const GimpRGB      *color);
-void        gimp_color_selection_get_old_color  (GimpColorSelection *selection,
-                                                 GimpRGB            *color);
+                                                 GeglColor          *color);
+GeglColor * gimp_color_selection_get_old_color  (GimpColorSelection *selection);
 
 void        gimp_color_selection_reset          (GimpColorSelection *selection);
 
 void        gimp_color_selection_color_changed  (GimpColorSelection *selection);
 
+void        gimp_color_selection_set_format     (GimpColorSelection *selection,
+                                                 const Babl          *format);
+void        gimp_color_selection_set_simulation (GimpColorSelection *selection,
+                                                 GimpColorProfile   *profile,
+                                                 GimpColorRenderingIntent intent,
+                                                 gboolean            bpc);
+
 void        gimp_color_selection_set_config     (GimpColorSelection *selection,
                                                  GimpColorConfig    *config);
+
+GtkWidget * gimp_color_selection_get_notebook   (GimpColorSelection *selection);
+GtkWidget * gimp_color_selection_get_right_vbox (GimpColorSelection *selection);
 
 
 G_END_DECLS

@@ -53,8 +53,8 @@ static void      gimp_stroke_editor_get_property (GObject           *object,
                                                   GValue            *value,
                                                   GParamSpec        *pspec);
 
-static gboolean  gimp_stroke_editor_paint_button (GtkWidget         *widget,
-                                                  GdkEventExpose    *event,
+static gboolean  gimp_stroke_editor_draw_button  (GtkWidget         *widget,
+                                                  cairo_t           *cr,
                                                   gpointer           data);
 static void      gimp_stroke_editor_dash_preset  (GtkWidget         *widget,
                                                   GimpStrokeOptions *options);
@@ -104,13 +104,14 @@ gimp_stroke_editor_constructed (GObject *object)
   GimpStrokeEditor  *editor      = GIMP_STROKE_EDITOR (object);
   GimpStrokeOptions *options;
   GimpEnumStore     *store;
+  GEnumClass        *enum_class;
   GEnumValue        *value;
+  GtkWidget         *scale;
   GtkWidget         *box;
   GtkWidget         *size;
   GtkWidget         *label;
   GtkWidget         *frame;
-  GtkWidget         *table;
-  GtkWidget         *expander;
+  GtkWidget         *grid;
   GtkWidget         *dash_editor;
   GtkWidget         *button;
   GtkCellRenderer   *cell;
@@ -136,47 +137,37 @@ gimp_stroke_editor_constructed (GObject *object)
                                    editor->resolution);
   gimp_size_entry_set_pixel_digits (GIMP_SIZE_ENTRY (size), 1);
   gtk_box_pack_start (GTK_BOX (box), size, FALSE, FALSE, 0);
-  gtk_widget_show (size);
 
-  expander = gtk_expander_new_with_mnemonic (_("_Line Style"));
-  gtk_box_pack_start (GTK_BOX (editor), expander, FALSE, FALSE, 0);
-  gtk_widget_show (expander);
-
-  frame = gimp_frame_new ("<expander>");
-  gtk_container_add (GTK_CONTAINER (expander), frame);
-  gtk_widget_show (frame);
-
-  table = gtk_table_new (5, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 3);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 2, 6);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 4, 6);
-  gtk_container_add (GTK_CONTAINER (frame), table);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 3);
+  gtk_container_add (GTK_CONTAINER (editor), grid);
+  gtk_widget_show (grid);
 
   box = gimp_prop_enum_icon_box_new (G_OBJECT (options), "cap-style",
                                      "gimp-cap", 0, 0);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, row++,
-                             _("_Cap style:"), 0.0, 0.5,
-                             box, 2, TRUE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("_Cap style:"), 0.0, 0.5,
+                            box, 2);
 
   box = gimp_prop_enum_icon_box_new (G_OBJECT (options), "join-style",
                                      "gimp-join", 0, 0);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, row++,
-                             _("_Join style:"), 0.0, 0.5,
-                             box, 2, TRUE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("_Join style:"), 0.0, 0.5,
+                            box, 2);
 
-  gimp_prop_scale_entry_new (G_OBJECT (options), "miter-limit",
-                             GTK_TABLE (table), 0, row++,
-                             _("_Miter limit:"),
-                             1.0, 1.0, 1,
-                             FALSE, 0.0, 0.0);
+  scale = gimp_prop_scale_entry_new (G_OBJECT (options), "miter-limit",
+                                     NULL, 1.0, FALSE, 0.0, 0.0);
+  gtk_widget_hide (gimp_labeled_get_label (GIMP_LABELED (scale)));
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("_Miter limit:"),
+                            0.0, 0.5, scale, 2);
 
   frame = gtk_frame_new (NULL);
   gtk_frame_set_shadow_type (GTK_FRAME (frame), GTK_SHADOW_IN);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, row++,
-                             _("Dash pattern:"), 0.0, 0.5,
-                             frame, 2, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("Dash pattern:"), 0.0, 0.5,
+                            frame, 2);
 
   box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_container_add (GTK_CONTAINER (frame), box);
@@ -193,8 +184,8 @@ gimp_stroke_editor_constructed (GObject *object)
   g_signal_connect_object (button, "clicked",
                            G_CALLBACK (gimp_dash_editor_shift_left),
                            dash_editor, G_CONNECT_SWAPPED);
-  g_signal_connect_after (button, "expose-event",
-                          G_CALLBACK (gimp_stroke_editor_paint_button),
+  g_signal_connect_after (button, "draw",
+                          G_CALLBACK (gimp_stroke_editor_draw_button),
                           button);
 
   gtk_box_pack_start (GTK_BOX (box), dash_editor, TRUE, TRUE, 0);
@@ -209,8 +200,8 @@ gimp_stroke_editor_constructed (GObject *object)
   g_signal_connect_object (button, "clicked",
                            G_CALLBACK (gimp_dash_editor_shift_right),
                            dash_editor, G_CONNECT_SWAPPED);
-  g_signal_connect_after (button, "expose-event",
-                          G_CALLBACK (gimp_stroke_editor_paint_button),
+  g_signal_connect_after (button, "draw",
+                          G_CALLBACK (gimp_stroke_editor_draw_button),
                           NULL);
 
 
@@ -219,12 +210,14 @@ gimp_stroke_editor_constructed (GObject *object)
                         "user-data-type", GIMP_TYPE_DASH_PATTERN,
                         NULL);
 
-  for (value = store->enum_class->values; value->value_name; value++)
+  enum_class = g_type_class_ref (GIMP_TYPE_DASH_PRESET);
+
+  for (value = enum_class->values; value->value_name; value++)
     {
       GtkTreeIter  iter = { 0, };
       const gchar *desc;
 
-      desc = gimp_enum_value_get_desc (store->enum_class, value);
+      desc = gimp_enum_value_get_desc (enum_class, value);
 
       gtk_list_store_append (GTK_LIST_STORE (store), &iter);
       gtk_list_store_set (GTK_LIST_STORE (store), &iter,
@@ -233,13 +226,15 @@ gimp_stroke_editor_constructed (GObject *object)
                           -1);
     }
 
+  g_type_class_unref (enum_class);
+
   box = gimp_enum_combo_box_new_with_model (store);
   g_object_unref (store);
 
   gimp_int_combo_box_set_active (GIMP_INT_COMBO_BOX (box), GIMP_DASH_CUSTOM);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, row++,
-                             _("Dash _preset:"), 0.0, 0.5,
-                             box, 2, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("Dash _preset:"), 0.0, 0.5,
+                            box, 2);
 
   cell = g_object_new (GIMP_TYPE_CELL_RENDERER_DASHES,
                        "xpad", 2,
@@ -313,39 +308,43 @@ gimp_stroke_editor_get_property (GObject    *object,
 GtkWidget *
 gimp_stroke_editor_new (GimpStrokeOptions *options,
                         gdouble            resolution,
-                        gboolean           edit_context)
+                        gboolean           edit_context,
+                        gboolean           use_custom_style)
 {
   g_return_val_if_fail (GIMP_IS_STROKE_OPTIONS (options), NULL);
 
   return g_object_new (GIMP_TYPE_STROKE_EDITOR,
-                       "options",      options,
-                       "resolution",   resolution,
-                       "edit-context", edit_context ? TRUE : FALSE,
+                       "options",          options,
+                       "resolution",       resolution,
+                       "edit-context",     edit_context ? TRUE : FALSE,
+                       "use-custom-style", use_custom_style ? TRUE: FALSE,
                        NULL);
 }
 
 static gboolean
-gimp_stroke_editor_paint_button (GtkWidget       *widget,
-                                 GdkEventExpose  *event,
-                                 gpointer         data)
+gimp_stroke_editor_draw_button (GtkWidget *widget,
+                                cairo_t   *cr,
+                                gpointer   data)
 {
-  GtkStyle      *style = gtk_widget_get_style (widget);
-  GtkAllocation  allocation;
-  gint           w;
+  GtkStyleContext *style = gtk_widget_get_style_context (widget);
+  GtkAllocation    allocation;
+  gint             w;
 
   gtk_widget_get_allocation (widget, &allocation);
 
   w = MIN (allocation.width, allocation.height) * 2 / 3;
 
-  gtk_paint_arrow (style,
-                   gtk_widget_get_window (widget),
-                   gtk_widget_get_state (widget),
-                   GTK_SHADOW_IN,
-                   &event->area, widget, NULL,
-                   data ? GTK_ARROW_LEFT : GTK_ARROW_RIGHT, TRUE,
-                   allocation.x + (allocation.width - w) / 2,
-                   allocation.y + (allocation.height - w) / 2,
-                   w, w);
+  gtk_style_context_save (style);
+  gtk_style_context_set_state (style, gtk_widget_get_state_flags (widget));
+
+  gtk_render_arrow (style, cr,
+                    data ? 3 * (G_PI / 2) : 1 * (G_PI / 2),
+                    (allocation.width  - w) / 2,
+                    (allocation.height - w) / 2,
+                    w);
+
+  gtk_style_context_restore (style);
+
   return FALSE;
 }
 

@@ -45,7 +45,7 @@ gboolean   gimp_gegl_apply_cached_operation (GeglBuffer          *src_buffer,
                                              GeglBuffer          *cache,
                                              const GeglRectangle *valid_rects,
                                              gint                 n_valid_rects,
-                                             gboolean             cancellable);
+                                             gboolean             cancelable);
 
 
 /*  apply specific operations  */
@@ -61,7 +61,7 @@ void   gimp_gegl_apply_flatten         (GeglBuffer             *src_buffer,
                                         GimpProgress           *progress,
                                         const gchar            *undo_desc,
                                         GeglBuffer             *dest_buffer,
-                                        const GimpRGB          *background,
+                                        GeglColor              *background,
                                         GimpLayerColorSpace     composite_space);
 
 void   gimp_gegl_apply_feather         (GeglBuffer             *src_buffer,

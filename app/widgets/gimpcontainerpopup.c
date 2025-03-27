@@ -61,6 +61,10 @@ static void   gimp_container_popup_view_type_toggled(GtkWidget          *button,
 static void   gimp_container_popup_dialog_clicked   (GtkWidget          *button,
                                                      GimpContainerPopup *popup);
 
+static void   gimp_container_popup_context_changed  (GimpContext        *context,
+                                                     GimpViewable       *viewable,
+                                                     GimpContainerPopup *popup);
+
 
 G_DEFINE_TYPE (GimpContainerPopup, gimp_container_popup, GIMP_TYPE_POPUP)
 
@@ -119,29 +123,6 @@ gimp_container_popup_confirm (GimpPopup *popup)
                             object);
 
   GIMP_POPUP_CLASS (parent_class)->confirm (popup);
-}
-
-static void
-gimp_container_popup_context_changed (GimpContext        *context,
-                                      GimpViewable       *viewable,
-                                      GimpContainerPopup *popup)
-{
-  GdkEvent *current_event;
-  gboolean  confirm = FALSE;
-
-  current_event = gtk_get_current_event ();
-
-  if (current_event)
-    {
-      if (((GdkEventAny *) current_event)->type == GDK_BUTTON_PRESS ||
-          ((GdkEventAny *) current_event)->type == GDK_BUTTON_RELEASE)
-        confirm = TRUE;
-
-      gdk_event_free (current_event);
-    }
-
-  if (confirm)
-    g_signal_emit_by_name (popup, "confirm");
 }
 
 GtkWidget *
@@ -275,10 +256,12 @@ gimp_container_popup_set_view_size (GimpContainerPopup *popup,
 static void
 gimp_container_popup_create_view (GimpContainerPopup *popup)
 {
-  GimpEditor *editor;
-  GtkWidget  *button;
-  gint        rows;
-  gint        columns;
+  GimpEditor  *editor;
+  GtkWidget   *button;
+  const gchar *signal_name;
+  GType        children_type;
+  gint         rows;
+  gint         columns;
 
   popup->editor = g_object_new (GIMP_TYPE_CONTAINER_EDITOR,
                                 "view-type",         popup->view_type,
@@ -353,6 +336,26 @@ gimp_container_popup_create_view (GimpContainerPopup *popup)
                             G_OBJECT (popup));
 
   gtk_widget_grab_focus (GTK_WIDGET (popup->editor));
+
+  /* Special-casing the object types managed by the context to make sure
+   * the right items are selected when opening the popup.
+   */
+  children_type = gimp_container_get_children_type (popup->container);
+  signal_name   = gimp_context_type_to_signal_name (children_type);
+
+  if (signal_name)
+    {
+      GimpObject *object;
+      GList      *items = NULL;
+
+      object = gimp_context_get_by_type (popup->orig_context, children_type);
+      if (object)
+        items = g_list_prepend (NULL, object);
+
+      gimp_container_view_select_items (popup->editor->view, items);
+
+      g_list_free (items);
+    }
 }
 
 static void
@@ -399,8 +402,38 @@ gimp_container_popup_dialog_clicked (GtkWidget          *button,
   gimp_window_strategy_show_dockable_dialog (GIMP_WINDOW_STRATEGY (gimp_get_window_strategy (popup->context->gimp)),
                                              popup->context->gimp,
                                              popup->dialog_factory,
-                                             gtk_widget_get_screen (button),
                                              gimp_widget_get_monitor (button),
                                              popup->dialog_identifier);
   g_signal_emit_by_name (popup, "cancel");
+}
+
+static void
+gimp_container_popup_context_changed (GimpContext        *context,
+                                      GimpViewable       *viewable,
+                                      GimpContainerPopup *popup)
+{
+  GdkEvent  *current_event;
+  GtkWidget *current_widget = GTK_WIDGET (popup);
+  gboolean   confirm        = FALSE;
+
+  current_event = gtk_get_current_event ();
+
+  if (current_event && gtk_widget_get_window (current_widget))
+    {
+      GdkWindow *event_window = gdk_window_get_effective_toplevel (((GdkEventAny *) current_event)->window);
+      GdkWindow *popup_window = gdk_window_get_effective_toplevel (gtk_widget_get_window (current_widget));
+
+      /* We need to differentiate a context change as a consequence of
+       * an event on another widget.
+       */
+      if ((((GdkEventAny *) current_event)->type == GDK_BUTTON_PRESS ||
+           ((GdkEventAny *) current_event)->type == GDK_BUTTON_RELEASE) &&
+          event_window == popup_window)
+        confirm = TRUE;
+
+      gdk_event_free (current_event);
+    }
+
+  if (confirm)
+    g_signal_emit_by_name (popup, "confirm");
 }

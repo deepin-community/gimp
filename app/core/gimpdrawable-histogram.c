@@ -90,8 +90,7 @@ gimp_drawable_calculate_histogram_internal (GimpDrawable  *drawable,
                              "histogram", histogram,
                              NULL);
 
-      gegl_node_connect_to (source,         "output",
-                            histogram_sink, "input");
+      gegl_node_link (source, histogram_sink);
 
       if (! gimp_channel_is_empty (mask))
         {
@@ -107,8 +106,7 @@ gimp_drawable_calculate_histogram_internal (GimpDrawable  *drawable,
                                          gimp_drawable_get_buffer (GIMP_DRAWABLE (mask)),
                                          -off_x, -off_y);
 
-          gegl_node_connect_to (mask_source,    "output",
-                                histogram_sink, "aux");
+          gegl_node_connect (mask_source, "output", histogram_sink, "aux");
         }
 
       processor = gegl_node_new_processor (histogram_sink,
@@ -124,7 +122,7 @@ gimp_drawable_calculate_histogram_internal (GimpDrawable  *drawable,
       GeglBuffer      *buffer      = gimp_drawable_get_buffer (drawable);
       GimpProjectable *projectable = NULL;
 
-      if (with_filters && gimp_drawable_has_filters (drawable))
+      if (with_filters && gimp_drawable_has_visible_filters (drawable))
         {
           GimpTileHandlerValidate *validate;
           GeglNode                *node;

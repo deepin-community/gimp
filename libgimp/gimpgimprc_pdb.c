@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -50,24 +52,29 @@
  * string. Entries not corresponding to this format will cause warnings
  * to be issued on gimprc parsing and will not be queryable.
  *
- * Returns: The value associated with the queried token.
+ * Returns: (transfer full): The value associated with the queried token.
+ *          The returned value must be freed with g_free().
  **/
 gchar *
 gimp_gimprc_query (const gchar *token)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar *value = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-gimprc-query",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, token,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, token,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    value = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-gimprc-query",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    value = GIMP_VALUES_DUP_STRING (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return value;
 }
@@ -91,19 +98,23 @@ gboolean
 gimp_gimprc_set (const gchar *token,
                  const gchar *value)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-gimprc-set",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, token,
-                                    GIMP_PDB_STRING, value,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, token,
+                                          G_TYPE_STRING, value,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-gimprc-set",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -115,23 +126,28 @@ gimp_gimprc_set (const gchar *token,
  *
  * Returns a copy of the default image comment.
  *
- * Returns: Default image comment.
+ * Returns: (transfer full): Default image comment.
+ *          The returned value must be freed with g_free().
  **/
 gchar *
 gimp_get_default_comment (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar *comment = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-get-default-comment",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    comment = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-get-default-comment",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    comment = GIMP_VALUES_DUP_STRING (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return comment;
 }
@@ -141,35 +157,39 @@ gimp_get_default_comment (void)
  *
  * Get the default unit (taken from the user's locale).
  *
- * Returns the default unit's integer ID.
+ * Returns the default unit.
  *
- * Returns: Default unit.
+ * Returns: (transfer none): Default unit.
  *
  * Since: 2.4
  **/
-GimpUnit
+GimpUnit *
 gimp_get_default_unit (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  GimpUnit unit_id = 0;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpUnit *unit = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-get-default-unit",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    unit_id = return_vals[1].data.d_unit;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-get-default-unit",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    unit = GIMP_VALUES_GET_UNIT (return_vals, 1);
 
-  return unit_id;
+  gimp_value_array_unref (return_vals);
+
+  return unit;
 }
 
 /**
  * gimp_get_monitor_resolution:
- * @xres: X resolution.
- * @yres: Y resolution.
+ * @xres: (out): X resolution.
+ * @yres: (out): Y resolution.
  *
  * Get the monitor resolution as specified in the Preferences.
  *
@@ -184,90 +204,32 @@ gboolean
 gimp_get_monitor_resolution (gdouble *xres,
                              gdouble *yres)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-get-monitor-resolution",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-get-monitor-resolution",
+                                               args);
+  gimp_value_array_unref (args);
 
   *xres = 0.0;
   *yres = 0.0;
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
   if (success)
     {
-      *xres = return_vals[1].data.d_float;
-      *yres = return_vals[2].data.d_float;
+      *xres = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+      *yres = GIMP_VALUES_GET_DOUBLE (return_vals, 2);
     }
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
-}
-
-/**
- * gimp_get_theme_dir:
- *
- * Get the directory of the current GUI theme.
- *
- * Returns a copy of the current GUI theme dir.
- *
- * Deprecated: There is no replacement for this procedure.
- *
- * Returns: The GUI theme dir.
- **/
-gchar *
-gimp_get_theme_dir (void)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *theme_dir = NULL;
-
-  return_vals = gimp_run_procedure ("gimp-get-theme-dir",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    theme_dir = g_strdup (return_vals[1].data.d_string);
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return theme_dir;
-}
-
-/**
- * gimp_get_icon_theme_dir:
- *
- * Get the directory of the current icon theme.
- *
- * Returns a copy of the current icon theme dir.
- *
- * Deprecated: There is no replacement for this procedure.
- *
- * Returns: The icon theme dir.
- *
- * Since: 2.10
- **/
-gchar *
-gimp_get_icon_theme_dir (void)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *icon_theme_dir = NULL;
-
-  return_vals = gimp_run_procedure ("gimp-get-icon-theme-dir",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    icon_theme_dir = g_strdup (return_vals[1].data.d_string);
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return icon_theme_dir;
 }
 
 /**
@@ -278,25 +240,30 @@ gimp_get_icon_theme_dir (void)
  * Returns a string that can be deserialized into a GimpColorConfig
  * object representing the current color management configuration.
  *
- * Returns: Serialized color management configuration.
+ * Returns: (transfer full): Serialized color management configuration.
+ *          The returned value must be freed with g_free().
  *
  * Since: 2.4
  **/
 gchar *
 _gimp_get_color_configuration (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar *config = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-get-color-configuration",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    config = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-get-color-configuration",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    config = GIMP_VALUES_DUP_STRING (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return config;
 }
@@ -308,23 +275,28 @@ _gimp_get_color_configuration (void)
  *
  * Returns a copy of the list of modules which should not be loaded.
  *
- * Returns: The list of modules.
+ * Returns: (transfer full): The list of modules.
+ *          The returned value must be freed with g_free().
  **/
 gchar *
 gimp_get_module_load_inhibit (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar *load_inhibit = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-get-module-load-inhibit",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    load_inhibit = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-get-module-load-inhibit",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    load_inhibit = GIMP_VALUES_DUP_STRING (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return load_inhibit;
 }

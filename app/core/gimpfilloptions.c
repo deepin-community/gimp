@@ -24,6 +24,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
 #include "libgimpconfig/gimpconfig.h"
 
@@ -37,6 +38,7 @@
 #include "gimpdrawable-fill.h"
 #include "gimperror.h"
 #include "gimpfilloptions.h"
+#include "gimpimage.h"
 #include "gimppattern.h"
 
 #include "gimp-intl.h"
@@ -46,6 +48,7 @@ enum
 {
   PROP_0,
   PROP_STYLE,
+  PROP_CUSTOM_STYLE,
   PROP_ANTIALIAS,
   PROP_FEATHER,
   PROP_FEATHER_RADIUS,
@@ -58,10 +61,11 @@ typedef struct _GimpFillOptionsPrivate GimpFillOptionsPrivate;
 
 struct _GimpFillOptionsPrivate
 {
-  GimpFillStyle style;
-  gboolean      antialias;
-  gboolean      feather;
-  gdouble       feather_radius;
+  GimpFillStyle   style;
+  GimpCustomStyle custom_style;
+  gboolean        antialias;
+  gboolean        feather;
+  gdouble         feather_radius;
 
   GimpViewType  pattern_view_type;
   GimpViewSize  pattern_view_size;
@@ -108,7 +112,15 @@ gimp_fill_options_class_init (GimpFillOptionsClass *klass)
                          _("Style"),
                          NULL,
                          GIMP_TYPE_FILL_STYLE,
-                         GIMP_FILL_STYLE_SOLID,
+                         GIMP_FILL_STYLE_FG_COLOR,
+                         GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_ENUM (object_class, PROP_CUSTOM_STYLE,
+                         "custom-style",
+                         _("Custom style"),
+                         NULL,
+                         GIMP_TYPE_CUSTOM_STYLE,
+                         GIMP_CUSTOM_STYLE_SOLID_COLOR,
                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_ANTIALIAS,
@@ -175,6 +187,10 @@ gimp_fill_options_set_property (GObject      *object,
       private->style = g_value_get_enum (value);
       private->undo_desc = NULL;
       break;
+    case PROP_CUSTOM_STYLE:
+      private->custom_style = g_value_get_enum (value);
+      private->undo_desc = NULL;
+      break;
     case PROP_ANTIALIAS:
       private->antialias = g_value_get_boolean (value);
       break;
@@ -210,6 +226,9 @@ gimp_fill_options_get_property (GObject    *object,
     {
     case PROP_STYLE:
       g_value_set_enum (value, private->style);
+      break;
+    case PROP_CUSTOM_STYLE:
+      g_value_set_enum (value, private->custom_style);
       break;
     case PROP_ANTIALIAS:
       g_value_set_boolean (value, private->antialias);
@@ -264,6 +283,7 @@ gimp_fill_options_new (Gimp        *gimp,
     {
       gimp_context_define_properties (GIMP_CONTEXT (options),
                                       GIMP_CONTEXT_PROP_MASK_FOREGROUND |
+                                      GIMP_CONTEXT_PROP_MASK_BACKGROUND |
                                       GIMP_CONTEXT_PROP_MASK_PATTERN,
                                       FALSE);
 
@@ -276,7 +296,7 @@ gimp_fill_options_new (Gimp        *gimp,
 GimpFillStyle
 gimp_fill_options_get_style (GimpFillOptions *options)
 {
-  g_return_val_if_fail (GIMP_IS_FILL_OPTIONS (options), GIMP_FILL_STYLE_SOLID);
+  g_return_val_if_fail (GIMP_IS_FILL_OPTIONS (options), GIMP_FILL_STYLE_FG_COLOR);
 
   return GET_PRIVATE (options)->style;
 }
@@ -288,6 +308,24 @@ gimp_fill_options_set_style (GimpFillOptions *options,
   g_return_if_fail (GIMP_IS_FILL_OPTIONS (options));
 
   g_object_set (options, "style", style, NULL);
+}
+
+GimpCustomStyle
+gimp_fill_options_get_custom_style (GimpFillOptions *options)
+{
+  g_return_val_if_fail (GIMP_IS_FILL_OPTIONS (options),
+                        GIMP_CUSTOM_STYLE_SOLID_COLOR);
+
+  return GET_PRIVATE (options)->custom_style;
+}
+
+void
+gimp_fill_options_set_custom_style (GimpFillOptions *options,
+                                    GimpCustomStyle  custom_style)
+{
+  g_return_if_fail (GIMP_IS_FILL_OPTIONS (options));
+
+  g_object_set (options, "custom-style", custom_style, NULL);
 }
 
 gboolean
@@ -337,7 +375,7 @@ gimp_fill_options_set_by_fill_type (GimpFillOptions  *options,
                                     GError          **error)
 {
   GimpFillOptionsPrivate *private;
-  GimpRGB                 color;
+  GeglColor              *color = NULL;
   const gchar            *undo_desc;
 
   g_return_val_if_fail (GIMP_IS_FILL_OPTIONS (options), FALSE);
@@ -351,22 +389,33 @@ gimp_fill_options_set_by_fill_type (GimpFillOptions  *options,
   switch (fill_type)
     {
     case GIMP_FILL_FOREGROUND:
-      gimp_context_get_foreground (context, &color);
+      color = gegl_color_duplicate (gimp_context_get_foreground (context));
       undo_desc = C_("undo-type", "Fill with Foreground Color");
       break;
 
     case GIMP_FILL_BACKGROUND:
-      gimp_context_get_background (context, &color);
+      color = gegl_color_duplicate (gimp_context_get_background (context));
       undo_desc = C_("undo-type", "Fill with Background Color");
       break;
 
+    case GIMP_FILL_CIELAB_MIDDLE_GRAY:
+      {
+        const float cielab_pixel[3] = {50, 0, 0};
+
+        color = gegl_color_new (NULL);
+        gegl_color_set_pixel (color, babl_format ("CIE Lab float"), cielab_pixel);
+
+        undo_desc = C_("undo-type", "Fill with Middle Gray (CIELAB) Color");
+      }
+      break;
+
     case GIMP_FILL_WHITE:
-      gimp_rgba_set (&color, 1.0, 1.0, 1.0, GIMP_OPACITY_OPAQUE);
+      color = gegl_color_new ("white");
       undo_desc = C_("undo-type", "Fill with White");
       break;
 
     case GIMP_FILL_TRANSPARENT:
-      gimp_context_get_background (context, &color);
+      color = gegl_color_duplicate (gimp_context_get_background (context));
       gimp_context_set_paint_mode (GIMP_CONTEXT (options),
                                    GIMP_LAYER_MODE_ERASE);
       undo_desc = C_("undo-type", "Fill with Transparency");
@@ -396,9 +445,13 @@ gimp_fill_options_set_by_fill_type (GimpFillOptions  *options,
       return FALSE;
     }
 
-  gimp_fill_options_set_style (options, GIMP_FILL_STYLE_SOLID);
-  gimp_context_set_foreground (GIMP_CONTEXT (options), &color);
+  g_return_val_if_fail (color != NULL, FALSE);
+
+  gimp_fill_options_set_style (options, GIMP_FILL_STYLE_FG_COLOR);
+  gimp_context_set_foreground (GIMP_CONTEXT (options), color);
   private->undo_desc = undo_desc;
+
+  g_object_unref (color);
 
   return TRUE;
 }
@@ -449,8 +502,11 @@ gimp_fill_options_get_undo_desc (GimpFillOptions *options)
 
   switch (private->style)
     {
-    case GIMP_FILL_STYLE_SOLID:
-      return C_("undo-type", "Fill with Solid Color");
+    case GIMP_FILL_STYLE_FG_COLOR:
+      return C_("undo-type", "Fill with Foreground Color");
+
+    case GIMP_FILL_STYLE_BG_COLOR:
+      return C_("undo-type", "Fill with Background Color");
 
     case GIMP_FILL_STYLE_PATTERN:
       return C_("undo-type", "Fill with Pattern");
@@ -520,15 +576,25 @@ gimp_fill_options_fill_buffer (GimpFillOptions *options,
 
   switch (gimp_fill_options_get_style (options))
     {
-    case GIMP_FILL_STYLE_SOLID:
+    case GIMP_FILL_STYLE_FG_COLOR:
       {
-        GimpRGB color;
+        GeglColor *color;
 
-        gimp_context_get_foreground (GIMP_CONTEXT (options), &color);
-        gimp_palettes_add_color_history (GIMP_CONTEXT (options)->gimp, &color);
+        color = gimp_context_get_foreground (GIMP_CONTEXT (options));
+        gimp_palettes_add_color_history (GIMP_CONTEXT (options)->gimp, color);
 
-        gimp_drawable_fill_buffer (drawable, buffer,
-                                   &color, NULL, 0, 0);
+        gimp_drawable_fill_buffer (drawable, buffer, color, NULL, 0, 0);
+      }
+      break;
+
+    case GIMP_FILL_STYLE_BG_COLOR:
+      {
+        GeglColor *color;
+
+        color = gimp_context_get_background (GIMP_CONTEXT (options));
+        gimp_palettes_add_color_history (GIMP_CONTEXT (options)->gimp, color);
+
+        gimp_drawable_fill_buffer (drawable, buffer, color, NULL, 0, 0);
       }
       break;
 

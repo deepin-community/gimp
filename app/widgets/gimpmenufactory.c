@@ -90,10 +90,12 @@ gimp_menu_factory_finalize (GObject *object)
 
           g_free (ui_entry->ui_path);
           g_free (ui_entry->basename);
+          g_clear_object (&ui_entry->builder);
 
           g_slice_free (GimpUIManagerUIEntry, ui_entry);
         }
 
+      g_hash_table_unref (entry->managers);
       g_list_free (entry->managed_uis);
 
       g_slice_free (GimpMenuFactoryEntry, entry);
@@ -101,6 +103,8 @@ gimp_menu_factory_finalize (GObject *object)
 
   g_list_free (factory->p->registered_menus);
   factory->p->registered_menus = NULL;
+
+  g_clear_weak_pointer (&factory->p->action_factory);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -116,8 +120,8 @@ gimp_menu_factory_new (Gimp              *gimp,
 
   factory = g_object_new (GIMP_TYPE_MENU_FACTORY, NULL);
 
-  factory->p->gimp           = gimp;
-  factory->p->action_factory = action_factory;
+  factory->p->gimp = gimp;
+  g_set_weak_pointer (&factory->p->action_factory, action_factory);
 
   return factory;
 }
@@ -179,6 +183,9 @@ gimp_menu_factory_manager_register (GimpMenuFactory *factory,
 
   entry->managed_uis = g_list_reverse (entry->managed_uis);
 
+  entry->managers = g_hash_table_new_full (g_direct_hash, g_direct_equal,
+                                           NULL, g_object_unref);
+
   va_end (args);
 }
 
@@ -190,20 +197,10 @@ gimp_menu_factory_get_registered_menus (GimpMenuFactory *factory)
   return factory->p->registered_menus;
 }
 
-static void
-gimp_menu_factory_manager_action_added (GimpActionGroup *group,
-                                        GimpAction      *action,
-                                        GtkAccelGroup   *accel_group)
-{
-  gimp_action_set_accel_group (action, accel_group);
-  gimp_action_connect_accelerator (action);
-}
-
 GimpUIManager *
-gimp_menu_factory_manager_new (GimpMenuFactory *factory,
+gimp_menu_factory_get_manager (GimpMenuFactory *factory,
                                const gchar     *identifier,
-                               gpointer         callback_data,
-                               gboolean         create_tearoff)
+                               gpointer         callback_data)
 {
   GList *list;
 
@@ -217,53 +214,36 @@ gimp_menu_factory_manager_new (GimpMenuFactory *factory,
       if (! strcmp (entry->identifier, identifier))
         {
           GimpUIManager *manager;
-          GtkAccelGroup *accel_group;
-          GList         *list;
 
-          manager = gimp_ui_manager_new (factory->p->gimp, entry->identifier);
-          gtk_ui_manager_set_add_tearoffs (GTK_UI_MANAGER (manager),
-                                           create_tearoff);
+          manager = g_hash_table_lookup (entry->managers, callback_data);
 
-          accel_group = gimp_ui_manager_get_accel_group (manager);
-
-          for (list = entry->action_groups; list; list = g_list_next (list))
+          if (manager == NULL)
             {
-              GimpActionGroup *group;
-              GList           *actions;
-              GList           *list2;
+              GList *list;
 
-              group = gimp_action_factory_group_new (factory->p->action_factory,
-                                                     (const gchar *) list->data,
-                                                     callback_data);
+              manager = gimp_ui_manager_new (factory->p->gimp, entry->identifier);
+              g_hash_table_insert (entry->managers, callback_data, manager);
 
-              actions = gimp_action_group_list_actions (group);
-
-              for (list2 = actions; list2; list2 = g_list_next (list2))
+              for (list = entry->action_groups; list; list = g_list_next (list))
                 {
-                  GimpAction *action = list2->data;
+                  GimpActionGroup *group;
 
-                  gimp_action_set_accel_group (action, accel_group);
-                  gimp_action_connect_accelerator (action);
+                  group = gimp_action_factory_get_group (factory->p->action_factory,
+                                                         (const gchar *) list->data,
+                                                         callback_data);
+
+                  gimp_ui_manager_add_action_group (manager, group);
                 }
 
-              g_list_free (actions);
+              for (list = entry->managed_uis; list; list = g_list_next (list))
+                {
+                  GimpUIManagerUIEntry *ui_entry = list->data;
 
-              g_signal_connect_object (group, "action-added",
-                                       G_CALLBACK (gimp_menu_factory_manager_action_added),
-                                       accel_group, 0);
-
-              gimp_ui_manager_insert_action_group (manager, group, -1);
-              g_object_unref (group);
-            }
-
-          for (list = entry->managed_uis; list; list = g_list_next (list))
-            {
-              GimpUIManagerUIEntry *ui_entry = list->data;
-
-              gimp_ui_manager_ui_register (manager,
-                                           ui_entry->ui_path,
-                                           ui_entry->basename,
-                                           ui_entry->setup_func);
+                  gimp_ui_manager_ui_register (manager,
+                                               ui_entry->ui_path,
+                                               ui_entry->basename,
+                                               ui_entry->setup_func);
+                }
             }
 
           return manager;
@@ -274,4 +254,38 @@ gimp_menu_factory_manager_new (GimpMenuFactory *factory,
              G_STRFUNC, identifier);
 
   return NULL;
+}
+
+void
+gimp_menu_factory_delete_manager (GimpMenuFactory *factory,
+                                  const gchar     *identifier,
+                                  gpointer         callback_data)
+{
+  GList *list;
+
+  g_return_if_fail (GIMP_IS_MENU_FACTORY (factory));
+  g_return_if_fail (identifier != NULL);
+
+  for (list = factory->p->registered_menus; list; list = g_list_next (list))
+    {
+      GimpMenuFactoryEntry *entry = list->data;
+
+      if (g_strcmp0 (entry->identifier, identifier) == 0)
+        {
+          if (factory->p->action_factory != NULL)
+            for (GList *list2 = entry->action_groups; list2; list2 = g_list_next (list2))
+              gimp_action_factory_delete_group (factory->p->action_factory,
+                                                (const gchar *) list2->data,
+                                                callback_data);
+
+          if (! g_hash_table_remove (entry->managers, callback_data))
+            g_warning ("%s: no GimpUIManager for (id \"%s\", data %p)",
+                       G_STRFUNC, identifier, callback_data);
+
+          return;
+        }
+    }
+
+  g_warning ("%s: no entry registered for \"%s\"",
+             G_STRFUNC, identifier);
 }

@@ -106,9 +106,7 @@ typedef enum
   GIMP_TAB_STYLE_ICON_NAME,     /*< desc="Icon & text"    >*/
   GIMP_TAB_STYLE_ICON_BLURB,    /*< desc="Icon & desc"    >*/
   GIMP_TAB_STYLE_PREVIEW_NAME,  /*< desc="Status & text"  >*/
-  GIMP_TAB_STYLE_PREVIEW_BLURB, /*< desc="Status & desc"  >*/
-  GIMP_TAB_STYLE_UNDEFINED,     /*< desc="Undefined"      >*/
-  GIMP_TAB_STYLE_AUTOMATIC      /*< desc="Automatic"      >*/
+  GIMP_TAB_STYLE_PREVIEW_BLURB  /*< desc="Status & desc"  >*/
 } GimpTabStyle;
 
 
@@ -167,9 +165,13 @@ typedef enum  /*< skip >*/
   GIMP_DND_TYPE_IMAGEFILE    = 21,
   GIMP_DND_TYPE_TEMPLATE     = 22,
   GIMP_DND_TYPE_TOOL_ITEM    = 23,
-  GIMP_DND_TYPE_DIALOG       = 24,
+  GIMP_DND_TYPE_NOTEBOOK_TAB = 24,
 
-  GIMP_DND_TYPE_LAST         = GIMP_DND_TYPE_DIALOG
+  GIMP_DND_TYPE_LAYER_LIST   = 25,
+  GIMP_DND_TYPE_CHANNEL_LIST = 26,
+  GIMP_DND_TYPE_VECTORS_LIST = 27,
+
+  GIMP_DND_TYPE_LAST         = GIMP_DND_TYPE_VECTORS_LIST
 } GimpDndType;
 
 typedef enum  /*< skip >*/
@@ -205,6 +207,7 @@ typedef enum  /*< skip >*/
   GIMP_CURSOR_SIDE_BOTTOM_LEFT,
   GIMP_CURSOR_SIDE_LEFT,
   GIMP_CURSOR_SIDE_TOP_LEFT,
+  GIMP_CURSOR_SINGLE_DOT,
   GIMP_CURSOR_LAST
 } GimpCursorType;
 

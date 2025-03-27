@@ -75,17 +75,21 @@ void                gimp_template_set_from_image      (GimpTemplate *template,
 
 gint                gimp_template_get_width           (GimpTemplate *template);
 gint                gimp_template_get_height          (GimpTemplate *template);
-GimpUnit            gimp_template_get_unit            (GimpTemplate *template);
+GimpUnit          * gimp_template_get_unit            (GimpTemplate *template);
 
 gdouble             gimp_template_get_resolution_x    (GimpTemplate *template);
 gdouble             gimp_template_get_resolution_y    (GimpTemplate *template);
-GimpUnit            gimp_template_get_resolution_unit (GimpTemplate *template);
+GimpUnit          * gimp_template_get_resolution_unit (GimpTemplate *template);
 
 GimpImageBaseType   gimp_template_get_base_type       (GimpTemplate *template);
 GimpPrecision       gimp_template_get_precision       (GimpTemplate *template);
 
-gboolean            gimp_template_get_color_managed   (GimpTemplate *template);
 GimpColorProfile  * gimp_template_get_color_profile   (GimpTemplate *template);
+GimpColorProfile  * gimp_template_get_simulation_profile
+                                                      (GimpTemplate *template);
+GimpColorRenderingIntent gimp_template_get_simulation_intent
+                                                      (GimpTemplate *template);
+gboolean            gimp_template_get_simulation_bpc  (GimpTemplate *template);
 
 GimpFillType        gimp_template_get_fill_type       (GimpTemplate *template);
 

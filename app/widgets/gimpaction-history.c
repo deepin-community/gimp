@@ -34,7 +34,6 @@
 
 #include "core/gimp.h"
 
-#include "gimpuimanager.h"
 #include "gimpaction.h"
 #include "gimpaction-history.h"
 
@@ -122,7 +121,7 @@ gimp_action_history_init (Gimp *gimp)
   if (gimp->be_verbose)
     g_print ("Parsing '%s'\n", gimp_file_get_utf8_name (file));
 
-  scanner = gimp_scanner_new_gfile (file, NULL);
+  scanner = gimp_scanner_new_file (file, NULL);
   g_object_unref (file);
 
   if (! scanner)
@@ -200,7 +199,7 @@ gimp_action_history_init (Gimp *gimp)
     }
 
  done:
-  gimp_scanner_destroy (scanner);
+  gimp_scanner_unref (scanner);
 }
 
 void
@@ -222,8 +221,8 @@ gimp_action_history_exit (Gimp *gimp)
   if (gimp->be_verbose)
     g_print ("Writing '%s'\n", gimp_file_get_utf8_name (file));
 
-  writer = gimp_config_writer_new_gfile (file, TRUE, "GIMP action-history",
-                                         NULL);
+  writer = gimp_config_writer_new_from_file (file, TRUE, "GIMP action-history",
+                                             NULL);
   g_object_unref (file);
 
   for (actions = history.items->head, i = 0;
@@ -260,11 +259,19 @@ gimp_action_history_clear (Gimp *gimp)
     gimp_action_history_item_free (item);
 }
 
-/* Search all history actions which match "keyword" with function
- * match_func(action, keyword).
+/**
+ * gimp_action_history_search:
+ * @gimp:
+ * @match_func:
+ * @keyword:
  *
- * @return a list of GtkAction*, to free with:
- * g_list_free_full (result, (GDestroyNotify) g_object_unref);
+ * Search all history #GimpAction which match @keyword with function
+ * @match_func(action, keyword).
+ * It will also return inactive actions, but will discard non-visible
+ * actions.
+ *
+ * returns: a #GList of #GimpAction, which must be freed with
+ *          g_list_free_full (result, (GDestroyNotify) g_object_unref)
  */
 GList *
 gimp_action_history_search (Gimp                *gimp,
@@ -272,7 +279,6 @@ gimp_action_history_search (Gimp                *gimp,
                             const gchar         *keyword)
 {
   GimpGuiConfig *config;
-  GimpUIManager *manager;
   GList         *actions;
   GList         *result = NULL;
   gint           i;
@@ -281,25 +287,23 @@ gimp_action_history_search (Gimp                *gimp,
   g_return_val_if_fail (match_func != NULL, NULL);
 
   config  = GIMP_GUI_CONFIG (gimp->config);
-  manager = gimp_ui_managers_from_name ("<Image>")->data;
 
   for (actions = history.items->head, i = 0;
        actions && i < config->action_history_size;
        actions = g_list_next (actions), i++)
     {
-      GimpActionHistoryItem *item   = actions->data;
-      GimpAction            *action;
+      GimpActionHistoryItem *item = actions->data;
+      GAction               *action;
 
-      action = gimp_ui_manager_find_action (manager, NULL, item->action_name);
+      action = g_action_map_lookup_action (G_ACTION_MAP (gimp->app), item->action_name);
       if (action == NULL)
         continue;
 
-      if (! gimp_action_is_visible (action)    ||
-          (! gimp_action_is_sensitive (action) &&
-           ! config->search_show_unavailable))
+      g_return_val_if_fail (GIMP_IS_ACTION (action), NULL);
+      if (! gimp_action_is_visible (GIMP_ACTION (action)))
         continue;
 
-      if (match_func (action, keyword, NULL, gimp))
+      if (match_func (GIMP_ACTION (action), keyword, NULL, gimp))
         result = g_list_prepend (result, g_object_ref (action));
     }
 
@@ -318,9 +322,8 @@ gimp_action_history_is_blacklisted_action (const gchar *action_name)
     return TRUE;
 
   return (g_str_has_suffix (action_name, "-set")            ||
-          g_str_has_suffix (action_name, "-accel")          ||
-          g_str_has_suffix (action_name, "-internal")       ||
           g_str_has_prefix (action_name, "context-")        ||
+          g_str_has_suffix (action_name, "-internal")       ||
           g_str_has_prefix (action_name, "filters-recent-") ||
           g_strcmp0 (action_name, "dialogs-action-search") == 0);
 }
@@ -359,6 +362,8 @@ gimp_action_history_action_activated (GimpAction *action)
   const gchar           *action_name;
   GList                 *link;
   GimpActionHistoryItem *item;
+
+  g_return_if_fail (GIMP_IS_ACTION (action));
 
   /* Silently return when called at the wrong time, like when the
    * activated action was "quit" and the history is already gone.

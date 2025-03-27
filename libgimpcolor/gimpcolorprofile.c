@@ -89,8 +89,10 @@
  **/
 
 
-struct _GimpColorProfilePrivate
+struct _GimpColorProfile
 {
+  GObject      parent_instance;
+
   cmsHPROFILE  lcms_profile;
   guint8      *data;
   gsize        length;
@@ -107,7 +109,7 @@ struct _GimpColorProfilePrivate
 static void   gimp_color_profile_finalize (GObject *object);
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpColorProfile, gimp_color_profile, G_TYPE_OBJECT)
+G_DEFINE_TYPE (GimpColorProfile, gimp_color_profile, G_TYPE_OBJECT)
 
 #define parent_class gimp_color_profile_parent_class
 
@@ -136,7 +138,6 @@ gimp_color_profile_class_init (GimpColorProfileClass *klass)
 static void
 gimp_color_profile_init (GimpColorProfile *profile)
 {
-  profile->priv = gimp_color_profile_get_instance_private (profile);
 }
 
 static void
@@ -144,17 +145,17 @@ gimp_color_profile_finalize (GObject *object)
 {
   GimpColorProfile *profile = GIMP_COLOR_PROFILE (object);
 
-  g_clear_pointer (&profile->priv->lcms_profile, cmsCloseProfile);
+  g_clear_pointer (&profile->lcms_profile, cmsCloseProfile);
 
-  g_clear_pointer (&profile->priv->data, g_free);
-  profile->priv->length = 0;
+  g_clear_pointer (&profile->data, g_free);
+  profile->length = 0;
 
-  g_clear_pointer (&profile->priv->description,  g_free);
-  g_clear_pointer (&profile->priv->manufacturer, g_free);
-  g_clear_pointer (&profile->priv->model,        g_free);
-  g_clear_pointer (&profile->priv->copyright,    g_free);
-  g_clear_pointer (&profile->priv->label,        g_free);
-  g_clear_pointer (&profile->priv->summary,      g_free);
+  g_clear_pointer (&profile->description,  g_free);
+  g_clear_pointer (&profile->manufacturer, g_free);
+  g_clear_pointer (&profile->model,        g_free);
+  g_clear_pointer (&profile->copyright,    g_free);
+  g_clear_pointer (&profile->label,        g_free);
+  g_clear_pointer (&profile->summary,      g_free);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -167,7 +168,7 @@ gimp_color_profile_finalize (GObject *object)
  *
  * This function opens an ICC color profile from @file.
  *
- * Return value: the #GimpColorProfile, or %NULL. On error, %NULL is
+ * Returns: (nullable): the #GimpColorProfile, or %NULL. On error, %NULL is
  *               returned and @error is set.
  *
  * Since: 2.10
@@ -198,7 +199,7 @@ gimp_color_profile_new_from_file (GFile   *file,
         return NULL;
 
       length = g_mapped_file_get_length (mapped);
-      data   = g_memdup (g_mapped_file_get_contents (mapped), length);
+      data   = g_memdup2 (g_mapped_file_get_contents (mapped), length);
 
       lcms_profile = cmsOpenProfileFromMem (data, length);
 
@@ -216,7 +217,7 @@ gimp_color_profile_new_from_file (GFile   *file,
         {
           GInputStream *input;
 
-          length = g_file_info_get_size (info);
+          length = g_file_info_get_attribute_uint64 (info, G_FILE_ATTRIBUTE_STANDARD_SIZE);
           data   = g_malloc (length);
 
           g_object_unref (info);
@@ -243,9 +244,9 @@ gimp_color_profile_new_from_file (GFile   *file,
     {
       profile = g_object_new (GIMP_TYPE_COLOR_PROFILE, NULL);
 
-      profile->priv->lcms_profile = lcms_profile;
-      profile->priv->data         = data;
-      profile->priv->length       = length;
+      profile->lcms_profile = lcms_profile;
+      profile->data         = data;
+      profile->length       = length;
     }
   else
     {
@@ -265,14 +266,14 @@ gimp_color_profile_new_from_file (GFile   *file,
 
 /**
  * gimp_color_profile_new_from_icc_profile:
- * @data:   pointer to memory containing an ICC profile
+ * @data: (array length=length): The memory containing an ICC profile
  * @length: length of the profile in memory, in bytes
  * @error:  return location for #GError
  *
  * This function opens an ICC color profile from memory. On error,
  * %NULL is returned and @error is set.
  *
- * Return value: the #GimpColorProfile, or %NULL.
+ * Returns: (nullable): the #GimpColorProfile, or %NULL.
  *
  * Since: 2.10
  **/
@@ -294,9 +295,9 @@ gimp_color_profile_new_from_icc_profile (const guint8  *data,
     {
       profile = g_object_new (GIMP_TYPE_COLOR_PROFILE, NULL);
 
-      profile->priv->lcms_profile = lcms_profile;
-      profile->priv->data         = g_memdup (data, length);
-      profile->priv->length       = length;
+      profile->lcms_profile = lcms_profile;
+      profile->data         = g_memdup2 (data, length);
+      profile->length       = length;
    }
   else
     {
@@ -317,7 +318,7 @@ gimp_color_profile_new_from_icc_profile (const guint8  *data,
  * @lcms_profile pointer is not retained by the created
  * #GimpColorProfile.
  *
- * Return value: the #GimpColorProfile, or %NULL.
+ * Returns: (nullable): the #GimpColorProfile, or %NULL.
  *
  * Since: 2.10
  **/
@@ -346,9 +347,9 @@ gimp_color_profile_new_from_lcms_profile (gpointer   lcms_profile,
 
               profile = g_object_new (GIMP_TYPE_COLOR_PROFILE, NULL);
 
-              profile->priv->lcms_profile = lcms_profile;
-              profile->priv->data         = data;
-              profile->priv->length       = length;
+              profile->lcms_profile = lcms_profile;
+              profile->data         = data;
+              profile->length       = length;
 
               return profile;
             }
@@ -371,7 +372,7 @@ gimp_color_profile_new_from_lcms_profile (gpointer   lcms_profile,
  *
  * This function saves @profile to @file as ICC profile.
  *
- * Return value: %TRUE on success, %FALSE if an error occurred.
+ * Returns: %TRUE on success, %FALSE if an error occurred.
  *
  * Since: 2.10
  **/
@@ -385,8 +386,8 @@ gimp_color_profile_save_to_file (GimpColorProfile  *profile,
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
   return g_file_replace_contents (file,
-                                  (const gchar *) profile->priv->data,
-                                  profile->priv->length,
+                                  (const gchar *) profile->data,
+                                  profile->length,
                                   NULL, FALSE,
                                   G_FILE_CREATE_NONE,
                                   NULL,
@@ -397,12 +398,12 @@ gimp_color_profile_save_to_file (GimpColorProfile  *profile,
 /**
  * gimp_color_profile_get_icc_profile:
  * @profile: a #GimpColorProfile
- * @length:  return location for the number of bytes
+ * @length: (out): return location for the number of bytes
  *
  * This function returns @profile as ICC profile data. The returned
  * memory belongs to @profile and must not be modified or freed.
  *
- * Return value: a pointer to the IIC profile data.
+ * Returns: (array length=length): a pointer to the IIC profile data.
  *
  * Since: 2.10
  **/
@@ -413,9 +414,9 @@ gimp_color_profile_get_icc_profile (GimpColorProfile  *profile,
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), NULL);
   g_return_val_if_fail (length != NULL, NULL);
 
-  *length = profile->priv->length;
+  *length = profile->length;
 
-  return profile->priv->data;
+  return profile->data;
 }
 
 /**
@@ -425,7 +426,7 @@ gimp_color_profile_get_icc_profile (GimpColorProfile  *profile,
  * This function returns @profile's cmsHPROFILE. The returned
  * value belongs to @profile and must not be modified or freed.
  *
- * Return value: a pointer to the cmsHPROFILE.
+ * Returns: a pointer to the cmsHPROFILE.
  *
  * Since: 2.10
  **/
@@ -434,7 +435,7 @@ gimp_color_profile_get_lcms_profile (GimpColorProfile *profile)
 {
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), NULL);
 
-  return profile->priv->lcms_profile;
+  return profile->lcms_profile;
 }
 
 static gchar *
@@ -444,13 +445,13 @@ gimp_color_profile_get_info (GimpColorProfile *profile,
   cmsUInt32Number  size;
   gchar           *text = NULL;
 
-  size = cmsGetProfileInfoASCII (profile->priv->lcms_profile, info,
+  size = cmsGetProfileInfoASCII (profile->lcms_profile, info,
                                  "en", "US", NULL, 0);
   if (size > 0)
     {
       gchar *data = g_new (gchar, size + 1);
 
-      size = cmsGetProfileInfoASCII (profile->priv->lcms_profile, info,
+      size = cmsGetProfileInfoASCII (profile->lcms_profile, info,
                                      "en", "US", data, size);
       if (size > 0)
         text = gimp_any_to_utf8 (data, -1, NULL);
@@ -465,7 +466,7 @@ gimp_color_profile_get_info (GimpColorProfile *profile,
  * gimp_color_profile_get_description:
  * @profile: a #GimpColorProfile
  *
- * Return value: a string containing @profile's description. The
+ * Returns: a string containing @profile's description. The
  *               returned value belongs to @profile and must not be
  *               modified or freed.
  *
@@ -476,18 +477,18 @@ gimp_color_profile_get_description (GimpColorProfile *profile)
 {
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), NULL);
 
-  if (! profile->priv->description)
-    profile->priv->description =
+  if (! profile->description)
+    profile->description =
       gimp_color_profile_get_info (profile, cmsInfoDescription);
 
-  return profile->priv->description;
+  return profile->description;
 }
 
 /**
  * gimp_color_profile_get_manufacturer:
  * @profile: a #GimpColorProfile
  *
- * Return value: a string containing @profile's manufacturer. The
+ * Returns: a string containing @profile's manufacturer. The
  *               returned value belongs to @profile and must not be
  *               modified or freed.
  *
@@ -498,18 +499,18 @@ gimp_color_profile_get_manufacturer (GimpColorProfile *profile)
 {
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), NULL);
 
-  if (! profile->priv->manufacturer)
-    profile->priv->manufacturer =
+  if (! profile->manufacturer)
+    profile->manufacturer =
       gimp_color_profile_get_info (profile, cmsInfoManufacturer);
 
-  return profile->priv->manufacturer;
+  return profile->manufacturer;
 }
 
 /**
  * gimp_color_profile_get_model:
  * @profile: a #GimpColorProfile
  *
- * Return value: a string containing @profile's model. The returned
+ * Returns: a string containing @profile's model. The returned
  *               value belongs to @profile and must not be modified or
  *               freed.
  *
@@ -520,18 +521,18 @@ gimp_color_profile_get_model (GimpColorProfile *profile)
 {
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), NULL);
 
-  if (! profile->priv->model)
-    profile->priv->model =
+  if (! profile->model)
+    profile->model =
       gimp_color_profile_get_info (profile, cmsInfoModel);
 
-  return profile->priv->model;
+  return profile->model;
 }
 
 /**
  * gimp_color_profile_get_copyright:
  * @profile: a #GimpColorProfile
  *
- * Return value: a string containing @profile's copyright. The
+ * Returns: a string containing @profile's copyright. The
  *               returned value belongs to @profile and must not be
  *               modified or freed.
  *
@@ -542,11 +543,11 @@ gimp_color_profile_get_copyright (GimpColorProfile *profile)
 {
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), NULL);
 
-  if (! profile->priv->copyright)
-    profile->priv->copyright =
+  if (! profile->copyright)
+    profile->copyright =
       gimp_color_profile_get_info (profile, cmsInfoCopyright);
 
-  return profile->priv->copyright;
+  return profile->copyright;
 }
 
 /**
@@ -559,7 +560,7 @@ gimp_color_profile_get_copyright (GimpColorProfile *profile)
  * Unlike gimp_color_profile_get_description(), this function always
  * returns a string (as a fallback, it returns "(unnamed profile)").
  *
- * Return value: the @profile's label. The returned value belongs to
+ * Returns: the @profile's label. The returned value belongs to
  *               @profile and must not be modified or freed.
  *
  * Since: 2.10
@@ -570,17 +571,17 @@ gimp_color_profile_get_label (GimpColorProfile *profile)
 
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), NULL);
 
-  if (! profile->priv->label)
+  if (! profile->label)
     {
       const gchar *label = gimp_color_profile_get_description (profile);
 
       if (! label || ! strlen (label))
         label = _("(unnamed profile)");
 
-      profile->priv->label = g_strdup (label);
+      profile->label = g_strdup (label);
     }
 
-  return profile->priv->label;
+  return profile->label;
 }
 
 /**
@@ -592,7 +593,7 @@ gimp_color_profile_get_label (GimpColorProfile *profile)
  * used as detailed information about the profile in a user
  * interface.
  *
- * Return value: the @profile's summary. The returned value belongs to
+ * Returns: the @profile's summary. The returned value belongs to
  *               @profile and must not be modified or freed.
  *
  * Since: 2.10
@@ -602,7 +603,7 @@ gimp_color_profile_get_summary (GimpColorProfile *profile)
 {
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), NULL);
 
-  if (! profile->priv->summary)
+  if (! profile->summary)
     {
       GString     *string = g_string_new (NULL);
       const gchar *text;
@@ -638,10 +639,10 @@ gimp_color_profile_get_summary (GimpColorProfile *profile)
           g_string_append_printf (string, _("Copyright: %s"), text);
         }
 
-      profile->priv->summary = g_string_free (string, FALSE);
+      profile->summary = g_string_free (string, FALSE);
     }
 
-  return profile->priv->summary;
+  return profile->summary;
 }
 
 /**
@@ -651,7 +652,7 @@ gimp_color_profile_get_summary (GimpColorProfile *profile)
  *
  * Compares two profiles.
  *
- * Return value: %TRUE if the profiles are equal, %FALSE otherwise.
+ * Returns: %TRUE if the profiles are equal, %FALSE otherwise.
  *
  * Since: 2.10
  **/
@@ -665,17 +666,17 @@ gimp_color_profile_is_equal (GimpColorProfile *profile1,
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile2), FALSE);
 
   return profile1 == profile2                              ||
-         (profile1->priv->length == profile2->priv->length &&
-          memcmp (profile1->priv->data + header_len,
-                  profile2->priv->data + header_len,
-                  profile1->priv->length - header_len) == 0);
+         (profile1->length == profile2->length &&
+          memcmp (profile1->data + header_len,
+                  profile2->data + header_len,
+                  profile1->length - header_len) == 0);
 }
 
 /**
  * gimp_color_profile_is_rgb:
  * @profile: a #GimpColorProfile
  *
- * Return value: %TRUE if the profile's color space is RGB, %FALSE
+ * Returns: %TRUE if the profile's color space is RGB, %FALSE
  * otherwise.
  *
  * Since: 2.10
@@ -685,14 +686,14 @@ gimp_color_profile_is_rgb (GimpColorProfile *profile)
 {
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), FALSE);
 
-  return (cmsGetColorSpace (profile->priv->lcms_profile) == cmsSigRgbData);
+  return (cmsGetColorSpace (profile->lcms_profile) == cmsSigRgbData);
 }
 
 /**
  * gimp_color_profile_is_gray:
  * @profile: a #GimpColorProfile
  *
- * Return value: %TRUE if the profile's color space is grayscale, %FALSE
+ * Returns: %TRUE if the profile's color space is grayscale, %FALSE
  * otherwise.
  *
  * Since: 2.10
@@ -702,14 +703,14 @@ gimp_color_profile_is_gray (GimpColorProfile *profile)
 {
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), FALSE);
 
-  return (cmsGetColorSpace (profile->priv->lcms_profile) == cmsSigGrayData);
+  return (cmsGetColorSpace (profile->lcms_profile) == cmsSigGrayData);
 }
 
 /**
  * gimp_color_profile_is_cmyk:
  * @profile: a #GimpColorProfile
  *
- * Return value: %TRUE if the profile's color space is CMYK, %FALSE
+ * Returns: %TRUE if the profile's color space is CMYK, %FALSE
  * otherwise.
  *
  * Since: 2.10
@@ -719,7 +720,7 @@ gimp_color_profile_is_cmyk (GimpColorProfile *profile)
 {
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), FALSE);
 
-  return (cmsGetColorSpace (profile->priv->lcms_profile) == cmsSigCmykData);
+  return (cmsGetColorSpace (profile->lcms_profile) == cmsSigCmykData);
 }
 
 
@@ -731,7 +732,7 @@ gimp_color_profile_is_cmyk (GimpColorProfile *profile)
  * is a linear RGB profile or not, some profiles that are LUTs though linear
  * will also return FALSE;
  *
- * Return value: %TRUE if the profile is a matrix shaping profile with linear
+ * Returns: %TRUE if the profile is a matrix shaping profile with linear
  * TRCs, %FALSE otherwise.
  *
  * Since: 2.10
@@ -744,7 +745,7 @@ gimp_color_profile_is_linear (GimpColorProfile *profile)
 
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), FALSE);
 
-  prof = profile->priv->lcms_profile;
+  prof = profile->lcms_profile;
 
   if (! cmsIsMatrixShaper (prof))
     return FALSE;
@@ -807,7 +808,7 @@ gimp_color_profile_get_rgb_matrix_colorants (GimpColorProfile *profile,
 
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), FALSE);
 
-  lcms_profile = profile->priv->lcms_profile;
+  lcms_profile = profile->lcms_profile;
 
   red   = cmsReadTag (lcms_profile, cmsSigRedColorantTag);
   green = cmsReadTag (lcms_profile, cmsSigGreenColorantTag);
@@ -909,7 +910,7 @@ gimp_color_profile_new_from_color_profile (GimpColorProfile *profile,
       return NULL;
     }
 
-  whitepoint = cmsReadTag (profile->priv->lcms_profile,
+  whitepoint = cmsReadTag (profile->lcms_profile,
                            cmsSigMediaWhitePointTag);
 
   target_profile = cmsCreateProfilePlaceholder (0);
@@ -1010,8 +1011,8 @@ gimp_color_profile_new_from_color_profile (GimpColorProfile *profile,
  * This function creates a new RGB #GimpColorProfile with a sRGB gamma
  * TRC and @profile's RGB chromacities and whitepoint.
  *
- * Return value: the new #GimpColorProfile, or %NULL if @profile is not
- *               an RGB profile or not matrix-based.
+ * Returns: (nullable) (transfer full): the new #GimpColorProfile, or %NULL if
+ *               @profile is not an RGB profile or not matrix-based.
  *
  * Since: 2.10
  **/
@@ -1030,8 +1031,8 @@ gimp_color_profile_new_srgb_trc_from_color_profile (GimpColorProfile *profile)
  * This function creates a new RGB #GimpColorProfile with a linear TRC
  * and @profile's RGB chromacities and whitepoint.
  *
- * Return value: the new #GimpColorProfile, or %NULL if @profile is not
- *               an RGB profile or not matrix-based.
+ * Returns: (nullable) (transfer full): the new #GimpColorProfile, or %NULL if
+ *               @profile is not an RGB profile or not matrix-based.
  *
  * Since: 2.10
  **/
@@ -1127,7 +1128,7 @@ gimp_color_profile_new_rgb_srgb_internal (void)
  * ArgyllCMS sRGB.icm profile. The resulting sRGB profile's colorants
  * exactly matches the ArgyllCMS sRGB.icm profile colorants.
  *
- * Return value: the sRGB #GimpColorProfile.
+ * Returns: the sRGB #GimpColorProfile.
  *
  * Since: 2.10
  **/
@@ -1137,7 +1138,7 @@ gimp_color_profile_new_rgb_srgb (void)
   static GimpColorProfile *profile = NULL;
 
   const guint8 *data;
-  gsize         length;
+  gsize         length = 0;
 
   if (G_UNLIKELY (profile == NULL))
     {
@@ -1202,7 +1203,7 @@ gimp_color_profile_new_rgb_srgb_linear_internal (void)
  * This function creates a profile for babl_model("RGB"). Please
  * somebody write something smarter here.
  *
- * Return value: the linear RGB #GimpColorProfile.
+ * Returns: the linear RGB #GimpColorProfile.
  *
  * Since: 2.10
  **/
@@ -1212,7 +1213,7 @@ gimp_color_profile_new_rgb_srgb_linear (void)
   static GimpColorProfile *profile = NULL;
 
   const guint8 *data;
-  gsize         length;
+  gsize         length = 0;
 
   if (G_UNLIKELY (profile == NULL))
     {
@@ -1281,7 +1282,7 @@ gimp_color_profile_new_rgb_adobe_internal (void)
  *
  * This function creates a profile compatible with AbobeRGB (1998).
  *
- * Return value: the AdobeRGB-compatible #GimpColorProfile.
+ * Returns: the AdobeRGB-compatible #GimpColorProfile.
  *
  * Since: 2.10
  **/
@@ -1291,7 +1292,7 @@ gimp_color_profile_new_rgb_adobe (void)
   static GimpColorProfile *profile = NULL;
 
   const guint8 *data;
-  gsize         length;
+  gsize         length = 0;
 
   if (G_UNLIKELY (profile == NULL))
     {
@@ -1343,7 +1344,7 @@ gimp_color_profile_new_d65_gray_srgb_trc_internal (void)
  * This function creates a grayscale #GimpColorProfile with an
  * sRGB TRC. See gimp_color_profile_new_rgb_srgb().
  *
- * Return value: the sRGB-gamma grayscale #GimpColorProfile.
+ * Returns: the sRGB-gamma grayscale #GimpColorProfile.
  *
  * Since: 2.10
  **/
@@ -1353,7 +1354,7 @@ gimp_color_profile_new_d65_gray_srgb_trc (void)
   static GimpColorProfile *profile = NULL;
 
   const guint8 *data;
-  gsize         length;
+  gsize         length = 0;
 
   if (G_UNLIKELY (profile == NULL))
     {
@@ -1401,7 +1402,7 @@ gimp_color_profile_new_d65_gray_linear_internal (void)
  * This function creates a profile for babl_model("Y"). Please
  * somebody write something smarter here.
  *
- * Return value: the linear grayscale #GimpColorProfile.
+ * Returns: the linear grayscale #GimpColorProfile.
  *
  * Since: 2.10
  **/
@@ -1411,7 +1412,7 @@ gimp_color_profile_new_d65_gray_linear (void)
   static GimpColorProfile *profile = NULL;
 
   const guint8 *data;
-  gsize         length;
+  gsize         length = 0;
 
   if (G_UNLIKELY (profile == NULL))
     {
@@ -1465,7 +1466,7 @@ gimp_color_profile_new_d50_gray_lab_trc_internal (void)
  * D50 ICC profile illuminant as the profile white point and the
  * LAB companding curve as the TRC.
  *
- * Return value: a gray profile with the D50 ICC profile illuminant
+ * Returns: a gray profile with the D50 ICC profile illuminant
  * as the profile white point and the LAB companding curve as the TRC.
  * as the TRC.
  *
@@ -1477,7 +1478,7 @@ gimp_color_profile_new_d50_gray_lab_trc (void)
   static GimpColorProfile *profile = NULL;
 
   const guint8 *data;
-  gsize         length;
+  gsize         length = 0;
 
   if (G_UNLIKELY (profile == NULL))
     {
@@ -1502,7 +1503,7 @@ gimp_color_profile_new_d50_gray_lab_trc (void)
  * This function returns the #Babl space of @profile, for the
  * specified @intent.
  *
- * Return value: the new #Babl space.
+ * Returns: the new #Babl space.
  *
  * Since: 2.10.6
  **/
@@ -1517,8 +1518,8 @@ gimp_color_profile_get_space (GimpColorProfile          *profile,
   g_return_val_if_fail (GIMP_IS_COLOR_PROFILE (profile), NULL);
   g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
-  space = babl_icc_make_space ((const gchar *) profile->priv->data,
-                               profile->priv->length,
+  space = babl_space_from_icc ((const gchar *) profile->data,
+                               profile->length,
                                (BablIccIntent) intent,
                                &babl_error);
 
@@ -1541,7 +1542,7 @@ gimp_color_profile_get_space (GimpColorProfile          *profile,
  * returns a new #Babl format with @profile's RGB primaries and TRC,
  * and @format's pixel layout.
  *
- * Return value: the new #Babl format.
+ * Returns: the new #Babl format.
  *
  * Since: 2.10
  **/
@@ -1562,13 +1563,13 @@ gimp_color_profile_get_format (GimpColorProfile          *profile,
   if (! space)
     return NULL;
 
-  return babl_format_with_space (babl_get_name (format), space);
+  return babl_format_with_space ((const gchar *) format, space);
 }
 
 /**
  * gimp_color_profile_get_lcms_format:
  * @format:      a #Babl format
- * @lcms_format: return location for an lcms format
+ * @lcms_format: (out): return location for an lcms format
  *
  * This function takes a #Babl format and returns the lcms format to
  * be used with that @format. It also returns a #Babl format to be
@@ -1578,7 +1579,7 @@ gimp_color_profile_get_format (GimpColorProfile          *profile,
  * Note that this function currently only supports RGB, RGBA, R'G'B',
  * R'G'B'A, Y, YA, Y', Y'A and the cairo-RGB24 and cairo-ARGB32 formats.
  *
- * Return value: the #Babl format to be used instead of @format, or %NULL
+ * Returns: (nullable): the #Babl format to be used instead of @format, or %NULL
  *               if the passed @format is not supported at all.
  *
  * Since: 2.10
@@ -1590,11 +1591,13 @@ gimp_color_profile_get_lcms_format (const Babl *format,
   const Babl *output_format = NULL;
   const Babl *type;
   const Babl *model;
+  const Babl *space;
   gboolean    has_alpha;
-  gboolean    rgb    = FALSE;
-  gboolean    gray   = FALSE;
-  gboolean    cmyk   = FALSE;
-  gboolean    linear = FALSE;
+  gboolean    rgb      = FALSE;
+  gboolean    gray     = FALSE;
+  gboolean    cmyk     = FALSE;
+  gboolean    linear   = FALSE;
+  gboolean    srgb_trc = FALSE;
 
   g_return_val_if_fail (format != NULL, NULL);
   g_return_val_if_fail (lcms_format != NULL, NULL);
@@ -1602,6 +1605,7 @@ gimp_color_profile_get_lcms_format (const Babl *format,
   has_alpha = babl_format_has_alpha (format);
   type      = babl_format_get_type (format, 0);
   model     = babl_format_get_model (format);
+  space     = babl_format_get_space (format);
 
   if (format == babl_format ("cairo-RGB24"))
     {
@@ -1624,6 +1628,13 @@ gimp_color_profile_get_lcms_format (const Babl *format,
       rgb    = TRUE;
       linear = TRUE;
     }
+  else if (model == babl_model ("R~G~B~")  ||
+           model == babl_model ("R~G~B~A") ||
+           model == babl_model ("R~aG~aB~aA"))
+    {
+      rgb      = TRUE;
+      srgb_trc = TRUE;
+    }
   else if (model == babl_model ("R'G'B'")  ||
            model == babl_model ("R'G'B'A") ||
            model == babl_model ("R'aG'aB'aA"))
@@ -1636,6 +1647,13 @@ gimp_color_profile_get_lcms_format (const Babl *format,
     {
       gray   = TRUE;
       linear = TRUE;
+    }
+  else if (model == babl_model ("Y~")  ||
+           model == babl_model ("Y~A") ||
+           model == babl_model ("Y~aA"))
+    {
+      gray     = TRUE;
+      srgb_trc = TRUE;
     }
   else if (model == babl_model ("Y'")  ||
            model == babl_model ("Y'A") ||
@@ -1660,13 +1678,13 @@ gimp_color_profile_get_lcms_format (const Babl *format,
         {
           *lcms_format = TYPE_RGBA_FLT;
 
-          return babl_format ("RGBA float");
+          return babl_format_with_space ("RGBA float", space);
         }
       else
         {
           *lcms_format = TYPE_RGB_FLT;
 
-          return babl_format ("RGB float");
+          return babl_format_with_space ("RGB float", space);
         }
     }
   else if (babl_format_is_palette (format))
@@ -1675,13 +1693,13 @@ gimp_color_profile_get_lcms_format (const Babl *format,
         {
           *lcms_format = TYPE_RGBA_8;
 
-          return babl_format ("R'G'B'A u8");
+          return babl_format_with_space ("R'G'B'A u8", space);
         }
       else
         {
           *lcms_format = TYPE_RGB_8;
 
-          return babl_format ("R'G'B' u8");
+          return babl_format_with_space ("R'G'B' u8", space);
         }
     }
   else
@@ -1709,18 +1727,28 @@ gimp_color_profile_get_lcms_format (const Babl *format,
                 *lcms_format = TYPE_RGBA_##lcms_t;                             \
                                                                                \
                 if (linear)                                                    \
-                  output_format = babl_format ("RGBA " babl_t);                \
+                  output_format = babl_format_with_space ("RGBA " babl_t,      \
+                                                          space);              \
+                else if (srgb_trc)                                             \
+                  output_format = babl_format_with_space ("R~G~B~A " babl_t,   \
+                                                          space);              \
                 else                                                           \
-                  output_format = babl_format ("R'G'B'A " babl_t);             \
+                  output_format = babl_format_with_space ("R'G'B'A " babl_t,   \
+                                                          space);              \
               }                                                                \
             else if (gray)                                                     \
               {                                                                \
                 *lcms_format = TYPE_GRAYA_##lcms_t;                            \
                                                                                \
                 if (linear)                                                    \
-                  output_format = babl_format ("YA " babl_t);                  \
+                  output_format = babl_format_with_space ("YA " babl_t,        \
+                                                          space);              \
+                else if (srgb_trc)                                             \
+                  output_format = babl_format_with_space ("Y~A " babl_t,       \
+                                                          space);              \
                 else                                                           \
-                  output_format = babl_format ("Y'A " babl_t);                 \
+                  output_format = babl_format_with_space ("Y'A " babl_t,       \
+                                                          space);              \
               }                                                                \
             else if (cmyk)                                                     \
               {                                                                \
@@ -1736,18 +1764,28 @@ gimp_color_profile_get_lcms_format (const Babl *format,
                 *lcms_format = TYPE_RGB_##lcms_t;                              \
                                                                                \
                 if (linear)                                                    \
-                  output_format = babl_format ("RGB " babl_t);                 \
+                  output_format = babl_format_with_space ("RGB " babl_t,       \
+                                                          space);              \
+                else if (srgb_trc)                                             \
+                  output_format = babl_format_with_space ("R~G~B~ " babl_t,    \
+                                                          space);              \
                 else                                                           \
-                  output_format = babl_format ("R'G'B' " babl_t);              \
+                  output_format = babl_format_with_space ("R'G'B' " babl_t,    \
+                                                          space);              \
               }                                                                \
             else if (gray)                                                     \
               {                                                                \
                 *lcms_format = TYPE_GRAY_##lcms_t;                             \
                                                                                \
                 if (linear)                                                    \
-                  output_format = babl_format ("Y " babl_t);                   \
+                  output_format = babl_format_with_space ("Y " babl_t,         \
+                                                          space);              \
+                else if (srgb_trc)                                             \
+                  output_format = babl_format_with_space ("Y~ " babl_t,        \
+                                                          space);              \
                 else                                                           \
-                  output_format = babl_format ("Y' " babl_t);                  \
+                  output_format = babl_format_with_space ("Y' " babl_t,        \
+                                                          space);              \
               }                                                                \
             else if (cmyk)                                                     \
               {                                                                \

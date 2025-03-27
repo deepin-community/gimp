@@ -106,14 +106,14 @@ static gboolean   gimp_color_tool_real_pick  (GimpColorTool         *color_tool,
                                               GimpDisplay           *display,
                                               const Babl           **sample_format,
                                               gpointer               pixel,
-                                              GimpRGB               *color);
+                                              GeglColor            **color);
 static void   gimp_color_tool_real_picked    (GimpColorTool         *color_tool,
                                               const GimpCoords      *coords,
                                               GimpDisplay           *display,
                                               GimpColorPickState     pick_state,
                                               const Babl            *sample_format,
                                               gpointer               pixel,
-                                              const GimpRGB         *color);
+                                              GeglColor             *color);
 
 static gboolean   gimp_color_tool_can_pick   (GimpColorTool         *tool,
                                               const GimpCoords      *coords,
@@ -151,7 +151,7 @@ gimp_color_tool_class_init (GimpColorToolClass *klass)
                   GIMP_TYPE_COLOR_PICK_STATE,
                   G_TYPE_POINTER,
                   G_TYPE_POINTER,
-                  GIMP_TYPE_RGB | G_SIGNAL_TYPE_STATIC_SCOPE);
+                  GEGL_TYPE_COLOR);
 
   object_class->finalize     = gimp_color_tool_finalize;
 
@@ -174,7 +174,7 @@ gimp_color_tool_init (GimpColorTool *color_tool)
   GimpTool *tool = GIMP_TOOL (color_tool);
 
   gimp_tool_control_set_action_size (tool->control,
-                                     "tools/tools-color-average-radius-set");
+                                     "tools-color-average-radius-set");
 }
 
 static void
@@ -458,15 +458,16 @@ gimp_color_tool_real_pick (GimpColorTool     *color_tool,
                            GimpDisplay       *display,
                            const Babl       **sample_format,
                            gpointer           pixel,
-                           GimpRGB           *color)
+                           GeglColor        **color)
 {
-  GimpDisplayShell *shell    = gimp_display_get_shell (display);
-  GimpImage        *image    = gimp_display_get_image (display);
-  GimpDrawable     *drawable = gimp_image_get_active_drawable (image);
+  GimpDisplayShell *shell     = gimp_display_get_shell (display);
+  GimpImage        *image     = gimp_display_get_image (display);
+  GList            *drawables = gimp_image_get_selected_drawables (image);
 
-  g_return_val_if_fail (drawable != NULL, FALSE);
+  g_return_val_if_fail (drawables != NULL, FALSE);
+  g_return_val_if_fail (color != NULL && GEGL_IS_COLOR (*color), FALSE);
 
-  return gimp_image_pick_color (image, drawable,
+  return gimp_image_pick_color (image, drawables,
                                 coords->x, coords->y,
                                 shell->show_all,
                                 color_tool->options->sample_merged,
@@ -484,13 +485,15 @@ gimp_color_tool_real_picked (GimpColorTool      *color_tool,
                              GimpColorPickState  pick_state,
                              const Babl         *sample_format,
                              gpointer            pixel,
-                             const GimpRGB      *color)
+                             GeglColor          *color)
 {
   GimpTool          *tool  = GIMP_TOOL (color_tool);
   GimpDisplayShell  *shell = gimp_display_get_shell (display);
   GimpImageWindow   *image_window;
   GimpDialogFactory *dialog_factory;
   GimpContext       *context;
+
+  g_return_if_fail (GEGL_IS_COLOR (color));
 
   image_window   = gimp_display_shell_get_window (shell);
   dialog_factory = gimp_dock_container_get_dialog_factory (GIMP_DOCK_CONTAINER (image_window));
@@ -568,15 +571,13 @@ gimp_color_tool_real_picked (GimpColorTool      *color_tool,
 
     case GIMP_COLOR_PICK_TARGET_PALETTE:
       {
-        GdkScreen *screen  = gtk_widget_get_screen (GTK_WIDGET (shell));
-        gint       monitor = gimp_widget_get_monitor (GTK_WIDGET (shell));
-        GtkWidget *dockable;
+        GdkMonitor *monitor = gimp_widget_get_monitor (GTK_WIDGET (shell));
+        GtkWidget  *dockable;
 
         dockable =
           gimp_window_strategy_show_dockable_dialog (GIMP_WINDOW_STRATEGY (gimp_get_window_strategy (display->gimp)),
                                                      display->gimp,
                                                      dialog_factory,
-                                                     screen,
                                                      monitor,
                                                      "gimp-palette-editor");
 
@@ -630,17 +631,18 @@ gimp_color_tool_pick (GimpColorTool      *tool,
   GimpColorToolClass *klass;
   const Babl         *sample_format;
   gdouble             pixel[4];
-  GimpRGB             color;
+  GeglColor          *color;
 
   klass = GIMP_COLOR_TOOL_GET_CLASS (tool);
+  color = gegl_color_new ("black");
 
   if (klass->pick &&
       klass->pick (tool, coords, display, &sample_format, pixel, &color))
-    {
-      g_signal_emit (tool, gimp_color_tool_signals[PICKED], 0,
-                     coords, display, pick_state,
-                     sample_format, pixel, &color);
-    }
+    g_signal_emit (tool, gimp_color_tool_signals[PICKED], 0,
+                   coords, display, pick_state,
+                   sample_format, pixel, color);
+
+  g_object_unref (color);
 }
 
 

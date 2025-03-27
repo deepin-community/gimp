@@ -46,25 +46,27 @@ print_utils_key_file_load_from_rcfile (const gchar *basename)
 }
 
 GKeyFile *
-print_utils_key_file_load_from_parasite (gint32       image_ID,
+print_utils_key_file_load_from_parasite (GimpImage   *image,
                                          const gchar *parasite_name)
 {
   GimpParasite *parasite;
   GKeyFile     *key_file;
   GError       *error = NULL;
+  const gchar  *parasite_data;
+  guint32       parasite_size;
+
 
   g_return_val_if_fail (parasite_name != NULL, NULL);
 
-  parasite = gimp_image_get_parasite (image_ID, parasite_name);
+  parasite = gimp_image_get_parasite (image, parasite_name);
 
   if (! parasite)
     return NULL;
 
   key_file = g_key_file_new ();
 
-  if (! g_key_file_load_from_data (key_file,
-                                   gimp_parasite_data (parasite),
-                                   gimp_parasite_data_size (parasite),
+  parasite_data = gimp_parasite_get_data (parasite, &parasite_size);
+  if (! g_key_file_load_from_data (key_file, parasite_data, parasite_size,
                                    G_KEY_FILE_NONE, &error))
     {
       g_key_file_free (key_file);
@@ -117,7 +119,7 @@ print_utils_key_file_save_as_rcfile (GKeyFile    *key_file,
 
 void
 print_utils_key_file_save_as_parasite (GKeyFile    *key_file,
-                                       gint32       image_ID,
+                                       GimpImage   *image,
                                        const gchar *parasite_name)
 {
   GimpParasite *parasite;
@@ -140,6 +142,6 @@ print_utils_key_file_save_as_parasite (GKeyFile    *key_file,
   parasite = gimp_parasite_new (parasite_name, 0, length, contents);
   g_free (contents);
 
-  gimp_image_attach_parasite (image_ID, parasite);
+  gimp_image_attach_parasite (image, parasite);
   gimp_parasite_free (parasite);
 }

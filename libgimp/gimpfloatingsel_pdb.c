@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -36,7 +38,7 @@
 
 /**
  * gimp_floating_sel_remove:
- * @floating_sel_ID: The floating selection.
+ * @floating_sel: The floating selection.
  *
  * Remove the specified floating selection from its associated
  * drawable.
@@ -47,27 +49,31 @@
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_floating_sel_remove (gint32 floating_sel_ID)
+gimp_floating_sel_remove (GimpLayer *floating_sel)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-floating-sel-remove",
-                                    &nreturn_vals,
-                                    GIMP_PDB_LAYER, floating_sel_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_LAYER, floating_sel,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-floating-sel-remove",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_floating_sel_anchor:
- * @floating_sel_ID: The floating selection.
+ * @floating_sel: The floating selection.
  *
  * Anchor the specified floating selection to its associated drawable.
  *
@@ -79,27 +85,31 @@ gimp_floating_sel_remove (gint32 floating_sel_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_floating_sel_anchor (gint32 floating_sel_ID)
+gimp_floating_sel_anchor (GimpLayer *floating_sel)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-floating-sel-anchor",
-                                    &nreturn_vals,
-                                    GIMP_PDB_LAYER, floating_sel_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_LAYER, floating_sel,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-floating-sel-anchor",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_floating_sel_to_layer:
- * @floating_sel_ID: The floating selection.
+ * @floating_sel: The floating selection.
  *
  * Transforms the specified floating selection into a layer.
  *
@@ -115,28 +125,32 @@ gimp_floating_sel_anchor (gint32 floating_sel_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_floating_sel_to_layer (gint32 floating_sel_ID)
+gimp_floating_sel_to_layer (GimpLayer *floating_sel)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-floating-sel-to-layer",
-                                    &nreturn_vals,
-                                    GIMP_PDB_LAYER, floating_sel_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_LAYER, floating_sel,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-floating-sel-to-layer",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_floating_sel_attach:
- * @layer_ID: The layer (is attached as floating selection).
- * @drawable_ID: The drawable (where to attach the floating selection).
+ * @layer: The layer (is attached as floating selection).
+ * @drawable: The drawable (where to attach the floating selection).
  *
  * Attach the specified layer as floating to the specified drawable.
  *
@@ -146,82 +160,26 @@ gimp_floating_sel_to_layer (gint32 floating_sel_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_floating_sel_attach (gint32 layer_ID,
-                          gint32 drawable_ID)
+gimp_floating_sel_attach (GimpLayer    *layer,
+                          GimpDrawable *drawable)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-floating-sel-attach",
-                                    &nreturn_vals,
-                                    GIMP_PDB_LAYER, layer_ID,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_LAYER, layer,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-floating-sel-attach",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
-  return success;
-}
-
-/**
- * gimp_floating_sel_rigor:
- * @floating_sel_ID: The floating selection.
- * @undo: .
- *
- * Deprecated: There is no replacement for this procedure.
- *
- * Returns: TRUE on success.
- **/
-gboolean
-gimp_floating_sel_rigor (gint32   floating_sel_ID,
-                         gboolean undo)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
-
-  return_vals = gimp_run_procedure ("gimp-floating-sel-rigor",
-                                    &nreturn_vals,
-                                    GIMP_PDB_LAYER, floating_sel_ID,
-                                    GIMP_PDB_INT32, undo,
-                                    GIMP_PDB_END);
-
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return success;
-}
-
-/**
- * gimp_floating_sel_relax:
- * @floating_sel_ID: The floating selection.
- * @undo: .
- *
- * Deprecated: There is no replacement for this procedure.
- *
- * Returns: TRUE on success.
- **/
-gboolean
-gimp_floating_sel_relax (gint32   floating_sel_ID,
-                         gboolean undo)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
-
-  return_vals = gimp_run_procedure ("gimp-floating-sel-relax",
-                                    &nreturn_vals,
-                                    GIMP_PDB_LAYER, floating_sel_ID,
-                                    GIMP_PDB_INT32, undo,
-                                    GIMP_PDB_END);
-
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

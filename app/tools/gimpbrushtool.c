@@ -113,20 +113,22 @@ gimp_brush_tool_init (GimpBrushTool *brush_tool)
 {
   GimpTool *tool = GIMP_TOOL (brush_tool);
 
-  gimp_tool_control_set_action_size     (tool->control,
-                                         "tools/tools-paintbrush-size-set");
-  gimp_tool_control_set_action_aspect   (tool->control,
-                                         "tools/tools-paintbrush-aspect-ratio-set");
-  gimp_tool_control_set_action_angle    (tool->control,
-                                         "tools/tools-paintbrush-angle-set");
-  gimp_tool_control_set_action_spacing  (tool->control,
-                                         "tools/tools-paintbrush-spacing-set");
-  gimp_tool_control_set_action_hardness (tool->control,
-                                         "tools/tools-paintbrush-hardness-set");
-  gimp_tool_control_set_action_force    (tool->control,
-                                         "tools/tools-paintbrush-force-set");
-  gimp_tool_control_set_action_object_1 (tool->control,
-                                         "context/context-brush-select-set");
+  gimp_tool_control_set_action_pixel_size (tool->control,
+                                           "tools-paintbrush-pixel-size-set");
+  gimp_tool_control_set_action_size       (tool->control,
+                                           "tools-paintbrush-size-set");
+  gimp_tool_control_set_action_aspect     (tool->control,
+                                           "tools-paintbrush-aspect-ratio-set");
+  gimp_tool_control_set_action_angle      (tool->control,
+                                           "tools-paintbrush-angle-set");
+  gimp_tool_control_set_action_spacing    (tool->control,
+                                           "tools-paintbrush-spacing-set");
+  gimp_tool_control_set_action_hardness   (tool->control,
+                                           "tools-paintbrush-hardness-set");
+  gimp_tool_control_set_action_force      (tool->control,
+                                           "tools-paintbrush-force-set");
+  gimp_tool_control_set_action_object_1   (tool->control,
+                                           "context-brush-select-set");
 }
 
 static void
@@ -156,17 +158,15 @@ gimp_brush_tool_oper_update (GimpTool         *tool,
                              GimpDisplay      *display)
 {
   GimpPaintOptions *paint_options = GIMP_PAINT_TOOL_GET_OPTIONS (tool);
-  GimpDrawable     *drawable;
+  GimpImage        *image         = gimp_display_get_image (display);
 
   gimp_draw_tool_pause (GIMP_DRAW_TOOL (tool));
 
   GIMP_TOOL_CLASS (parent_class)->oper_update (tool, coords, state,
                                                proximity, display);
 
-  drawable = gimp_image_get_active_drawable (gimp_display_get_image (display));
-
   if (! gimp_color_tool_is_enabled (GIMP_COLOR_TOOL (tool)) &&
-      drawable && proximity)
+      image && proximity)
     {
       GimpContext   *context    = GIMP_CONTEXT (paint_options);
       GimpPaintTool *paint_tool = GIMP_PAINT_TOOL (tool);
@@ -181,7 +181,7 @@ gimp_brush_tool_oper_update (GimpTool         *tool,
       if (GIMP_BRUSH_CORE_GET_CLASS (brush_core)->handles_transforming_brush)
         {
           gimp_brush_core_eval_transform_dynamics (brush_core,
-                                                   drawable,
+                                                   image,
                                                    paint_options,
                                                    coords);
         }

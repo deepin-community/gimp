@@ -44,10 +44,10 @@ static GtkWidget     *add_button;
 static GtkWidget     *kill_button;
 static GtkAdjustment *vector_preview_brightness_adjust = NULL;
 
-static GtkAdjustment *angle_adjust              = NULL;
-static GtkAdjustment *strength_adjust           = NULL;
-static GtkAdjustment *orient_map_str_exp_adjust = NULL;
-static GtkAdjustment *angle_offset_adjust       = NULL;
+static GtkWidget     *angle_adjust              = NULL;
+static GtkWidget     *strength_adjust           = NULL;
+static GtkWidget     *orient_map_str_exp_adjust = NULL;
+static GtkWidget     *angle_offset_adjust       = NULL;
 static GtkWidget     *vector_types[NUMVECTYPES];
 static GtkWidget     *orient_voronoi            = NULL;
 
@@ -80,8 +80,8 @@ double get_direction (double x, double y, int from)
     {
       n = num_vectors;
       vec = vector;
-      angoff = gtk_adjustment_get_value (angle_offset_adjust);
-      strexp = gtk_adjustment_get_value (orient_map_str_exp_adjust);
+      angoff = gimp_label_spin_get_value (GIMP_LABEL_SPIN (angle_offset_adjust));
+      strexp = gimp_label_spin_get_value (GIMP_LABEL_SPIN (orient_map_str_exp_adjust));
       voronoi = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (orient_voronoi));
     }
   else
@@ -286,8 +286,8 @@ update_slides (void)
   gint type;
 
   adjignore = TRUE;
-  gtk_adjustment_set_value (angle_adjust, vector[selectedvector].dir);
-  gtk_adjustment_set_value (strength_adjust, vector[selectedvector].str);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (angle_adjust), vector[selectedvector].dir);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (strength_adjust), vector[selectedvector].str);
   type = vector[selectedvector].type;
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (vector_types[type]), TRUE);
   adjignore = FALSE;
@@ -388,7 +388,7 @@ angle_adjust_move_callback (GtkWidget *w, gpointer data)
 {
   if (adjignore)
     return;
-  vector[selectedvector].dir = gtk_adjustment_get_value (angle_adjust);
+  vector[selectedvector].dir = gimp_label_spin_get_value (GIMP_LABEL_SPIN (angle_adjust));
   vector[selectedvector].dx =
     sin (gimp_deg_to_rad (vector[selectedvector].dir));
   vector[selectedvector].dy =
@@ -402,7 +402,7 @@ strength_adjust_move_callback (GtkWidget *w, gpointer data)
 {
   if (adjignore)
     return;
-  vector[selectedvector].str = gtk_adjustment_get_value (strength_adjust);
+  vector[selectedvector].str = gimp_label_spin_get_value (GIMP_LABEL_SPIN (strength_adjust));
   update_vector_prev ();
   update_orient_map_preview_prev ();
 }
@@ -453,8 +453,8 @@ orient_map_response (GtkWidget *widget,
           pcvals.orient_vectors[i] = vector[i];
 
         pcvals.num_orient_vectors = num_vectors;
-        pcvals.orient_strength_exponent  = gtk_adjustment_get_value (orient_map_str_exp_adjust);
-        pcvals.orient_angle_offset  = gtk_adjustment_get_value (angle_offset_adjust);
+        pcvals.orient_strength_exponent  = gimp_label_spin_get_value (GIMP_LABEL_SPIN (orient_map_str_exp_adjust));
+        pcvals.orient_angle_offset  = gimp_label_spin_get_value (GIMP_LABEL_SPIN (angle_offset_adjust));
         pcvals.orient_voronoi = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (orient_voronoi));
       }
     };
@@ -490,10 +490,10 @@ update_orientmap_dialog (void)
 
   init_vectors ();
 
-  gtk_adjustment_set_value (orient_map_str_exp_adjust,
-                            pcvals.orient_strength_exponent);
-  gtk_adjustment_set_value (angle_offset_adjust,
-                            pcvals.orient_angle_offset);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (orient_map_str_exp_adjust),
+                             pcvals.orient_strength_exponent);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (angle_offset_adjust),
+                             pcvals.orient_angle_offset);
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (orient_voronoi),
                                 pcvals.orient_voronoi);
 
@@ -505,7 +505,7 @@ void
 create_orientmap_dialog (GtkWidget *parent)
 {
   GtkWidget *tmpw, *tmpw2;
-  GtkWidget *table1, *table2;
+  GtkWidget *grid1, *grid2;
   GtkWidget *frame;
   GtkWidget *ebox, *hbox, *vbox;
 
@@ -530,7 +530,7 @@ create_orientmap_dialog (GtkWidget *parent)
 
                      NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (orient_map_window),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (orient_map_window),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_APPLY,
                                            GTK_RESPONSE_CANCEL,
@@ -543,16 +543,15 @@ create_orientmap_dialog (GtkWidget *parent)
                     G_CALLBACK (gtk_widget_destroyed),
                     &orient_map_window);
 
-  table1 = gtk_table_new (2, 5, FALSE);
-  gtk_container_set_border_width (GTK_CONTAINER (table1), 6);
+  grid1 = gtk_grid_new ();
+  gtk_container_set_border_width (GTK_CONTAINER (grid1), 6);
   gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (orient_map_window))),
-                      table1, TRUE, TRUE, 0);
-  gtk_widget_show (table1);
+                      grid1, TRUE, TRUE, 0);
+  gtk_widget_show (grid1);
 
   frame = gtk_frame_new (_("Vectors"));
   gtk_container_set_border_width (GTK_CONTAINER (frame), 2);
-  gtk_table_attach (GTK_TABLE (table1), frame, 0, 1, 0, 1,
-                    GTK_EXPAND, GTK_EXPAND, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid1), frame, 0, 0, 1, 1);
   gtk_widget_show (frame);
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
@@ -576,7 +575,7 @@ create_orientmap_dialog (GtkWidget *parent)
                    G_CALLBACK (map_click_callback), NULL);
   gtk_widget_show (ebox);
 
-  vector_preview_brightness_adjust = (GtkAdjustment *)
+  vector_preview_brightness_adjust =
     gtk_adjustment_new (50.0, 0.0, 100.0, 1.0, 1.0, 1.0);
   tmpw = gtk_scale_new (GTK_ORIENTATION_VERTICAL,
                         vector_preview_brightness_adjust);
@@ -589,8 +588,7 @@ create_orientmap_dialog (GtkWidget *parent)
 
   tmpw2 = tmpw = gtk_frame_new (_("Preview"));
   gtk_container_set_border_width (GTK_CONTAINER (tmpw), 2);
-  gtk_table_attach (GTK_TABLE (table1), tmpw, 1,2, 0,1,
-                    GTK_EXPAND, GTK_EXPAND, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid1), tmpw, 1, 0, 1, 1);
   gtk_widget_show (tmpw);
 
   tmpw = orient_map_preview_prev = gimp_preview_area_new ();
@@ -601,7 +599,7 @@ create_orientmap_dialog (GtkWidget *parent)
   hbox = tmpw = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_set_homogeneous (GTK_BOX (hbox), TRUE);
   gtk_container_set_border_width (GTK_CONTAINER (tmpw), 2);
-  gtk_table_attach_defaults (GTK_TABLE (table1), tmpw, 0,1, 1,2);
+  gtk_grid_attach (GTK_GRID (grid1), tmpw, 0, 1, 1, 1);
   gtk_widget_show (tmpw);
 
   prev_button = tmpw = gtk_button_new_with_mnemonic ("_<<");
@@ -630,7 +628,7 @@ create_orientmap_dialog (GtkWidget *parent)
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_set_spacing (GTK_BOX (hbox), 12);
-  gtk_table_attach_defaults (GTK_TABLE (table1), hbox, 0, 2, 2, 3);
+  gtk_grid_attach (GTK_GRID (grid1), hbox, 0, 2, 2, 1);
   gtk_widget_show (hbox);
 
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
@@ -639,7 +637,7 @@ create_orientmap_dialog (GtkWidget *parent)
 
   frame = gimp_int_radio_group_new (TRUE, _("Type"),
                                     G_CALLBACK (vector_type_click_callback),
-                                    &vector_type, 0,
+                                    &vector_type, NULL, 0,
 
                                     _("_Normal"),  0, &vector_types[0],
                                     _("Vorte_x"),  1, &vector_types[1],
@@ -661,54 +659,52 @@ create_orientmap_dialog (GtkWidget *parent)
                           _("Voronoi-mode makes only the vector closest to the given point have any influence"),
                           NULL);
 
-  table2 = gtk_table_new (4, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table2), 4);
-  gtk_box_pack_start (GTK_BOX (hbox), table2, TRUE, TRUE, 0);
-  gtk_widget_show (table2);
+  grid2 = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid2), 4);
+  gtk_box_pack_start (GTK_BOX (hbox), grid2, TRUE, TRUE, 0);
+  gtk_widget_show (grid2);
 
-  angle_adjust = (GtkAdjustment *)
-    gimp_scale_entry_new (GTK_TABLE (table2), 0, 0,
-                          _("A_ngle:"),
-                          150, 6, 0.0,
-                          0.0, 360.0, 1.0, 10.0, 1,
-                          TRUE, 0, 0,
-                          _("Change the angle of the selected vector"),
-                          NULL);
+  angle_adjust =
+    gimp_scale_entry_new (_("A_ngle:"), 0.0, 0.0, 360.0, 1);
+  gimp_help_set_help_data (angle_adjust,
+                           _("Change the angle of the selected vector"),
+                           NULL);
   g_signal_connect (angle_adjust, "value-changed",
                     G_CALLBACK (angle_adjust_move_callback), NULL);
+  gtk_grid_attach (GTK_GRID (grid2), angle_adjust, 0, 0, 3, 1);
+  gtk_widget_show (angle_adjust);
 
-  angle_offset_adjust = (GtkAdjustment *)
-    gimp_scale_entry_new (GTK_TABLE (table2), 0, 1,
-                          _("Ang_le offset:"),
-                          150, 6, 0.0,
-                          0.0, 360.0, 1.0, 10.0, 1,
-                          TRUE, 0, 0,
-                          _("Offset all vectors with a given angle"),
-                          NULL);
+  angle_offset_adjust =
+    gimp_scale_entry_new (_("Ang_le offset:"), 0.0, 0.0, 360.0, 1);
+  gimp_help_set_help_data (angle_offset_adjust,
+                           _("Offset all vectors with a given angle"),
+                           NULL);
   g_signal_connect (angle_offset_adjust, "value-changed",
                     G_CALLBACK (angle_offset_adjust_move_callback), NULL);
+  gtk_grid_attach (GTK_GRID (grid2), angle_offset_adjust, 0, 1, 3, 1);
+  gtk_widget_show (angle_offset_adjust);
 
-  strength_adjust = (GtkAdjustment *)
-    gimp_scale_entry_new (GTK_TABLE (table2), 0, 2,
-                          _("_Strength:"),
-                          150, 6, 1.0,
-                          0.1, 5.0, 0.1, 1.0, 1,
-                          TRUE, 0, 0,
-                          _("Change the strength of the selected vector"),
-                          NULL);
+  strength_adjust =
+    gimp_scale_entry_new (_("_Strength:"), 1.0, 0.1, 5.0, 1);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (strength_adjust), 0.1, 1.0);
+  gimp_help_set_help_data (strength_adjust,
+                           _("Change the strength of the selected vector"),
+                           NULL);
   g_signal_connect (strength_adjust, "value-changed",
                     G_CALLBACK (strength_adjust_move_callback), NULL);
+  gtk_grid_attach (GTK_GRID (grid2), strength_adjust, 0, 2, 3, 1);
+  gtk_widget_show (strength_adjust);
 
-  orient_map_str_exp_adjust = (GtkAdjustment *)
-    gimp_scale_entry_new (GTK_TABLE (table2), 0, 3,
-                          _("S_trength exp.:"),
-                          150, 6, 1.0,
-                          0.1, 10.9, 0.1, 1.0, 1,
-                          TRUE, 0, 0,
-                          _("Change the exponent of the strength"),
-                          NULL);
+  orient_map_str_exp_adjust =
+    gimp_scale_entry_new (_("S_trength exp.:"), 1.0, 0.1, 10.9, 1);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (orient_map_str_exp_adjust), 0.1, 1.0);
+  gimp_help_set_help_data (orient_map_str_exp_adjust,
+                           _("Change the exponent of the strength"),
+                           NULL);
   g_signal_connect (orient_map_str_exp_adjust, "value-changed",
                     G_CALLBACK (strength_exponent_adjust_move_callback), NULL);
+  gtk_grid_attach (GTK_GRID (grid2), orient_map_str_exp_adjust, 0, 3, 3, 1);
+  gtk_widget_show (orient_map_str_exp_adjust);
 
   gtk_widget_show (orient_map_window);
 

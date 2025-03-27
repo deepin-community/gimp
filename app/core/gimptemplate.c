@@ -57,11 +57,17 @@ enum
   PROP_PRECISION,
   PROP_COMPONENT_TYPE,
   PROP_LINEAR,
-  PROP_COLOR_MANAGED,
+  PROP_TRC,
   PROP_COLOR_PROFILE,
+  PROP_SIMULATION_PROFILE,
+  PROP_SIMULATION_BPC,
+  PROP_SIMULATION_INTENT,
   PROP_FILL_TYPE,
   PROP_COMMENT,
-  PROP_FILENAME
+  PROP_FILENAME,
+
+  /* compat cruft */
+  PROP_COLOR_MANAGED
 };
 
 
@@ -69,24 +75,26 @@ typedef struct _GimpTemplatePrivate GimpTemplatePrivate;
 
 struct _GimpTemplatePrivate
 {
-  gint               width;
-  gint               height;
-  GimpUnit           unit;
+  gint                     width;
+  gint                     height;
+  GimpUnit                *unit;
 
-  gdouble            xresolution;
-  gdouble            yresolution;
-  GimpUnit           resolution_unit;
+  gdouble                  xresolution;
+  gdouble                  yresolution;
+  GimpUnit                *resolution_unit;
 
-  GimpImageBaseType  base_type;
-  GimpPrecision      precision;
+  GimpImageBaseType        base_type;
+  GimpPrecision            precision;
 
-  gboolean           color_managed;
-  GFile             *color_profile;
+  GFile                   *color_profile;
+  GFile                   *simulation_profile;
+  GimpColorRenderingIntent simulation_intent;
+  gboolean                 simulation_bpc;
 
-  GimpFillType       fill_type;
+  GimpFillType             fill_type;
 
-  gchar             *comment;
-  gchar             *filename;
+  gchar                   *comment;
+  gchar                   *filename;
 
   guint64            initial_size;
 };
@@ -150,7 +158,7 @@ gimp_template_class_init (GimpTemplateClass *klass)
                          _("Unit"),
                          _("The unit used for coordinate display "
                            "when not in dot-for-dot mode."),
-                         TRUE, FALSE, GIMP_UNIT_PIXEL,
+                         TRUE, FALSE, gimp_unit_pixel (),
                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_RESOLUTION (object_class, PROP_XRESOLUTION,
@@ -173,7 +181,7 @@ gimp_template_class_init (GimpTemplateClass *klass)
                          "resolution-unit",
                          _("Resolution unit"),
                          NULL,
-                         FALSE, FALSE, GIMP_UNIT_INCH,
+                         FALSE, FALSE, gimp_unit_inch (),
                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_BASE_TYPE,
@@ -187,7 +195,7 @@ gimp_template_class_init (GimpTemplateClass *klass)
                          "precision",
                          _("Precision"),
                          NULL,
-                         GIMP_TYPE_PRECISION, GIMP_PRECISION_U8_GAMMA,
+                         GIMP_TYPE_PRECISION, GIMP_PRECISION_U8_NON_LINEAR,
                          GIMP_PARAM_STATIC_STRINGS);
 
   g_object_class_install_property (object_class, PROP_COMPONENT_TYPE,
@@ -199,23 +207,14 @@ gimp_template_class_init (GimpTemplateClass *klass)
                                                       G_PARAM_READWRITE |
                                                       GIMP_PARAM_STATIC_STRINGS));
 
-  g_object_class_install_property (object_class, PROP_LINEAR,
-                                   g_param_spec_boolean ("linear",
-                                                         _("Gamma"),
-                                                         NULL,
-                                                         FALSE,
-                                                         G_PARAM_READWRITE |
-                                                         GIMP_PARAM_STATIC_STRINGS));
-
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_COLOR_MANAGED,
-                            "color-managed",
-                            _("Color managed"),
-                            _("Whether the image is color managed. "
-                              "Disabling color management is equivalent to "
-                              "choosing a built-in sRGB profile. Better "
-                              "leave color management enabled."),
-                            TRUE,
-                            GIMP_PARAM_STATIC_STRINGS);
+  g_object_class_install_property (object_class, PROP_TRC,
+                                   g_param_spec_enum ("trc",
+                                                      _("Linear/Perceptual"),
+                                                      NULL,
+                                                      GIMP_TYPE_TRC_TYPE,
+                                                      GIMP_TRC_NON_LINEAR,
+                                                      G_PARAM_READWRITE |
+                                                      GIMP_PARAM_STATIC_STRINGS));
 
   GIMP_CONFIG_PROP_OBJECT (object_class, PROP_COLOR_PROFILE,
                            "color-profile",
@@ -223,6 +222,28 @@ gimp_template_class_init (GimpTemplateClass *klass)
                            NULL,
                            G_TYPE_FILE,
                            GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_OBJECT (object_class, PROP_SIMULATION_PROFILE,
+                           "simulation-profile",
+                           _("Simulation profile"),
+                           NULL,
+                           G_TYPE_FILE,
+                           GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_ENUM (object_class, PROP_SIMULATION_INTENT,
+                         "simulation-intent",
+                         _("Simulation Rendering Intent"),
+                         NULL,
+                         GIMP_TYPE_COLOR_RENDERING_INTENT,
+                         GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
+                         GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_SIMULATION_BPC,
+                            "simulation-bpc",
+                            _("Use Black Point Compensation for Simulation"),
+                            NULL,
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_FILL_TYPE,
                          "fill-type",
@@ -244,6 +265,14 @@ gimp_template_class_init (GimpTemplateClass *klass)
                            NULL,
                            NULL,
                            GIMP_PARAM_STATIC_STRINGS);
+
+  /* compat cruft */
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_COLOR_MANAGED,
+                            "color-managed",
+                            NULL, NULL,
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS |
+                            GIMP_CONFIG_PARAM_IGNORE);
 }
 
 static void
@@ -257,6 +286,7 @@ gimp_template_finalize (GObject *object)
   GimpTemplatePrivate *private = GET_PRIVATE (object);
 
   g_clear_object (&private->color_profile);
+  g_clear_object (&private->simulation_profile);
   g_clear_pointer (&private->comment,  g_free);
   g_clear_pointer (&private->filename, g_free);
 
@@ -280,7 +310,7 @@ gimp_template_set_property (GObject      *object,
       private->height = g_value_get_int (value);
       break;
     case PROP_UNIT:
-      private->unit = g_value_get_int (value);
+      private->unit = g_value_get_object (value);
       break;
     case PROP_XRESOLUTION:
       private->xresolution = g_value_get_double (value);
@@ -289,7 +319,7 @@ gimp_template_set_property (GObject      *object,
       private->yresolution = g_value_get_double (value);
       break;
     case PROP_RESOLUTION_UNIT:
-      private->resolution_unit = g_value_get_int (value);
+      private->resolution_unit = g_value_get_object (value);
       break;
     case PROP_BASE_TYPE:
       private->base_type = g_value_get_enum (value);
@@ -297,27 +327,35 @@ gimp_template_set_property (GObject      *object,
     case PROP_PRECISION:
       private->precision = g_value_get_enum (value);
       g_object_notify (object, "component-type");
-      g_object_notify (object, "linear");
+      g_object_notify (object, "trc");
       break;
     case PROP_COMPONENT_TYPE:
       private->precision =
         gimp_babl_precision (g_value_get_enum (value),
-                             gimp_babl_linear (private->precision));
+                             gimp_babl_trc (private->precision));
       g_object_notify (object, "precision");
       break;
-    case PROP_LINEAR:
+    case PROP_TRC:
       private->precision =
         gimp_babl_precision (gimp_babl_component_type (private->precision),
-                             g_value_get_boolean (value));
+                             g_value_get_enum (value));
       g_object_notify (object, "precision");
-      break;
-    case PROP_COLOR_MANAGED:
-      private->color_managed = g_value_get_boolean (value);
       break;
     case PROP_COLOR_PROFILE:
       if (private->color_profile)
         g_object_unref (private->color_profile);
       private->color_profile = g_value_dup_object (value);
+      break;
+    case PROP_SIMULATION_PROFILE:
+      if (private->simulation_profile)
+        g_object_unref (private->simulation_profile);
+      private->simulation_profile = g_value_dup_object (value);
+      break;
+    case PROP_SIMULATION_INTENT:
+      private->simulation_intent = g_value_get_enum (value);
+      break;
+    case PROP_SIMULATION_BPC:
+      private->simulation_bpc = g_value_get_boolean (value);
       break;
     case PROP_FILL_TYPE:
       private->fill_type = g_value_get_enum (value);
@@ -332,6 +370,11 @@ gimp_template_set_property (GObject      *object,
         g_free (private->filename);
       private->filename = g_value_dup_string (value);
       break;
+
+    case PROP_COLOR_MANAGED:
+      /* ignored */
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -355,7 +398,7 @@ gimp_template_get_property (GObject    *object,
       g_value_set_int (value, private->height);
       break;
     case PROP_UNIT:
-      g_value_set_int (value, private->unit);
+      g_value_set_object (value, private->unit);
       break;
     case PROP_XRESOLUTION:
       g_value_set_double (value, private->xresolution);
@@ -364,7 +407,7 @@ gimp_template_get_property (GObject    *object,
       g_value_set_double (value, private->yresolution);
       break;
     case PROP_RESOLUTION_UNIT:
-      g_value_set_int (value, private->resolution_unit);
+      g_value_set_object (value, private->resolution_unit);
       break;
     case PROP_BASE_TYPE:
       g_value_set_enum (value, private->base_type);
@@ -375,14 +418,20 @@ gimp_template_get_property (GObject    *object,
     case PROP_COMPONENT_TYPE:
       g_value_set_enum (value, gimp_babl_component_type (private->precision));
       break;
-    case PROP_LINEAR:
-      g_value_set_boolean (value, gimp_babl_linear (private->precision));
-      break;
-    case PROP_COLOR_MANAGED:
-      g_value_set_boolean (value, private->color_managed);
+    case PROP_TRC:
+      g_value_set_enum (value, gimp_babl_trc (private->precision));
       break;
     case PROP_COLOR_PROFILE:
       g_value_set_object (value, private->color_profile);
+      break;
+    case PROP_SIMULATION_PROFILE:
+      g_value_set_object (value, private->simulation_profile);
+      break;
+    case PROP_SIMULATION_INTENT:
+      g_value_set_enum (value, private->simulation_intent);
+      break;
+    case PROP_SIMULATION_BPC:
+      g_value_set_boolean (value, private->simulation_bpc);
       break;
     case PROP_FILL_TYPE:
       g_value_set_enum (value, private->fill_type);
@@ -393,6 +442,11 @@ gimp_template_get_property (GObject    *object,
     case PROP_FILENAME:
       g_value_set_string (value, private->filename);
       break;
+
+    case PROP_COLOR_MANAGED:
+      /* ignored */
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -413,7 +467,8 @@ gimp_template_notify (GObject    *object,
   /* the initial layer */
   format = gimp_babl_format (private->base_type,
                              private->precision,
-                             private->fill_type == GIMP_FILL_TRANSPARENT);
+                             private->fill_type == GIMP_FILL_TRANSPARENT,
+                             NULL);
   bytes = babl_format_get_bytes_per_pixel (format);
 
   /* the selection */
@@ -465,8 +520,12 @@ gimp_template_set_from_image (GimpTemplate *template,
 
   parasite =  gimp_image_parasite_find (image, "gimp-comment");
   if (parasite)
-    comment = g_strndup (gimp_parasite_data (parasite),
-                         gimp_parasite_data_size (parasite));
+    {
+      guint32 parasite_size;
+
+      comment = (gchar *) gimp_parasite_get_data (parasite, &parasite_size);
+      comment = g_strndup (comment, parasite_size);
+    }
 
   g_object_set (template,
                 "width",           gimp_image_get_width (image),
@@ -499,10 +558,10 @@ gimp_template_get_height (GimpTemplate *template)
   return GET_PRIVATE (template)->height;
 }
 
-GimpUnit
+GimpUnit *
 gimp_template_get_unit (GimpTemplate *template)
 {
-  g_return_val_if_fail (GIMP_IS_TEMPLATE (template), GIMP_UNIT_INCH);
+  g_return_val_if_fail (GIMP_IS_TEMPLATE (template), gimp_unit_inch ());
 
   return GET_PRIVATE (template)->unit;
 }
@@ -523,10 +582,10 @@ gimp_template_get_resolution_y (GimpTemplate *template)
   return GET_PRIVATE (template)->yresolution;
 }
 
-GimpUnit
+GimpUnit *
 gimp_template_get_resolution_unit (GimpTemplate *template)
 {
-  g_return_val_if_fail (GIMP_IS_TEMPLATE (template), GIMP_UNIT_INCH);
+  g_return_val_if_fail (GIMP_IS_TEMPLATE (template), gimp_unit_inch ());
 
   return GET_PRIVATE (template)->resolution_unit;
 }
@@ -542,17 +601,10 @@ gimp_template_get_base_type (GimpTemplate *template)
 GimpPrecision
 gimp_template_get_precision (GimpTemplate *template)
 {
-  g_return_val_if_fail (GIMP_IS_TEMPLATE (template), GIMP_PRECISION_U8_GAMMA);
+  g_return_val_if_fail (GIMP_IS_TEMPLATE (template),
+                        GIMP_PRECISION_U8_NON_LINEAR);
 
   return GET_PRIVATE (template)->precision;
-}
-
-gboolean
-gimp_template_get_color_managed (GimpTemplate *template)
-{
-  g_return_val_if_fail (GIMP_IS_TEMPLATE (template), FALSE);
-
-  return GET_PRIVATE (template)->color_managed;
 }
 
 GimpColorProfile *
@@ -568,6 +620,46 @@ gimp_template_get_color_profile (GimpTemplate *template)
     return gimp_color_profile_new_from_file (private->color_profile, NULL);
 
   return NULL;
+}
+
+GimpColorProfile *
+gimp_template_get_simulation_profile (GimpTemplate *template)
+{
+  GimpTemplatePrivate *private;
+
+  g_return_val_if_fail (GIMP_IS_TEMPLATE (template), FALSE);
+
+  private = GET_PRIVATE (template);
+
+  if (private->simulation_profile)
+    return gimp_color_profile_new_from_file (private->simulation_profile,
+                                             NULL);
+
+  return NULL;
+}
+
+GimpColorRenderingIntent
+gimp_template_get_simulation_intent (GimpTemplate *template)
+{
+  GimpTemplatePrivate *private;
+
+  g_return_val_if_fail (GIMP_IS_TEMPLATE (template), FALSE);
+
+  private = GET_PRIVATE (template);
+
+  return private->simulation_intent;
+}
+
+gboolean
+gimp_template_get_simulation_bpc (GimpTemplate *template)
+{
+  GimpTemplatePrivate *private;
+
+  g_return_val_if_fail (GIMP_IS_TEMPLATE (template), FALSE);
+
+  private = GET_PRIVATE (template);
+
+  return private->simulation_bpc;
 }
 
 GimpFillType

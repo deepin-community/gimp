@@ -23,39 +23,43 @@
 #include "gimp.h"
 
 
-/**
- * gimp_channel_new:
- * @image_ID: The image to which to add the channel.
- * @name: The channel name.
- * @width: The channel width.
- * @height: The channel height.
- * @opacity: The channel opacity.
- * @color: The channel compositing color.
- *
- * Create a new channel.
- *
- * This procedure creates a new channel with the specified width and
- * height. Name, opacity, and color are also supplied parameters. The
- * new channel still needs to be added to the image, as this is not
- * automatic. Add the new channel with the gimp_image_insert_channel()
- * command. Other attributes such as channel show masked, should be
- * set with explicit procedure calls. The channel's contents are
- * undefined initially.
- *
- * Returns: The newly created channel.
- */
-gint32
-gimp_channel_new (gint32         image_ID,
-                  const gchar   *name,
-                  guint          width,
-                  guint          height,
-                  gdouble        opacity,
-                  const GimpRGB *color)
+G_DEFINE_TYPE (GimpChannel, gimp_channel, GIMP_TYPE_DRAWABLE)
+
+#define parent_class gimp_drawable_parent_class
+
+
+static void
+gimp_channel_class_init (GimpChannelClass *klass)
 {
-  return _gimp_channel_new (image_ID,
-                            width,
-                            height,
-                            name,
-                            opacity,
-                            color);
+}
+
+static void
+gimp_channel_init (GimpChannel *channel)
+{
+}
+
+/**
+ * gimp_channel_get_by_id:
+ * @channel_id: The channel id.
+ *
+ * Returns a #GimpChannel representing @channel_id. This function
+ * calls gimp_item_get_by_id() and returns the item if it is channel
+ * or %NULL otherwise.
+ *
+ * Returns: (nullable) (transfer none): a #GimpChannel for @channel_id
+ *          or %NULL if @channel_id does not represent a valid
+ *          channel. The object belongs to libgimp and you must not
+ *          modify or unref it.
+ *
+ * Since: 3.0
+ **/
+GimpChannel *
+gimp_channel_get_by_id (gint32 channel_id)
+{
+  GimpItem *item = gimp_item_get_by_id (channel_id);
+
+  if (GIMP_IS_CHANNEL (item))
+    return (GimpChannel *) item;
+
+  return NULL;
 }

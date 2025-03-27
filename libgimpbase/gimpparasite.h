@@ -73,7 +73,7 @@ GParamSpec * gimp_param_spec_parasite      (const gchar  *name,
  * @name:  the parasite name, USE A UNIQUE PREFIX
  * @flags: the parasite flags, like save in XCF etc.
  * @size:  the parasite size in bytes
- * @data:  the parasite data, the owner os the parasite is responsible
+ * @data: (array length=size): the parasite data, the owner os the parasite is responsible
  *   for tracking byte order and internal structure
  **/
 struct _GimpParasite
@@ -102,11 +102,11 @@ gboolean       gimp_parasite_is_persistent (const GimpParasite *parasite);
 gboolean       gimp_parasite_is_undoable   (const GimpParasite *parasite);
 gboolean       gimp_parasite_has_flag      (const GimpParasite *parasite,
                                             gulong              flag);
-gulong         gimp_parasite_flags         (const GimpParasite *parasite);
-const gchar  * gimp_parasite_name          (const GimpParasite *parasite);
-gconstpointer  gimp_parasite_data          (const GimpParasite *parasite);
-glong          gimp_parasite_data_size     (const GimpParasite *parasite);
+gulong         gimp_parasite_get_flags     (const GimpParasite *parasite);
+const gchar  * gimp_parasite_get_name      (const GimpParasite *parasite);
 
+gconstpointer  gimp_parasite_get_data      (const GimpParasite *parasite,
+                                            guint32            *num_bytes);
 
 G_END_DECLS
 

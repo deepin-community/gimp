@@ -25,6 +25,8 @@
 #include <gegl.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <pango/pangocairo.h>
+#include <pango/pangofc-fontmap.h>
+#include <fontconfig/fontconfig.h>
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
@@ -32,7 +34,12 @@
 
 #include "text-types.h"
 
+#include "gegl/gimp-babl.h"
+
 #include "core/gimperror.h"
+#include "core/gimpimage.h"
+
+#include "gimpfont.h"
 
 #include "gimptext.h"
 #include "gimptextlayout.h"
@@ -48,6 +55,8 @@ struct _GimpTextLayout
   gdouble         yres;
   PangoLayout    *layout;
   PangoRectangle  extents;
+  const Babl     *layout_space;
+  GimpTRCType     layout_trc;
 };
 
 
@@ -103,20 +112,23 @@ gimp_text_layout_finalize (GObject *object)
 
 
 GimpTextLayout *
-gimp_text_layout_new (GimpText  *text,
-                      gdouble    xres,
-                      gdouble    yres,
-                      GError   **error)
+gimp_text_layout_new (GimpText     *text,
+                      GimpImage    *target_image,
+                      gdouble       xres,
+                      gdouble       yres,
+                      GError      **error)
 {
   GimpTextLayout       *layout;
+  const Babl           *target_space;
   PangoContext         *context;
   PangoFontDescription *font_desc;
   PangoAlignment        alignment = PANGO_ALIGN_LEFT;
   gint                  size;
 
   g_return_val_if_fail (GIMP_IS_TEXT (text), NULL);
+  g_return_val_if_fail (GIMP_IS_IMAGE (target_image), NULL);
 
-  font_desc = pango_font_description_from_string (text->font);
+  font_desc = pango_font_description_from_string (gimp_font_get_lookup_name (text->font));
   g_return_val_if_fail (font_desc != NULL, NULL);
 
   size = pango_units_from_double (gimp_units_to_points (text->font_size,
@@ -138,6 +150,21 @@ gimp_text_layout_new (GimpText  *text,
 
   pango_layout_set_font_description (layout->layout, font_desc);
   pango_font_description_free (font_desc);
+
+  target_space = gimp_image_get_layer_space (target_image);
+  if (babl_space_is_rgb (target_space) || babl_space_is_gray (target_space))
+    layout->layout_space = target_space;
+  else
+    layout->layout_space = NULL;
+
+#if CAIRO_VERSION >= CAIRO_VERSION_ENCODE(1, 17, 2)
+  layout->layout_trc = gimp_babl_trc (gimp_image_get_precision (target_image));
+#else
+  /* With older Cairo, we just use cairo-ARGB32 with no linear or perceptual
+   * option.
+   */
+  layout->layout_trc = GIMP_TRC_NON_LINEAR;
+#endif
 
   gimp_text_layout_set_markup (layout, error);
 
@@ -219,6 +246,72 @@ gimp_text_layout_new (GimpText  *text,
   return layout;
 }
 
+const GimpTRCType
+gimp_text_layout_get_trc (GimpTextLayout *layout)
+{
+  g_return_val_if_fail (GIMP_IS_TEXT_LAYOUT (layout), GIMP_TRC_NON_LINEAR);
+
+  return layout->layout_trc;
+}
+
+const Babl *
+gimp_text_layout_get_format (GimpTextLayout *layout,
+                             const gchar    *babl_type)
+{
+  const Babl *format;
+  gchar      *format_name;
+
+  g_return_val_if_fail (GIMP_IS_TEXT_LAYOUT (layout), NULL);
+
+  if (! babl_space_is_gray (layout->layout_space))
+    {
+      switch (layout->layout_trc)
+        {
+        case GIMP_TRC_LINEAR:
+          format_name = g_strdup_printf ("RGB %s", babl_type);
+          break;
+        case GIMP_TRC_NON_LINEAR:
+          format_name = g_strdup_printf ("R'G'B' %s", babl_type);
+          break;
+        case GIMP_TRC_PERCEPTUAL:
+          format_name = g_strdup_printf ("R~G~B~ %s", babl_type);
+          break;
+        default:
+          g_return_val_if_reached (NULL);
+        }
+    }
+  else
+    {
+      switch (layout->layout_trc)
+        {
+        case GIMP_TRC_LINEAR:
+          format_name = g_strdup_printf ("Y %s", babl_type);
+          break;
+        case GIMP_TRC_NON_LINEAR:
+          format_name = g_strdup_printf ("Y' %s", babl_type);
+          break;
+        case GIMP_TRC_PERCEPTUAL:
+          format_name = g_strdup_printf ("Y~ %s", babl_type);
+          break;
+        default:
+          g_return_val_if_reached (NULL);
+        }
+    }
+
+  format = babl_format_with_space (format_name, layout->layout_space);
+  g_free (format_name);
+
+  return format;
+}
+
+const Babl *
+gimp_text_layout_get_space (GimpTextLayout *layout)
+{
+  g_return_val_if_fail (GIMP_IS_TEXT_LAYOUT (layout), NULL);
+
+  return layout->layout_space;
+}
+
 gboolean
 gimp_text_layout_get_size (GimpTextLayout *layout,
                            gint           *width,
@@ -284,8 +377,8 @@ gimp_text_layout_get_transform (GimpTextLayout *layout,
                                 cairo_matrix_t *matrix)
 {
   GimpText *text;
-  gdouble   xres;
-  gdouble   yres;
+  gdouble   xres = 0;
+  gdouble   yres = 0;
   gdouble   norm;
 
   g_return_if_fail (GIMP_IS_TEXT_LAYOUT (layout));
@@ -497,17 +590,31 @@ static gchar *
 gimp_text_layout_apply_tags (GimpTextLayout *layout,
                              const gchar    *markup)
 {
-  GimpText *text = layout->text;
-  gchar    *result;
+  const Babl *format;
+  GimpText   *text  = layout->text;
+  gchar      *result;
+  guchar      color[3];
 
-  {
-    guchar r, g, b;
-
-    gimp_rgb_get_uchar (&text->color, &r, &g, &b);
-
+  /* Unfortunately Pango markup are very limited, color-wise. Colors are
+   * written in hexadecimal, so they are u8 as maximum precision, and
+   * unbounded colors are not accessible.
+   * At the very least, what we do is to write color values in the target
+   * space in the PangoLayout, so that we don't end up stuck to sRGB text
+   * colors even in images with wider gamut spaces.
+   *
+   * Moreover this is limited to RGB and Grayscale spaces. Therefore, images
+   * with other backends will be limited to the sRGB gamut, for as long as Pango
+   * do not evolve (or unless we changed our rendering backend).
+   */
+  format = gimp_text_layout_get_format (layout, "u8");
+  gegl_color_get_pixel (text->color, format, color);
+  if (! babl_space_is_gray (babl_format_get_space (format)))
     result = g_strdup_printf ("<span color=\"#%02x%02x%02x\">%s</span>",
-                              r, g, b, markup);
-  }
+                              color[0], color[1], color[2], markup);
+  else
+    result = g_strdup_printf ("<span color=\"#%02x%02x%02x\">%s</span>",
+                              color[0], color[0], color[0], markup);
+
   /* Updating font 'locl' (if supported) with 'lang' feature tag */
   if (text->language)
     {
@@ -596,7 +703,9 @@ gimp_text_layout_set_markup (GimpTextLayout  *layout,
         }
     }
   else
-    pango_layout_set_markup (layout->layout, markup, -1);
+    {
+      pango_layout_set_markup (layout->layout, markup, -1);
+    }
 
   g_free (markup);
 }
@@ -658,7 +767,7 @@ gimp_text_layout_position (GimpTextLayout *layout)
       pango_layout_get_pixel_size (layout->layout, &width, NULL);
 
       if ((base_dir == GIMP_TEXT_DIRECTION_LTR && align == PANGO_ALIGN_RIGHT) ||
-          (base_dir == GIMP_TEXT_DIRECTION_RTL && align == PANGO_ALIGN_LEFT) ||
+          (base_dir == GIMP_TEXT_DIRECTION_RTL && align == PANGO_ALIGN_RIGHT) ||
           (base_dir == GIMP_TEXT_DIRECTION_TTB_RTL && align == PANGO_ALIGN_RIGHT) ||
           (base_dir == GIMP_TEXT_DIRECTION_TTB_RTL_UPRIGHT && align == PANGO_ALIGN_RIGHT) ||
           (base_dir == GIMP_TEXT_DIRECTION_TTB_LTR && align == PANGO_ALIGN_LEFT) ||
@@ -749,6 +858,11 @@ gimp_text_get_pango_context (GimpText *text,
     g_error ("You are using a Pango that has been built against a cairo "
              "that lacks the Freetype font backend");
 
+  /* In case a font becomes missing mid-session and is chosen (or is already in use)
+   * pango substitutes EVERY font for the default font, to avoid this
+   * the FcConfig has to be set everytime a pango fontmap is created
+   */
+  pango_fc_font_map_set_config (PANGO_FC_FONT_MAP (fontmap), FcConfigGetCurrent ());
   pango_cairo_font_map_set_resolution (PANGO_CAIRO_FONT_MAP (fontmap), yres);
 
   context = pango_font_map_create_context (fontmap);

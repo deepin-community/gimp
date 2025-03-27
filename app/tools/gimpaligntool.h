@@ -25,14 +25,17 @@
 /*  tool function/operation/state/mode  */
 typedef enum
 {
-  ALIGN_TOOL_IDLE,
-  ALIGN_TOOL_PICK_LAYER,
-  ALIGN_TOOL_ADD_LAYER,
-  ALIGN_TOOL_PICK_GUIDE,
-  ALIGN_TOOL_ADD_GUIDE,
-  ALIGN_TOOL_PICK_PATH,
-  ALIGN_TOOL_ADD_PATH,
-  ALIGN_TOOL_DRAG_BOX
+  ALIGN_TOOL_NO_ACTION,
+
+  ALIGN_TOOL_REF_IDLE,
+  ALIGN_TOOL_REF_PICK_LAYER,
+  ALIGN_TOOL_REF_PICK_GUIDE,
+  ALIGN_TOOL_REF_PICK_PATH,
+  ALIGN_TOOL_REF_DRAG_BOX,
+
+  ALIGN_TOOL_ALIGN_IDLE,
+  ALIGN_TOOL_ALIGN_PICK_GUIDE,
+  ALIGN_TOOL_ALIGN_ADD_GUIDE,
 } GimpAlignToolFunction;
 
 
@@ -68,7 +71,7 @@ struct _GimpAlignToolClass
 
 
 void    gimp_align_tool_register (GimpToolRegisterCallback  callback,
-                                 gpointer                  data);
+                                  gpointer                  data);
 
 GType   gimp_align_tool_get_type (void) G_GNUC_CONST;
 

@@ -28,8 +28,10 @@
 #include "libgimp/gimp.h"
 #include "libgimp/gimpui.h"
 
+#include "imap_icons.h"
 #include "imap_statusbar.h"
-#include "imap_stock.h"
+
+#include "libgimp/stdplugins-intl.h"
 
 StatusBar_t*
 make_statusbar(GtkWidget *main_vbox, GtkWidget *window)
@@ -48,8 +50,9 @@ make_statusbar(GtkWidget *main_vbox, GtkWidget *window)
    gtk_widget_show(statusbar->status);
 
    /* (x, y) coordinate */
-   iconw = gtk_image_new_from_stock(IMAP_STOCK_COORD,
-                                    GTK_ICON_SIZE_SMALL_TOOLBAR);
+   iconw = gtk_image_new_from_icon_name (IMAP_COORD,
+                                         GTK_ICON_SIZE_SMALL_TOOLBAR);
+   gtk_widget_set_tooltip_text (iconw, _("Coordinates:"));
 
    gtk_box_pack_start(GTK_BOX(hbox), iconw, FALSE, FALSE, 10);
    gtk_widget_show(iconw);
@@ -62,10 +65,11 @@ make_statusbar(GtkWidget *main_vbox, GtkWidget *window)
    gtk_widget_show(statusbar->xy);
 
    /* Dimension info */
-   iconw = gtk_image_new_from_stock(IMAP_STOCK_DIMENSION,
-                                    GTK_ICON_SIZE_SMALL_TOOLBAR);
-   gtk_box_pack_start(GTK_BOX(hbox), iconw, FALSE, FALSE, 10);
-   gtk_widget_show(iconw);
+   iconw = gtk_image_new_from_icon_name (IMAP_DIMENSION,
+                                         GTK_ICON_SIZE_SMALL_TOOLBAR);
+   gtk_widget_set_tooltip_text (iconw, _("Active Area Size:"));
+   gtk_box_pack_start (GTK_BOX (hbox), iconw, FALSE, FALSE, 10);
+   gtk_widget_set_visible (iconw, TRUE);
 
    statusbar->dimension = gtk_entry_new();
    gtk_widget_set_size_request(statusbar->dimension, 96, -1);
@@ -143,11 +147,16 @@ statusbar_clear_dimension(StatusBar_t *statusbar)
 }
 
 void
-statusbar_set_zoom(StatusBar_t *statusbar, gint factor)
+statusbar_set_zoom (StatusBar_t *statusbar,
+                    gint         factor)
 {
-   char scratch[16];
+  char scratch[16];
 
-   sprintf(scratch, "1:%d", factor);
-   gtk_statusbar_push(GTK_STATUSBAR(statusbar->zoom), statusbar->zoom_id,
+  if (factor > 0)
+    sprintf (scratch, "%d:1", factor);
+  else
+    sprintf (scratch, "1:%d", ((factor - 2) * -1));
+
+  gtk_statusbar_push (GTK_STATUSBAR (statusbar->zoom), statusbar->zoom_id,
                       scratch);
 }

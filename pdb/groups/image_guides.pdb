@@ -30,7 +30,7 @@ HELP
     @inargs = (
 	{ name => 'image', type => 'image',
 	  desc => 'The image' },
-	{ name => 'yposition', type => '0 <= int32',
+	{ name => 'yposition', type => 'int32',
 	  desc => "The guide's y-offset from top of image" }
     );
 
@@ -42,13 +42,11 @@ HELP
     %invoke = (
 	code => <<'CODE'
 {
-  if (yposition <= gimp_image_get_height (image))
-    {
-      GimpGuide *g;
+  GimpGuide *g;
 
-      g = gimp_image_add_hguide (image, yposition, TRUE);
-      guide = gimp_aux_item_get_ID (GIMP_AUX_ITEM (g));
-    }
+  g = gimp_image_add_hguide (image, yposition, TRUE);
+  if (g)
+    guide = gimp_aux_item_get_id (GIMP_AUX_ITEM (g));
   else
     success = FALSE;
 }
@@ -70,7 +68,7 @@ HELP
     @inargs = (
 	{ name => 'image', type => 'image',
 	  desc => 'The image' },
-	{ name => 'xposition', type => '0 <= int32',
+	{ name => 'xposition', type => 'int32',
 	  desc => "The guide's x-offset from left of image" }
     );
 
@@ -82,13 +80,11 @@ HELP
     %invoke = (
 	code => <<'CODE'
 {
-  if (xposition <= gimp_image_get_width (image))
-    {
-      GimpGuide *g;
+  GimpGuide *g;
 
-      g = gimp_image_add_vguide (image, xposition, TRUE);
-      guide = gimp_aux_item_get_ID (GIMP_AUX_ITEM (g));
-    }
+  g = gimp_image_add_vguide (image, xposition, TRUE);
+  if (g)
+    guide = gimp_aux_item_get_id (GIMP_AUX_ITEM (g));
   else
     success = FALSE;
 }
@@ -142,7 +138,7 @@ HELP
     @inargs = (
 	{ name => 'image', type => 'image',
 	  desc => 'The image' },
-	{ name => 'guide', type => 'guide', no_validate => 1,
+	{ name => 'guide', type => '0 <= int32', default => 1, no_validate => 1,
 	  desc => 'The ID of the current guide (0 if first invocation)' }
     );
 
@@ -157,13 +153,13 @@ HELP
   GimpGuide *g = gimp_image_get_next_guide (image, guide, &success);
 
   if (g)
-    next_guide = gimp_aux_item_get_ID (GIMP_AUX_ITEM (g));
+    next_guide = gimp_aux_item_get_id (GIMP_AUX_ITEM (g));
 
   if (! success)
     g_set_error (error, GIMP_PDB_ERROR, GIMP_PDB_ERROR_INVALID_ARGUMENT,
                  _("Image '%s' (%d) does not contain guide with ID %d"),
                  gimp_image_get_display_name (image),
-                 gimp_image_get_ID (image),
+                 gimp_image_get_id (image),
                  guide);
 }
 CODE

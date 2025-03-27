@@ -35,9 +35,12 @@
 
 #include "core/gimp.h"
 #include "core/gimpchannel.h"
+#include "core/gimpchannel-combine.h"
 #include "core/gimpcontainer.h"
 #include "core/gimpcontext.h"
 #include "core/gimpdrawable-fill.h"
+#include "core/gimpdrawable-filters.h"
+#include "core/gimpdrawablefilter.h"
 #include "core/gimpgrouplayer.h"
 #include "core/gimpimage.h"
 #include "core/gimpimage-merge.h"
@@ -47,6 +50,7 @@
 #include "core/gimplayerpropundo.h"
 #include "core/gimplayer-floating-selection.h"
 #include "core/gimplayer-new.h"
+#include "core/gimplist.h"
 #include "core/gimppickable.h"
 #include "core/gimppickable-auto-shrink.h"
 #include "core/gimptoolinfo.h"
@@ -54,12 +58,12 @@
 #include "core/gimpprogress.h"
 
 #include "text/gimptext.h"
-#include "text/gimptext-vectors.h"
+#include "text/gimptext-path.h"
 #include "text/gimptextlayer.h"
 
+#include "vectors/gimppath.h"
+#include "vectors/gimppath-warp.h"
 #include "vectors/gimpstroke.h"
-#include "vectors/gimpvectors.h"
-#include "vectors/gimpvectors-warp.h"
 
 #include "widgets/gimpaction.h"
 #include "widgets/gimpdock.h"
@@ -104,10 +108,10 @@ static void   layers_new_callback             (GtkWidget             *dialog,
                                                gint                   layer_offset_x,
                                                gint                   layer_offset_y,
                                                gboolean               layer_visible,
-                                               gboolean               layer_linked,
                                                GimpColorTag           layer_color_tag,
                                                gboolean               layer_lock_pixels,
                                                gboolean               layer_lock_position,
+                                               gboolean               layer_lock_visibility,
                                                gboolean               layer_lock_alpha,
                                                gboolean               rename_text_layer,
                                                gpointer               user_data);
@@ -127,15 +131,15 @@ static void   layers_edit_attributes_callback (GtkWidget             *dialog,
                                                gint                   layer_offset_x,
                                                gint                   layer_offset_y,
                                                gboolean               layer_visible,
-                                               gboolean               layer_linked,
                                                GimpColorTag           layer_color_tag,
                                                gboolean               layer_lock_pixels,
                                                gboolean               layer_lock_position,
+                                               gboolean               layer_lock_visibility,
                                                gboolean               layer_lock_alpha,
                                                gboolean               rename_text_layer,
                                                gpointer               user_data);
 static void   layers_add_mask_callback        (GtkWidget             *dialog,
-                                               GimpLayer             *layer,
+                                               GList                 *layers,
                                                GimpAddMaskType        add_mask_type,
                                                GimpChannel           *channel,
                                                gboolean               invert,
@@ -144,23 +148,23 @@ static void   layers_scale_callback           (GtkWidget             *dialog,
                                                GimpViewable          *viewable,
                                                gint                   width,
                                                gint                   height,
-                                               GimpUnit               unit,
+                                               GimpUnit              *unit,
                                                GimpInterpolationType  interpolation,
                                                gdouble                xresolution,
                                                gdouble                yresolution,
-                                               GimpUnit               resolution_unit,
+                                               GimpUnit              *resolution_unit,
                                                gpointer               user_data);
 static void   layers_resize_callback          (GtkWidget             *dialog,
                                                GimpViewable          *viewable,
                                                GimpContext           *context,
                                                gint                   width,
                                                gint                   height,
-                                               GimpUnit               unit,
+                                               GimpUnit              *unit,
                                                gint                   offset_x,
                                                gint                   offset_y,
                                                gdouble                unused0,
                                                gdouble                unused1,
-                                               GimpUnit               unused2,
+                                               GimpUnit              *unused2,
                                                GimpFillType           fill_type,
                                                GimpItemSet            unused3,
                                                gboolean               unused4,
@@ -173,8 +177,8 @@ static gint   layers_mode_index               (GimpLayerMode          layer_mode
 
 /*  private variables  */
 
-static GimpUnit               layer_resize_unit   = GIMP_UNIT_PIXEL;
-static GimpUnit               layer_scale_unit    = GIMP_UNIT_PIXEL;
+static GimpUnit              *layer_resize_unit   = NULL;
+static GimpUnit              *layer_scale_unit    = NULL;
 static GimpInterpolationType  layer_scale_interp  = -1;
 
 
@@ -186,12 +190,15 @@ layers_edit_cmd_callback (GimpAction *action,
                           gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
+  GList     *layers;
   GtkWidget *widget;
-  return_if_no_layer (image, layer, data);
+  return_if_no_layers (image, layers, data);
   return_if_no_widget (widget, data);
 
-  if (gimp_item_is_text_layer (GIMP_ITEM (layer)))
+  if (g_list_length (layers) != 1)
+    return;
+
+  if (gimp_item_is_text_layer (GIMP_ITEM (layers->data)))
     {
       layers_edit_text_cmd_callback (action, value, data);
     }
@@ -208,11 +215,16 @@ layers_edit_text_cmd_callback (GimpAction *action,
 {
   GimpImage *image;
   GimpLayer *layer;
+  GList     *layers;
   GtkWidget *widget;
   GimpTool  *active_tool;
-  return_if_no_layer (image, layer, data);
+  return_if_no_layers (image, layers, data);
   return_if_no_widget (widget, data);
 
+  if (g_list_length (layers) != 1)
+    return;
+
+  layer = layers->data;
   g_return_if_fail (gimp_item_is_text_layer (GIMP_ITEM (layer)));
 
   active_tool = tool_manager_get_active (image->gimp);
@@ -248,10 +260,16 @@ layers_edit_attributes_cmd_callback (GimpAction *action,
 {
   GimpImage *image;
   GimpLayer *layer;
+  GList     *layers;
   GtkWidget *widget;
   GtkWidget *dialog;
-  return_if_no_layer (image, layer, data);
+  return_if_no_layers (image, layers, data);
   return_if_no_widget (widget, data);
+
+  if (g_list_length (layers) != 1)
+    return;
+
+  layer = layers->data;
 
 #define EDIT_DIALOG_KEY "gimp-layer-edit-attributes-dialog"
 
@@ -278,10 +296,10 @@ layers_edit_attributes_cmd_callback (GimpAction *action,
                                          gimp_layer_get_opacity (layer),
                                          0 /* unused */,
                                          gimp_item_get_visible (item),
-                                         gimp_item_get_linked (item),
                                          gimp_item_get_color_tag (item),
                                          gimp_item_get_lock_content (item),
                                          gimp_item_get_lock_position (item),
+                                         gimp_item_get_lock_visibility (item),
                                          gimp_layer_get_lock_alpha (layer),
                                          layers_edit_attributes_callback,
                                          NULL);
@@ -331,7 +349,15 @@ layers_new_cmd_callback (GimpAction *action,
   if (! dialog)
     {
       GimpDialogConfig *config     = GIMP_DIALOG_CONFIG (image->gimp->config);
+      const gchar      *title;
+      gchar            *desc;
+      gint              n_layers;
       GimpLayerMode     layer_mode = config->layer_new_mode;
+
+      n_layers = g_list_length (gimp_image_get_selected_layers (image));
+      title = ngettext ("New Layer", "New Layers", n_layers > 0 ? n_layers : 1);
+      desc  = ngettext ("Create a New Layer", "Create %d New Layers", n_layers > 0 ? n_layers : 1);
+      desc  = g_strdup_printf (desc, n_layers > 0 ? n_layers : 1);
 
       if (layer_mode == GIMP_LAYER_MODE_NORMAL ||
           layer_mode == GIMP_LAYER_MODE_NORMAL_LEGACY)
@@ -342,10 +368,10 @@ layers_new_cmd_callback (GimpAction *action,
       dialog = layer_options_dialog_new (image, NULL,
                                          action_data_get_context (data),
                                          widget,
-                                         _("New Layer"),
+                                         title,
                                          "gimp-layer-new",
                                          GIMP_ICON_LAYER,
-                                         _("Create a New Layer"),
+                                         desc,
                                          GIMP_HELP_LAYER_NEW,
                                          config->layer_new_name,
                                          layer_mode,
@@ -355,13 +381,14 @@ layers_new_cmd_callback (GimpAction *action,
                                          config->layer_new_opacity,
                                          config->layer_new_fill_type,
                                          TRUE,
-                                         FALSE,
                                          GIMP_COLOR_TAG_NONE,
+                                         FALSE,
                                          FALSE,
                                          FALSE,
                                          FALSE,
                                          layers_new_callback,
                                          NULL);
+      g_free (desc);
 
       dialogs_attach_dialog (G_OBJECT (image), NEW_DIALOG_KEY, dialog);
     }
@@ -378,7 +405,12 @@ layers_new_last_vals_cmd_callback (GimpAction *action,
   GtkWidget        *widget;
   GimpLayer        *layer;
   GimpDialogConfig *config;
+  GList            *layers;
+  GList            *new_layers = NULL;
+  GList            *iter;
   GimpLayerMode     layer_mode;
+  gint              n_layers;
+  gboolean          run_once;
 
   return_if_no_image (image, data);
   return_if_no_widget (widget, data);
@@ -402,25 +434,66 @@ layers_new_last_vals_cmd_callback (GimpAction *action,
       layer_mode = gimp_image_get_default_new_layer_mode (image);
     }
 
-  layer = gimp_layer_new (image,
-                          gimp_image_get_width  (image),
-                          gimp_image_get_height (image),
-                          gimp_image_get_layer_format (image, TRUE),
-                          config->layer_new_name,
-                          config->layer_new_opacity,
-                          layer_mode);
+  layers   = gimp_image_get_selected_layers (image);
+  layers   = g_list_copy (layers);
+  n_layers = g_list_length (layers);
+  run_once = (n_layers == 0);
 
-  gimp_drawable_fill (GIMP_DRAWABLE (layer),
-                      action_data_get_context (data),
-                      config->layer_new_fill_type);
-  gimp_layer_set_blend_space (layer,
-                              config->layer_new_blend_space, FALSE);
-  gimp_layer_set_composite_space (layer,
-                                  config->layer_new_composite_space, FALSE);
-  gimp_layer_set_composite_mode (layer,
-                                 config->layer_new_composite_mode, FALSE);
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_LAYER_ADD,
+                               ngettext ("New layer",
+                                         "New layers",
+                                         n_layers > 0 ? n_layers : 1));
+  for (iter = layers; iter || run_once ; iter = iter ? iter->next : NULL)
+    {
+      GimpLayer *parent;
+      gint       position;
 
-  gimp_image_add_layer (image, layer, GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
+      run_once = FALSE;
+      if (iter)
+        {
+          if (gimp_viewable_get_children (GIMP_VIEWABLE (iter->data)))
+            {
+              parent   = iter->data;
+              position = 0;
+            }
+          else
+            {
+              parent   = GIMP_LAYER (gimp_item_get_parent (iter->data));
+              position = gimp_item_get_index (iter->data);
+            }
+        }
+      else /* run_once */
+        {
+          parent   = NULL;
+          position = -1;
+        }
+      layer = gimp_layer_new (image,
+                              gimp_image_get_width  (image),
+                              gimp_image_get_height (image),
+                              gimp_image_get_layer_format (image, TRUE),
+                              config->layer_new_name,
+                              config->layer_new_opacity,
+                              layer_mode);
+
+      gimp_drawable_fill (GIMP_DRAWABLE (layer),
+                          action_data_get_context (data),
+                          config->layer_new_fill_type);
+      gimp_layer_set_blend_space (layer,
+                                  config->layer_new_blend_space, FALSE);
+      gimp_layer_set_composite_space (layer,
+                                      config->layer_new_composite_space, FALSE);
+      gimp_layer_set_composite_mode (layer,
+                                     config->layer_new_composite_mode, FALSE);
+
+      gimp_image_add_layer (image, layer, parent, position, TRUE);
+      new_layers = g_list_prepend (new_layers, layer);
+    }
+  gimp_image_set_selected_layers (image, new_layers);
+  gimp_image_undo_group_end (image);
+
+  g_list_free (layers);
+  g_list_free (new_layers);
   gimp_image_flush (image);
 }
 
@@ -462,13 +535,61 @@ layers_new_group_cmd_callback (GimpAction *action,
                                gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
+  GList     *new_layers = NULL;
+  GList     *layers;
+  GList     *iter;
+  gint       n_layers;
+  gboolean   run_once;
+
   return_if_no_image (image, data);
 
-  layer = gimp_group_layer_new (image);
+  layers     = gimp_image_get_selected_layers (image);
+  layers     = g_list_copy (layers);
+  n_layers   = g_list_length (layers);
+  run_once   = (n_layers == 0);
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_LAYER_ADD,
+                               ngettext ("New layer group",
+                                         "New layer groups",
+                                         n_layers > 0 ? n_layers : 1));
 
-  gimp_image_add_layer (image, layer, GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
+  for (iter = layers; iter || run_once ; iter = iter ? iter->next : NULL)
+    {
+      GimpLayer *layer;
+      GimpLayer *parent;
+      gint       position;
+
+      run_once = FALSE;
+      if (iter)
+        {
+          if (gimp_viewable_get_children (GIMP_VIEWABLE (iter->data)))
+            {
+              parent   = iter->data;
+              position = 0;
+            }
+          else
+            {
+              parent   = GIMP_LAYER (gimp_item_get_parent (iter->data));
+              position = gimp_item_get_index (iter->data);
+            }
+        }
+      else /* run_once */
+        {
+          parent   = NULL;
+          position = -1;
+        }
+      layer = gimp_group_layer_new (image);
+
+      gimp_image_add_layer (image, layer, parent, position, TRUE);
+      new_layers = g_list_prepend (new_layers, layer);
+    }
+
+  gimp_image_set_selected_layers (image, new_layers);
+  gimp_image_undo_group_end (image);
   gimp_image_flush (image);
+
+  g_list_free (layers);
+  g_list_free (new_layers);
 }
 
 void
@@ -477,30 +598,46 @@ layers_select_cmd_callback (GimpAction *action,
                             gpointer    data)
 {
   GimpImage            *image;
-  GimpLayer            *layer;
-  GimpContainer        *container;
-  GimpLayer            *new_layer;
+  GList                *new_layers = NULL;
+  GList                *layers;
+  GList                *iter;
   GimpActionSelectType  select_type;
+  gboolean              run_once;
   return_if_no_image (image, data);
 
   select_type = (GimpActionSelectType) g_variant_get_int32 (value);
 
-  layer = gimp_image_get_active_layer (image);
+  layers   = gimp_image_get_selected_layers (image);
+  run_once = (g_list_length (layers) == 0);
 
-  if (layer)
-    container = gimp_item_get_container (GIMP_ITEM (layer));
-  else
-    container = gimp_image_get_layers (image);
-
-  new_layer = (GimpLayer *) action_select_object (select_type,
-                                                  container,
-                                                  (GimpObject *) layer);
-
-  if (new_layer && new_layer != layer)
+  for (iter = layers; iter || run_once; iter = iter ? iter->next : NULL)
     {
-      gimp_image_set_active_layer (image, new_layer);
+      GimpLayer     *new_layer;
+      GimpContainer *container;
+
+      if (iter)
+        {
+          container = gimp_item_get_container (GIMP_ITEM (iter->data));
+        }
+      else /* run_once */
+        {
+          container = gimp_image_get_layers (image);
+          run_once  = FALSE;
+        }
+      new_layer = (GimpLayer *) action_select_object (select_type,
+                                                      container,
+                                                      iter ? iter->data : NULL);
+      if (new_layer)
+        new_layers = g_list_prepend (new_layers, new_layer);
+    }
+
+  if (new_layers)
+    {
+      gimp_image_set_selected_layers (image, new_layers);
       gimp_image_flush (image);
     }
+
+  g_list_free (new_layers);
 }
 
 void
@@ -509,11 +646,42 @@ layers_raise_cmd_callback (GimpAction *action,
                            gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *iter;
+  GList     *raised_layers = NULL;
+  return_if_no_layers (image, layers, data);
 
-  gimp_image_raise_item (image, GIMP_ITEM (layer), NULL);
+  for (iter = layers; iter; iter = iter->next)
+    {
+      gint index;
+
+      index = gimp_item_get_index (iter->data);
+      if (index > 0)
+        {
+          raised_layers = g_list_prepend (raised_layers, iter->data);
+        }
+      else
+        {
+          gimp_image_flush (image);
+          g_list_free (raised_layers);
+          return;
+        }
+    }
+
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_ITEM_DISPLACE,
+                               ngettext ("Raise Layer",
+                                         "Raise Layers",
+                                         g_list_length (raised_layers)));
+
+  raised_layers = g_list_reverse (raised_layers);
+  for (iter = raised_layers; iter; iter = iter->next)
+    gimp_image_raise_item (image, iter->data, NULL);
+
   gimp_image_flush (image);
+  gimp_image_undo_group_end (image);
+
+  g_list_free (raised_layers);
 }
 
 void
@@ -522,11 +690,33 @@ layers_raise_to_top_cmd_callback (GimpAction *action,
                                   gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *iter;
+  GList     *raised_layers = NULL;
+  return_if_no_layers (image, layers, data);
 
-  gimp_image_raise_item_to_top (image, GIMP_ITEM (layer));
+  for (iter = layers; iter; iter = iter->next)
+    {
+      gint index;
+
+      index = gimp_item_get_index (iter->data);
+      if (index > 0)
+        raised_layers = g_list_prepend (raised_layers, iter->data);
+    }
+
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_ITEM_DISPLACE,
+                               ngettext ("Raise Layer to Top",
+                                         "Raise Layers to Top",
+                                         g_list_length (raised_layers)));
+
+  for (iter = raised_layers; iter; iter = iter->next)
+    gimp_image_raise_item_to_top (image, iter->data);
+
   gimp_image_flush (image);
+  gimp_image_undo_group_end (image);
+
+  g_list_free (raised_layers);
 }
 
 void
@@ -535,11 +725,43 @@ layers_lower_cmd_callback (GimpAction *action,
                            gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *iter;
+  GList     *lowered_layers = NULL;
+  return_if_no_layers (image, layers, data);
 
-  gimp_image_lower_item (image, GIMP_ITEM (layer), NULL);
+  for (iter = layers; iter; iter = iter->next)
+    {
+      GList *layer_list;
+      gint   index;
+
+      layer_list = gimp_item_get_container_iter (GIMP_ITEM (iter->data));
+      index = gimp_item_get_index (iter->data);
+      if (index < g_list_length (layer_list) - 1)
+        {
+          lowered_layers = g_list_prepend (lowered_layers, iter->data);
+        }
+      else
+        {
+          gimp_image_flush (image);
+          g_list_free (lowered_layers);
+          return;
+        }
+    }
+
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_ITEM_DISPLACE,
+                               ngettext ("Lower Layer",
+                                         "Lower Layers",
+                                         g_list_length (lowered_layers)));
+
+  for (iter = lowered_layers; iter; iter = iter->next)
+    gimp_image_lower_item (image, iter->data, NULL);
+
   gimp_image_flush (image);
+  gimp_image_undo_group_end (image);
+
+  g_list_free (lowered_layers);
 }
 
 void
@@ -548,11 +770,35 @@ layers_lower_to_bottom_cmd_callback (GimpAction *action,
                                      gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *iter;
+  GList     *lowered_layers = NULL;
+  return_if_no_layers (image, layers, data);
 
-  gimp_image_lower_item_to_bottom (image, GIMP_ITEM (layer));
+  for (iter = layers; iter; iter = iter->next)
+    {
+      GList *layer_list;
+      gint   index;
+
+      layer_list = gimp_item_get_container_iter (GIMP_ITEM (iter->data));
+      index = gimp_item_get_index (iter->data);
+      if (index < g_list_length (layer_list) - 1)
+        lowered_layers = g_list_prepend (lowered_layers, iter->data);
+    }
+
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_ITEM_DISPLACE,
+                               ngettext ("Lower Layer to Bottom",
+                                         "Lower Layers to Bottom",
+                                         g_list_length (lowered_layers)));
+
+  for (iter = lowered_layers; iter; iter = iter->next)
+    gimp_image_lower_item_to_bottom (image, iter->data);
+
   gimp_image_flush (image);
+  gimp_image_undo_group_end (image);
+
+  g_list_free (lowered_layers);
 }
 
 void
@@ -561,20 +807,72 @@ layers_duplicate_cmd_callback (GimpAction *action,
                                gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  GimpLayer *new_layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *new_layers = NULL;
+  GList     *iter;
+  return_if_no_layers (image, layers, data);
 
-  new_layer = GIMP_LAYER (gimp_item_duplicate (GIMP_ITEM (layer),
-                                               G_TYPE_FROM_INSTANCE (layer)));
+  layers = g_list_copy (layers);
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_LAYER_ADD,
+                               _("Duplicate layers"));
+  for (iter = layers; iter; iter = iter->next)
+    {
+      GimpLayer     *new_layer;
+      GimpContainer *filters;
 
-  /*  use the actual parent here, not GIMP_IMAGE_ACTIVE_PARENT because
-   *  the latter would add a duplicated group inside itself instead of
-   *  above it
-   */
-  gimp_image_add_layer (image, new_layer,
-                        gimp_layer_get_parent (layer), -1,
-                        TRUE);
+      new_layer = GIMP_LAYER (gimp_item_duplicate (GIMP_ITEM (iter->data),
+                                                   G_TYPE_FROM_INSTANCE (iter->data)));
+
+      /*  use the actual parent here, not GIMP_IMAGE_ACTIVE_PARENT because
+       *  the latter would add a duplicated group inside itself instead of
+       *  above it
+       */
+      gimp_image_add_layer (image, new_layer,
+                            gimp_layer_get_parent (iter->data),
+                            gimp_item_get_index (iter->data),
+                            TRUE);
+      new_layers = g_list_prepend (new_layers, new_layer);
+
+      /* Import any attached layer effects */
+      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (iter->data));
+      if (gimp_container_get_n_children (filters) > 0)
+        {
+          GList         *filter_list;
+          GimpContainer *filters;
+
+          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (iter->data));
+
+          for (filter_list = GIMP_LIST (filters)->queue->tail; filter_list;
+               filter_list = g_list_previous (filter_list))
+            {
+              if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                {
+                  GimpDrawableFilter *old_filter = filter_list->data;
+                  GimpDrawableFilter *filter;
+
+                  filter =
+                    gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_layer),
+                                                    old_filter);
+
+                  if (filter != NULL)
+                    {
+                      gimp_drawable_filter_apply (filter, NULL);
+                      gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+
+                      gimp_drawable_filter_layer_mask_freeze (filter);
+                      g_object_unref (filter);
+                    }
+                }
+            }
+        }
+    }
+
+  gimp_image_set_selected_layers (image, new_layers);
+  g_list_free (layers);
+  g_list_free (new_layers);
+
+  gimp_image_undo_group_end (image);
   gimp_image_flush (image);
 }
 
@@ -584,12 +882,13 @@ layers_anchor_cmd_callback (GimpAction *action,
                             gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  return_if_no_layers (image, layers, data);
 
-  if (gimp_layer_is_floating_sel (layer))
+  if (g_list_length (layers) == 1 &&
+      gimp_layer_is_floating_sel (layers->data))
     {
-      floating_sel_anchor (layer);
+      floating_sel_anchor (layers->data);
       gimp_image_flush (image);
     }
 }
@@ -600,14 +899,28 @@ layers_merge_down_cmd_callback (GimpAction *action,
                                 gpointer    data)
 {
   GimpImage   *image;
-  GimpLayer   *layer;
+  GList       *layers;
   GimpDisplay *display;
-  return_if_no_layer (image, layer, data);
+  GError      *error = NULL;
+
+  return_if_no_layers (image, layers, data);
   return_if_no_display (display, data);
 
-  gimp_image_merge_down (image, layer, action_data_get_context (data),
-                         GIMP_EXPAND_AS_NECESSARY,
-                         GIMP_PROGRESS (display), NULL);
+  layers = gimp_image_merge_down (image, layers, action_data_get_context (data),
+                                  GIMP_EXPAND_AS_NECESSARY,
+                                  GIMP_PROGRESS (display), &error);
+
+  if (error)
+    {
+      gimp_message_literal (image->gimp,
+                            G_OBJECT (display), GIMP_MESSAGE_WARNING,
+                            error->message);
+      g_clear_error (&error);
+      return;
+    }
+  gimp_image_set_selected_layers (image, layers);
+  g_list_free (layers);
+
   gimp_image_flush (image);
 }
 
@@ -617,10 +930,85 @@ layers_merge_group_cmd_callback (GimpAction *action,
                                  gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *merge_layers = NULL;
+  GList     *iter;
+  return_if_no_layers (image, layers, data);
 
-  gimp_image_merge_group_layer (image, GIMP_GROUP_LAYER (layer));
+  for (iter = layers; iter; iter = iter->next)
+    {
+      if (gimp_viewable_get_children (GIMP_VIEWABLE (iter->data)))
+        {
+          GList *iter2;
+
+          for (iter2 = layers; iter2; iter2 = iter2->next)
+            {
+              if (iter->data == iter2->data)
+                continue;
+
+              /* Do not merge a layer when we already merge one of its
+               * ancestors.
+               */
+              if (gimp_viewable_is_ancestor (iter2->data, iter->data))
+                break;
+
+              /* Do not merge a layer which has a little sister (same
+               * parent and smaller index) or a little cousin (one of
+               * its ancestors is a little sister) of a pass-through
+               * group layer.
+               * These will be rendered and merged through the
+               * pass-through by definition.
+               */
+              if (gimp_viewable_get_children (GIMP_VIEWABLE (iter2->data)) &&
+                  gimp_layer_get_mode (iter2->data) == GIMP_LAYER_MODE_PASS_THROUGH)
+                {
+                  GimpLayer *pass_through_parent = gimp_layer_get_parent (iter2->data);
+                  GimpLayer *cousin              = iter->data;
+                  gboolean   ignore = FALSE;
+
+                  do
+                    {
+                      GimpLayer *cousin_parent = gimp_layer_get_parent (cousin);
+
+                      if (pass_through_parent == cousin_parent &&
+                          gimp_item_get_index (GIMP_ITEM (iter2->data)) < gimp_item_get_index (GIMP_ITEM (cousin)))
+                        {
+                          ignore = TRUE;
+                          break;
+                        }
+
+                      cousin = cousin_parent;
+                    }
+                  while (cousin != NULL);
+
+                  if (ignore)
+                    break;
+                }
+            }
+
+          if (iter2 == NULL)
+            merge_layers = g_list_prepend (merge_layers, iter->data);
+        }
+    }
+
+  if (g_list_length (merge_layers) > 1)
+    {
+      gchar *undo_name;
+
+      undo_name = g_strdup_printf (C_("undo-type", "Merge %d Layer Groups"),
+                                   g_list_length (merge_layers));
+      gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_IMAGE_LAYERS_MERGE,
+                                   undo_name);
+      g_free (undo_name);
+    }
+
+  for (iter = merge_layers; iter; iter = iter->next)
+    gimp_image_merge_group_layer (image, GIMP_GROUP_LAYER (iter->data));
+
+  if (g_list_length (merge_layers) > 1)
+    gimp_image_undo_group_end (image);
+
+  g_list_free (merge_layers);
   gimp_image_flush (image);
 }
 
@@ -630,10 +1018,56 @@ layers_delete_cmd_callback (GimpAction *action,
                             gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *removed_layers;
+  GList     *iter;
+  GList     *iter2;
 
-  gimp_image_remove_layer (image, layer, TRUE, NULL);
+  return_if_no_image (image, data);
+
+  layers = gimp_image_get_selected_layers (image);
+
+  /*TODO: we should have a failsafe to determine when we are going to
+   * delete all layers (i.e. all layers of first level at least) and
+   * forbid it. */
+
+  /* Copy of the original selection. */
+  removed_layers = g_list_copy (layers);
+
+  /* Removing children layers (they will be removed anyway by removing
+   * the parent).
+   */
+  for (iter = removed_layers; iter; iter = iter->next)
+    {
+      for (iter2 = removed_layers; iter2; iter2 = iter2->next)
+        {
+          if (iter->data != iter2->data &&
+              gimp_viewable_is_ancestor (iter2->data, iter->data))
+            {
+              removed_layers = g_list_delete_link (removed_layers, iter);
+              iter = removed_layers;
+              break;
+            }
+        }
+    }
+
+  if (g_list_length (removed_layers) > 1)
+    {
+      gchar *undo_name;
+
+      undo_name = g_strdup_printf (C_("undo-type", "Remove %d Layers"),
+                                   g_list_length (removed_layers));
+      gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_IMAGE_ITEM_REMOVE,
+                                   undo_name);
+    }
+
+  for (iter = removed_layers; iter; iter = iter->next)
+    gimp_image_remove_layer (image, iter->data, TRUE, NULL);
+
+  if (g_list_length (removed_layers) > 1)
+    gimp_image_undo_group_end (image);
+
+  g_list_free (removed_layers);
   gimp_image_flush (image);
 }
 
@@ -643,11 +1077,16 @@ layers_text_discard_cmd_callback (GimpAction *action,
                                   gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *iter;
+  return_if_no_layers (image, layers, data);
 
-  if (GIMP_IS_TEXT_LAYER (layer))
-    gimp_text_layer_discard (GIMP_TEXT_LAYER (layer));
+  gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_TEXT,
+                               _("Discard Text Information"));
+  for (iter = layers; iter; iter = iter->next)
+    if (GIMP_IS_TEXT_LAYER (iter->data))
+      gimp_text_layer_discard (GIMP_TEXT_LAYER (iter->data));
+  gimp_image_undo_group_end (image);
 }
 
 void
@@ -656,23 +1095,33 @@ layers_text_to_vectors_cmd_callback (GimpAction *action,
                                      gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *iter;
+  return_if_no_layers (image, layers, data);
 
-  if (GIMP_IS_TEXT_LAYER (layer))
+  /* TODO: have the proper undo group. */
+  gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_PATHS_IMPORT,
+                               _("Add Paths"));
+  for (iter = layers; iter; iter = iter->next)
     {
-      GimpVectors *vectors;
-      gint         x, y;
+      GimpLayer *layer = iter->data;
 
-      vectors = gimp_text_vectors_new (image, GIMP_TEXT_LAYER (layer)->text);
+      if (GIMP_IS_TEXT_LAYER (layer))
+        {
+          GimpPath *path;
+          gint      x, y;
 
-      gimp_item_get_offset (GIMP_ITEM (layer), &x, &y);
-      gimp_item_translate (GIMP_ITEM (vectors), x, y, FALSE);
+          path = gimp_text_path_new (image, GIMP_TEXT_LAYER (layer)->text);
 
-      gimp_image_add_vectors (image, vectors,
-                              GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
-      gimp_image_flush (image);
+          gimp_item_get_offset (GIMP_ITEM (layer), &x, &y);
+          gimp_item_translate (GIMP_ITEM (path), x, y, FALSE);
+
+          gimp_image_add_path (image, path,
+                               GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
+          gimp_image_flush (image);
+        }
     }
+  gimp_image_undo_group_end (image);
 }
 
 void
@@ -681,22 +1130,29 @@ layers_text_along_vectors_cmd_callback (GimpAction *action,
                                         gpointer    data)
 {
   GimpImage   *image;
+  GList       *layers;
+  GList       *paths;
   GimpLayer   *layer;
-  GimpVectors *vectors;
-  return_if_no_layer (image, layer, data);
-  return_if_no_vectors (image, vectors, data);
+  GimpPath    *path;
+  return_if_no_layers (image, layers, data);
+  return_if_no_paths (image, paths, data);
 
+  if (g_list_length (layers) != 1 || g_list_length (paths) != 1)
+    return;
+
+  layer = layers->data;
+  path  = paths->data;
   if (GIMP_IS_TEXT_LAYER (layer))
     {
-      gdouble      box_width;
-      gdouble      box_height;
-      GimpVectors *new_vectors;
-      gdouble      offset;
+      gdouble   box_width;
+      gdouble   box_height;
+      GimpPath *new_path;
+      gdouble   offset;
 
       box_width  = gimp_item_get_width  (GIMP_ITEM (layer));
       box_height = gimp_item_get_height (GIMP_ITEM (layer));
 
-      new_vectors = gimp_text_vectors_new (image, GIMP_TEXT_LAYER (layer)->text);
+      new_path = gimp_text_path_new (image, GIMP_TEXT_LAYER (layer)->text);
 
       offset = 0;
       switch (GIMP_TEXT_LAYER (layer)->text->base_dir)
@@ -712,7 +1168,7 @@ layers_text_along_vectors_cmd_callback (GimpAction *action,
           {
             GimpStroke *stroke = NULL;
 
-            while ((stroke = gimp_vectors_stroke_get_next (new_vectors, stroke)))
+            while ((stroke = gimp_path_stroke_get_next (new_path, stroke)))
               {
                 gimp_stroke_rotate (stroke, 0, 0, 270);
                 gimp_stroke_translate (stroke, 0, box_width);
@@ -722,13 +1178,12 @@ layers_text_along_vectors_cmd_callback (GimpAction *action,
           break;
         }
 
+      gimp_path_warp_path (path, new_path, offset);
 
-      gimp_vectors_warp_vectors (vectors, new_vectors, offset);
+      gimp_item_set_visible (GIMP_ITEM (new_path), TRUE, FALSE);
 
-      gimp_item_set_visible (GIMP_ITEM (new_vectors), TRUE, FALSE);
-
-      gimp_image_add_vectors (image, new_vectors,
-                              GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
+      gimp_image_add_path (image, new_path,
+                           GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
       gimp_image_flush (image);
     }
 }
@@ -740,12 +1195,17 @@ layers_resize_cmd_callback (GimpAction *action,
 {
   GimpImage *image;
   GimpLayer *layer;
+  GList     *layers;
   GtkWidget *widget;
   GtkWidget *dialog;
-  return_if_no_layer (image, layer, data);
+  return_if_no_layers (image, layers, data);
   return_if_no_widget (widget, data);
 
 #define RESIZE_DIALOG_KEY "gimp-resize-dialog"
+
+  g_return_if_fail (g_list_length (layers) == 1);
+
+  layer = layers->data;
 
   dialog = dialogs_get_dialog (G_OBJECT (layer), RESIZE_DIALOG_KEY);
 
@@ -757,7 +1217,10 @@ layers_resize_cmd_callback (GimpAction *action,
       if (GIMP_IS_IMAGE_WINDOW (data))
         display = action_data_get_display (data);
 
-      if (layer_resize_unit != GIMP_UNIT_PERCENT && display)
+      if (layer_resize_unit == NULL)
+        layer_resize_unit = gimp_unit_pixel ();
+
+      if (layer_resize_unit != gimp_unit_percent () && display)
         layer_resize_unit = gimp_display_get_shell (display)->unit;
 
       dialog = resize_dialog_new (GIMP_VIEWABLE (layer),
@@ -786,12 +1249,21 @@ layers_resize_to_image_cmd_callback (GimpAction *action,
                                      gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *iter;
+  return_if_no_layers (image, layers, data);
 
-  gimp_layer_resize_to_image (layer,
-                              action_data_get_context (data),
-                              GIMP_FILL_TRANSPARENT);
+  if (g_list_length (layers) > 1)
+    gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_ITEM_RESIZE,
+                                 _("Layers to Image Size"));
+  for (iter = layers; iter; iter = iter->next)
+    gimp_layer_resize_to_image (iter->data,
+                                action_data_get_context (data),
+                                GIMP_FILL_TRANSPARENT);
+
+  if (g_list_length (layers) > 1)
+    gimp_image_undo_group_end (image);
+
   gimp_image_flush (image);
 }
 
@@ -801,13 +1273,18 @@ layers_scale_cmd_callback (GimpAction *action,
                            gpointer    data)
 {
   GimpImage *image;
+  GList     *layers;
   GimpLayer *layer;
   GtkWidget *widget;
   GtkWidget *dialog;
-  return_if_no_layer (image, layer, data);
+  return_if_no_layers (image, layers, data);
   return_if_no_widget (widget, data);
 
 #define SCALE_DIALOG_KEY "gimp-scale-dialog"
+
+  g_return_if_fail (g_list_length (layers) == 1);
+
+  layer = layers->data;
 
   dialog = dialogs_get_dialog (G_OBJECT (layer), SCALE_DIALOG_KEY);
 
@@ -818,7 +1295,10 @@ layers_scale_cmd_callback (GimpAction *action,
       if (GIMP_IS_IMAGE_WINDOW (data))
         display = action_data_get_display (data);
 
-      if (layer_scale_unit != GIMP_UNIT_PERCENT && display)
+      if (layer_scale_unit == NULL)
+        layer_scale_unit = gimp_unit_pixel ();;
+
+      if (layer_scale_unit != gimp_unit_percent () && display)
         layer_scale_unit = gimp_display_get_shell (display)->unit;
 
       if (layer_scale_interp == -1)
@@ -846,12 +1326,13 @@ layers_crop_to_selection_cmd_callback (GimpAction *action,
                                        gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
+  GList     *layers;
+  GList     *iter;
   GtkWidget *widget;
+  gchar     *desc;
   gint       x, y;
   gint       width, height;
-  gint       off_x, off_y;
-  return_if_no_layer (image, layer, data);
+  return_if_no_layers (image, layers, data);
   return_if_no_widget (widget, data);
 
   if (! gimp_item_bounds (GIMP_ITEM (gimp_image_get_mask (image)),
@@ -864,16 +1345,25 @@ layers_crop_to_selection_cmd_callback (GimpAction *action,
       return;
     }
 
-  gimp_item_get_offset (GIMP_ITEM (layer), &off_x, &off_y);
-  off_x -= x;
-  off_y -= y;
+  desc = g_strdup_printf (ngettext ("Crop Layer to Selection",
+                                    "Crop %d Layers to Selection",
+                                    g_list_length (layers)),
+                          g_list_length (layers));
+  gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_ITEM_RESIZE, desc);
+  g_free (desc);
 
-  gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_ITEM_RESIZE,
-                               _("Crop Layer to Selection"));
+  for (iter = layers; iter; iter = iter->next)
+    {
+      gint off_x, off_y;
 
-  gimp_item_resize (GIMP_ITEM (layer),
-                    action_data_get_context (data), GIMP_FILL_TRANSPARENT,
-                    width, height, off_x, off_y);
+      gimp_item_get_offset (GIMP_ITEM (iter->data), &off_x, &off_y);
+      off_x -= x;
+      off_y -= y;
+
+      gimp_item_resize (GIMP_ITEM (iter->data),
+                        action_data_get_context (data), GIMP_FILL_TRANSPARENT,
+                        width, height, off_x, off_y);
+    }
 
   gimp_image_undo_group_end (image);
   gimp_image_flush (image);
@@ -885,45 +1375,74 @@ layers_crop_to_content_cmd_callback (GimpAction *action,
                                      gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
+  GList     *layers;
+  GList     *iter;
   GtkWidget *widget;
+  gchar     *desc;
   gint       x, y;
   gint       width, height;
-  return_if_no_layer (image, layer, data);
+  gint       n_croppable = 0;
+  return_if_no_layers (image, layers, data);
   return_if_no_widget (widget, data);
 
-  switch (gimp_pickable_auto_shrink (GIMP_PICKABLE (layer),
-                                     0, 0,
-                                     gimp_item_get_width  (GIMP_ITEM (layer)),
-                                     gimp_item_get_height (GIMP_ITEM (layer)),
-                                     &x, &y, &width, &height))
+  for (iter = layers; iter; iter = iter->next)
     {
-    case GIMP_AUTO_SHRINK_SHRINK:
-      gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_ITEM_RESIZE,
-                                   _("Crop Layer to Content"));
+      switch (gimp_pickable_auto_shrink (GIMP_PICKABLE (iter->data),
+                                         0, 0,
+                                         gimp_item_get_width  (iter->data),
+                                         gimp_item_get_height (iter->data),
+                                         &x, &y, &width, &height))
+        {
+        case GIMP_AUTO_SHRINK_SHRINK:
+          n_croppable++;
+          break;
 
-      gimp_item_resize (GIMP_ITEM (layer),
-                        action_data_get_context (data), GIMP_FILL_TRANSPARENT,
-                        width, height, -x, -y);
-
-      gimp_image_undo_group_end (image);
-      gimp_image_flush (image);
-      break;
-
-    case GIMP_AUTO_SHRINK_EMPTY:
-      gimp_message_literal (image->gimp,
-                            G_OBJECT (widget), GIMP_MESSAGE_INFO,
-                            _("Cannot crop because the active layer "
-                              "has no content."));
-      break;
-
-    case GIMP_AUTO_SHRINK_UNSHRINKABLE:
-      gimp_message_literal (image->gimp,
-                            G_OBJECT (widget), GIMP_MESSAGE_INFO,
-                            _("Cannot crop because the active layer "
-                              "is already cropped to its content."));
-      break;
+        case GIMP_AUTO_SHRINK_EMPTY:
+          /* Cannot crop because the layer has no content. */
+        case GIMP_AUTO_SHRINK_UNSHRINKABLE:
+          /* Cannot crop because the active layer is already cropped to
+           * its content. */
+          break;
+        }
     }
+
+  if (n_croppable == 0)
+    {
+      gimp_message_literal (image->gimp,
+                            G_OBJECT (widget), GIMP_MESSAGE_INFO,
+                            _("Cannot crop because none of the selected"
+                              " layers have content or they are already"
+                              " cropped to their content."));
+      return;
+    }
+
+  desc = g_strdup_printf (ngettext ("Crop Layer to Content",
+                                    "Crop %d Layers to Content",
+                                    n_croppable),
+                          n_croppable);
+  gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_ITEM_RESIZE, desc);
+  g_free (desc);
+
+  for (iter = layers; iter; iter = iter->next)
+    {
+      switch (gimp_pickable_auto_shrink (GIMP_PICKABLE (iter->data),
+                                         0, 0,
+                                         gimp_item_get_width  (iter->data),
+                                         gimp_item_get_height (iter->data),
+                                         &x, &y, &width, &height))
+        {
+        case GIMP_AUTO_SHRINK_SHRINK:
+          gimp_item_resize (iter->data,
+                            action_data_get_context (data), GIMP_FILL_TRANSPARENT,
+                            width, height, -x, -y);
+
+          break;
+        default:
+          break;
+        }
+    }
+  gimp_image_flush (image);
+  gimp_image_undo_group_end (image);
 }
 
 void
@@ -932,31 +1451,51 @@ layers_mask_add_cmd_callback (GimpAction *action,
                               gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
+  GList     *layers;
+  GList     *iter;
   GtkWidget *widget;
   GtkWidget *dialog;
-  return_if_no_layer (image, layer, data);
+  GList     *update_layers = NULL;
+  gint       n_channels = 0;
+  return_if_no_layers (image, layers, data);
   return_if_no_widget (widget, data);
 
-  if (gimp_layer_get_mask (layer))
+  for (iter = layers; iter; iter = iter->next)
+    {
+      g_return_if_fail (GIMP_IS_LAYER (iter->data));
+
+      if (! gimp_layer_get_mask (iter->data))
+        {
+          update_layers = g_list_prepend (update_layers, iter->data);
+          n_channels++;
+        }
+    }
+  if (n_channels == 0)
+    /* No layers or they all have masks already. */
     return;
 
 #define ADD_MASK_DIALOG_KEY "gimp-add-mask-dialog"
 
-  dialog = dialogs_get_dialog (G_OBJECT (layer), ADD_MASK_DIALOG_KEY);
+  for (iter = update_layers; iter; iter = iter->next)
+    {
+      dialog = dialogs_get_dialog (G_OBJECT (iter->data), ADD_MASK_DIALOG_KEY);
+      if (dialog)
+        break;
+    }
 
   if (! dialog)
     {
       GimpDialogConfig *config = GIMP_DIALOG_CONFIG (image->gimp->config);
 
-      dialog = layer_add_mask_dialog_new (layer, action_data_get_context (data),
+      dialog = layer_add_mask_dialog_new (update_layers, action_data_get_context (data),
                                           widget,
                                           config->layer_add_mask_type,
                                           config->layer_add_mask_invert,
                                           layers_add_mask_callback,
                                           NULL);
 
-      dialogs_attach_dialog (G_OBJECT (layer), ADD_MASK_DIALOG_KEY, dialog);
+      for (iter = update_layers; iter; iter = iter->next)
+        dialogs_attach_dialog (G_OBJECT (iter->data), ADD_MASK_DIALOG_KEY, dialog);
     }
 
   gtk_window_present (GTK_WINDOW (dialog));
@@ -968,24 +1507,28 @@ layers_mask_add_last_vals_cmd_callback (GimpAction *action,
                                         gpointer    data)
 {
   GimpImage        *image;
-  GimpLayer        *layer;
+  GList            *layers;
+  GList            *iter;
   GtkWidget        *widget;
   GimpDialogConfig *config;
   GimpChannel      *channel = NULL;
   GimpLayerMask    *mask;
-  return_if_no_layer (image, layer, data);
+  return_if_no_layers (image, layers, data);
   return_if_no_widget (widget, data);
-
-  if (gimp_layer_get_mask (layer))
-    return;
 
   config = GIMP_DIALOG_CONFIG (image->gimp->config);
 
   if (config->layer_add_mask_type == GIMP_ADD_MASK_CHANNEL)
     {
-      channel = gimp_image_get_active_channel (image);
+      GList *selected_channels;
 
-      if (! channel)
+      selected_channels = gimp_image_get_selected_channels (image);
+
+      if (selected_channels)
+        {
+          channel = selected_channels->data;
+        }
+      else
         {
           GimpContainer *channels = gimp_image_get_channels (image);
 
@@ -999,14 +1542,35 @@ layers_mask_add_last_vals_cmd_callback (GimpAction *action,
         }
     }
 
-  mask = gimp_layer_create_mask (layer,
-                                 config->layer_add_mask_type,
-                                 channel);
+  for (iter = layers; iter; iter = iter->next)
+    {
+      if (! gimp_layer_get_mask (iter->data))
+        break;
+    }
+  if (iter == NULL)
+    /* No layers or they all have masks already. */
+    return;
 
-  if (config->layer_add_mask_invert)
-    gimp_channel_invert (GIMP_CHANNEL (mask), FALSE);
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_LAYER_ADD,
+                               _("Add Layer Masks"));
+  for (iter = layers; iter; iter = iter->next)
+    {
+      if (gimp_layer_get_mask (iter->data))
+        continue;
 
-  gimp_layer_add_mask (layer, mask, TRUE, NULL);
+      mask = gimp_layer_create_mask (iter->data,
+                                     config->layer_add_mask_type,
+                                     channel);
+
+      if (config->layer_add_mask_invert)
+        gimp_channel_invert (GIMP_CHANNEL (mask), FALSE);
+
+      gimp_layer_add_mask (iter->data, mask, TRUE, NULL);
+    }
+
+  gimp_image_undo_group_end (image);
+
   gimp_image_flush (image);
 }
 
@@ -1015,17 +1579,67 @@ layers_mask_apply_cmd_callback (GimpAction *action,
                                 GVariant   *value,
                                 gpointer    data)
 {
-  GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GimpMaskApplyMode  mode;
+  GimpImage         *image;
+  GList             *layers;
+  GList             *iter;
+  gchar             *undo_text = NULL;
+  GimpUndoType       undo_type = GIMP_UNDO_GROUP_NONE;
 
-  if (gimp_layer_get_mask (layer))
+  return_if_no_layers (image, layers, data);
+
+  mode = (GimpMaskApplyMode) g_variant_get_int32 (value);
+  for (iter = layers; iter; iter = iter->next)
     {
-      GimpMaskApplyMode mode = (GimpMaskApplyMode) g_variant_get_int32 (value);
-
-      gimp_layer_apply_mask (layer, mode, TRUE);
-      gimp_image_flush (image);
+      if (gimp_layer_get_mask (iter->data) &&
+          (mode != GIMP_MASK_APPLY ||
+           (! gimp_viewable_get_children (GIMP_VIEWABLE (iter->data)) &&
+            ! gimp_item_is_content_locked (GIMP_ITEM (iter->data), NULL))))
+        break;
     }
+  if (iter == NULL)
+    /* No layers or none have applicable masks. */
+    return;
+
+  switch (mode)
+    {
+    case GIMP_MASK_APPLY:
+      undo_type = GIMP_UNDO_GROUP_MASK;
+      undo_text = _("Apply Layer Masks");
+      break;
+    case GIMP_MASK_DISCARD:
+      undo_type = GIMP_UNDO_GROUP_MASK;
+      undo_text = _("Delete Layer Masks");
+      break;
+    default:
+      g_warning ("%s: unhandled GimpMaskApplyMode %d\n",
+                 G_STRFUNC, mode);
+      break;
+    }
+
+  if (undo_type != GIMP_UNDO_GROUP_NONE)
+    gimp_image_undo_group_start (image, undo_type, undo_text);
+
+  for (iter = layers; iter; iter = iter->next)
+    {
+      if (gimp_layer_get_mask (iter->data))
+        {
+          if (mode == GIMP_MASK_APPLY &&
+              (gimp_viewable_get_children (GIMP_VIEWABLE (iter->data)) ||
+               gimp_item_is_content_locked (GIMP_ITEM (iter->data), NULL)))
+            /* Layer groups cannot apply masks. Neither can
+             * content-locked layers.
+             */
+            continue;
+
+          gimp_layer_apply_mask (iter->data, mode, TRUE);
+        }
+    }
+
+  if (undo_type != GIMP_UNDO_GROUP_NONE)
+    gimp_image_undo_group_end (image);
+
+  gimp_image_flush (image);
 }
 
 void
@@ -1034,16 +1648,19 @@ layers_mask_edit_cmd_callback (GimpAction *action,
                                gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *iter;
+  gboolean   active = g_variant_get_boolean (value);
+  return_if_no_layers (image, layers, data);
 
-  if (gimp_layer_get_mask (layer))
-    {
-      gboolean active = g_variant_get_boolean (value);
+  /* Multiple-layer selection cannot edit masks. */
+  active = active && (g_list_length (layers) == 1);
 
-      gimp_layer_set_edit_mask (layer, active);
-      gimp_image_flush (image);
-    }
+  for (iter = layers; iter; iter = iter->next)
+    if (gimp_layer_get_mask (iter->data))
+      gimp_layer_set_edit_mask (iter->data, active);
+
+  gimp_image_flush (image);
 }
 
 void
@@ -1052,16 +1669,45 @@ layers_mask_show_cmd_callback (GimpAction *action,
                                gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *iter;
+  gboolean   active     = g_variant_get_boolean (value);
+  gboolean   have_masks = FALSE;
+  return_if_no_layers (image, layers, data);
 
-  if (gimp_layer_get_mask (layer))
+  for (iter = layers; iter; iter = iter->next)
     {
-      gboolean active = g_variant_get_boolean (value);
-
-      gimp_layer_set_show_mask (layer, active, TRUE);
-      gimp_image_flush (image);
+      if (gimp_layer_get_mask (iter->data))
+        {
+          have_masks = TRUE;
+          /* A bit of tricky to handle multiple and diverse layers with
+           * a toggle action (with only binary state).
+           * In non-active state, we will consider sets of both shown
+           * and hidden masks as ok and exits. This allows us to switch
+           * the action "active" state without actually changing
+           * individual masks state without explicit user request.
+           */
+          if (! active && ! gimp_layer_get_show_mask (iter->data))
+            return;
+        }
     }
+  if (! have_masks)
+    return;
+
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_LAYER_ADD,
+                               _("Show Layer Masks"));
+
+  for (iter = layers; iter; iter = iter->next)
+    {
+      if (gimp_layer_get_mask (iter->data))
+        {
+          gimp_layer_set_show_mask (iter->data, active, TRUE);
+        }
+    }
+
+  gimp_image_flush (image);
+  gimp_image_undo_group_end (image);
 }
 
 void
@@ -1070,16 +1716,45 @@ layers_mask_disable_cmd_callback (GimpAction *action,
                                   gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *iter;
+  gboolean   active = g_variant_get_boolean (value);
+  gboolean   have_masks = FALSE;
+  return_if_no_layers (image, layers, data);
 
-  if (gimp_layer_get_mask (layer))
+  for (iter = layers; iter; iter = iter->next)
     {
-      gboolean active = g_variant_get_boolean (value);
-
-      gimp_layer_set_apply_mask (layer, ! active, TRUE);
-      gimp_image_flush (image);
+      if (gimp_layer_get_mask (iter->data))
+        {
+          have_masks = TRUE;
+          /* A bit of tricky to handle multiple and diverse layers with
+           * a toggle action (with only binary state).
+           * In non-active state, we will consider sets of both enabled
+           * and disabled masks as ok and exits. This allows us to
+           * switch the action "active" state without actually changing
+           * individual masks state without explicit user request.
+           */
+          if (! active && gimp_layer_get_apply_mask (iter->data))
+            return;
+        }
     }
+  if (! have_masks)
+    return;
+
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_LAYER_ADD,
+                               _("Disable Layer Masks"));
+
+  for (iter = layers; iter; iter = iter->next)
+    {
+      if (gimp_layer_get_mask (iter->data))
+        {
+          gimp_layer_set_apply_mask (iter->data, ! active, TRUE);
+        }
+    }
+
+  gimp_image_flush (image);
+  gimp_image_undo_group_end (image);
 }
 
 void
@@ -1088,19 +1763,44 @@ layers_mask_to_selection_cmd_callback (GimpAction *action,
                                        gpointer    data)
 {
   GimpImage     *image;
-  GimpLayer     *layer;
-  GimpLayerMask *mask;
-  return_if_no_layer (image, layer, data);
+  GList         *layers;
+  GList         *iter;
+  GList         *masks = NULL;
+  return_if_no_layers (image, layers, data);
 
-  mask = gimp_layer_get_mask (layer);
+  for (iter = layers; iter; iter = iter->next)
+    {
+      if (gimp_layer_get_mask (iter->data))
+        masks = g_list_prepend (masks, gimp_layer_get_mask (iter->data));
+    }
 
-  if (mask)
+  if (masks)
     {
       GimpChannelOps operation = (GimpChannelOps) g_variant_get_int32 (value);
 
-      gimp_item_to_selection (GIMP_ITEM (mask), operation,
-                              TRUE, FALSE, 0.0, 0.0);
+      switch (operation)
+        {
+        case GIMP_CHANNEL_OP_REPLACE:
+          gimp_channel_push_undo (gimp_image_get_mask (image),
+                                  C_("undo-type", "Masks to Selection"));
+          break;
+        case GIMP_CHANNEL_OP_ADD:
+          gimp_channel_push_undo (gimp_image_get_mask (image),
+                                  C_("undo-type", "Add Masks to Selection"));
+          break;
+        case GIMP_CHANNEL_OP_SUBTRACT:
+          gimp_channel_push_undo (gimp_image_get_mask (image),
+                                  C_("undo-type", "Subtract Masks from Selection"));
+          break;
+        case GIMP_CHANNEL_OP_INTERSECT:
+          gimp_channel_push_undo (gimp_image_get_mask (image),
+                                  C_("undo-type", "Intersect Masks with Selection"));
+          break;
+        }
+      gimp_channel_combine_items (gimp_image_get_mask (image),
+                                  masks, operation);
       gimp_image_flush (image);
+      g_list_free (masks);
     }
 }
 
@@ -1110,14 +1810,19 @@ layers_alpha_add_cmd_callback (GimpAction *action,
                                gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *iter;
+  return_if_no_layers (image, layers, data);
 
-  if (! gimp_drawable_has_alpha (GIMP_DRAWABLE (layer)))
-    {
-      gimp_layer_add_alpha (layer);
-      gimp_image_flush (image);
-    }
+  gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_LAYER_ADD_ALPHA,
+                               _("Add Alpha Channel"));
+
+  for (iter = layers; iter; iter = iter->next)
+    if (! gimp_drawable_has_alpha (iter->data))
+      gimp_layer_add_alpha (iter->data);
+
+  gimp_image_undo_group_end (image);
+  gimp_image_flush (image);
 }
 
 void
@@ -1126,14 +1831,19 @@ layers_alpha_remove_cmd_callback (GimpAction *action,
                                   gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  GList     *iter;
+  return_if_no_layers (image, layers, data);
 
-  if (gimp_drawable_has_alpha (GIMP_DRAWABLE (layer)))
-    {
-      gimp_layer_remove_alpha (layer, action_data_get_context (data));
-      gimp_image_flush (image);
-    }
+  gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_LAYER_ADD_ALPHA,
+                               _("Remove Alpha Channel"));
+
+  for (iter = layers; iter; iter = iter->next)
+    if (gimp_drawable_has_alpha (iter->data))
+      gimp_layer_remove_alpha (iter->data, action_data_get_context (data));
+
+  gimp_image_undo_group_end (image);
+  gimp_image_flush (image);
 }
 
 void
@@ -1142,15 +1852,43 @@ layers_alpha_to_selection_cmd_callback (GimpAction *action,
                                         gpointer    data)
 {
   GimpImage      *image;
-  GimpLayer      *layer;
+  GimpDisplay    *display;
+  GList          *layers;
   GimpChannelOps  operation;
-  return_if_no_layer (image, layer, data);
+  return_if_no_layers (image, layers, data);
+  return_if_no_display (display, data);
 
   operation = (GimpChannelOps) g_variant_get_int32 (value);
 
-  gimp_item_to_selection (GIMP_ITEM (layer), operation,
-                          TRUE, FALSE, 0.0, 0.0);
+  switch (operation)
+    {
+    case GIMP_CHANNEL_OP_REPLACE:
+      gimp_channel_push_undo (gimp_image_get_mask (image),
+                              C_("undo-type", "Alpha to Selection"));
+      break;
+    case GIMP_CHANNEL_OP_ADD:
+      gimp_channel_push_undo (gimp_image_get_mask (image),
+                              C_("undo-type", "Add Alpha to Selection"));
+      break;
+    case GIMP_CHANNEL_OP_SUBTRACT:
+      gimp_channel_push_undo (gimp_image_get_mask (image),
+                              C_("undo-type", "Subtract Alpha from Selection"));
+      break;
+    case GIMP_CHANNEL_OP_INTERSECT:
+      gimp_channel_push_undo (gimp_image_get_mask (image),
+                              C_("undo-type", "Intersect Alpha with Selection"));
+      break;
+    }
+  gimp_channel_combine_items (gimp_image_get_mask (image),
+                              layers, operation);
   gimp_image_flush (image);
+
+  if (gimp_channel_is_empty (gimp_image_get_mask (image)))
+    {
+      gimp_message_literal (image->gimp, G_OBJECT (display),
+                            GIMP_MESSAGE_WARNING,
+                            _("Empty Selection"));
+    }
 }
 
 void
@@ -1159,26 +1897,40 @@ layers_opacity_cmd_callback (GimpAction *action,
                              gpointer    data)
 {
   GimpImage            *image;
-  GimpLayer            *layer;
+  GList                *layers;
+  GList                *iter;
   gdouble               opacity;
   GimpUndo             *undo;
   GimpActionSelectType  select_type;
-  gboolean              push_undo = TRUE;
-  return_if_no_layer (image, layer, data);
+  gboolean        push_undo = TRUE;
+  return_if_no_layers (image, layers, data);
 
   select_type = (GimpActionSelectType) g_variant_get_int32 (value);
+  if (g_list_length (layers) == 1)
+    {
+      undo = gimp_image_undo_can_compress (image, GIMP_TYPE_ITEM_UNDO,
+                                           GIMP_UNDO_LAYER_OPACITY);
 
-  undo = gimp_image_undo_can_compress (image, GIMP_TYPE_ITEM_UNDO,
-                                       GIMP_UNDO_LAYER_OPACITY);
+      if (undo && GIMP_ITEM_UNDO (undo)->item == GIMP_ITEM (layers->data))
+        push_undo = FALSE;
+    }
 
-  if (undo && GIMP_ITEM_UNDO (undo)->item == GIMP_ITEM (layer))
-    push_undo = FALSE;
+  if (g_list_length (layers) > 1)
+    gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_LAYER_OPACITY,
+                                 _("Set layers opacity"));
 
-  opacity = action_select_value (select_type,
-                                 gimp_layer_get_opacity (layer),
-                                 0.0, 1.0, 1.0,
-                                 1.0 / 255.0, 0.01, 0.1, 0.0, FALSE);
-  gimp_layer_set_opacity (layer, opacity, push_undo);
+  for (iter = layers; iter; iter = iter->next)
+    {
+      opacity = action_select_value (select_type,
+                                     gimp_layer_get_opacity (iter->data),
+                                     0.0, 1.0, 1.0,
+                                     1.0 / 255.0, 0.01, 0.1, 0.0, FALSE);
+      gimp_layer_set_opacity (iter->data, opacity, push_undo);
+    }
+
+  if (g_list_length (layers) > 1)
+    gimp_image_undo_group_end (image);
+
   gimp_image_flush (image);
 }
 
@@ -1188,37 +1940,54 @@ layers_mode_cmd_callback (GimpAction *action,
                           gpointer    data)
 {
   GimpImage            *image;
-  GimpLayer            *layer;
-  GimpLayerMode        *modes;
-  gint                  n_modes;
-  GimpLayerMode         layer_mode;
-  gint                  index;
-  GimpUndo             *undo;
+  GList                *layers;
+  GList                *iter;
   GimpActionSelectType  select_type;
   gboolean              push_undo = TRUE;
-  return_if_no_layer (image, layer, data);
+  return_if_no_layers (image, layers, data);
 
   select_type = (GimpActionSelectType) g_variant_get_int32 (value);
 
-  undo = gimp_image_undo_can_compress (image, GIMP_TYPE_ITEM_UNDO,
-                                       GIMP_UNDO_LAYER_MODE);
+  if (g_list_length (layers) == 1)
+    {
+      GimpUndo *undo;
 
-  if (undo && GIMP_ITEM_UNDO (undo)->item == GIMP_ITEM (layer))
-    push_undo = FALSE;
+      undo = gimp_image_undo_can_compress (image, GIMP_TYPE_ITEM_UNDO,
+                                           GIMP_UNDO_LAYER_MODE);
 
-  layer_mode = gimp_layer_get_mode (layer);
+      if (undo && GIMP_ITEM_UNDO (undo)->item == GIMP_ITEM (layers->data))
+        push_undo = FALSE;
+    }
 
-  modes = gimp_layer_mode_get_context_array (layer_mode,
-                                             GIMP_LAYER_MODE_CONTEXT_LAYER,
-                                             &n_modes);
-  index = layers_mode_index (layer_mode, modes, n_modes);
-  index = action_select_value (select_type,
-                               index, 0, n_modes - 1, 0,
-                               0.0, 1.0, 1.0, 0.0, FALSE);
-  layer_mode = modes[index];
-  g_free (modes);
+  if (g_list_length (layers) > 1)
+    gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_LAYER_OPACITY,
+                                 _("Set layers opacity"));
 
-  gimp_layer_set_mode (layer, layer_mode, push_undo);
+  for (iter = layers; iter; iter = iter->next)
+    {
+      GimpLayerMode *modes;
+      gint           n_modes;
+      GimpLayerMode  layer_mode;
+      gint           index;
+
+      layer_mode = gimp_layer_get_mode (iter->data);
+
+      modes = gimp_layer_mode_get_context_array (layer_mode,
+                                                 GIMP_LAYER_MODE_CONTEXT_LAYER,
+                                                 &n_modes);
+      index = layers_mode_index (layer_mode, modes, n_modes);
+      index = action_select_value (select_type,
+                                   index, 0, n_modes - 1, 0,
+                                   0.0, 1.0, 1.0, 0.0, FALSE);
+      layer_mode = modes[index];
+      g_free (modes);
+
+      gimp_layer_set_mode (iter->data, layer_mode, push_undo);
+    }
+
+  if (g_list_length (layers) > 1)
+    gimp_image_undo_group_end (image);
+
   gimp_image_flush (image);
 }
 
@@ -1228,24 +1997,49 @@ layers_blend_space_cmd_callback (GimpAction *action,
                                  gpointer    data)
 {
   GimpImage           *image;
-  GimpLayer           *layer;
+  GList               *layers;
+  GList               *update_layers = NULL;
+  GList               *iter;
   GimpLayerColorSpace  blend_space;
-  return_if_no_layer (image, layer, data);
+  gboolean             push_undo = TRUE;
+  return_if_no_layers (image, layers, data);
 
   blend_space = (GimpLayerColorSpace) g_variant_get_int32 (value);
 
-  if (blend_space != gimp_layer_get_blend_space (layer))
+  for (iter = layers; iter; iter = iter->next)
+    {
+      GimpLayerMode mode;
+
+      mode = gimp_layer_get_mode (iter->data);
+      if (gimp_layer_mode_is_blend_space_mutable (mode) &&
+          blend_space != gimp_layer_get_blend_space (iter->data))
+        update_layers = g_list_prepend (update_layers, iter->data);
+    }
+
+  if (g_list_length (update_layers) == 1)
     {
       GimpUndo *undo;
-      gboolean  push_undo = TRUE;
 
       undo = gimp_image_undo_can_compress (image, GIMP_TYPE_LAYER_PROP_UNDO,
                                            GIMP_UNDO_LAYER_MODE);
 
-      if (undo && GIMP_ITEM_UNDO (undo)->item == GIMP_ITEM (layer))
+      if (undo && GIMP_ITEM_UNDO (undo)->item == GIMP_ITEM (update_layers->data))
         push_undo = FALSE;
+    }
 
-      gimp_layer_set_blend_space (layer, blend_space, push_undo);
+  if (update_layers)
+    {
+      if (g_list_length (update_layers) > 1)
+        gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_LAYER_MODE,
+                                     _("Set layers' blend space"));
+
+      for (iter = update_layers; iter; iter = iter->next)
+        gimp_layer_set_blend_space (iter->data, blend_space, push_undo);
+
+      if (g_list_length (update_layers) > 1)
+        gimp_image_undo_group_end (image);
+
+      g_list_free (update_layers);
       gimp_image_flush (image);
     }
 }
@@ -1256,24 +2050,49 @@ layers_composite_space_cmd_callback (GimpAction *action,
                                      gpointer    data)
 {
   GimpImage           *image;
-  GimpLayer           *layer;
+  GList               *layers;
+  GList               *update_layers = NULL;
+  GList               *iter;
   GimpLayerColorSpace  composite_space;
-  return_if_no_layer (image, layer, data);
+  gboolean             push_undo = TRUE;
+  return_if_no_layers (image, layers, data);
 
   composite_space = (GimpLayerColorSpace) g_variant_get_int32 (value);
 
-  if (composite_space != gimp_layer_get_composite_space (layer))
+  for (iter = layers; iter; iter = iter->next)
+    {
+      GimpLayerMode mode;
+
+      mode = gimp_layer_get_mode (iter->data);
+      if (gimp_layer_mode_is_composite_space_mutable (mode) &&
+          composite_space != gimp_layer_get_composite_space (iter->data))
+        update_layers = g_list_prepend (update_layers, iter->data);
+    }
+
+  if (g_list_length (update_layers) == 1)
     {
       GimpUndo *undo;
-      gboolean  push_undo = TRUE;
 
       undo = gimp_image_undo_can_compress (image, GIMP_TYPE_LAYER_PROP_UNDO,
                                            GIMP_UNDO_LAYER_MODE);
 
-      if (undo && GIMP_ITEM_UNDO (undo)->item == GIMP_ITEM (layer))
+      if (undo && GIMP_ITEM_UNDO (undo)->item == GIMP_ITEM (update_layers->data))
         push_undo = FALSE;
+    }
 
-      gimp_layer_set_composite_space (layer, composite_space, push_undo);
+  if (update_layers)
+    {
+      if (g_list_length (update_layers) > 1)
+        gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_LAYER_MODE,
+                                     _("Set layers' composite space"));
+
+      for (iter = update_layers; iter; iter = iter->next)
+        gimp_layer_set_composite_space (iter->data, composite_space, push_undo);
+
+      if (g_list_length (update_layers) > 1)
+        gimp_image_undo_group_end (image);
+
+      g_list_free (update_layers);
       gimp_image_flush (image);
     }
 }
@@ -1284,24 +2103,49 @@ layers_composite_mode_cmd_callback (GimpAction *action,
                                     gpointer    data)
 {
   GimpImage              *image;
-  GimpLayer              *layer;
+  GList                  *layers;
+  GList                  *update_layers = NULL;
+  GList                  *iter;
   GimpLayerCompositeMode  composite_mode;
-  return_if_no_layer (image, layer, data);
+  gboolean             push_undo = TRUE;
+  return_if_no_layers (image, layers, data);
 
   composite_mode = (GimpLayerCompositeMode) g_variant_get_int32 (value);
 
-  if (composite_mode != gimp_layer_get_composite_mode (layer))
+  for (iter = layers; iter; iter = iter->next)
+    {
+      GimpLayerMode mode;
+
+      mode = gimp_layer_get_mode (iter->data);
+      if (gimp_layer_mode_is_composite_mode_mutable (mode) &&
+          composite_mode != gimp_layer_get_composite_mode (iter->data))
+        update_layers = g_list_prepend (update_layers, iter->data);
+    }
+
+  if (g_list_length (update_layers) == 1)
     {
       GimpUndo *undo;
-      gboolean  push_undo = TRUE;
 
       undo = gimp_image_undo_can_compress (image, GIMP_TYPE_LAYER_PROP_UNDO,
                                            GIMP_UNDO_LAYER_MODE);
 
-      if (undo && GIMP_ITEM_UNDO (undo)->item == GIMP_ITEM (layer))
+      if (undo && GIMP_ITEM_UNDO (undo)->item == GIMP_ITEM (update_layers->data))
         push_undo = FALSE;
+    }
 
-      gimp_layer_set_composite_mode (layer, composite_mode, push_undo);
+  if (update_layers)
+    {
+      if (g_list_length (update_layers) > 1)
+        gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_LAYER_MODE,
+                                     _("Set layers' composite mode"));
+
+      for (iter = update_layers; iter; iter = iter->next)
+        gimp_layer_set_composite_mode (iter->data, composite_mode, push_undo);
+
+      if (g_list_length (update_layers) > 1)
+        gimp_image_undo_group_end (image);
+
+      g_list_free (update_layers);
       gimp_image_flush (image);
     }
 }
@@ -1309,25 +2153,13 @@ layers_composite_mode_cmd_callback (GimpAction *action,
 void
 layers_visible_cmd_callback (GimpAction *action,
                              GVariant   *value,
-                             gpointer   data)
+                             gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  return_if_no_layers (image, layers, data);
 
-  items_visible_cmd_callback (action, value, image, GIMP_ITEM (layer));
-}
-
-void
-layers_linked_cmd_callback (GimpAction *action,
-                            GVariant   *value,
-                            gpointer    data)
-{
-  GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
-
-  items_linked_cmd_callback (action, value, image, GIMP_ITEM (layer));
+  items_visible_cmd_callback (action, value, image, layers);
 }
 
 void
@@ -1336,10 +2168,10 @@ layers_lock_content_cmd_callback (GimpAction *action,
                                   gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  return_if_no_layers (image, layers, data);
 
-  items_lock_content_cmd_callback (action, value, image, GIMP_ITEM (layer));
+  items_lock_content_cmd_callback (action, value, image, layers);
 }
 
 void
@@ -1348,10 +2180,10 @@ layers_lock_position_cmd_callback (GimpAction *action,
                                    gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
-  return_if_no_layer (image, layer, data);
+  GList     *layers;
+  return_if_no_layers (image, layers, data);
 
-  items_lock_position_cmd_callback (action, value, image, GIMP_ITEM (layer));
+  items_lock_position_cmd_callback (action, value, image, layers);
 }
 
 void
@@ -1360,26 +2192,46 @@ layers_lock_alpha_cmd_callback (GimpAction *action,
                                 gpointer    data)
 {
   GimpImage *image;
-  GimpLayer *layer;
+  GList     *layers;
+  GList     *iter;
   gboolean   lock_alpha;
-  return_if_no_layer (image, layer, data);
+  gboolean   lock_change = FALSE;
+  return_if_no_layers (image, layers, data);
 
   lock_alpha = g_variant_get_boolean (value);
 
-  if (lock_alpha != gimp_layer_get_lock_alpha (layer))
+  for (iter = layers; iter; iter = iter->next)
     {
-      GimpUndo *undo;
-      gboolean  push_undo = TRUE;
-
-      undo = gimp_image_undo_can_compress (image, GIMP_TYPE_ITEM_UNDO,
-                                           GIMP_UNDO_LAYER_LOCK_ALPHA);
-
-      if (undo && GIMP_ITEM_UNDO (undo)->item == GIMP_ITEM (layer))
-        push_undo = FALSE;
-
-      gimp_layer_set_lock_alpha (layer, lock_alpha, push_undo);
-      gimp_image_flush (image);
+      if (gimp_layer_can_lock_alpha (iter->data))
+        {
+          /* Similar trick as in layers_mask_show_cmd_callback().
+           * When unlocking, we expect all selected layers to be locked,
+           * otherwise SET_ACTIVE() calls in layers-actions.c will
+           * trigger lock updates.
+           */
+          if (! lock_alpha && ! gimp_layer_get_lock_alpha (iter->data))
+            return;
+          if (lock_alpha != gimp_layer_get_lock_alpha (iter->data))
+            lock_change = TRUE;
+        }
     }
+  if (! lock_change)
+    /* No layer locks would be changed. */
+    return;
+
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_LAYER_LOCK_ALPHA,
+                               lock_alpha ? _("Lock alpha channels") : _("Unlock alpha channels"));
+  for (iter = layers; iter; iter = iter->next)
+    {
+      if (gimp_layer_can_lock_alpha (iter->data))
+        {
+          if (lock_alpha != gimp_layer_get_lock_alpha (iter->data))
+            gimp_layer_set_lock_alpha (iter->data, lock_alpha, TRUE);
+        }
+    }
+  gimp_image_undo_group_end (image);
+  gimp_image_flush (image);
 }
 
 void
@@ -1388,14 +2240,13 @@ layers_color_tag_cmd_callback (GimpAction *action,
                                gpointer    data)
 {
   GimpImage    *image;
-  GimpLayer    *layer;
+  GList        *layers;
   GimpColorTag  color_tag;
-  return_if_no_layer (image, layer, data);
+  return_if_no_layers (image, layers, data);
 
   color_tag = (GimpColorTag) g_variant_get_int32 (value);
 
-  items_color_tag_cmd_callback (action, image, GIMP_ITEM (layer),
-                                color_tag);
+  items_color_tag_cmd_callback (action, image, layers, color_tag);
 }
 
 
@@ -1418,15 +2269,20 @@ layers_new_callback (GtkWidget              *dialog,
                      gint                    layer_offset_x,
                      gint                    layer_offset_y,
                      gboolean                layer_visible,
-                     gboolean                layer_linked,
                      GimpColorTag            layer_color_tag,
                      gboolean                layer_lock_pixels,
                      gboolean                layer_lock_position,
+                     gboolean                layer_lock_visibility,
                      gboolean                layer_lock_alpha,
                      gboolean                rename_text_layer, /* unused */
                      gpointer                user_data)
 {
-  GimpDialogConfig *config = GIMP_DIALOG_CONFIG (image->gimp->config);
+  GimpDialogConfig *config     = GIMP_DIALOG_CONFIG (image->gimp->config);
+  GList            *layers     = gimp_image_get_selected_layers (image);
+  GList            *new_layers = NULL;
+  GList            *iter;
+  gint              n_layers   = g_list_length (layers);
+  gboolean          run_once   = (n_layers == 0);
 
   g_object_set (config,
                 "layer-new-name",            layer_name,
@@ -1438,38 +2294,77 @@ layers_new_callback (GtkWidget              *dialog,
                 "layer-new-fill-type",       layer_fill_type,
                 NULL);
 
-  layer = gimp_layer_new (image, layer_width, layer_height,
-                          gimp_image_get_layer_format (image, TRUE),
-                          config->layer_new_name,
-                          config->layer_new_opacity,
-                          config->layer_new_mode);
-
-  if (layer)
+  layers = g_list_copy (layers);
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_LAYER_ADD,
+                               ngettext ("New layer",
+                                         "New layers",
+                                         n_layers > 0 ? n_layers : 1));
+  for (iter = layers; iter || run_once; iter = iter ? iter->next : NULL)
     {
-      gimp_item_set_offset (GIMP_ITEM (layer), layer_offset_x, layer_offset_y);
-      gimp_drawable_fill (GIMP_DRAWABLE (layer), context,
-                          config->layer_new_fill_type);
-      gimp_item_set_visible (GIMP_ITEM (layer), layer_visible, FALSE);
-      gimp_item_set_linked (GIMP_ITEM (layer), layer_linked, FALSE);
-      gimp_item_set_color_tag (GIMP_ITEM (layer), layer_color_tag, FALSE);
-      gimp_item_set_lock_content (GIMP_ITEM (layer), layer_lock_pixels,
-                                  FALSE);
-      gimp_item_set_lock_position (GIMP_ITEM (layer), layer_lock_position,
-                                   FALSE);
-      gimp_layer_set_lock_alpha (layer, layer_lock_alpha, FALSE);
-      gimp_layer_set_blend_space (layer, layer_blend_space, FALSE);
-      gimp_layer_set_composite_space (layer, layer_composite_space, FALSE);
-      gimp_layer_set_composite_mode (layer, layer_composite_mode, FALSE);
+      GimpLayer *parent;
+      gint       position;
 
-      gimp_image_add_layer (image, layer,
-                            GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
-      gimp_image_flush (image);
-    }
-  else
-    {
-      g_warning ("%s: could not allocate new layer", G_STRFUNC);
+      run_once = FALSE;
+      if (iter)
+        {
+          if (gimp_viewable_get_children (GIMP_VIEWABLE (iter->data)))
+            {
+              parent   = iter->data;
+              position = 0;
+            }
+          else
+            {
+              parent   = GIMP_LAYER (gimp_item_get_parent (iter->data));
+              position = gimp_item_get_index (iter->data);
+            }
+        }
+      else /* run_once */
+        {
+          parent = NULL;
+          position = 0;
+        }
+
+      layer = gimp_layer_new (image, layer_width, layer_height,
+                              gimp_image_get_layer_format (image, TRUE),
+                              config->layer_new_name,
+                              config->layer_new_opacity,
+                              config->layer_new_mode);
+
+      if (layer)
+        {
+          gimp_item_set_offset (GIMP_ITEM (layer), layer_offset_x, layer_offset_y);
+          gimp_drawable_fill (GIMP_DRAWABLE (layer), context,
+                              config->layer_new_fill_type);
+          gimp_item_set_visible (GIMP_ITEM (layer), layer_visible, FALSE);
+          gimp_item_set_color_tag (GIMP_ITEM (layer), layer_color_tag, FALSE);
+          gimp_item_set_lock_content (GIMP_ITEM (layer), layer_lock_pixels,
+                                      FALSE);
+          gimp_item_set_lock_position (GIMP_ITEM (layer), layer_lock_position,
+                                       FALSE);
+          gimp_item_set_lock_visibility (GIMP_ITEM (layer), layer_lock_visibility,
+                                         FALSE);
+          gimp_layer_set_lock_alpha (layer, layer_lock_alpha, FALSE);
+          gimp_layer_set_blend_space (layer, layer_blend_space, FALSE);
+          gimp_layer_set_composite_space (layer, layer_composite_space, FALSE);
+          gimp_layer_set_composite_mode (layer, layer_composite_mode, FALSE);
+
+          gimp_image_add_layer (image, layer, parent, position, TRUE);
+          gimp_image_flush (image);
+
+          new_layers = g_list_prepend (new_layers, layer);
+        }
+      else
+        {
+          g_warning ("%s: could not allocate new layer", G_STRFUNC);
+        }
     }
 
+  gimp_image_undo_group_end (image);
+  gimp_image_set_selected_layers (image, new_layers);
+
+  g_list_free (layers);
+  g_list_free (new_layers);
   gtk_widget_destroy (dialog);
 }
 
@@ -1490,10 +2385,10 @@ layers_edit_attributes_callback (GtkWidget              *dialog,
                                  gint                    layer_offset_x,
                                  gint                    layer_offset_y,
                                  gboolean                layer_visible,
-                                 gboolean                layer_linked,
                                  GimpColorTag            layer_color_tag,
                                  gboolean                layer_lock_pixels,
                                  gboolean                layer_lock_position,
+                                 gboolean                layer_lock_visibility,
                                  gboolean                layer_lock_alpha,
                                  gboolean                rename_text_layer,
                                  gpointer                user_data)
@@ -1509,10 +2404,10 @@ layers_edit_attributes_callback (GtkWidget              *dialog,
       layer_offset_x        != gimp_item_get_offset_x (item)          ||
       layer_offset_y        != gimp_item_get_offset_y (item)          ||
       layer_visible         != gimp_item_get_visible (item)           ||
-      layer_linked          != gimp_item_get_linked (item)            ||
       layer_color_tag       != gimp_item_get_color_tag (item)         ||
       layer_lock_pixels     != gimp_item_get_lock_content (item)      ||
       layer_lock_position   != gimp_item_get_lock_position (item)     ||
+      layer_lock_visibility != gimp_item_get_lock_visibility (item)   ||
       layer_lock_alpha      != gimp_layer_get_lock_alpha (layer))
     {
       gimp_image_undo_group_start (image,
@@ -1559,9 +2454,6 @@ layers_edit_attributes_callback (GtkWidget              *dialog,
       if (layer_visible != gimp_item_get_visible (item))
         gimp_item_set_visible (item, layer_visible, TRUE);
 
-      if (layer_linked != gimp_item_get_linked (item))
-        gimp_item_set_linked (item, layer_linked, TRUE);
-
       if (layer_color_tag != gimp_item_get_color_tag (item))
         gimp_item_set_color_tag (item, layer_color_tag, TRUE);
 
@@ -1570,6 +2462,9 @@ layers_edit_attributes_callback (GtkWidget              *dialog,
 
       if (layer_lock_position != gimp_item_get_lock_position (item))
         gimp_item_set_lock_position (item, layer_lock_position, TRUE);
+
+      if (layer_lock_visibility != gimp_item_get_lock_visibility (item))
+        gimp_item_set_lock_visibility (item, layer_lock_visibility, TRUE);
 
       if (layer_lock_alpha != gimp_layer_get_lock_alpha (layer))
         gimp_layer_set_lock_alpha (layer, layer_lock_alpha, TRUE);
@@ -1591,15 +2486,16 @@ layers_edit_attributes_callback (GtkWidget              *dialog,
 
 static void
 layers_add_mask_callback (GtkWidget       *dialog,
-                          GimpLayer       *layer,
+                          GList           *layers,
                           GimpAddMaskType  add_mask_type,
                           GimpChannel     *channel,
                           gboolean         invert,
                           gpointer         user_data)
 {
-  GimpImage        *image  = gimp_item_get_image (GIMP_ITEM (layer));
+  GimpImage        *image  = gimp_item_get_image (GIMP_ITEM (layers->data));
   GimpDialogConfig *config = GIMP_DIALOG_CONFIG (image->gimp->config);
   GimpLayerMask    *mask;
+  GList            *iter;
   GError           *error = NULL;
 
   g_object_set (config,
@@ -1607,25 +2503,31 @@ layers_add_mask_callback (GtkWidget       *dialog,
                 "layer-add-mask-invert", invert,
                 NULL);
 
-  mask = gimp_layer_create_mask (layer,
-                                 config->layer_add_mask_type,
-                                 channel);
-
-  if (config->layer_add_mask_invert)
-    gimp_channel_invert (GIMP_CHANNEL (mask), FALSE);
-
-  if (! gimp_layer_add_mask (layer, mask, TRUE, &error))
+  gimp_image_undo_group_start (image,
+                               GIMP_UNDO_GROUP_LAYER_ADD,
+                               _("Add Layer Masks"));
+  for (iter = layers; iter; iter = iter->next)
     {
-      gimp_message_literal (image->gimp,
-                            G_OBJECT (dialog), GIMP_MESSAGE_WARNING,
-                            error->message);
-      g_object_unref (mask);
-      g_clear_error (&error);
-      return;
+      mask = gimp_layer_create_mask (iter->data,
+                                     config->layer_add_mask_type,
+                                     channel);
+
+      if (config->layer_add_mask_invert)
+        gimp_channel_invert (GIMP_CHANNEL (mask), FALSE);
+
+      if (! gimp_layer_add_mask (iter->data, mask, TRUE, &error))
+        {
+          gimp_message_literal (image->gimp,
+                                G_OBJECT (dialog), GIMP_MESSAGE_WARNING,
+                                error->message);
+          g_object_unref (mask);
+          g_clear_error (&error);
+          return;
+        }
     }
 
+  gimp_image_undo_group_end (image);
   gimp_image_flush (image);
-
   gtk_widget_destroy (dialog);
 }
 
@@ -1634,11 +2536,11 @@ layers_scale_callback (GtkWidget             *dialog,
                        GimpViewable          *viewable,
                        gint                   width,
                        gint                   height,
-                       GimpUnit               unit,
+                       GimpUnit              *unit,
                        GimpInterpolationType  interpolation,
                        gdouble                xresolution,    /* unused */
                        gdouble                yresolution,    /* unused */
-                       GimpUnit               resolution_unit,/* unused */
+                       GimpUnit              *resolution_unit,/* unused */
                        gpointer               user_data)
 {
   GimpDisplay *display = GIMP_DISPLAY (user_data);
@@ -1695,12 +2597,12 @@ layers_resize_callback (GtkWidget    *dialog,
                         GimpContext  *context,
                         gint          width,
                         gint          height,
-                        GimpUnit      unit,
+                        GimpUnit     *unit,
                         gint          offset_x,
                         gint          offset_y,
                         gdouble       unused0,
                         gdouble       unused1,
-                        GimpUnit      unused2,
+                        GimpUnit     *unused2,
                         GimpFillType  fill_type,
                         GimpItemSet   unused3,
                         gboolean      unused4,

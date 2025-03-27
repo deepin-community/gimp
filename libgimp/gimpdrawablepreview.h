@@ -31,56 +31,19 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_DRAWABLE_PREVIEW            (gimp_drawable_preview_get_type ())
-#define GIMP_DRAWABLE_PREVIEW(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_DRAWABLE_PREVIEW, GimpDrawablePreview))
-#define GIMP_DRAWABLE_PREVIEW_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_DRAWABLE_PREVIEW, GimpDrawablePreviewClass))
-#define GIMP_IS_DRAWABLE_PREVIEW(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_DRAWABLE_PREVIEW))
-#define GIMP_IS_DRAWABLE_PREVIEW_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_DRAWABLE_PREVIEW))
-#define GIMP_DRAWABLE_PREVIEW_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_DRAWABLE_PREVIEW, GimpDrawablePreviewClass))
+#define GIMP_TYPE_DRAWABLE_PREVIEW (gimp_drawable_preview_get_type ())
+G_DECLARE_FINAL_TYPE (GimpDrawablePreview, gimp_drawable_preview, GIMP, DRAWABLE_PREVIEW, GimpScrolledPreview)
 
 
-typedef struct _GimpDrawablePreviewClass  GimpDrawablePreviewClass;
-
-struct _GimpDrawablePreview
-{
-  GimpScrolledPreview  parent_instance;
-
-  GimpDrawable        *drawable;
-};
-
-struct _GimpDrawablePreviewClass
-{
-  GimpScrolledPreviewClass parent_class;
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-};
-
-
-GType          gimp_drawable_preview_get_type             (void) G_GNUC_CONST;
-
-GtkWidget    * gimp_drawable_preview_new_from_drawable_id (gint32               drawable_ID);
-gint32         gimp_drawable_preview_get_drawable_id      (GimpDrawablePreview *preview);
-
-GIMP_DEPRECATED_FOR(gimp_drawable_preview_new_from_drawable_id)
-GtkWidget    * gimp_drawable_preview_new                  (GimpDrawable        *drawable,
-                                                           gboolean            *toggle);
-GIMP_DEPRECATED_FOR(gimp_drawable_preview_get_drawable_id)
-GimpDrawable * gimp_drawable_preview_get_drawable         (GimpDrawablePreview *preview);
-
-GIMP_DEPRECATED_FOR(gimp_preview_draw_buffer)
-void           gimp_drawable_preview_draw_region          (GimpDrawablePreview *preview,
-                                                           const GimpPixelRgn  *region);
+GtkWidget    * gimp_drawable_preview_new_from_drawable (GimpDrawable        *drawable);
+GimpDrawable * gimp_drawable_preview_get_drawable      (GimpDrawablePreview *preview);
 
 /*  for internal use only  */
 G_GNUC_INTERNAL void      _gimp_drawable_preview_area_draw_thumb (GimpPreviewArea *area,
-                                                                  gint32           drawable_ID,
+                                                                  GimpDrawable    *drawable,
                                                                   gint             width,
                                                                   gint             height);
-G_GNUC_INTERNAL gboolean  _gimp_drawable_preview_get_bounds      (gint32           drawable_ID,
+G_GNUC_INTERNAL gboolean  _gimp_drawable_preview_get_bounds      (GimpDrawable    *drawable,
                                                                   gint            *xmin,
                                                                   gint            *ymin,
                                                                   gint            *xmax,

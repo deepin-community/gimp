@@ -56,7 +56,7 @@ image_properties_dialog_new (GimpImage   *image,
   g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
   g_return_val_if_fail (parent == NULL || GTK_IS_WIDGET (parent), NULL);
 
-  dialog = gimp_viewable_dialog_new (GIMP_VIEWABLE (image), context,
+  dialog = gimp_viewable_dialog_new (g_list_prepend (NULL, image), context,
                                      _("Image Properties"),
                                      "gimp-image-properties",
                                      "dialog-information",
@@ -65,9 +65,11 @@ image_properties_dialog_new (GimpImage   *image,
                                      gimp_standard_help_func,
                                      GIMP_HELP_IMAGE_PROPERTIES,
 
-                                     _("_Close"), GTK_RESPONSE_OK,
+                                     _("_Close"), GTK_RESPONSE_CLOSE,
 
                                      NULL);
+
+  gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_CLOSE);
 
   g_signal_connect (dialog, "response",
                     G_CALLBACK (gtk_widget_destroy),

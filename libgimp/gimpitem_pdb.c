@@ -22,7 +22,7 @@
 
 #include "config.h"
 
-#include <string.h>
+#include "stamp-pdbgen.h"
 
 #include "gimp.h"
 
@@ -37,73 +37,417 @@
 
 
 /**
- * gimp_item_is_valid:
- * @item_ID: The item to check.
+ * gimp_item_id_is_valid:
+ * @item_id: The item ID to check.
  *
- * Returns TRUE if the item is valid.
+ * Returns %TRUE if the item ID is valid.
  *
  * This procedure checks if the given item ID is valid and refers to an
  * existing item.
  *
+ * *Note*: in most use cases, you should not use this function. If you
+ * got a [class@Gimp.Item] from the API, you should trust it is valid.
+ * This function is mostly for internal usage.
+ *
  * Returns: Whether the item ID is valid.
  *
- * Since: 2.8
+ * Since: 3.0
  **/
 gboolean
-gimp_item_is_valid (gint32 item_ID)
+gimp_item_id_is_valid (gint item_id)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean valid = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-item-is-valid",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    valid = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-valid",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    valid = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return valid;
 }
 
 /**
+ * gimp_item_id_is_drawable:
+ * @item_id: The item ID.
+ *
+ * Returns whether the item ID is a drawable.
+ *
+ * This procedure returns %TRUE if the specified item ID is a drawable.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+ *
+ * Returns: TRUE if the item ID is a drawable, FALSE otherwise.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_id_is_drawable (gint item_id)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean drawable = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-drawable",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    drawable = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return drawable;
+}
+
+/**
+ * gimp_item_id_is_layer:
+ * @item_id: The item ID.
+ *
+ * Returns whether the item ID is a layer.
+ *
+ * This procedure returns %TRUE if the specified item ID is a layer.
+ *
+ * *Note*: in most use cases, you should not use this function. If the
+ * goal is to verify the accurate type for a [class@Gimp.Item], you
+ * should either use [method@Gimp.Item.is_layer] or the specific
+ * type-checking methods for the used language.
+ *
+ * For instance, in C:
+ *
+ * ```C
+ * if (GIMP_IS_LAYER (item))
+ *   do_something ();
+ * ```
+ *
+ * Or in the Python binding, you could run:
+ *
+ * ```py3
+ * if isinstance(item, Gimp.Layer):
+ *   do_something()
+ * ```
+ *
+ * Returns: TRUE if the item is a layer, FALSE otherwise.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_id_is_layer (gint item_id)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean layer = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-layer",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    layer = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return layer;
+}
+
+/**
+ * gimp_item_id_is_text_layer:
+ * @item_id: The item ID.
+ *
+ * Returns whether the item ID is a text layer.
+ *
+ * This procedure returns %TRUE if the specified item ID is a text
+ * layer.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+ *
+ * Returns: TRUE if the item is a text layer, FALSE otherwise.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_id_is_text_layer (gint item_id)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean text_layer = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-text-layer",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    text_layer = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return text_layer;
+}
+
+/**
+ * gimp_item_id_is_group_layer:
+ * @item_id: The item ID.
+ *
+ * Returns whether the item ID is a group layer.
+ *
+ * This procedure returns %TRUE if the specified item ID is a group
+ * layer.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+ *
+ * Returns: TRUE if the item is a group layer, FALSE otherwise.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_id_is_group_layer (gint item_id)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean group_layer = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-group-layer",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    group_layer = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return group_layer;
+}
+
+/**
+ * gimp_item_id_is_channel:
+ * @item_id: The item ID.
+ *
+ * Returns whether the item ID is a channel.
+ *
+ * This procedure returns %TRUE if the specified item ID is a channel.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+ *
+ * Returns: TRUE if the item ID is a channel, FALSE otherwise.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_id_is_channel (gint item_id)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean channel = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-channel",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    channel = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return channel;
+}
+
+/**
+ * gimp_item_id_is_layer_mask:
+ * @item_id: The item.
+ *
+ * Returns whether the item ID is a layer mask.
+ *
+ * This procedure returns %TRUE if the specified item ID is a layer
+ * mask.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+ *
+ * Returns: TRUE if the item ID is a layer mask, FALSE otherwise.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_id_is_layer_mask (gint item_id)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean layer_mask = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-layer-mask",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    layer_mask = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return layer_mask;
+}
+
+/**
+ * gimp_item_id_is_path:
+ * @item_id: The item ID.
+ *
+ * Returns whether the item ID is a path.
+ *
+ * This procedure returns %TRUE if the specified item ID is a path.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+ *
+ * Returns: TRUE if the item ID is a path, FALSE otherwise.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_id_is_path (gint item_id)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean path = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-path",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    path = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return path;
+}
+
+/**
+ * gimp_item_id_is_selection:
+ * @item_id: The item ID.
+ *
+ * Returns whether the item ID is a selection.
+ *
+ * This procedure returns %TRUE if the specified item ID is a
+ * selection.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+ *
+ * Returns: TRUE if the item ID is a selection, FALSE otherwise.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_id_is_selection (gint item_id)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean selection = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-selection",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    selection = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return selection;
+}
+
+/**
  * gimp_item_get_image:
- * @item_ID: The item.
+ * @item: The item.
  *
  * Returns the item's image.
  *
  * This procedure returns the item's image.
  *
- * Returns: The item's image.
+ * Returns: (transfer none): The item's image.
  *
  * Since: 2.8
  **/
-gint32
-gimp_item_get_image (gint32 item_ID)
+GimpImage *
+gimp_item_get_image (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 image_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpImage *image = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-get-image",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    image_ID = return_vals[1].data.d_image;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-image",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    image = GIMP_VALUES_GET_IMAGE (return_vals, 1);
 
-  return image_ID;
+  gimp_value_array_unref (return_vals);
+
+  return image;
 }
 
 /**
  * gimp_item_delete:
- * @item_ID: The item to delete.
+ * @item: The item to delete.
  *
  * Delete a item.
  *
@@ -118,255 +462,35 @@ gimp_item_get_image (gint32 item_ID)
  * Since: 2.8
  **/
 gboolean
-gimp_item_delete (gint32 item_ID)
+gimp_item_delete (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-item-delete",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-delete",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_item_is_drawable:
- * @item_ID: The item.
- *
- * Returns whether the item is a drawable.
- *
- * This procedure returns TRUE if the specified item is a drawable.
- *
- * Returns: TRUE if the item is a drawable, FALSE otherwise.
- *
- * Since: 2.8
- **/
-gboolean
-gimp_item_is_drawable (gint32 item_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean drawable = FALSE;
-
-  return_vals = gimp_run_procedure ("gimp-item-is-drawable",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    drawable = return_vals[1].data.d_int32;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return drawable;
-}
-
-/**
- * gimp_item_is_layer:
- * @item_ID: The item.
- *
- * Returns whether the item is a layer.
- *
- * This procedure returns TRUE if the specified item is a layer.
- *
- * Returns: TRUE if the item is a layer, FALSE otherwise.
- *
- * Since: 2.8
- **/
-gboolean
-gimp_item_is_layer (gint32 item_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean layer = FALSE;
-
-  return_vals = gimp_run_procedure ("gimp-item-is-layer",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    layer = return_vals[1].data.d_int32;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return layer;
-}
-
-/**
- * gimp_item_is_text_layer:
- * @item_ID: The item.
- *
- * Returns whether the item is a text layer.
- *
- * This procedure returns TRUE if the specified item is a text layer.
- *
- * Returns: TRUE if the item is a text layer, FALSE otherwise.
- *
- * Since: 2.8
- **/
-gboolean
-gimp_item_is_text_layer (gint32 item_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean text_layer = FALSE;
-
-  return_vals = gimp_run_procedure ("gimp-item-is-text-layer",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    text_layer = return_vals[1].data.d_int32;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return text_layer;
-}
-
-/**
- * gimp_item_is_channel:
- * @item_ID: The item.
- *
- * Returns whether the item is a channel.
- *
- * This procedure returns TRUE if the specified item is a channel.
- *
- * Returns: TRUE if the item is a channel, FALSE otherwise.
- *
- * Since: 2.8
- **/
-gboolean
-gimp_item_is_channel (gint32 item_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean channel = FALSE;
-
-  return_vals = gimp_run_procedure ("gimp-item-is-channel",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    channel = return_vals[1].data.d_int32;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return channel;
-}
-
-/**
- * gimp_item_is_layer_mask:
- * @item_ID: The item.
- *
- * Returns whether the item is a layer mask.
- *
- * This procedure returns TRUE if the specified item is a layer mask.
- *
- * Returns: TRUE if the item is a layer mask, FALSE otherwise.
- *
- * Since: 2.8
- **/
-gboolean
-gimp_item_is_layer_mask (gint32 item_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean layer_mask = FALSE;
-
-  return_vals = gimp_run_procedure ("gimp-item-is-layer-mask",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    layer_mask = return_vals[1].data.d_int32;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return layer_mask;
-}
-
-/**
- * gimp_item_is_selection:
- * @item_ID: The item.
- *
- * Returns whether the item is a selection.
- *
- * This procedure returns TRUE if the specified item is a selection.
- *
- * Returns: TRUE if the item is a selection, FALSE otherwise.
- *
- * Since: 2.8
- **/
-gboolean
-gimp_item_is_selection (gint32 item_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean selection = FALSE;
-
-  return_vals = gimp_run_procedure ("gimp-item-is-selection",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    selection = return_vals[1].data.d_int32;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return selection;
-}
-
-/**
- * gimp_item_is_vectors:
- * @item_ID: The item.
- *
- * Returns whether the item is a vectors.
- *
- * This procedure returns TRUE if the specified item is a vectors.
- *
- * Returns: TRUE if the item is a vectors, FALSE otherwise.
- *
- * Since: 2.8
- **/
-gboolean
-gimp_item_is_vectors (gint32 item_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean vectors = FALSE;
-
-  return_vals = gimp_run_procedure ("gimp-item-is-vectors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    vectors = return_vals[1].data.d_int32;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return vectors;
-}
-
-/**
  * gimp_item_is_group:
- * @item_ID: The item.
+ * @item: The item.
  *
  * Returns whether the item is a group item.
  *
- * This procedure returns TRUE if the specified item is a group item
+ * This procedure returns %TRUE if the specified item is a group item
  * which can have children.
  *
  * Returns: TRUE if the item is a group, FALSE otherwise.
@@ -374,135 +498,143 @@ gimp_item_is_vectors (gint32 item_ID)
  * Since: 2.8
  **/
 gboolean
-gimp_item_is_group (gint32 item_ID)
+gimp_item_is_group (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean group = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-item-is-group",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    group = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-is-group",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    group = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return group;
 }
 
 /**
  * gimp_item_get_parent:
- * @item_ID: The item.
+ * @item: The item.
  *
  * Returns the item's parent item.
  *
  * This procedure returns the item's parent item, if any.
  *
- * Returns: The item's parent item.
+ * Returns: (transfer none): The item's parent item.
  *
  * Since: 2.8
  **/
-gint32
-gimp_item_get_parent (gint32 item_ID)
+GimpItem *
+gimp_item_get_parent (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 parent_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpItem *parent = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-get-parent",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    parent_ID = return_vals[1].data.d_item;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-parent",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    parent = GIMP_VALUES_GET_ITEM (return_vals, 1);
 
-  return parent_ID;
+  gimp_value_array_unref (return_vals);
+
+  return parent;
 }
 
 /**
  * gimp_item_get_children:
- * @item_ID: The item.
- * @num_children: The item's number of children.
+ * @item: The item.
  *
  * Returns the item's list of children.
  *
  * This procedure returns the list of items which are children of the
  * specified item. The order is topmost to bottommost.
  *
- * Returns: The item's list of children.
+ * Returns: (element-type GimpItem) (array zero-terminated=1) (transfer container):
+ *          The item's list of children.
+ *          The returned value must be freed with g_free().
  *
  * Since: 2.8
  **/
-gint *
-gimp_item_get_children (gint32  item_ID,
-                        gint   *num_children)
+GimpItem **
+gimp_item_get_children (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint *child_ids = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpItem **children = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-get-children",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  *num_children = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-children",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_children = return_vals[1].data.d_int32;
-      child_ids = g_new (gint32, *num_children);
-      memcpy (child_ids,
-              return_vals[2].data.d_int32array,
-              *num_children * sizeof (gint32));
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    children = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
-  return child_ids;
+  return children;
 }
 
 /**
  * gimp_item_get_expanded:
- * @item_ID: The item.
+ * @item: The item.
  *
  * Returns whether the item is expanded.
  *
- * This procedure returns TRUE if the specified item is expanded.
+ * This procedure returns %TRUE if the specified item is expanded.
  *
  * Returns: TRUE if the item is expanded, FALSE otherwise.
  *
  * Since: 2.10
  **/
 gboolean
-gimp_item_get_expanded (gint32 item_ID)
+gimp_item_get_expanded (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean expanded = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-item-get-expanded",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    expanded = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-expanded",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    expanded = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return expanded;
 }
 
 /**
  * gimp_item_set_expanded:
- * @item_ID: The item.
+ * @item: The item.
  * @expanded: TRUE to expand the item, FALSE to collapse the item.
  *
  * Sets the expanded state of the item.
@@ -514,61 +646,70 @@ gimp_item_get_expanded (gint32 item_ID)
  * Since: 2.10
  **/
 gboolean
-gimp_item_set_expanded (gint32   item_ID,
-                        gboolean expanded)
+gimp_item_set_expanded (GimpItem *item,
+                        gboolean  expanded)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-item-set-expanded",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_INT32, expanded,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_BOOLEAN, expanded,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-set-expanded",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_item_get_name:
- * @item_ID: The item.
+ * @item: The item.
  *
  * Get the name of the specified item.
  *
  * This procedure returns the specified item's name.
  *
- * Returns: The item name.
+ * Returns: (transfer full): The item name.
+ *          The returned value must be freed with g_free().
  *
  * Since: 2.8
  **/
 gchar *
-gimp_item_get_name (gint32 item_ID)
+gimp_item_get_name (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar *name = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-get-name",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    name = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-name",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    name = GIMP_VALUES_DUP_STRING (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return name;
 }
 
 /**
  * gimp_item_set_name:
- * @item_ID: The item.
+ * @item: The item.
  * @name: The new item name.
  *
  * Set the name of the specified item.
@@ -580,29 +721,33 @@ gimp_item_get_name (gint32 item_ID)
  * Since: 2.8
  **/
 gboolean
-gimp_item_set_name (gint32       item_ID,
+gimp_item_set_name (GimpItem    *item,
                     const gchar *name)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-item-set-name",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-set-name",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_item_get_visible:
- * @item_ID: The item.
+ * @item: The item.
  *
  * Get the visibility of the specified item.
  *
@@ -613,28 +758,32 @@ gimp_item_set_name (gint32       item_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_item_get_visible (gint32 item_ID)
+gimp_item_get_visible (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean visible = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-item-get-visible",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    visible = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-visible",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    visible = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return visible;
 }
 
 /**
  * gimp_item_set_visible:
- * @item_ID: The item.
+ * @item: The item.
  * @visible: The new item visibility.
  *
  * Set the visibility of the specified item.
@@ -646,95 +795,33 @@ gimp_item_get_visible (gint32 item_ID)
  * Since: 2.8
  **/
 gboolean
-gimp_item_set_visible (gint32   item_ID,
-                       gboolean visible)
+gimp_item_set_visible (GimpItem *item,
+                       gboolean  visible)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-item-set-visible",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_INT32, visible,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_BOOLEAN, visible,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-set-visible",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
-  return success;
-}
-
-/**
- * gimp_item_get_linked:
- * @item_ID: The item.
- *
- * Get the linked state of the specified item.
- *
- * This procedure returns the specified item's linked state.
- *
- * Returns: The item linked state (for moves).
- *
- * Since: 2.8
- **/
-gboolean
-gimp_item_get_linked (gint32 item_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean linked = FALSE;
-
-  return_vals = gimp_run_procedure ("gimp-item-get-linked",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    linked = return_vals[1].data.d_int32;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return linked;
-}
-
-/**
- * gimp_item_set_linked:
- * @item_ID: The item.
- * @linked: The new item linked state.
- *
- * Set the linked state of the specified item.
- *
- * This procedure sets the specified item's linked state.
- *
- * Returns: TRUE on success.
- *
- * Since: 2.8
- **/
-gboolean
-gimp_item_set_linked (gint32   item_ID,
-                      gboolean linked)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
-
-  return_vals = gimp_run_procedure ("gimp-item-set-linked",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_INT32, linked,
-                                    GIMP_PDB_END);
-
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_item_get_lock_content:
- * @item_ID: The item.
+ * @item: The item.
  *
  * Get the 'lock content' state of the specified item.
  *
@@ -745,28 +832,32 @@ gimp_item_set_linked (gint32   item_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_item_get_lock_content (gint32 item_ID)
+gimp_item_get_lock_content (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean lock_content = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-item-get-lock-content",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    lock_content = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-lock-content",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    lock_content = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return lock_content;
 }
 
 /**
  * gimp_item_set_lock_content:
- * @item_ID: The item.
+ * @item: The item.
  * @lock_content: The new item 'lock content' state.
  *
  * Set the 'lock content' state of the specified item.
@@ -778,29 +869,33 @@ gimp_item_get_lock_content (gint32 item_ID)
  * Since: 2.8
  **/
 gboolean
-gimp_item_set_lock_content (gint32   item_ID,
-                            gboolean lock_content)
+gimp_item_set_lock_content (GimpItem *item,
+                            gboolean  lock_content)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-item-set-lock-content",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_INT32, lock_content,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_BOOLEAN, lock_content,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-set-lock-content",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_item_get_lock_position:
- * @item_ID: The item.
+ * @item: The item.
  *
  * Get the 'lock position' state of the specified item.
  *
@@ -811,28 +906,32 @@ gimp_item_set_lock_content (gint32   item_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_item_get_lock_position (gint32 item_ID)
+gimp_item_get_lock_position (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean lock_position = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-item-get-lock-position",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    lock_position = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-lock-position",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    lock_position = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return lock_position;
 }
 
 /**
  * gimp_item_set_lock_position:
- * @item_ID: The item.
+ * @item: The item.
  * @lock_position: The new item 'lock position' state.
  *
  * Set the 'lock position' state of the specified item.
@@ -844,29 +943,107 @@ gimp_item_get_lock_position (gint32 item_ID)
  * Since: 2.10
  **/
 gboolean
-gimp_item_set_lock_position (gint32   item_ID,
-                             gboolean lock_position)
+gimp_item_set_lock_position (GimpItem *item,
+                             gboolean  lock_position)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-item-set-lock-position",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_INT32, lock_position,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_BOOLEAN, lock_position,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-set-lock-position",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_item_get_lock_visibility:
+ * @item: The item.
+ *
+ * Get the 'lock visibility' state of the specified item.
+ *
+ * This procedure returns the specified item's lock visibility state.
+ *
+ * Returns: Whether the item's visibility is locked.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_get_lock_visibility (GimpItem *item)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean lock_visibility = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-lock-visibility",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    lock_visibility = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return lock_visibility;
+}
+
+/**
+ * gimp_item_set_lock_visibility:
+ * @item: The item.
+ * @lock_visibility: The new item 'lock visibility' state.
+ *
+ * Set the 'lock visibility' state of the specified item.
+ *
+ * This procedure sets the specified item's lock visibility state.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_item_set_lock_visibility (GimpItem *item,
+                               gboolean  lock_visibility)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_BOOLEAN, lock_visibility,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-set-lock-visibility",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_item_get_color_tag:
- * @item_ID: The item.
+ * @item: The item.
  *
  * Get the color tag of the specified item.
  *
@@ -877,28 +1054,32 @@ gimp_item_set_lock_position (gint32   item_ID,
  * Since: 2.10
  **/
 GimpColorTag
-gimp_item_get_color_tag (gint32 item_ID)
+gimp_item_get_color_tag (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpColorTag color_tag = 0;
 
-  return_vals = gimp_run_procedure ("gimp-item-get-color-tag",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    color_tag = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-color-tag",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    color_tag = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return color_tag;
 }
 
 /**
  * gimp_item_set_color_tag:
- * @item_ID: The item.
+ * @item: The item.
  * @color_tag: The new item color tag.
  *
  * Set the color tag of the specified item.
@@ -910,29 +1091,33 @@ gimp_item_get_color_tag (gint32 item_ID)
  * Since: 2.10
  **/
 gboolean
-gimp_item_set_color_tag (gint32       item_ID,
-                         GimpColorTag color_tag)
+gimp_item_set_color_tag (GimpItem     *item,
+                         GimpColorTag  color_tag)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-item-set-color-tag",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_INT32, color_tag,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          GIMP_TYPE_COLOR_TAG, color_tag,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-set-color-tag",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_item_get_tattoo:
- * @item_ID: The item.
+ * @item: The item.
  *
  * Get the tattoo of the specified item.
  *
@@ -944,29 +1129,33 @@ gimp_item_set_color_tag (gint32       item_ID,
  *
  * Since: 2.8
  **/
-gint
-gimp_item_get_tattoo (gint32 item_ID)
+guint
+gimp_item_get_tattoo (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint tattoo = 0;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  guint tattoo = 0;
 
-  return_vals = gimp_run_procedure ("gimp-item-get-tattoo",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    tattoo = return_vals[1].data.d_tattoo;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-tattoo",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    tattoo = GIMP_VALUES_GET_UINT (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return tattoo;
 }
 
 /**
  * gimp_item_set_tattoo:
- * @item_ID: The item.
+ * @item: The item.
  * @tattoo: The new item tattoo.
  *
  * Set the tattoo of the specified item.
@@ -980,29 +1169,33 @@ gimp_item_get_tattoo (gint32 item_ID)
  * Since: 2.8
  **/
 gboolean
-gimp_item_set_tattoo (gint32 item_ID,
-                      gint   tattoo)
+gimp_item_set_tattoo (GimpItem *item,
+                      guint     tattoo)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-item-set-tattoo",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_INT32, tattoo,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_UINT, tattoo,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-set-tattoo",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_item_attach_parasite:
- * @item_ID: The item.
+ * @item: The item.
  * @parasite: The parasite to attach to the item.
  *
  * Add a parasite to an item.
@@ -1015,29 +1208,33 @@ gimp_item_set_tattoo (gint32 item_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_item_attach_parasite (gint32              item_ID,
+gimp_item_attach_parasite (GimpItem           *item,
                            const GimpParasite *parasite)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-item-attach-parasite",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_PARASITE, parasite,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          GIMP_TYPE_PARASITE, parasite,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-attach-parasite",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_item_detach_parasite:
- * @item_ID: The item.
+ * @item: The item.
  * @name: The name of the parasite to detach from the item.
  *
  * Removes a parasite from an item.
@@ -1050,103 +1247,103 @@ gimp_item_attach_parasite (gint32              item_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_item_detach_parasite (gint32       item_ID,
+gimp_item_detach_parasite (GimpItem    *item,
                            const gchar *name)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-item-detach-parasite",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-detach-parasite",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_item_get_parasite:
- * @item_ID: The item.
+ * @item: The item.
  * @name: The name of the parasite to find.
  *
  * Look up a parasite in an item
  *
  * Finds and returns the parasite that is attached to an item.
  *
- * Returns: The found parasite.
+ * Returns: (transfer full): The found parasite.
  *
  * Since: 2.8
  **/
 GimpParasite *
-gimp_item_get_parasite (gint32       item_ID,
+gimp_item_get_parasite (GimpItem    *item,
                         const gchar *name)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpParasite *parasite = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-item-get-parasite",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    parasite = gimp_parasite_copy (&return_vals[1].data.d_parasite);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-parasite",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    parasite = GIMP_VALUES_DUP_PARASITE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return parasite;
 }
 
 /**
  * gimp_item_get_parasite_list:
- * @item_ID: The item.
- * @num_parasites: The number of attached parasites.
+ * @item: The item.
  *
  * List all parasites.
  *
  * Returns a list of all parasites currently attached the an item.
  *
- * Returns: The names of currently attached parasites. The returned
- * value must be freed with g_strfreev().
+ * Returns: (array zero-terminated=1) (transfer full):
+ *          The names of currently attached parasites.
+ *          The returned value must be freed with g_strfreev().
  *
  * Since: 2.8
  **/
 gchar **
-gimp_item_get_parasite_list (gint32  item_ID,
-                             gint   *num_parasites)
+gimp_item_get_parasite_list (GimpItem *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar **parasites = NULL;
-  gint i;
 
-  return_vals = gimp_run_procedure ("gimp-item-get-parasite-list",
-                                    &nreturn_vals,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  *num_parasites = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-get-parasite-list",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_parasites = return_vals[1].data.d_int32;
-      if (*num_parasites > 0)
-        {
-          parasites = g_new0 (gchar *, *num_parasites + 1);
-          for (i = 0; i < *num_parasites; i++)
-            parasites[i] = g_strdup (return_vals[2].data.d_stringarray[i]);
-        }
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    parasites = GIMP_VALUES_DUP_STRV (return_vals, 1);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return parasites;
 }

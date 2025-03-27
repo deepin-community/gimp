@@ -34,168 +34,199 @@
 #define PLUG_IN_ROLE   "gimp-smooth-palette"
 
 
-/* Declare local functions. */
-static void      query          (void);
-static void      run            (const gchar      *name,
-                                 gint              nparams,
-                                 const GimpParam  *param,
-                                 gint             *nreturn_vals,
-                                 GimpParam       **return_vals);
+typedef struct _Palette      Palette;
+typedef struct _PaletteClass PaletteClass;
 
-static gboolean  dialog         (gint32            drawable_id);
-
-static gint32    smooth_palette (gint32            drawable_id,
-                                 gint32           *layer_id);
-
-
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _Palette
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
+  GimpPlugIn parent_instance;
+};
+
+struct _PaletteClass
+{
+  GimpPlugInClass parent_class;
 };
 
 
-MAIN ()
+#define PALETTE_TYPE  (palette_get_type ())
+#define PALETTE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), PALETTE_TYPE, Palette))
+
+GType                   palette_get_type         (void) G_GNUC_CONST;
+
+static GList          * palette_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * palette_create_procedure (GimpPlugIn           *plug_in,
+                                                  const gchar          *name);
+
+static GimpValueArray * palette_run              (GimpProcedure        *procedure,
+                                                  GimpRunMode           run_mode,
+                                                  GimpImage            *image,
+                                                  GimpDrawable        **drawables,
+                                                  GimpProcedureConfig  *config,
+                                                  gpointer              run_data);
+
+static gboolean         dialog                   (GimpProcedure        *procedure,
+                                                  GimpProcedureConfig  *config,
+                                                  GimpDrawable         *drawable);
+
+static GimpImage      * smooth_palette           (GimpProcedureConfig  *config,
+                                                  GimpDrawable         *drawable,
+                                                  GimpLayer           **layer);
+
+
+G_DEFINE_TYPE (Palette, palette, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (PALETTE_TYPE)
+DEFINE_STD_SET_I18N
+
+#define TRY_SIZE 10000
 
 static void
-query (void)
+palette_class_init (PaletteClass *klass)
 {
-  static const GimpParamDef args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode",   "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",      "Input image (unused)"         },
-    { GIMP_PDB_DRAWABLE, "drawable",   "Input drawable"               },
-    { GIMP_PDB_INT32,    "width",      "Width"                        },
-    { GIMP_PDB_INT32,    "height",     "Height"                       },
-    { GIMP_PDB_INT32,    "ntries",     "Search Depth"                 },
-    { GIMP_PDB_INT32,    "show-image", "Show Image?"                  }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  static const GimpParamDef return_vals[] =
-  {
-    { GIMP_PDB_IMAGE, "new-image", "Output image" },
-    { GIMP_PDB_LAYER, "new-layer", "Output layer" }
-  };
-
-  gimp_install_procedure (PLUG_IN_PROC,
-                          N_("Derive a smooth color palette from the image"),
-                          "help!",
-                          "Scott Draves",
-                          "Scott Draves",
-                          "1997",
-                          N_("Smoo_th Palette..."),
-                          "RGB*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args), G_N_ELEMENTS (return_vals),
-                          args, return_vals);
-
-  gimp_plugin_menu_register (PLUG_IN_PROC, "<Image>/Colors/Info");
+  plug_in_class->query_procedures = palette_query_procedures;
+  plug_in_class->create_procedure = palette_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
-static struct
-{
-  gint width;
-  gint height;
-  gint ntries;
-  gint try_size;
-  gint show_image;
-} config =
-{
-  256,
-  64,
-  50,
-  10000,
-  1
-};
-
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+palette_init (Palette *palette)
 {
-  static GimpParam   values[3];
-  GimpRunMode        run_mode;
-  gint32             drawable_id;
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
+}
 
-  run_mode = param[0].data.d_int32;
+static GList *
+palette_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (PLUG_IN_PROC));
+}
 
-  INIT_I18N ();
+static GimpProcedure *
+palette_create_procedure (GimpPlugIn  *plug_in,
+                          const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
 
-  *nreturn_vals = 3;
-  *return_vals  = values;
-
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
-  values[1].type          = GIMP_PDB_IMAGE;
-  values[2].type          = GIMP_PDB_LAYER;
-
-  drawable_id = param[2].data.d_drawable;
-
-  switch (run_mode)
+  if (! strcmp (name, PLUG_IN_PROC))
     {
-    case GIMP_RUN_INTERACTIVE:
-      gimp_get_data (PLUG_IN_PROC, &config);
-      if (! dialog (drawable_id))
-        return;
-      break;
+      procedure = gimp_image_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            palette_run, NULL, NULL);
 
-    case GIMP_RUN_NONINTERACTIVE:
-      if (nparams != 7)
-        {
-          status = GIMP_PDB_CALLING_ERROR;
-        }
-      else
-        {
-          config.width      = param[3].data.d_int32;
-          config.height     = param[4].data.d_int32;
-          config.ntries     = param[5].data.d_int32;
-          config.show_image = param[6].data.d_int32 ? TRUE : FALSE;
-        }
+      gimp_procedure_set_image_types (procedure, "RGB*");
+      gimp_procedure_set_sensitivity_mask (procedure,
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLE);
 
-      if (status == GIMP_PDB_SUCCESS &&
-          ((config.width <= 0) || (config.height <= 0) || config.ntries <= 0))
-        status = GIMP_PDB_CALLING_ERROR;
+      gimp_procedure_set_menu_label (procedure, _("Smoo_th Palette..."));
+      gimp_procedure_add_menu_path (procedure, "<Image>/Colors/Info");
 
-      break;
+      gimp_procedure_set_documentation (procedure,
+                                        _("Derive a smooth color palette "
+                                          "from the image"),
+                                        "help!",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Scott Draves",
+                                      "Scott Draves",
+                                      "1997");
 
-    case GIMP_RUN_WITH_LAST_VALS:
-      /*  Possibly retrieve data  */
-      gimp_get_data (PLUG_IN_PROC, &config);
-      break;
+      gimp_procedure_add_int_argument (procedure, "width",
+                                       _("_Width"),
+                                       _("Width"),
+                                       2, GIMP_MAX_IMAGE_SIZE, 256,
+                                       G_PARAM_READWRITE);
 
-    default:
-      break;
+      gimp_procedure_add_int_argument (procedure, "height",
+                                       _("_Height"),
+                                       _("Height"),
+                                       2, GIMP_MAX_IMAGE_SIZE, 64,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "n-tries",
+                                       _("Search _depth"),
+                                       _("Search depth"),
+                                       1, 1024, 50,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_boolean_argument (procedure, "show-image",
+                                           _("Show image"),
+                                           _("Show image"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_image_return_value (procedure, "new-image",
+                                             _("New image"),
+                                             _("Output image"),
+                                             FALSE,
+                                             G_PARAM_READWRITE);
+
+      gimp_procedure_add_layer_return_value (procedure, "new-layer",
+                                             _("New layer"),
+                                             _("Output layer"),
+                                             FALSE,
+                                             G_PARAM_READWRITE);
     }
 
-  if (status == GIMP_PDB_SUCCESS)
+  return procedure;
+}
+
+static GimpValueArray *
+palette_run (GimpProcedure        *procedure,
+             GimpRunMode           run_mode,
+             GimpImage            *image,
+             GimpDrawable        **drawables,
+             GimpProcedureConfig  *config,
+             gpointer              run_data)
+{
+  GimpImage    *new_image;
+  GimpLayer    *new_layer;
+  GimpDrawable *drawable;
+  gboolean      show_image;
+
+  gegl_init (NULL, NULL);
+
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
-      if (gimp_drawable_is_rgb (drawable_id))
-        {
-          gimp_progress_init (_("Deriving smooth palette"));
+      GError *error = NULL;
 
-          gegl_init (NULL, NULL);
-          values[1].data.d_image = smooth_palette (drawable_id,
-                                                   &values[2].data.d_layer);
-          gegl_exit ();
+      g_set_error (&error, GIMP_PLUG_IN_ERROR, 0,
+                   _("Procedure '%s' only works with one drawable."),
+                   PLUG_IN_PROC);
 
-          if (run_mode == GIMP_RUN_INTERACTIVE)
-            gimp_set_data (PLUG_IN_PROC, &config, sizeof (config));
-
-          if (config.show_image)
-            gimp_display_new (values[1].data.d_image);
-        }
-      else
-        {
-          status = GIMP_PDB_EXECUTION_ERROR;
-        }
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_CALLING_ERROR,
+                                               error);
+    }
+  else
+    {
+      drawable = drawables[0];
     }
 
-  values[0].data.d_status = status;
+  if (run_mode == GIMP_RUN_INTERACTIVE && ! dialog (procedure, config, drawable))
+    {
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_CANCEL,
+                                               NULL);
+    }
+
+  if (gimp_drawable_is_rgb (drawable))
+    {
+      gimp_progress_init (_("Deriving smooth palette"));
+
+      new_image = smooth_palette (config, drawable, &new_layer);
+
+      g_object_get (config, "show-image", &show_image, NULL);
+      if (show_image)
+        gimp_display_new (new_image);
+    }
+  else
+    {
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_EXECUTION_ERROR,
+                                               NULL);
+    }
+
+  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }
 
 static gfloat
@@ -233,46 +264,57 @@ pix_swap (gfloat *pal,
     }
 }
 
-static gint32
-smooth_palette (gint32  drawable_id,
-                gint32 *layer_id)
+static GimpImage *
+smooth_palette (GimpProcedureConfig  *config,
+                GimpDrawable         *drawable,
+                GimpLayer           **layer)
 {
-  gint32        new_image_id;
+  GimpImage    *new_image;
   gint          psize, i, j;
   guint         bpp;
   gint          sel_x1, sel_y1;
   gint          width, height;
+  gint          config_width;
+  gint          config_height;
+  gint          config_n_tries;
   GeglBuffer   *buffer;
   GeglSampler  *sampler;
   gfloat       *pal;
   GRand        *gr;
 
-  const Babl *format = babl_format ("RGB float");
+  const Babl *format = gimp_drawable_has_alpha (drawable) ?
+                       babl_format ("RGBA float") : babl_format ("RGB float");
 
-  new_image_id = gimp_image_new_with_precision (config.width,
-                                                config.height,
-                                                GIMP_RGB,
-                                                GIMP_PRECISION_FLOAT_LINEAR);
+  g_object_get (config,
+                "width",   &config_width,
+                "height",  &config_height,
+                "n-tries", &config_n_tries,
+                NULL);
 
-  gimp_image_undo_disable (new_image_id);
+  new_image = gimp_image_new_with_precision (config_width,
+                                             config_height,
+                                             GIMP_RGB,
+                                             GIMP_PRECISION_FLOAT_LINEAR);
 
-  *layer_id = gimp_layer_new (new_image_id, _("Background"),
-                              config.width, config.height,
-                              gimp_drawable_type (drawable_id),
-                              100,
-                              gimp_image_get_default_new_layer_mode (new_image_id));
+  gimp_image_undo_disable (new_image);
 
-  gimp_image_insert_layer (new_image_id, *layer_id, -1, 0);
+  *layer = gimp_layer_new (new_image, _("Background"),
+                           config_width, config_height,
+                           gimp_drawable_type (drawable),
+                           100,
+                           gimp_image_get_default_new_layer_mode (new_image));
 
-  if (! gimp_drawable_mask_intersect (drawable_id,
+  gimp_image_insert_layer (new_image, *layer, NULL, 0);
+
+  if (! gimp_drawable_mask_intersect (drawable,
                                       &sel_x1, &sel_y1, &width, &height))
-    return new_image_id;
+    return new_image;
 
   gr = g_rand_new ();
 
-  psize = config.width;
+  psize = config_width;
 
-  buffer = gimp_drawable_get_buffer (drawable_id);
+  buffer = gimp_drawable_get_buffer (drawable);
 
   sampler = gegl_buffer_sampler_new (buffer, format, GEGL_SAMPLER_NEAREST);
 
@@ -303,15 +345,15 @@ smooth_palette (gint32  drawable_id,
       gdouble  len_best = 0;
       gint     try;
 
-      pal_best = g_memdup (pal, bpp * psize);
-      original = g_memdup (pal, bpp * psize);
+      pal_best = g_memdup2 (pal, bpp * psize);
+      original = g_memdup2 (pal, bpp * psize);
 
-      for (try = 0; try < config.ntries; try++)
+      for (try = 0; try < config_n_tries; try++)
         {
           gdouble len;
 
-          if (!(try%5))
-            gimp_progress_update (try / (double) config.ntries);
+          if (! (try % 5))
+            gimp_progress_update (try / (double) config_n_tries);
           memcpy (pal, original, bpp * psize);
 
           /* scramble */
@@ -324,7 +366,7 @@ smooth_palette (gint32  drawable_id,
             len += pix_diff (pal, bpp, i, i-1);
 
           /* improve */
-          for (i = 0; i < config.try_size; i++)
+          for (i = 0; i < TRY_SIZE; i++)
             {
               gint  i0 = 1 + g_rand_int_range (gr, 0, psize-2);
               gint  i1 = 1 + g_rand_int_range (gr, 0, psize-2);
@@ -396,72 +438,74 @@ smooth_palette (gint32  drawable_id,
 
   /* store smooth palette */
 
-  buffer = gimp_drawable_get_buffer (*layer_id);
+  buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (*layer));
 
-  for (j = 0; j < config.height; j++)
+  for (j = 0; j < config_height; j++)
     {
-      GeglRectangle row = {0, j, config.width, 1};
+      GeglRectangle row = {0, j, config_width, 1};
       gegl_buffer_set (buffer, &row, 0, format, pal, GEGL_AUTO_ROWSTRIDE);
     }
 
   gegl_buffer_flush (buffer);
 
-  gimp_drawable_update (*layer_id, 0, 0,
-                        config.width, config.height);
-  gimp_image_undo_enable (new_image_id);
+  gimp_drawable_update (GIMP_DRAWABLE (*layer), 0, 0,
+                        config_width, config_height);
+  gimp_image_undo_enable (new_image);
 
   g_object_unref (buffer);
   g_free (pal);
   g_rand_free (gr);
 
-  return new_image_id;
+  return new_image;
 }
 
 static gboolean
-dialog (gint32 drawable_id)
+dialog (GimpProcedure       *procedure,
+        GimpProcedureConfig *config,
+        GimpDrawable        *drawable)
 {
   GtkWidget     *dlg;
-  GtkWidget     *spinbutton;
-  GtkAdjustment *adj;
   GtkWidget     *sizeentry;
-  guint32        image_id;
-  GimpUnit       unit;
+  GimpImage     *image;
+  GimpUnit      *unit;
   gdouble        xres, yres;
+  gint           width;
+  gint           height;
   gboolean       run;
 
-  gimp_ui_init (PLUG_IN_BINARY, FALSE);
+  g_object_get (config,
+                "width",  &width,
+                "height", &height,
+                NULL);
 
-  dlg = gimp_dialog_new (_("Smooth Palette"), PLUG_IN_ROLE,
-                         NULL, 0,
-                         gimp_standard_help_func, PLUG_IN_PROC,
+  gimp_ui_init (PLUG_IN_BINARY);
 
-                         _("_Cancel"), GTK_RESPONSE_CANCEL,
-                         _("_OK"),     GTK_RESPONSE_OK,
+  dlg = gimp_procedure_dialog_new (procedure,
+                                   GIMP_PROCEDURE_CONFIG (config),
+                                   _("Smooth Palette"));
 
-                         NULL);
-
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dlg),
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dlg),
+                                            GTK_RESPONSE_OK,
+                                            GTK_RESPONSE_CANCEL,
+                                            -1);
 
   gimp_window_set_transient (GTK_WINDOW (dlg));
 
-  image_id = gimp_item_get_image (drawable_id);
-  unit = gimp_image_get_unit (image_id);
-  gimp_image_get_resolution (image_id, &xres, &yres);
+  image = gimp_item_get_image (GIMP_ITEM (drawable));
+  unit = gimp_image_get_unit (image);
+  gimp_image_get_resolution (image, &xres, &yres);
 
   sizeentry = gimp_coordinates_new (unit, "%a", TRUE, FALSE, 6,
                                     GIMP_SIZE_ENTRY_UPDATE_SIZE,
                                     FALSE, FALSE,
 
                                     _("_Width:"),
-                                    config.width, xres,
+                                    width, xres,
                                     2, GIMP_MAX_IMAGE_SIZE,
                                     2, GIMP_MAX_IMAGE_SIZE,
 
                                     _("_Height:"),
-                                    config.height, yres,
+                                    height, yres,
                                     1, GIMP_MAX_IMAGE_SIZE,
                                     1, GIMP_MAX_IMAGE_SIZE);
   gtk_container_set_border_width (GTK_CONTAINER (sizeentry), 12);
@@ -469,17 +513,8 @@ dialog (gint32 drawable_id)
                       sizeentry, FALSE, FALSE, 0);
   gtk_widget_show (sizeentry);
 
-  adj = GTK_ADJUSTMENT (gtk_adjustment_new (config.ntries,
-                                            1, 1024, 1, 10, 0));
-  spinbutton = gimp_spin_button_new (adj, 1, 0);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-
-  gimp_table_attach_aligned (GTK_TABLE (sizeentry), 0, 2,
-                             _("_Search depth:"), 0.0, 0.5,
-                             spinbutton, 1, FALSE);
-  g_signal_connect (adj, "value-changed",
-                    G_CALLBACK (gimp_int_adjustment_update),
-                    &config.ntries);
+  /* We don't want to have the "Show Image" option in the GUI */
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dlg), "n-tries", NULL);
 
   gtk_widget_show (dlg);
 
@@ -487,10 +522,13 @@ dialog (gint32 drawable_id)
 
   if (run)
     {
-      config.width  = gimp_size_entry_get_refval (GIMP_SIZE_ENTRY (sizeentry),
-                                                  0);
-      config.height = gimp_size_entry_get_refval (GIMP_SIZE_ENTRY (sizeentry),
-                                                  1);
+      width  = gimp_size_entry_get_refval (GIMP_SIZE_ENTRY (sizeentry), 0);
+      height = gimp_size_entry_get_refval (GIMP_SIZE_ENTRY (sizeentry), 1);
+
+      g_object_set (config,
+                    "width",  width,
+                    "height", height,
+                    NULL);
     }
 
   gtk_widget_destroy (dlg);

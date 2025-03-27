@@ -31,7 +31,7 @@
 ; be saved. A minimum of three layers is required.
 
 (define (script-fu-blend-anim img
-                              drawable
+                              drawables
                               frames
                               max-blur
                               looped)
@@ -47,13 +47,12 @@
         (max-blur (max max-blur 0))
         (frames (max frames 0))
         (image (car (gimp-image-duplicate img)))
-        (width (car (gimp-image-width image)))
-        (height (car (gimp-image-height image)))
-        (layers (gimp-image-get-layers image))
-        (num-layers (car layers))
-        (layer-array (cadr layers))
+        (width (car (gimp-image-get-width image)))
+        (height (car (gimp-image-get-height image)))
+        (layer-array (car (gimp-image-get-layers image)))
+        (num-layers (vector-length layer-array))
         (slots (- num-layers 2))
-        (bg-layer (aref layer-array (- num-layers 1)))
+        (bg-layer (vector-ref layer-array (- num-layers 1)))
         (max-width 0)
         (max-height 0)
         (offset-x 0)
@@ -67,13 +66,13 @@
 		  (if (= looped TRUE)
 			  ; add a copy of the lowest blend layer on top
 			  (let* ((copy (car (gimp-layer-copy
-						 (aref layer-array (- num-layers 2)) TRUE))))
+						 (vector-ref layer-array (- num-layers 2))))))
+                                (gimp-layer-add-alpha copy)
 				(gimp-image-insert-layer image copy 0 0)
-				(set! layers (gimp-image-get-layers image))
-				(set! num-layers (car layers))
-				(set! layer-array (cadr layers))
+				(set! layer-array (car (gimp-image-get-layers image)))
+				(set! num-layers (vector-length layer-array))
 				(set! slots (- num-layers 2))
-				(set! bg-layer (aref layer-array (- num-layers 1)))))
+				(set! bg-layer (vector-ref layer-array (- num-layers 1)))))
 
 		  ; make all layers invisible and check for sizes
 		  (let* ((min-offset-x width)
@@ -81,12 +80,12 @@
 				 (layer-count slots))
 			(gimp-item-set-visible bg-layer FALSE)
 			(while (> layer-count -1)
-				   (let* ((layer (aref layer-array layer-count))
-				  (layer-width (+ (car (gimp-drawable-width layer))
+				   (let* ((layer (vector-ref layer-array layer-count))
+				  (layer-width (+ (car (gimp-drawable-get-width layer))
 						  (* max-blur 2)))
-				  (layer-height (+ (car (gimp-drawable-height layer))
+				  (layer-height (+ (car (gimp-drawable-get-height layer))
 						   (* max-blur 2)))
-				  (layer-offsets (gimp-drawable-offsets layer))
+				  (layer-offsets (gimp-drawable-get-offsets layer))
 				  (layer-offset-x (- (car layer-offsets) max-blur))
 				  (layer-offset-y (- (cadr layer-offsets) max-blur)))
 				 (gimp-item-set-visible layer FALSE)
@@ -95,9 +94,9 @@
 				 (set! min-offset-x (min min-offset-x layer-offset-x))
 				 (set! min-offset-y (min min-offset-y layer-offset-y))
 				 (set! layer-count (- layer-count 1))))
-			(set! offset-x (- (car (gimp-drawable-offsets bg-layer))
+			(set! offset-x (- (car (gimp-drawable-get-offsets bg-layer))
 					  min-offset-x))
-			(set! offset-y (- (cadr (gimp-drawable-offsets bg-layer))
+			(set! offset-y (- (cadr (gimp-drawable-get-offsets bg-layer))
 					  min-offset-y)))
 
 		  ; create intermediate frames by merging copies of adjacent layers
@@ -105,14 +104,17 @@
 		  (let* ((layer-count slots))
 			(while (> layer-count 0)
 			   (let* ((frame-count frames)
-				  (lower-layer (aref layer-array layer-count))
-				  (upper-layer (aref layer-array (- layer-count 1))))
+				  (lower-layer (vector-ref layer-array layer-count))
+				  (upper-layer (vector-ref layer-array (- layer-count 1))))
 				 (while (> frame-count 0)
 					(let* ((opacity (* (/ frame-count (+ frames 1)) 100))
 				   (blur (/ (* opacity max-blur) 100))
-				   (upper-copy (car (gimp-layer-copy upper-layer TRUE)))
-				   (lower-copy (car (gimp-layer-copy lower-layer TRUE)))
-				   (bg-copy (car (gimp-layer-copy bg-layer TRUE))))
+				   (upper-copy (car (gimp-layer-copy upper-layer)))
+				   (lower-copy (car (gimp-layer-copy lower-layer)))
+				   (bg-copy (car (gimp-layer-copy bg-layer))))
+                                  (gimp-layer-add-alpha upper-copy)
+                                  (gimp-layer-add-alpha lower-copy)
+                                  (gimp-layer-add-alpha bg-copy)
 				  (gimp-image-insert-layer image bg-copy 0 0)
 				  (gimp-image-insert-layer image lower-copy 0 0)
 				  (gimp-image-insert-layer image upper-copy 0 0)
@@ -123,8 +125,8 @@
 				  (gimp-layer-set-opacity lower-copy opacity)
 				  (gimp-layer-set-opacity bg-copy 100)
 				  (if (> max-blur 0)
-				  (let* ((layer-width (car (gimp-drawable-width upper-copy)))
-						 (layer-height (car (gimp-drawable-height upper-copy))))
+				  (let* ((layer-width (car (gimp-drawable-get-width upper-copy)))
+						 (layer-height (car (gimp-drawable-get-height upper-copy))))
 					(gimp-layer-set-lock-alpha upper-copy FALSE)
 					(gimp-layer-resize upper-copy
 							   (+ layer-width (* blur 2))
@@ -132,16 +134,14 @@
 							   blur
 							   blur)
 					(if (>= blur 1.0)
-						(plug-in-gauss-rle RUN-NONINTERACTIVE
-							   image
-							   upper-copy
-							   blur
-							   TRUE TRUE))
+                                          (gimp-drawable-merge-new-filter upper-copy "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0
+                                                                          "std-dev-x" (* 0.32 blur) "std-dev-y" (* 0.32 blur) "filter" "auto")
+                                        )
 					(set! blur (- max-blur blur))
 					(gimp-layer-set-lock-alpha lower-copy FALSE)
-					(set! layer-width (car (gimp-drawable-width
+					(set! layer-width (car (gimp-drawable-get-width
 								lower-copy)))
-					(set! layer-height (car (gimp-drawable-height
+					(set! layer-height (car (gimp-drawable-get-height
 								 lower-copy)))
 					(gimp-layer-resize lower-copy
 							   (+ layer-width (* blur 2))
@@ -149,11 +149,8 @@
 							   blur
 							   blur)
 					(if (>= blur 1.0)
-						(plug-in-gauss-rle RUN-NONINTERACTIVE
-							   image
-							   lower-copy
-							   blur
-							   TRUE TRUE))))
+                                          (gimp-drawable-merge-new-filter lower-copy "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0
+                                                                          "std-dev-x" (* 0.32 blur) "std-dev-y" (* 0.32 blur) "filter" "auto"))))
 				  (gimp-layer-resize bg-copy
 							 max-width
 							 max-height
@@ -169,7 +166,7 @@
 			  ; with copies of the background layer
 		  (let* ((layer-count 0))
 			(while (< layer-count slots)
-				   (let* ((orig-layer (aref layer-array layer-count))
+				   (let* ((orig-layer (vector-ref layer-array layer-count))
 				  (bg-copy (car (gimp-layer-copy bg-layer TRUE))))
 				 (gimp-image-insert-layer image
 						   bg-copy
@@ -191,18 +188,17 @@
 			   (set! layer-count (+ layer-count 1)))))
 
 		  ; merge the lowest blend layer with the background layer
-		  (let* ((orig-layer (aref layer-array (- num-layers 2))))
+		  (let* ((orig-layer (vector-ref layer-array (- num-layers 2))))
 			(gimp-item-set-visible bg-layer TRUE)
 			(gimp-item-set-visible orig-layer TRUE)
 			(gimp-image-merge-visible-layers image CLIP-TO-IMAGE))
 
 		  ; make all layers visible again
-		  (let* ((result-layers (gimp-image-get-layers image))
-				 (num-result-layers (car result-layers))
-				 (result-layer-array (cadr result-layers))
+		  (let* ((result-layer-array (car (gimp-image-get-layers image)))
+				 (num-result-layers (vector-length result-layer-array))
 				 (layer-count (- num-result-layers 1)))
 			(while (> layer-count -1)
-			   (let* ((layer (aref result-layer-array layer-count))
+			   (let* ((layer (vector-ref result-layer-array layer-count))
 				  (name (string-append _"Frame" " "
 						       (number->string
 							(- num-result-layers layer-count) 10))))
@@ -212,7 +208,7 @@
 
 			(if (= looped TRUE)
 				; remove the topmost layer
-				(gimp-image-remove-layer image (aref result-layer-array 0))))
+				(gimp-image-remove-layer image (vector-ref result-layer-array 0))))
 
 		  (gimp-image-undo-enable image)
 		  (gimp-display-new image)
@@ -224,19 +220,18 @@
   )
 )
 
-(script-fu-register "script-fu-blend-anim"
+(script-fu-register-filter "script-fu-blend-anim"
     _"_Blend..."
     _"Create intermediate layers to blend two or more layers over a background as an animation"
     "Sven Neumann <sven@gimp.org>"
     "Sven Neumann"
     "1999/12/21"
     "RGB* GRAY*"
-    SF-IMAGE       "Image"               0
-    SF-DRAWABLE    "Drawable"            0
+    SF-ONE-OR-MORE-DRAWABLE
     SF-ADJUSTMENT _"Intermediate frames" '(3 1 1024 1 10 0 1)
     SF-ADJUSTMENT _"Max. blur radius"    '(0 0 1024 1 10 0 1)
     SF-TOGGLE     _"Looped"              TRUE
 )
 
 (script-fu-menu-register "script-fu-blend-anim"
-                         "<Image>/Filters/Animation/Animators")
+                         "<Image>/Filters/Animation/")

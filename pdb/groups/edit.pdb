@@ -17,24 +17,26 @@
 # "Perlized" from C source by Manish Singh <yosh@gimp.org>
 
 sub edit_cut {
-    $blurb = 'Cut from the specified drawable.';
+    $blurb = 'Cut from the specified drawables.';
 
     $help = <<'HELP';
 If there is a selection in the image, then the area specified by the
-selection is cut from the specified drawable and placed in an internal
+selection is cut from the specified drawables and placed in an internal
 GIMP edit buffer. It can subsequently be retrieved using the
-gimp_edit_paste() command. If there is no selection, then the
-specified drawable will be removed and its contents stored in the
-internal GIMP edit buffer. This procedure will fail if the selected area
-lies completely outside the bounds of the current drawable and there is
-nothing to copy from.
+gimp_edit_paste() command. If there is no selection and only one
+specified drawable, then the specified drawable will be removed and its
+contents stored in the internal GIMP edit buffer.
+
+This procedure will return %FALSE if the selected area lies completely
+outside the bounds of the current drawables and there is nothing to cut
+from.
 HELP
 
     &std_pdb_misc;
 
     @inargs = (
-	{ name => 'drawable', type => 'drawable',
-	  desc => 'The drawable to cut from' }
+        { name => 'drawables', type => 'drawablearray',
+         desc => 'The drawables to cut from' }
     );
 
     @outargs = (
@@ -46,14 +48,41 @@ HELP
     %invoke = (
 	code => <<CODE
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
-                                 GIMP_PDB_ITEM_CONTENT, error) &&
-      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
-    {
-      GimpImage *image    = gimp_item_get_image (GIMP_ITEM (drawable));
-      GError    *my_error = NULL;
+  GimpImage *image         = NULL;
+  GList     *drawable_list = NULL;
+  gint       i;
 
-      non_empty = gimp_edit_cut (image, drawable, context, &my_error) != NULL;
+  for (i = 0; drawables[i] != NULL; i++)
+    {
+      if (! gimp_pdb_item_is_attached (GIMP_ITEM (drawables[i]), NULL,
+                                       GIMP_PDB_ITEM_CONTENT, error) ||
+          ! gimp_pdb_item_is_not_group (GIMP_ITEM (drawables[i]), error))
+        {
+          success = FALSE;
+          break;
+        }
+
+      if (! image)
+        {
+          image = gimp_item_get_image (GIMP_ITEM (drawables[i]));
+        }
+      else if (image != gimp_item_get_image (GIMP_ITEM (drawables[i])))
+        {
+          success = FALSE;
+          gimp_message_literal (gimp,
+                                G_OBJECT (progress), GIMP_MESSAGE_WARNING,
+                                _("All specified drawables must belong to the same image."));
+          break;
+        }
+
+      drawable_list = g_list_prepend (drawable_list, (gpointer) drawables[i]);
+    }
+
+  if (success && image)
+    {
+      GError *my_error = NULL;
+
+      non_empty = gimp_edit_cut (image, drawable_list, context, &my_error) != NULL;
 
       if (! non_empty)
         {
@@ -64,31 +93,38 @@ HELP
         }
     }
   else
-    success = FALSE;
+    {
+      success = FALSE;
+    }
+  g_list_free (drawable_list);
 }
 CODE
     );
 }
 
 sub edit_copy {
-    $blurb = 'Copy from the specified drawable.';
+    $blurb = 'Copy from the specified drawables.';
 
     $help = <<'HELP';
 If there is a selection in the image, then the area specified by the
-selection is copied from the specified drawable and placed in an
+selection is copied from the specified drawables and placed in an
 internal GIMP edit buffer. It can subsequently be retrieved using the
 gimp_edit_paste() command.  If there is no selection, then the
-specified drawable's contents will be stored in the internal GIMP edit
-buffer. This procedure will fail if the selected area lies completely
-outside the bounds of the current drawable and there is nothing to
-copy from.
+specified drawables' contents will be stored in the internal GIMP edit
+buffer.
+
+This procedure will return %FALSE if the selected area lies
+completely outside the bounds of the current drawables and there is
+nothing to copy from.
+
+All the drawables must belong to the same image.
 HELP
 
     &std_pdb_misc;
 
     @inargs = (
-	{ name => 'drawable', type => 'drawable',
-	  desc => 'The drawable to copy from' }
+	{ name => 'drawables', type => 'drawablearray',
+          desc => 'Drawables to copy from' }
     );
 
     @outargs = (
@@ -100,12 +136,34 @@ HELP
     %invoke = (
 	code => <<CODE
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, 0, error))
-    {
-      GimpImage *image    = gimp_item_get_image (GIMP_ITEM (drawable));
-      GError    *my_error = NULL;
+  GimpImage *image          = NULL;
+  GList     *drawables_list = NULL;
+  gint       i;
 
-      non_empty = gimp_edit_copy (image, drawable, context, &my_error) != NULL;
+  for (i = 0; drawables[i] != NULL; i++)
+    {
+      if (! gimp_pdb_item_is_attached (GIMP_ITEM (drawables[i]), NULL, 0, error))
+        {
+          success = FALSE;
+          break;
+        }
+      if (image == NULL)
+        {
+          image = gimp_item_get_image (GIMP_ITEM (drawables[i]));
+        }
+      else if (image != gimp_item_get_image (GIMP_ITEM (drawables[i])))
+        {
+          success = FALSE;
+          break;
+        }
+      drawables_list = g_list_prepend (drawables_list, (gpointer) drawables[i]);
+    }
+
+  if (success && g_list_length (drawables_list) > 0)
+    {
+      GError *my_error = NULL;
+
+      non_empty = gimp_edit_copy (image, drawables_list, context, FALSE, &my_error) != NULL;
 
       if (! non_empty)
         {
@@ -117,6 +175,8 @@ HELP
     }
   else
     success = FALSE;
+
+  g_list_free (drawables_list);
 }
 CODE
     );
@@ -170,18 +230,20 @@ sub edit_paste {
     $help = <<'HELP';
 This procedure pastes a copy of the internal GIMP edit buffer to the
 specified drawable. The GIMP edit buffer will be empty unless a call
-was previously made to either gimp_edit_cut() or gimp_edit_copy(). The
-"paste_into" option specifies whether to clear the current image
+was previously made to either [func@Gimp.edit_cut] or [func@Gimp.edit_copy].
+The "paste_into" option specifies whether to clear the current image
 selection, or to paste the buffer "behind" the selection. This allows
 the selection to act as a mask for the pasted buffer. Anywhere that
 the selection mask is non-zero, the pasted buffer will show
-through. The pasted buffer will be a new layer in the image which is
-designated as the image floating selection. If the image has a
-floating selection at the time of pasting, the old floating selection
-will be anchored to its drawable before the new floating selection is
-added. This procedure returns the new floating layer. The resulting
-floating selection will already be attached to the specified drawable,
-and a subsequent call to floating_sel_attach is not needed.
+through.
+The pasted data may be a floating selection when relevant, layers otherwise.
+If the image has a floating selection at the time of pasting, the old
+floating selection will be anchored to its drawable before the new
+floating selection is added.
+
+This procedure returns the new drawables (floating or not). If the result
+is a floating selection, it will already be attached to the specified
+drawable, and a subsequent call to [func@Gimp.floating_sel_attach] is not needed.
 HELP
 
     &std_pdb_misc;
@@ -194,8 +256,8 @@ HELP
     );
 
     @outargs = (
-	{ name  => 'floating_sel', type  => 'layer',
-	  desc  => 'The new floating selection' }
+        { name => 'new_drawables', type => 'drawablearray',
+          desc => 'The list of pasted layers.' }
     );
 
     %invoke = (
@@ -208,15 +270,33 @@ HELP
                                  GIMP_PDB_ITEM_CONTENT, error) &&
       gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
     {
-      floating_sel = gimp_edit_paste (gimp_item_get_image (GIMP_ITEM (drawable)),
-                                      drawable, paste,
-                                      paste_into ?
-                                      GIMP_PASTE_TYPE_FLOATING_INTO :
-                                      GIMP_PASTE_TYPE_FLOATING,
-                                      -1, -1, -1, -1);
+      GList *drawables = NULL;
+      GList *list;
+      gint   num_drawables;
+      gint   i;
 
-      if (! floating_sel)
+      if (drawable != NULL)
+        drawables = g_list_prepend (drawables, drawable);
+
+      list = gimp_edit_paste (gimp_item_get_image (GIMP_ITEM (drawable)),
+                              drawables, paste,
+                              paste_into ?
+                              GIMP_PASTE_TYPE_FLOATING_INTO :
+                              GIMP_PASTE_TYPE_FLOATING,
+                              context, FALSE,
+                              -1, -1, -1, -1);
+      g_list_free (drawables);
+
+      if (! list)
         success = FALSE;
+
+      num_drawables = g_list_length (list);
+      new_drawables = g_new0 (GimpDrawable *, num_drawables + 1);
+
+      for (i = 0; i < num_drawables; i++, list = g_list_next (list))
+        new_drawables[i] = g_object_ref (list->data);
+
+      g_list_free (list);
     }
   else
     success = FALSE;
@@ -248,7 +328,7 @@ HELP
 
   if (paste)
     {
-      image = gimp_edit_paste_as_new_image (gimp, paste);
+      image = gimp_edit_paste_as_new_image (gimp, paste, context);
 
       if (! image)
         success = FALSE;
@@ -270,8 +350,8 @@ HELP
     &mitch_pdb_misc('2005', '2.4');
 
     @inargs = (
-	{ name => 'drawable', type => 'drawable',
-	  desc => "The drawable to cut from" },
+        { name => 'drawables', type => 'drawablearray',
+         desc => 'The drawables to cut from' },
         { name => 'buffer_name', type => 'string', non_empty => 1,
           desc => 'The name of the buffer to create' }
     );
@@ -285,15 +365,42 @@ HELP
     %invoke = (
 	code => <<CODE
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
-                                 GIMP_PDB_ITEM_CONTENT, error) &&
-      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+  GimpImage *image         = NULL;
+  GList     *drawable_list = NULL;
+  gint       i;
+
+  for (i = 0; drawables[i] != NULL; i++)
     {
-      GimpImage *image    = gimp_item_get_image (GIMP_ITEM (drawable));
-      GError    *my_error = NULL;
+      if (! gimp_pdb_item_is_attached (GIMP_ITEM (drawables[i]), NULL,
+                                       GIMP_PDB_ITEM_CONTENT, error) ||
+          ! gimp_pdb_item_is_not_group (GIMP_ITEM (drawables[i]), error))
+        {
+          success = FALSE;
+          break;
+        }
+
+      if (! image)
+        {
+          image = gimp_item_get_image (GIMP_ITEM (drawables[i]));
+        }
+      else if (image != gimp_item_get_image (GIMP_ITEM (drawables[i])))
+        {
+          success = FALSE;
+          gimp_message_literal (gimp,
+                                G_OBJECT (progress), GIMP_MESSAGE_WARNING,
+                                _("All specified drawables must belong to the same image."));
+          break;
+        }
+
+      drawable_list = g_list_prepend (drawable_list, (gpointer) drawables[i]);
+    }
+
+  if (success && image)
+    {
+      GError *my_error = NULL;
 
       real_name = (gchar *) gimp_edit_named_cut (image, buffer_name,
-                                                 drawable, context, &my_error);
+                                                 drawable_list, context, &my_error);
 
       if (real_name)
         {
@@ -308,7 +415,10 @@ HELP
         }
     }
   else
-    success = FALSE;
+    {
+      success = FALSE;
+    }
+  g_list_free (drawable_list);
 }
 CODE
     );
@@ -326,8 +436,8 @@ HELP
     &mitch_pdb_misc('2005', '2.4');
 
     @inargs = (
-	{ name => 'drawable', type => 'drawable',
-	  desc => "The drawable to copy from" },
+        { name => 'drawables', type => 'drawablearray',
+         desc => 'The drawables to copy from' },
         { name => 'buffer_name', type => 'string', non_empty => 1,
           desc => 'The name of the buffer to create' }
     );
@@ -341,13 +451,41 @@ HELP
     %invoke = (
 	code => <<CODE
 {
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL, 0, error))
+  GimpImage *image         = NULL;
+  GList     *drawable_list = NULL;
+  gint       i;
+
+  for (i = 0; drawables[i] != NULL; i++)
     {
-      GimpImage *image    = gimp_item_get_image (GIMP_ITEM (drawable));
-      GError    *my_error = NULL;
+      if (! gimp_pdb_item_is_attached (GIMP_ITEM (drawables[i]), NULL,
+                                       0, error))
+        {
+          success = FALSE;
+          break;
+        }
+
+      if (! image)
+        {
+          image = gimp_item_get_image (GIMP_ITEM (drawables[i]));
+        }
+      else if (image != gimp_item_get_image (GIMP_ITEM (drawables[i])))
+        {
+          success = FALSE;
+          gimp_message_literal (gimp,
+                                G_OBJECT (progress), GIMP_MESSAGE_WARNING,
+                                _("All specified drawables must belong to the same image."));
+          break;
+        }
+
+      drawable_list = g_list_prepend (drawable_list, (gpointer) drawables[i]);
+    }
+
+  if (success && image)
+    {
+      GError *my_error = NULL;
 
       real_name = (gchar *) gimp_edit_named_copy (image, buffer_name,
-                                                  drawable, context, &my_error);
+                                                  drawable_list, context, &my_error);
 
       if (real_name)
         {
@@ -362,7 +500,10 @@ HELP
         }
     }
   else
-    success = FALSE;
+    {
+      success = FALSE;
+    }
+  g_list_free (drawable_list);
 }
 CODE
     );
@@ -451,14 +592,27 @@ HELP
                                  GIMP_PDB_ITEM_CONTENT, error) &&
       gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
     {
-      floating_sel = gimp_edit_paste (gimp_item_get_image (GIMP_ITEM (drawable)),
-                                      drawable, GIMP_OBJECT (buffer),
-                                      paste_into ?
-                                      GIMP_PASTE_TYPE_FLOATING_INTO :
-                                      GIMP_PASTE_TYPE_FLOATING,
-                                      -1, -1, -1, -1);
-      if (! floating_sel)
+      GList *drawables = NULL;
+      GList *layers;
+
+      if (drawable != NULL)
+        drawables = g_list_prepend (drawables, drawable);
+
+      layers = gimp_edit_paste (gimp_item_get_image (GIMP_ITEM (drawable)),
+                                drawables, GIMP_OBJECT (buffer),
+                                paste_into ?
+                                GIMP_PASTE_TYPE_FLOATING_INTO :
+                                GIMP_PASTE_TYPE_FLOATING,
+                                context, FALSE,
+                                -1, -1, -1, -1);
+      g_list_free (drawables);
+
+      if (! layers)
         success = FALSE;
+      else
+        floating_sel = layers->data;
+
+      g_list_free (layers);
     }
   else
     success = FALSE;
@@ -494,540 +648,10 @@ HELP
 
   if (buffer)
     {
-      image = gimp_edit_paste_as_new_image (gimp, GIMP_OBJECT (buffer));
+      image = gimp_edit_paste_as_new_image (gimp, GIMP_OBJECT (buffer), context);
 
       if (! image)
         success = FALSE;
-    }
-  else
-    success = FALSE;
-}
-CODE
-    );
-}
-
-sub edit_clear {
-    $blurb = 'Clear selected area of drawable.';
-
-    $help = <<'HELP';
-This procedure clears the specified drawable. If the drawable has an
-alpha channel, the cleared pixels will become transparent. If the
-drawable does not have an alpha channel, cleared pixels will be set to
-the background color. This procedure only affects regions within a
-selection if there is a selection active.
-HELP
-
-    &std_pdb_misc;
-
-    $deprecated = 'gimp-drawable-edit-clear';
-
-    @inargs = (
-	{ name => 'drawable', type => 'drawable',
-	  desc => 'The drawable to clear from' }
-    );
-
-    %invoke = (
-	code => <<CODE
-{
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
-                                 GIMP_PDB_ITEM_CONTENT, error) &&
-      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
-    {
-      gimp_drawable_edit_clear (drawable, context);
-    }
-  else
-    success = FALSE;
-}
-CODE
-    );
-}
-
-sub edit_fill {
-    $blurb = 'Fill selected area of drawable.';
-
-    $help = <<'HELP';
-This procedure fills the specified drawable with the fill mode. If the
-fill mode is foreground, the current foreground color is used. If the
-fill mode is background, the current background color is used. Other
-fill modes should not be used. This procedure only affects regions
-within a selection if there is a selection active. If you want to fill
-the whole drawable, regardless of the selection, use
-gimp_drawable_fill().
-HELP
-
-    &std_pdb_misc;
-    $author .= ' & Raphael Quinet';
-    $date = '1995-2000';
-
-    $deprecated = 'gimp-drawable-edit-fill';
-
-    @inargs = (
-	{ name => 'drawable', type => 'drawable',
-	  desc => "The drawable to fill to" },
-	{ name => 'fill_type', type => 'enum GimpFillType',
-	  desc => 'The type of fill' }
-    );
-
-    %invoke = (
-	code => <<CODE
-{
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
-                                 GIMP_PDB_ITEM_CONTENT, error) &&
-      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
-    {
-      GimpFillOptions *options = gimp_fill_options_new (gimp, NULL, FALSE);
-
-      if (gimp_fill_options_set_by_fill_type (options, context,
-                                              fill_type, error))
-        {
-          gimp_drawable_edit_fill (drawable, options, NULL);
-        }
-      else
-        success = FALSE;
-
-      g_object_unref (options);
-    }
-  else
-    success = FALSE;
-}
-CODE
-    );
-}
-
-sub edit_bucket_fill {
-    $blurb = <<'BLURB';
-Fill the area specified either by the current selection if there is one, or by
-a seed fill starting at the specified coordinates.
-BLURB
-
-    $help = <<'HELP';
-This tool requires information on the paint application mode, and the
-fill mode, which can either be in the foreground color, or in the
-currently active pattern. If there is no selection, a seed fill is
-executed at the specified coordinates and extends outward in keeping
-with the threshold parameter. If there is a selection in the target
-image, the threshold, sample merged, x, and y arguments are unused. If
-the sample_merged parameter is TRUE, the data of the composite
-image will be used instead of that for the specified drawable.  This
-is equivalent to sampling for colors after merging all visible
-layers. In the case of merged sampling, the x and y coordinates are
-relative to the image's origin; otherwise, they are relative to the
-drawable's origin.
-HELP
-
-    &std_pdb_misc;
-
-    $deprecated = 'gimp-drawable-edit-bucket-fill';
-
-    @inargs = (
-	{ name => 'drawable', type => 'drawable',
-	  desc => 'The affected drawable' },
-	{ name => 'fill_mode', type => 'enum GimpBucketFillMode',
-	  desc => 'The type of fill' },
-	{ name => paint_mode, type => 'enum GimpLayerMode',
-          default => 'GIMP_LAYER_MODE_NORMAL',
-	  desc => 'The paint application mode' },
-	{ name => 'opacity', type => '0 <= float <= 100',
-	  desc => 'The opacity of the final bucket fill' },
-	{ name => 'threshold', type => '0 <= float <= 255',
-	  desc => "The threshold determines how extensive the seed fill will
-		   be. It's value is specified in terms of intensity levels.
-                   This parameter is only valid when there is no selection in
-		   the specified image." },
-	{ name => 'sample_merged', type => 'boolean',
-	  desc => 'Use the composite image, not the drawable' },
-	{ name => 'x', type => 'float',
-	  desc => "The x coordinate of this bucket fill's application.
-		   This parameter is only valid when there is no selection
-		   in the specified image." },
-	{ name => 'y', type => 'float',
-	  desc => "The y coordinate of this bucket fill's application.
-		   This parameter is only valid when there is no selection
-		   in the specified image." }
-    );
-
-    %invoke = (
-        headers => [ qw ("core/gimpdrawable-bucket-fill.h"
-	                 "core/gimpchannel.h") ],
-	code => <<'CODE'
-{
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
-                                 GIMP_PDB_ITEM_CONTENT, error) &&
-      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
-    {
-      GimpImage       *image   = gimp_item_get_image (GIMP_ITEM (drawable));
-      GimpFillOptions *options = gimp_fill_options_new (gimp, NULL, FALSE);
-
-      if (gimp_fill_options_set_by_fill_mode (options, context,
-                                              fill_mode, error))
-        {
-          if (paint_mode == GIMP_LAYER_MODE_OVERLAY_LEGACY)
-            paint_mode = GIMP_LAYER_MODE_SOFTLIGHT_LEGACY;
-
-          gimp_context_set_opacity (GIMP_CONTEXT (options), opacity / 100.0);
-          gimp_context_set_paint_mode (GIMP_CONTEXT (options), paint_mode);
-
-          if (! gimp_channel_is_empty (gimp_image_get_mask (image)))
-            {
-              gimp_drawable_edit_fill (drawable, options, NULL);
-            }
-          else
-            {
-              gimp_drawable_bucket_fill (drawable, options,
-                                         FALSE /* don't fill transparent */,
-                                         GIMP_SELECT_CRITERION_COMPOSITE,
-                                         threshold / 255.0,
-                                         sample_merged,
-                                         FALSE /* no diagonal neighbors */,
-                                         x, y);
-           }
-        }
-      else
-        success = FALSE;
-
-      g_object_unref (options);
-    }
-  else
-    success = FALSE;
-}
-CODE
-    );
-}
-
-sub edit_bucket_fill_full {
-    $blurb = <<'BLURB';
-Fill the area specified either by the current selection if there is one, or by
-a seed fill starting at the specified coordinates.
-BLURB
-
-    $help = <<'HELP';
-This tool requires information on the paint application mode, and the
-fill mode, which can either be in the foreground color, or in the
-currently active pattern. If there is no selection, a seed fill is
-executed at the specified coordinates and extends outward in keeping
-with the threshold parameter. If there is a selection in the target
-image, the threshold, sample merged, x, and y arguments are unused. If
-the sample_merged parameter is TRUE, the data of the composite
-image will be used instead of that for the specified drawable.  This
-is equivalent to sampling for colors after merging all visible
-layers. In the case of merged sampling, the x and y coordinates are
-relative to the image's origin; otherwise, they are relative to the
-drawable's origin.
-HELP
-
-    &david_pdb_misc('2006', '2.4');
-
-    $deprecated = 'gimp-drawable-edit-bucket-fill';
-
-    @inargs = (
-	{ name => 'drawable', type => 'drawable',
-	  desc => 'The affected drawable' },
-	{ name => 'fill_mode', type => 'enum GimpBucketFillMode',
-	  desc => 'The type of fill' },
-	{ name => paint_mode, type => 'enum GimpLayerMode',
-          default => 'GIMP_LAYER_MODE_NORMAL',
-	  desc => 'The paint application mode' },
-	{ name => 'opacity', type => '0 <= float <= 100',
-	  desc => 'The opacity of the final bucket fill' },
-	{ name => 'threshold', type => '0 <= float <= 255',
-	  desc => "The threshold determines how extensive the seed fill will
-		   be. It's value is specified in terms of intensity levels.
-                   This parameter is only valid when there is no selection in
-		   the specified image." },
-	{ name => 'sample_merged', type => 'boolean',
-	  desc => 'Use the composite image, not the drawable' },
-	{ name => 'fill_transparent', type => 'boolean',
-	  desc => "Whether to consider transparent pixels for filling.
-	           If TRUE, transparency is considered as a unique fillable
-		   color." },
-	{ name => 'select_criterion', type => 'enum GimpSelectCriterion',
-	  desc => "The criterion used to determine color similarity.
-	           SELECT_CRITERION_COMPOSITE is the standard choice.
-		   " },
-	{ name => 'x', type => 'float',
-	  desc => "The x coordinate of this bucket fill's application.
-		   This parameter is only valid when there is no selection
-		   in the specified image." },
-	{ name => 'y', type => 'float',
-	  desc => "The y coordinate of this bucket fill's application.
-		   This parameter is only valid when there is no selection
-		   in the specified image." }
-    );
-
-    %invoke = (
-        headers => [ qw ("core/gimpdrawable-bucket-fill.h"
-	                 "core/gimpchannel.h") ],
-	code => <<'CODE'
-{
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
-                                 GIMP_PDB_ITEM_CONTENT, error) &&
-      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
-    {
-      GimpImage       *image   = gimp_item_get_image (GIMP_ITEM (drawable));
-      GimpFillOptions *options = gimp_fill_options_new (gimp, NULL, FALSE);
-
-      if (gimp_fill_options_set_by_fill_mode (options, context,
-                                              fill_mode, error))
-        {
-          if (paint_mode == GIMP_LAYER_MODE_OVERLAY_LEGACY)
-            paint_mode = GIMP_LAYER_MODE_SOFTLIGHT_LEGACY;
-
-          gimp_context_set_opacity (GIMP_CONTEXT (options), opacity / 100.0);
-          gimp_context_set_paint_mode (GIMP_CONTEXT (options), paint_mode);
-
-          if (! gimp_channel_is_empty (gimp_image_get_mask (image)))
-            {
-              gimp_drawable_edit_fill (drawable, options, NULL);
-            }
-          else
-            {
-              gimp_drawable_bucket_fill (drawable, options,
-                                         fill_transparent,
-                                         select_criterion,
-                                         threshold / 255.0,
-                                         sample_merged,
-                                         FALSE /* no diagonal neighbors */,
-                                         x, y);
-           }
-        }
-      else
-        success = FALSE;
-
-      g_object_unref (options);
-    }
-  else
-    success = FALSE;
-}
-CODE
-    );
-}
-
-sub edit_blend {
-    $blurb = <<'BLURB';
-Blend between the starting and ending coordinates with the specified
-blend mode and gradient type.
-BLURB
-
-    $help = <<'HELP';
-This tool requires information on the paint application mode, the
-blend mode, and the gradient type. It creates the specified variety of
-blend using the starting and ending coordinates as defined for each
-gradient type.
-For shapeburst gradient types, the context's distance metric is also
-relevant and can be updated with gimp_context_set_distance_metric().
-HELP
-
-    &std_pdb_misc;
-
-    $deprecated = 'gimp-drawable-edit-gradient-fill';
-
-    @inargs = (
-	{ name => 'drawable', type => 'drawable',
-	  desc => 'The affected drawable' },
-        { name => 'blend_mode', type => 'enum GimpBlendMode',
-	  desc => 'The type of blend' },
-	{ name => 'paint_mode', type => 'enum GimpLayerMode',
-          default => 'GIMP_LAYER_MODE_NORMAL',
-	  desc => 'The paint application mode' },
-	{ name => 'gradient_type',  type => 'enum GimpGradientType',
-	  desc => 'The type of gradient' },
-	{ name => 'opacity', type => '0 <= float <= 100',
-	  desc => 'The opacity of the final blend' },
-	{ name => 'offset', type => '0 <= float',
-	  desc => 'Offset relates to the starting and ending coordinates
-		   specified for the blend. This parameter is mode dependent.' },
-	{ name => 'repeat', type => 'enum GimpRepeatMode',
-	  desc => 'Repeat mode' },
-	{ name => 'reverse', type => 'boolean',
-	  desc => 'Use the reverse gradient' },
-	{ name => 'supersample', type => 'boolean',
-	  desc => 'Do adaptive supersampling' },
-	{ name => 'max_depth', type => '1 <= int32 <= 9', no_validate => 1,
-	  desc => 'Maximum recursion levels for supersampling' },
-	{ name => 'threshold', type => '0 <= float <= 4', no_validate => 1,
-	  desc => 'Supersampling threshold' },
-	{ name => 'dither', type => 'boolean',
-	  desc => 'Use dithering to reduce banding' },
-	{ name => 'x1', type => 'float',
-	  desc => "The x coordinate of this blend's starting point" },
-	{ name => 'y1', type => 'float',
-	  desc => "The y coordinate of this blend's starting point" },
-	{ name => 'x2', type => 'float',
-	  desc => "The x coordinate of this blend's ending point" },
-	{ name => 'y2', type => 'float',
-	  desc => "The y coordinate of this blend's ending point" }
-    );
-
-    %invoke = (
-        headers => [ qw("core/gimp-gradients.h" "core/gimpdrawable-gradient.h") ],
-	code => <<'CODE'
-{
-  success = (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
-                                        GIMP_PDB_ITEM_CONTENT, error) &&
-             gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error));
-
-  if (success)
-    {
-      if (supersample)
-        {
-          if (max_depth < 1 || max_depth > 9)
-            success = FALSE;
-
-          if (threshold < 0.0 || threshold > 4.0)
-            success = FALSE;
-	}
-      else
-        {
-	  max_depth = CLAMP (max_depth, 1, 9);
-	  threshold = CLAMP (threshold, 0.0, 4.0);
-	}
-    }
-
-  if (success)
-    {
-      GimpGradient *gradient;
-
-      if (paint_mode == GIMP_LAYER_MODE_OVERLAY_LEGACY)
-        paint_mode = GIMP_LAYER_MODE_SOFTLIGHT_LEGACY;
-
-      if (progress)
-        gimp_progress_start (progress, FALSE, _("Gradient"));
-
-      switch (blend_mode)
-        {
-        case GIMP_BLEND_FG_BG_RGB:
-          gradient = gimp_gradients_get_fg_bg_rgb (context->gimp);
-          break;
-
-        case GIMP_BLEND_FG_BG_HSV:
-          gradient = gimp_gradients_get_fg_bg_hsv_cw (context->gimp);
-          break;
-
-        case GIMP_BLEND_FG_TRANSPARENT:
-          gradient = gimp_gradients_get_fg_transparent (context->gimp);
-          break;
-
-        case GIMP_BLEND_CUSTOM:
-	default:
-          gradient = gimp_context_get_gradient (context);
-          break;
-        }
-
-      gimp_drawable_gradient (drawable,
-                              context,
-                              gradient,
-                              GIMP_PDB_CONTEXT (context)->distance_metric,
-                              paint_mode,
-                              gradient_type,
-                              opacity / 100.0,
-                              offset, repeat, reverse,
-                              GIMP_GRADIENT_BLEND_RGB_PERCEPTUAL,
-                              supersample, max_depth,
-                              threshold, dither,
-                              x1, y1, x2, y2,
-                              progress);
-
-      if (progress)
-        gimp_progress_end (progress);
-    }
-}
-CODE
-    );
-}
-
-sub edit_stroke {
-    $blurb = 'Stroke the current selection';
-
-    $help = <<'HELP';
-This procedure strokes the current selection, painting along the selection
-boundary with the active brush and foreground color. The paint is applied to
-the specified drawable regardless of the active selection.
-HELP
-
-    &std_pdb_misc;
-
-    $deprecated = 'gimp-drawable-edit-stroke-selection';
-
-    @inargs = (
-	{ name => 'drawable', type => 'drawable',
-	  desc => 'The drawable to stroke to' }
-    );
-
-    %invoke = (
-	headers => [ qw("core/gimpstrokeoptions.h") ],
-	code => <<'CODE'
-{
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
-                                 GIMP_PDB_ITEM_CONTENT, error) &&
-      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
-    {
-      GimpImage         *image = gimp_item_get_image (GIMP_ITEM (drawable));
-      GimpStrokeOptions *options;
-      GimpPaintOptions  *paint_options;
-
-      options = gimp_pdb_context_get_stroke_options (GIMP_PDB_CONTEXT (context));
-
-      paint_options =
-        gimp_pdb_context_get_paint_options (GIMP_PDB_CONTEXT (context), NULL);
-      paint_options = gimp_config_duplicate (GIMP_CONFIG (paint_options));
-
-      success = gimp_item_stroke (GIMP_ITEM (gimp_image_get_mask (image)),
-                                  drawable, context, options, paint_options,
-                                  TRUE, progress, error);
-
-      g_object_unref (paint_options);
-    }
-  else
-    success = FALSE;
-}
-CODE
-    );
-}
-
-sub edit_stroke_vectors {
-    $blurb = 'Stroke the specified vectors object';
-
-    $help = <<'HELP';
-This procedure strokes the specified vectors object, painting along the
-path with the active brush and foreground color.
-HELP
-
-    &simon_pdb_misc('2006', '2.4');
-
-    $deprecated = 'gimp-drawable-edit-stroke-item';
-
-    @inargs = (
-	{ name => 'drawable', type => 'drawable',
-	  desc => 'The drawable to stroke to' },
-	{ name => 'vectors', type => 'vectors',
-          desc => 'The vectors object' }
-    );
-
-    %invoke = (
-	headers => [ qw("core/gimpstrokeoptions.h") ],
-	code => <<'CODE'
-{
-  if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
-                                 GIMP_PDB_ITEM_CONTENT, error) &&
-      gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error) &&
-      gimp_pdb_item_is_attached (GIMP_ITEM (vectors),
-                                 gimp_item_get_image (GIMP_ITEM (drawable)),
-                                 0, error))
-    {
-      GimpStrokeOptions *options;
-      GimpPaintOptions  *paint_options;
-
-      options = gimp_pdb_context_get_stroke_options (GIMP_PDB_CONTEXT (context));
-
-      paint_options =
-        gimp_pdb_context_get_paint_options (GIMP_PDB_CONTEXT (context), NULL);
-      paint_options = gimp_config_duplicate (GIMP_CONFIG (paint_options));
-
-      success = gimp_item_stroke (GIMP_ITEM (vectors),
-                                  drawable, context, options, paint_options,
-                                  TRUE, progress, error);
-
-      g_object_unref (paint_options);
     }
   else
     success = FALSE;
@@ -1057,14 +681,7 @@ CODE
             edit_named_copy
             edit_named_copy_visible
             edit_named_paste
-            edit_named_paste_as_new_image
-            edit_clear
-            edit_fill
-            edit_bucket_fill
-            edit_bucket_fill_full
-	    edit_blend
-            edit_stroke
-            edit_stroke_vectors);
+            edit_named_paste_as_new_image);
 
 %exports = (app => [@procs], lib => [@procs]);
 

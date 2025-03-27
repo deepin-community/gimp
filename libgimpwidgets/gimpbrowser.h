@@ -31,63 +31,26 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_BROWSER            (gimp_browser_get_type ())
-#define GIMP_BROWSER(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_BROWSER, GimpBrowser))
-#define GIMP_BROWSER_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_BROWSER, GimpBrowserClass))
-#define GIMP_IS_BROWSER(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_BROWSER))
-#define GIMP_IS_BROWSER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_BROWSER))
-#define GIMP_BROWSER_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_BROWSER, GimpBrowserClass))
+#define GIMP_TYPE_BROWSER (gimp_browser_get_type ())
+G_DECLARE_FINAL_TYPE (GimpBrowser, gimp_browser, GIMP, BROWSER, GtkPaned)
 
 
-typedef struct _GimpBrowserClass GimpBrowserClass;
+GtkWidget * gimp_browser_new                (void);
 
-struct _GimpBrowser
-{
-  GtkHPaned  parent_instance;
+void        gimp_browser_add_search_types   (GimpBrowser *browser,
+                                             const gchar *first_type_label,
+                                             gint         first_type_id,
+                                             ...) G_GNUC_NULL_TERMINATED;
 
-  GtkWidget *left_vbox;
+GtkWidget * gimp_browser_get_left_vbox      (GimpBrowser *browser);
+GtkWidget * gimp_browser_get_right_vbox     (GimpBrowser *browser);
 
-  GtkWidget *search_entry;
-  guint      search_timeout_id;
-
-  GtkWidget *search_type_combo;
-  gint       search_type;
-
-  GtkWidget *count_label;
-
-  GtkWidget *right_vbox;
-  GtkWidget *right_widget;
-};
-
-struct _GimpBrowserClass
-{
-  GtkHPanedClass  parent_class;
-
-  void (* search) (GimpBrowser *browser,
-                   const gchar *search_string,
-                   gint         search_type);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-};
-
-
-GType       gimp_browser_get_type         (void) G_GNUC_CONST;
-
-GtkWidget * gimp_browser_new              (void);
-
-void        gimp_browser_add_search_types (GimpBrowser *browser,
-                                           const gchar *first_type_label,
-                                           gint         first_type_id,
-                                           ...) G_GNUC_NULL_TERMINATED;
-
-void        gimp_browser_set_widget       (GimpBrowser *browser,
-                                           GtkWidget   *widget);
-void        gimp_browser_show_message     (GimpBrowser *browser,
-                                           const gchar *message);
+void        gimp_browser_set_search_summary (GimpBrowser *browser,
+                                             const gchar *summary);
+void        gimp_browser_set_widget         (GimpBrowser *browser,
+                                             GtkWidget   *widget);
+void        gimp_browser_show_message       (GimpBrowser *browser,
+                                             const gchar *message);
 
 
 G_END_DECLS

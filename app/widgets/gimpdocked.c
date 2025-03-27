@@ -28,7 +28,6 @@
 #include "widgets-types.h"
 
 #include "core/gimpcontext.h"
-#include "core/gimpmarshal.h"
 
 #include "gimpdocked.h"
 #include "gimpsessioninfo-aux.h"
@@ -65,8 +64,7 @@ gimp_docked_default_init (GimpDockedInterface *iface)
                   GIMP_TYPE_DOCKED,
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpDockedInterface, title_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   iface->get_aux_info = gimp_docked_iface_get_aux_info;
@@ -129,7 +127,7 @@ gimp_docked_set_aux_info (GimpDocked *docked,
 
   g_return_if_fail (GIMP_IS_DOCKED (docked));
 
-  docked_iface = GIMP_DOCKED_GET_INTERFACE (docked);
+  docked_iface = GIMP_DOCKED_GET_IFACE (docked);
 
   if (docked_iface->set_aux_info)
     docked_iface->set_aux_info (docked, aux_info);
@@ -142,7 +140,7 @@ gimp_docked_get_aux_info (GimpDocked *docked)
 
   g_return_val_if_fail (GIMP_IS_DOCKED (docked), NULL);
 
-  docked_iface = GIMP_DOCKED_GET_INTERFACE (docked);
+  docked_iface = GIMP_DOCKED_GET_IFACE (docked);
 
   if (docked_iface->get_aux_info)
     return docked_iface->get_aux_info (docked);
@@ -159,7 +157,7 @@ gimp_docked_get_preview (GimpDocked  *docked,
 
   g_return_val_if_fail (GIMP_IS_DOCKED (docked), NULL);
 
-  docked_iface = GIMP_DOCKED_GET_INTERFACE (docked);
+  docked_iface = GIMP_DOCKED_GET_IFACE (docked);
 
   if (docked_iface->get_preview)
     return docked_iface->get_preview (docked, context, size);
@@ -174,7 +172,7 @@ gimp_docked_get_prefer_icon (GimpDocked *docked)
 
   g_return_val_if_fail (GIMP_IS_DOCKED (docked), FALSE);
 
-  docked_iface = GIMP_DOCKED_GET_INTERFACE (docked);
+  docked_iface = GIMP_DOCKED_GET_IFACE (docked);
 
   if (docked_iface->get_prefer_icon)
     return docked_iface->get_prefer_icon (docked);
@@ -193,7 +191,7 @@ gimp_docked_get_menu (GimpDocked     *docked,
   g_return_val_if_fail (ui_path != NULL, NULL);
   g_return_val_if_fail (popup_data != NULL, NULL);
 
-  docked_iface = GIMP_DOCKED_GET_INTERFACE (docked);
+  docked_iface = GIMP_DOCKED_GET_IFACE (docked);
 
   if (docked_iface->get_menu)
     return docked_iface->get_menu (docked, ui_path, popup_data);
@@ -208,7 +206,7 @@ gimp_docked_get_title (GimpDocked *docked)
 
   g_return_val_if_fail (GIMP_IS_DOCKED (docked), NULL);
 
-  docked_iface = GIMP_DOCKED_GET_INTERFACE (docked);
+  docked_iface = GIMP_DOCKED_GET_IFACE (docked);
 
   if (docked_iface->get_title)
     return docked_iface->get_title (docked);
@@ -225,7 +223,7 @@ gimp_docked_set_context (GimpDocked  *docked,
   g_return_if_fail (GIMP_IS_DOCKED (docked));
   g_return_if_fail (context == NULL || GIMP_IS_CONTEXT (context));
 
-  docked_iface = GIMP_DOCKED_GET_INTERFACE (docked);
+  docked_iface = GIMP_DOCKED_GET_IFACE (docked);
 
   if (docked_iface->set_context)
     docked_iface->set_context (docked, context);
@@ -238,7 +236,7 @@ gimp_docked_has_button_bar (GimpDocked *docked)
 
   g_return_val_if_fail (GIMP_IS_DOCKED (docked), FALSE);
 
-  docked_iface = GIMP_DOCKED_GET_INTERFACE (docked);
+  docked_iface = GIMP_DOCKED_GET_IFACE (docked);
 
   if (docked_iface->has_button_bar)
     return docked_iface->has_button_bar (docked);
@@ -254,7 +252,7 @@ gimp_docked_set_show_button_bar (GimpDocked *docked,
 
   g_return_if_fail (GIMP_IS_DOCKED (docked));
 
-  docked_iface = GIMP_DOCKED_GET_INTERFACE (docked);
+  docked_iface = GIMP_DOCKED_GET_IFACE (docked);
 
   if (docked_iface->set_show_button_bar)
     docked_iface->set_show_button_bar (docked, show ? TRUE : FALSE);
@@ -267,7 +265,7 @@ gimp_docked_get_show_button_bar (GimpDocked *docked)
 
   g_return_val_if_fail (GIMP_IS_DOCKED (docked), FALSE);
 
-  docked_iface = GIMP_DOCKED_GET_INTERFACE (docked);
+  docked_iface = GIMP_DOCKED_GET_IFACE (docked);
 
   if (docked_iface->get_show_button_bar)
     return docked_iface->get_show_button_bar (docked);

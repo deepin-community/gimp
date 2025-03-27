@@ -26,46 +26,9 @@
 G_BEGIN_DECLS
 
 
-#define GIMP_TYPE_PREVIEW_AREA            (gimp_preview_area_get_type ())
-#define GIMP_PREVIEW_AREA(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_PREVIEW_AREA, GimpPreviewArea))
-#define GIMP_PREVIEW_AREA_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_PREVIEW_AREA, GimpPreviewAreaClass))
-#define GIMP_IS_PREVIEW_AREA(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_PREVIEW_AREA))
-#define GIMP_IS_PREVIEW_AREA_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_PREVIEW_AREA))
-#define GIMP_PREVIEW_AREA_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_PREVIEW_AREA, GimpPreviewArea))
+#define GIMP_TYPE_PREVIEW_AREA (gimp_preview_area_get_type ())
+G_DECLARE_FINAL_TYPE (GimpPreviewArea, gimp_preview_area, GIMP, PREVIEW_AREA, GtkDrawingArea)
 
-
-typedef struct _GimpPreviewAreaClass  GimpPreviewAreaClass;
-
-struct _GimpPreviewArea
-{
-  GtkDrawingArea   parent_instance;
-
-  GimpCheckSize    check_size;
-  GimpCheckType    check_type;
-  gint             width;
-  gint             height;
-  gint             rowstride;
-  gint             offset_x;
-  gint             offset_y;
-  gint             max_width;
-  gint             max_height;
-  guchar          *buf;
-  guchar          *colormap;
-};
-
-struct _GimpPreviewAreaClass
-{
-  GtkDrawingAreaClass  parent_class;
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-};
-
-
-GType       gimp_preview_area_get_type         (void) G_GNUC_CONST;
 
 GtkWidget * gimp_preview_area_new              (void);
 
@@ -108,6 +71,7 @@ void        gimp_preview_area_fill             (GimpPreviewArea *area,
                                                 guchar           red,
                                                 guchar           green,
                                                 guchar           blue);
+void        gimp_preview_area_reset            (GimpPreviewArea *area);
 
 void        gimp_preview_area_set_offsets      (GimpPreviewArea *area,
                                                 gint             x,
@@ -120,6 +84,9 @@ void        gimp_preview_area_set_colormap     (GimpPreviewArea *area,
 void        gimp_preview_area_set_color_config (GimpPreviewArea *area,
                                                 GimpColorConfig *config);
 
+void        gimp_preview_area_get_size         (GimpPreviewArea *area,
+                                                gint            *width,
+                                                gint            *height);
 void        gimp_preview_area_set_max_size     (GimpPreviewArea *area,
                                                 gint             width,
                                                 gint             height);

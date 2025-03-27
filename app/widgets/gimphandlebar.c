@@ -19,6 +19,7 @@
 
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 
 #include "widgets-types.h"
@@ -44,8 +45,8 @@ static void      gimp_handle_bar_get_property       (GObject        *object,
                                                      GValue         *value,
                                                      GParamSpec     *pspec);
 
-static gboolean  gimp_handle_bar_expose             (GtkWidget      *widget,
-                                                     GdkEventExpose *eevent);
+static gboolean  gimp_handle_bar_draw               (GtkWidget      *widget,
+                                                     cairo_t        *cr);
 static gboolean  gimp_handle_bar_button_press       (GtkWidget      *widget,
                                                      GdkEventButton *bevent);
 static gboolean  gimp_handle_bar_button_release     (GtkWidget      *widget,
@@ -71,7 +72,7 @@ gimp_handle_bar_class_init (GimpHandleBarClass *klass)
   object_class->set_property         = gimp_handle_bar_set_property;
   object_class->get_property         = gimp_handle_bar_get_property;
 
-  widget_class->expose_event         = gimp_handle_bar_expose;
+  widget_class->draw                 = gimp_handle_bar_draw;
   widget_class->button_press_event   = gimp_handle_bar_button_press;
   widget_class->button_release_event = gimp_handle_bar_button_release;
   widget_class->motion_notify_event  = gimp_handle_bar_motion_notify;
@@ -143,32 +144,27 @@ gimp_handle_bar_get_property (GObject    *object,
 }
 
 static gboolean
-gimp_handle_bar_expose (GtkWidget      *widget,
-                        GdkEventExpose *eevent)
+gimp_handle_bar_draw (GtkWidget *widget,
+                      cairo_t   *cr)
 {
-  GimpHandleBar *bar = GIMP_HANDLE_BAR (widget);
-  GtkAllocation  allocation;
-  cairo_t       *cr;
-  gint           x, y;
-  gint           width, height;
-  gint           i;
+  GimpHandleBar   *bar = GIMP_HANDLE_BAR (widget);
+  GtkStyleContext *style;
+  GdkRGBA          outline_color;
+  GtkAllocation    allocation;
+  gint             x, y;
+  gint             width, height;
+  gint             i;
 
   gtk_widget_get_allocation (widget, &allocation);
 
   x = y = gtk_container_get_border_width (GTK_CONTAINER (widget));
 
+  style = gtk_widget_get_style_context (widget);
+  gtk_style_context_get_color (style, gtk_style_context_get_state (style),
+                               &outline_color);
+
   width  = allocation.width  - 2 * x;
   height = allocation.height - 2 * y;
-
-  if (! gtk_widget_get_has_window (widget))
-    {
-      x += allocation.x;
-      y += allocation.y;
-    }
-
-  cr = gdk_cairo_create (gtk_widget_get_window (widget));
-  gdk_cairo_region (cr, eevent->region);
-  cairo_clip (cr);
 
   cairo_set_line_width (cr, 1.0);
   cairo_translate (cr, 0.5, 0.5);
@@ -203,16 +199,11 @@ gimp_handle_bar_expose (GtkWidget      *widget,
           /* Make all sliders well visible even on similar colored
            * backgrounds.
            */
-          if (i == 0)
-            cairo_set_source_rgb (cr, 0.6, 0.6, 0.6);
-          else
-            cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
+          gdk_cairo_set_source_rgba (cr, &outline_color);
 
           cairo_stroke (cr);
         }
     }
-
-  cairo_destroy (cr);
 
   return FALSE;
 }
@@ -310,7 +301,7 @@ gimp_handle_bar_motion_notify (GtkWidget      *widget,
  *
  * Creates a new #GimpHandleBar widget.
  *
- * Return value: The new #GimpHandleBar widget.
+ * Returns: The new #GimpHandleBar widget.
  **/
 GtkWidget *
 gimp_handle_bar_new (GtkOrientation  orientation)

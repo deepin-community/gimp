@@ -27,9 +27,7 @@
 #include <gtk/gtk.h>
 
 #ifdef HAVE_DX_DINPUT
-#define _WIN32_WINNT 0x0501
 #include <windows.h>
-#define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
 #include <rpc.h>
 
@@ -114,8 +112,7 @@ gimp_input_device_store_class_init (GimpInputDeviceStoreClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpInputDeviceStoreClass, device_added),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__STRING,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1, G_TYPE_STRING);
 
   store_signals[DEVICE_REMOVED] =
@@ -123,8 +120,7 @@ gimp_input_device_store_class_init (GimpInputDeviceStoreClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpInputDeviceStoreClass, device_removed),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__STRING,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1, G_TYPE_STRING);
 
   object_class->finalize = gimp_input_device_store_finalize;
@@ -206,9 +202,10 @@ gimp_input_device_store_init (GimpInputDeviceStore *store)
   gtk_list_store_set_column_types (GTK_LIST_STORE (store),
                                    G_N_ELEMENTS (types), types);
 
-  if (!GetModuleHandleEx (GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS,
-                          (LPCTSTR) &gimp_input_device_store_init,
-                          &thismodule))
+  if (!GetModuleHandleExW (GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                           GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                           (LPCWSTR) &gimp_input_device_store_init,
+                           &thismodule))
     return;
 
   if ((store->window = create_aux_window (store)) == NULL)
@@ -218,7 +215,7 @@ gimp_input_device_store_init (GimpInputDeviceStore *store)
       return;
     }
 
-  if ((dinput8 = LoadLibrary ("dinput8.dll")) == NULL)
+  if ((dinput8 = LoadLibraryW (L"dinput8.dll")) == NULL)
     {
       g_set_error_literal (&store->error, GIMP_MODULE_ERROR, GIMP_MODULE_FAILED,
 			   "Could not load dinput8.dll");
@@ -374,7 +371,7 @@ gimp_input_device_store_add (GimpInputDeviceStore *store,
     }
 
   if (FAILED ((hresult = IDirectInputDevice8_SetCooperativeLevel (didevice8,
-                                                                  (HWND) gdk_win32_drawable_get_handle (store->window),
+                                                                  (HWND) gdk_win32_window_get_handle (store->window),
                                                                   DISCL_NONEXCLUSIVE | DISCL_BACKGROUND))))
     {
       g_warning ("IDirectInputDevice8::SetCooperativeLevel failed: %s",

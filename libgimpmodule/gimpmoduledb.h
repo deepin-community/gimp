@@ -25,49 +25,15 @@
 
 G_BEGIN_DECLS
 
-
 #define GIMP_TYPE_MODULE_DB            (gimp_module_db_get_type ())
-#define GIMP_MODULE_DB(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_MODULE_DB, GimpModuleDB))
-#define GIMP_MODULE_DB_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_MODULE_DB, GimpModuleDBClass))
-#define GIMP_IS_MODULE_DB(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_MODULE_DB))
-#define GIMP_IS_MODULE_DB_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_MODULE_DB))
-#define GIMP_MODULE_DB_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_MODULE_DB, GimpModuleDBClass))
+G_DECLARE_FINAL_TYPE (GimpModuleDB, gimp_module_db, GIMP, MODULE_DB, GObject)
 
 
-typedef struct _GimpModuleDBClass GimpModuleDBClass;
-
-struct _GimpModuleDB
-{
-  GObject   parent_instance;
-
-  /*< private >*/
-  GList    *modules;
-
-  gchar    *load_inhibit;
-  gboolean  verbose;
-};
-
-struct _GimpModuleDBClass
-{
-  GObjectClass  parent_class;
-
-  void (* add)             (GimpModuleDB *db,
-                            GimpModule   *module);
-  void (* remove)          (GimpModuleDB *db,
-                            GimpModule   *module);
-  void (* module_modified) (GimpModuleDB *db,
-                            GimpModule   *module);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-};
-
-
-GType          gimp_module_db_get_type         (void) G_GNUC_CONST;
 GimpModuleDB * gimp_module_db_new              (gboolean      verbose);
+
+void           gimp_module_db_set_verbose      (GimpModuleDB *db,
+                                                gboolean      verbose);
+gboolean       gimp_module_db_get_verbose      (GimpModuleDB *db);
 
 void           gimp_module_db_set_load_inhibit (GimpModuleDB *db,
                                                 const gchar  *load_inhibit);

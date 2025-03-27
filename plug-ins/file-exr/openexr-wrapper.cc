@@ -48,11 +48,15 @@
 #endif
 #endif
 
+/* ignore deprecated warnings from OpenEXR headers */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated"
 #include <ImfInputFile.h>
 #include <ImfChannelList.h>
 #include <ImfRgbaFile.h>
 #include <ImfRgbaYca.h>
 #include <ImfStandardAttributes.h>
+#pragma GCC diagnostic pop
 
 #include "exr-attribute-blob.h"
 #include "openexr-wrapper.h"
@@ -80,6 +84,8 @@ struct _EXRLoader
   {
     const Channel* chan;
 
+    can_load_ = true;
+
     if (channels_.findChannel("R") ||
         channels_.findChannel("G") ||
         channels_.findChannel("B"))
@@ -98,13 +104,12 @@ struct _EXRLoader
              (channels_.findChannel("RY") ||
               channels_.findChannel("BY")))
       {
-        format_string_ = "RGB";
-        image_type_ = IMAGE_TYPE_RGB;
+        format_string_ = "Y'CbCr";
+        image_type_ = IMAGE_TYPE_YUV;
 
+        /* TODO: Use RGBA interface to incorporate
+         * RY/BY chroma channels */
         pt_ = channels_.findChannel("Y")->type;
-
-        // FIXME: no chroma handling for now.
-        throw;
       }
     else if (channels_.findChannel("Y"))
       {
@@ -115,7 +120,36 @@ struct _EXRLoader
       }
     else
       {
-        throw;
+        int         channel_count = 0;
+        const char *channel_name  = NULL;
+
+        for (ChannelList::ConstIterator i = channels_.begin();
+             i != channels_.end(); ++i)
+          {
+            channel_count++;
+
+            pt_ = i.channel().type;
+            channel_name = i.name();
+          }
+
+       /* Assume single channel images are grayscale,
+        * no matter what the channel name is. */
+        if (channel_count == 1)
+          {
+            format_string_ = channel_name;
+            image_type_ = IMAGE_TYPE_UNKNOWN_1_CHANNEL;
+            unknown_channel_name_ = channel_name;
+
+            /* TODO: Pass this information back so it can be displayed
+             * in the UI. */
+            printf ("OpenEXR Warning: Single channel image with unknown "
+                    "channel %s, loading as grayscale\n", channel_name);
+          }
+        else
+          {
+            /* TODO: After string freeze ends add unsupported type notice. */
+            can_load_ = false;
+          }
       }
 
     if (channels_.findChannel("A"))
@@ -145,9 +179,9 @@ struct _EXRLoader
       }
   }
 
-  int readPixelRow(char* pixels,
-                   int bpp,
-                   int row)
+  int readPixelRow(char *pixels,
+                   int   bpp,
+                   int   row)
   {
     const int actual_row = data_window_.min.y + row;
     FrameBuffer fb;
@@ -158,6 +192,11 @@ struct _EXRLoader
 
     switch (image_type_)
       {
+      case IMAGE_TYPE_UNKNOWN_1_CHANNEL:
+        fb.insert(unknown_channel_name_, Slice(pt_, base, bpp, 0, 1, 1, 0.5));
+        break;
+
+      case IMAGE_TYPE_YUV:
       case IMAGE_TYPE_GRAY:
         fb.insert("Y", Slice(pt_, base, bpp, 0, 1, 1, 0.5));
         if (hasAlpha())
@@ -216,6 +255,10 @@ struct _EXRLoader
 
   int hasAlpha() const {
     return has_alpha_ ? 1 : 0;
+  }
+
+  int canLoad() const {
+    return can_load_ ? 1 : 0;
   }
 
   GimpColorProfile *getProfile() const {
@@ -347,15 +390,17 @@ struct _EXRLoader
       {
         exif_data = (guchar *)(exif->value().data.get());
         *size = exif->value().size;
-        // darktable appends a jpg-compatible exif00 string, so get rid of that again:
-        if ( ! memcmp (jpeg_exif, exif_data, sizeof(jpeg_exif)))
+        /* darktable 4.0.0 and earlier appended a jpg-compatible exif00 string,
+         * so get rid of that again. We explicitly reduce the size by 1 since
+         * the compiler adds an extra \0 to the end of jpeg_exif. */
+        if ( ! memcmp (jpeg_exif, exif_data, sizeof(jpeg_exif)-1))
           {
             *size -= 6;
             exif_data += 6;
           }
       }
 
-    return (guchar *)g_memdup (exif_data, *size);
+    return (guchar *)g_memdup2 (exif_data, *size);
   }
 
   guchar *getXmp(guint *size) const {
@@ -365,7 +410,7 @@ struct _EXRLoader
     if (xmp)
       {
         *size = xmp->value().size();
-        result = (guchar *) g_memdup (xmp->value().data(), *size);
+        result = (guchar *) g_memdup2 (xmp->value().data(), *size);
       }
     return result;
   }
@@ -378,7 +423,9 @@ struct _EXRLoader
   int bpc_;
   EXRImageType image_type_;
   bool has_alpha_;
+  bool can_load_;
   std::string format_string_;
+  std::string unknown_channel_name_;
 };
 
 EXRLoader*
@@ -391,6 +438,12 @@ exr_loader_new (const char *filename)
     {
       Imf::BlobAttribute::registerAttributeType();
       file = new EXRLoader(filename);
+
+      if (file && ! file->canLoad())
+        {
+          exr_loader_unref (file);
+          file = NULL;
+        }
     }
   catch (...)
     {

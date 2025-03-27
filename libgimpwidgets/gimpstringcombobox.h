@@ -29,45 +29,47 @@
 G_BEGIN_DECLS
 
 
-#define GIMP_TYPE_STRING_COMBO_BOX            (gimp_string_combo_box_get_type ())
-#define GIMP_STRING_COMBO_BOX(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_STRING_COMBO_BOX, GimpStringComboBox))
-#define GIMP_STRING_COMBO_BOX_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_STRING_COMBO_BOX, GimpStringComboBoxClass))
-#define GIMP_IS_STRING_COMBO_BOX(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_STRING_COMBO_BOX))
-#define GIMP_IS_STRING_COMBO_BOX_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_STRING_COMBO_BOX))
-#define GIMP_STRING_COMBO_BOX_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_STRING_COMBO_BOX, GimpStringComboBoxClass))
+/**
+ * GimpStringSensitivityFunc:
+ * @id: the string value from the column @id_column as passed to [ctor@StringComboBox.new].
+ * @data: (closure): the data passed in [method@StringComboBox.set_sensitivity].
+ */
+typedef  gboolean (* GimpStringSensitivityFunc) (const gchar *id,
+                                                 gpointer     data);
 
 
-typedef struct _GimpStringComboBoxClass  GimpStringComboBoxClass;
-
-struct _GimpStringComboBox
-{
-  GtkComboBox       parent_instance;
-
-  /*< private >*/
-  gpointer          priv;
-};
+#define GIMP_TYPE_STRING_COMBO_BOX (gimp_string_combo_box_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpStringComboBox, gimp_string_combo_box, GIMP, STRING_COMBO_BOX, GtkComboBox)
 
 struct _GimpStringComboBoxClass
 {
   GtkComboBoxClass  parent_class;
 
   /* Padding for future expansion */
+  void (* _gimp_reserved0) (void);
   void (* _gimp_reserved1) (void);
   void (* _gimp_reserved2) (void);
   void (* _gimp_reserved3) (void);
   void (* _gimp_reserved4) (void);
+  void (* _gimp_reserved5) (void);
+  void (* _gimp_reserved6) (void);
+  void (* _gimp_reserved7) (void);
+  void (* _gimp_reserved8) (void);
+  void (* _gimp_reserved9) (void);
 };
 
 
-GType       gimp_string_combo_box_get_type   (void) G_GNUC_CONST;
+GtkWidget * gimp_string_combo_box_new             (GtkTreeModel              *model,
+                                                   gint                       id_column,
+                                                   gint                       label_column);
+gboolean    gimp_string_combo_box_set_active      (GimpStringComboBox        *combo_box,
+                                                   const gchar               *id);
+gchar     * gimp_string_combo_box_get_active      (GimpStringComboBox        *combo_box);
 
-GtkWidget * gimp_string_combo_box_new        (GtkTreeModel       *model,
-                                              gint                id_column,
-                                              gint                label_column);
-gboolean    gimp_string_combo_box_set_active (GimpStringComboBox *combo_box,
-                                              const gchar        *id);
-gchar     * gimp_string_combo_box_get_active (GimpStringComboBox *combo_box);
-
+void        gimp_string_combo_box_set_sensitivity (GimpStringComboBox        *combo_box,
+                                                   GimpStringSensitivityFunc  func,
+                                                   gpointer                   data,
+                                                   GDestroyNotify             destroy);
 
 G_END_DECLS
 

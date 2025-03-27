@@ -265,9 +265,8 @@ gimp_measure_tool_button_press (GimpTool            *tool,
       if (options->use_info_window ||
           ! gimp_display_shell_get_show_statusbar (shell))
         {
-          measure->gui = gimp_measure_tool_dialog_new (measure);
-          g_object_add_weak_pointer (G_OBJECT (measure->gui),
-                                     (gpointer) &measure->gui);
+          g_set_weak_pointer (&measure->gui,
+                              gimp_measure_tool_dialog_new (measure));
         }
     }
 
@@ -438,12 +437,6 @@ gimp_measure_tool_compass_create_guides (GimpToolWidget  *widget,
   if (measure->supress_guides)
     return;
 
-  if (x < 0 || x > gimp_image_get_width (image))
-    vertical = FALSE;
-
-  if (y < 0 || y > gimp_image_get_height (image))
-    horizontal = FALSE;
-
   if (horizontal || vertical)
     {
       if (horizontal && vertical)
@@ -598,7 +591,7 @@ gimp_measure_tool_dialog_update (GimpMeasureTool *measure,
   pixel_distance = sqrt (SQR (ax - bx) + SQR (ay - by));
   inch_distance = sqrt (SQR ((gdouble) (ax - bx) / xres) +
                         SQR ((gdouble) (ay - by) / yres));
-  unit_distance  = gimp_unit_get_factor (shell->unit) * inch_distance;
+  unit_distance = gimp_unit_get_factor (shell->unit) * inch_distance;
 
   g_object_get (measure->widget,
                 "pixel-angle", &pixel_angle,
@@ -618,7 +611,7 @@ gimp_measure_tool_dialog_update (GimpMeasureTool *measure,
   unit_width_digits  = gimp_unit_get_scaled_digits (shell->unit, xres);
   unit_height_digits = gimp_unit_get_scaled_digits (shell->unit, yres);
 
-  if (shell->unit == GIMP_UNIT_PIXEL)
+  if (shell->unit == gimp_unit_pixel ())
     {
       gimp_tool_replace_status (GIMP_TOOL (measure), display,
                                 "%.1f %s, %.2f\302\260 (%d × %d)",
@@ -630,7 +623,7 @@ gimp_measure_tool_dialog_update (GimpMeasureTool *measure,
       g_snprintf (format, sizeof (format),
                   "%%.%df %s, %%.2f\302\260 (%%.%df × %%.%df)",
                   unit_distance_digits,
-                  gimp_unit_get_plural (shell->unit),
+                  gimp_unit_get_name (shell->unit),
                   unit_width_digits,
                   unit_height_digits);
 
@@ -647,7 +640,7 @@ gimp_measure_tool_dialog_update (GimpMeasureTool *measure,
       g_snprintf (buf, sizeof (buf), "%.1f", pixel_distance);
       gtk_label_set_text (GTK_LABEL (measure->distance_label[0]), buf);
 
-      if (shell->unit != GIMP_UNIT_PIXEL)
+      if (shell->unit != gimp_unit_pixel ())
         {
           g_snprintf (format, sizeof (format), "%%.%df",
                       unit_distance_digits);
@@ -655,7 +648,7 @@ gimp_measure_tool_dialog_update (GimpMeasureTool *measure,
           gtk_label_set_text (GTK_LABEL (measure->distance_label[1]), buf);
 
           gtk_label_set_text (GTK_LABEL (measure->unit_label[0]),
-                              gimp_unit_get_plural (shell->unit));
+                              gimp_unit_get_name (shell->unit));
         }
       else
         {
@@ -684,7 +677,7 @@ gimp_measure_tool_dialog_update (GimpMeasureTool *measure,
       g_snprintf (buf, sizeof (buf), "%d", pixel_width);
       gtk_label_set_text (GTK_LABEL (measure->width_label[0]), buf);
 
-      if (shell->unit != GIMP_UNIT_PIXEL)
+      if (shell->unit != gimp_unit_pixel ())
         {
           g_snprintf (format, sizeof (format), "%%.%df",
                       unit_width_digits);
@@ -692,7 +685,7 @@ gimp_measure_tool_dialog_update (GimpMeasureTool *measure,
           gtk_label_set_text (GTK_LABEL (measure->width_label[1]), buf);
 
           gtk_label_set_text (GTK_LABEL (measure->unit_label[2]),
-                              gimp_unit_get_plural (shell->unit));
+                              gimp_unit_get_name (shell->unit));
         }
       else
         {
@@ -704,7 +697,7 @@ gimp_measure_tool_dialog_update (GimpMeasureTool *measure,
       gtk_label_set_text (GTK_LABEL (measure->height_label[0]), buf);
 
       /* Height */
-      if (shell->unit != GIMP_UNIT_PIXEL)
+      if (shell->unit != gimp_unit_pixel ())
         {
           g_snprintf (format, sizeof (format), "%%.%df",
                       unit_height_digits);
@@ -712,7 +705,7 @@ gimp_measure_tool_dialog_update (GimpMeasureTool *measure,
           gtk_label_set_text (GTK_LABEL (measure->height_label[1]), buf);
 
           gtk_label_set_text (GTK_LABEL (measure->unit_label[3]),
-                              gimp_unit_get_plural (shell->unit));
+                              gimp_unit_get_name (shell->unit));
         }
       else
         {
@@ -730,7 +723,7 @@ gimp_measure_tool_dialog_new (GimpMeasureTool *measure)
   GimpTool         *tool = GIMP_TOOL (measure);
   GimpDisplayShell *shell;
   GimpToolGui      *gui;
-  GtkWidget        *table;
+  GtkWidget        *grid;
   GtkWidget        *label;
 
   g_return_val_if_fail (tool->display != NULL, NULL);
@@ -741,7 +734,6 @@ gimp_measure_tool_dialog_new (GimpMeasureTool *measure)
                            NULL,
                            _("Measure Distances and Angles"),
                            NULL, NULL,
-                           gtk_widget_get_screen (GTK_WIDGET (shell)),
                            gimp_widget_get_monitor (GTK_WIDGET (shell)),
                            TRUE,
 
@@ -756,124 +748,124 @@ gimp_measure_tool_dialog_new (GimpMeasureTool *measure)
                     G_CALLBACK (g_object_unref),
                     NULL);
 
-  table = gtk_table_new (4, 5, TRUE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_box_pack_start (GTK_BOX (gimp_tool_gui_get_vbox (gui)), table,
-                      TRUE, TRUE, 0);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+  gtk_box_pack_start (GTK_BOX (gimp_tool_gui_get_vbox (gui)), grid,
+                      FALSE, FALSE, 0);
+  gtk_widget_set_visible (grid, TRUE);
 
 
   label = gtk_label_new (_("Distance:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 0, 1, 0, 1);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   measure->distance_label[0] = label = gtk_label_new ("0.0");
   gtk_label_set_selectable (GTK_LABEL (label), TRUE);
   gtk_label_set_xalign (GTK_LABEL (label), 1.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 1, 2, 0, 1);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 1, 0, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   label = gtk_label_new (_("pixels"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 2, 3, 0, 1);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 2, 0, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   measure->distance_label[1] = label = gtk_label_new ("0.0");
   gtk_label_set_selectable (GTK_LABEL (label), TRUE);
   gtk_label_set_xalign (GTK_LABEL (label), 1.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 3, 4, 0, 1);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 3, 0, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   measure->unit_label[0] = label = gtk_label_new (NULL);
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 4, 5, 0, 1);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 4, 0, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
 
   label = gtk_label_new (_("Angle:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 0, 1, 1, 2);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 1, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   measure->angle_label[0] = label = gtk_label_new ("0.0");
   gtk_label_set_selectable (GTK_LABEL (label), TRUE);
   gtk_label_set_xalign (GTK_LABEL (label), 1.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 1, 2, 1, 2);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 1, 1, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   label = gtk_label_new ("\302\260");
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 2, 3, 1, 2);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 2, 1, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   measure->angle_label[1] = label = gtk_label_new (NULL);
   gtk_label_set_selectable (GTK_LABEL (label), TRUE);
   gtk_label_set_xalign (GTK_LABEL (label), 1.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 3, 4, 1, 2);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 3, 1, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   measure->unit_label[1] = label = gtk_label_new (NULL);
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 4, 5, 1, 2);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 4, 1, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
 
   label = gtk_label_new (_("Width:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 0, 1, 2, 3);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 2, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   measure->width_label[0] = label = gtk_label_new ("0.0");
   gtk_label_set_selectable (GTK_LABEL (label), TRUE);
   gtk_label_set_xalign (GTK_LABEL (label), 1.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 1, 2, 2, 3);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 1, 2, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   label = gtk_label_new (_("pixels"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 2, 3, 2, 3);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 2, 2, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   measure->width_label[1] = label = gtk_label_new ("0.0");
   gtk_label_set_selectable (GTK_LABEL (label), TRUE);
   gtk_label_set_xalign (GTK_LABEL (label), 1.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 3, 4, 2, 3);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 3, 2, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   measure->unit_label[2] = label = gtk_label_new (NULL);
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 4, 5, 2, 3);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 4, 2, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
 
   label = gtk_label_new (_("Height:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 0, 1, 3, 4);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 3, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   measure->height_label[0] = label = gtk_label_new ("0.0");
   gtk_label_set_selectable (GTK_LABEL (label), TRUE);
   gtk_label_set_xalign (GTK_LABEL (label), 1.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 1, 2, 3, 4);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 1, 3, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   label = gtk_label_new (_("pixels"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 2, 3, 3, 4);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 2, 3, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   measure->height_label[1] = label = gtk_label_new ("0.0");
   gtk_label_set_selectable (GTK_LABEL (label), TRUE);
   gtk_label_set_xalign (GTK_LABEL (label), 1.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 3, 4, 3, 4);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 3, 3, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   measure->unit_label[3] = label = gtk_label_new (NULL);
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 4, 5, 3, 4);
-  gtk_widget_show (label);
+  gtk_grid_attach (GTK_GRID (grid), label, 4, 3, 1, 1);
+  gtk_widget_set_visible (label, TRUE);
 
   return gui;
 }

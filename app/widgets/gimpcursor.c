@@ -18,13 +18,16 @@
 #include "config.h"
 
 #include <gtk/gtk.h>
+#ifdef GDK_WINDOWING_QUARTZ
+#include <gdk/gdkquartz.h>
+#endif
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/gdkwayland.h>
+#endif
 
 #include "widgets-types.h"
 
 #include "gimpcursor.h"
-#include "gimpwidgets-utils.h"
-
-#include "cursors/gimp-tool-cursors.c"
 
 
 #define cursor_default_hot_x 10
@@ -151,6 +154,10 @@ static GimpCursor gimp_cursors[] =
   },
   {
     "cursor-side-top-left",
+    cursor_default_hot_x, cursor_default_hot_y
+  },
+  {
+    "cursor-single-dot",
     cursor_default_hot_x, cursor_default_hot_y
   }
 };
@@ -409,20 +416,10 @@ gimp_cursor_new (GdkWindow          *window,
       bmmodifier = &gimp_cursor_modifiers[modifier];
     }
 
-  scale_factor = 1;
+  scale_factor = gdk_window_get_scale_factor (window);
 
-  /* guess HiDPI */
-  {
-    GdkScreen *screen = gdk_window_get_screen (window);
-    gdouble    xres, yres;
-
-    gimp_get_monitor_resolution (screen,
-                                 gdk_screen_get_monitor_at_window (screen, window),
-                                 &xres, &yres);
-
-    if ((xres + yres) / 2.0 > 250.0)
-      scale_factor = 2;
-  }
+  /* we only support x2 scaling right now */
+  scale_factor = CLAMP (scale_factor, 1, 2);
 
   pixbuf = gdk_pixbuf_copy (get_cursor_pixbuf (bmcursor, scale_factor));
 
@@ -462,9 +459,42 @@ gimp_cursor_new (GdkWindow          *window,
       hot_x = (width - 1) - hot_x;
     }
 
-  cursor = gdk_cursor_new_from_pixbuf (display, pixbuf,
-                                       hot_x * scale_factor,
-                                       hot_y * scale_factor);
+  if (scale_factor > 1)
+    {
+      gint hot_x_scaled = hot_x;
+      gint hot_y_scaled = hot_y;
+
+      cairo_surface_t *surface =
+        gdk_cairo_surface_create_from_pixbuf (pixbuf, scale_factor, NULL);
+
+      /*
+       * MacOS needs the hotspot in surface coordinates
+       * X11 needs the hotspot in pixel coordinates (not scaled)
+       * Windows doesn't handle scaled cursors at all
+       * Broadway does not appear to support surface cursors at all,
+       * let alone scaled surface cursors.
+       * https://gitlab.gnome.org/GNOME/gimp/-/merge_requests/545#note_1388777
+       */
+      if (FALSE                            ||
+#ifdef GDK_WINDOWING_QUARTZ
+          GDK_IS_QUARTZ_DISPLAY (display)  ||
+#endif
+          FALSE)
+        {
+          hot_x_scaled *= scale_factor;
+          hot_y_scaled *= scale_factor;
+        }
+
+      cursor = gdk_cursor_new_from_surface (display,
+                                            surface,
+                                            hot_x_scaled,
+                                            hot_y_scaled);
+      cairo_surface_destroy (surface);
+    }
+  else
+    {
+      cursor = gdk_cursor_new_from_pixbuf (display, pixbuf, hot_x, hot_y);
+    }
 
   g_object_unref (pixbuf);
 
@@ -492,7 +522,7 @@ gimp_cursor_set (GtkWidget          *widget,
                             tool_cursor,
                             modifier);
   gdk_window_set_cursor (window, cursor);
-  gdk_cursor_unref (cursor);
+  g_object_unref (cursor);
 
   gdk_display_flush (gdk_window_get_display (window));
 }

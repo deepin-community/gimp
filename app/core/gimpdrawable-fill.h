@@ -28,7 +28,7 @@ void       gimp_drawable_fill              (GimpDrawable        *drawable,
                                             GimpFillType         fill_type);
 void       gimp_drawable_fill_buffer       (GimpDrawable        *drawable,
                                             GeglBuffer          *buffer,
-                                            const GimpRGB       *color,
+                                            GeglColor           *color,
                                             GimpPattern         *pattern,
                                             gint                 pattern_offset_x,
                                             gint                 pattern_offset_y);
@@ -45,9 +45,9 @@ void       gimp_drawable_fill_boundary     (GimpDrawable        *drawable,
                                             gint                 offset_y,
                                             gboolean             push_undo);
 
-gboolean   gimp_drawable_fill_vectors      (GimpDrawable        *drawable,
+gboolean   gimp_drawable_fill_path         (GimpDrawable        *drawable,
                                             GimpFillOptions     *options,
-                                            GimpVectors         *vectors,
+                                            GimpPath            *vectors,
                                             gboolean             push_undo,
                                             GError             **error);
 

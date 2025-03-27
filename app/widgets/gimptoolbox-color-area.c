@@ -28,11 +28,13 @@
 
 #include "core/gimp.h"
 #include "core/gimpcontext.h"
+#include "core/gimpdisplay.h"
 
 #include "gimpaction.h"
 #include "gimpcolordialog.h"
 #include "gimpdialogfactory.h"
 #include "gimpfgbgeditor.h"
+#include "gimphelp-ids.h"
 #include "gimpsessioninfo.h"
 #include "gimptoolbox.h"
 #include "gimptoolbox-color-area.h"
@@ -44,20 +46,21 @@
 /*  local function prototypes  */
 
 static void   color_area_foreground_changed (GimpContext          *context,
-                                             const GimpRGB        *color,
+                                             GeglColor            *color,
                                              GimpColorDialog      *dialog);
 static void   color_area_background_changed (GimpContext          *context,
-                                             const GimpRGB        *color,
+                                             GeglColor            *color,
                                              GimpColorDialog      *dialog);
 
 static void   color_area_dialog_update      (GimpColorDialog      *dialog,
-                                             const GimpRGB        *color,
+                                             GeglColor            *color,
                                              GimpColorDialogState  state,
                                              GimpContext          *context);
 
 static void   color_area_color_clicked      (GimpFgBgEditor       *editor,
                                              GimpActiveColor       active_color,
                                              GimpContext          *context);
+static void   color_area_color_changed      (GimpContext          *context);
 static void   color_area_tooltip            (GimpFgBgEditor       *editor,
                                              GimpFgBgTarget        target,
                                              GtkTooltip           *tooltip,
@@ -70,8 +73,8 @@ static GtkWidget       *color_area          = NULL;
 static GtkWidget       *color_dialog        = NULL;
 static gboolean         color_dialog_active = FALSE;
 static GimpActiveColor  edit_color          = GIMP_ACTIVE_COLOR_FOREGROUND;
-static GimpRGB          revert_fg;
-static GimpRGB          revert_bg;
+static GeglColor       *revert_fg           = NULL;
+static GeglColor       *revert_bg           = NULL;
 
 
 /*  public functions  */
@@ -89,15 +92,23 @@ gimp_toolbox_color_area_create (GimpToolbox *toolbox,
 
   color_area = gimp_fg_bg_editor_new (context);
   gtk_widget_set_size_request (color_area, width, height);
-  gtk_widget_add_events (color_area,
-                         GDK_ENTER_NOTIFY_MASK |
-                         GDK_LEAVE_NOTIFY_MASK);
 
+  gimp_help_set_help_data (color_area, NULL,
+                           GIMP_HELP_TOOLBOX_COLOR_AREA);
   g_object_set (color_area, "has-tooltip", TRUE, NULL);
 
   g_signal_connect (color_area, "color-clicked",
                     G_CALLBACK (color_area_color_clicked),
                     context);
+  g_signal_connect_swapped (color_area, "colors-swapped",
+                            G_CALLBACK (color_area_color_changed),
+                            context);
+  g_signal_connect_swapped (color_area, "colors-default",
+                            G_CALLBACK (color_area_color_changed),
+                            context);
+  g_signal_connect_swapped (color_area, "color-dropped",
+                            G_CALLBACK (color_area_color_changed),
+                            context);
 
   g_signal_connect (color_area, "tooltip",
                     G_CALLBACK (color_area_tooltip),
@@ -111,7 +122,7 @@ gimp_toolbox_color_area_create (GimpToolbox *toolbox,
 
 static void
 color_area_foreground_changed (GimpContext     *context,
-                               const GimpRGB   *color,
+                               GeglColor       *color,
                                GimpColorDialog *dialog)
 {
   if (edit_color == GIMP_ACTIVE_COLOR_FOREGROUND)
@@ -120,9 +131,7 @@ color_area_foreground_changed (GimpContext     *context,
                                        color_area_dialog_update,
                                        context);
 
-      /* FIXME this should use GimpColorDialog API */
-      gimp_color_selection_set_color (GIMP_COLOR_SELECTION (dialog->selection),
-                                      color);
+      gimp_color_dialog_set_color (dialog, color);
 
       g_signal_handlers_unblock_by_func (dialog,
                                          color_area_dialog_update,
@@ -132,7 +141,7 @@ color_area_foreground_changed (GimpContext     *context,
 
 static void
 color_area_background_changed (GimpContext     *context,
-                               const GimpRGB   *color,
+                               GeglColor       *color,
                                GimpColorDialog *dialog)
 {
   if (edit_color == GIMP_ACTIVE_COLOR_BACKGROUND)
@@ -141,9 +150,7 @@ color_area_background_changed (GimpContext     *context,
                                        color_area_dialog_update,
                                        context);
 
-      /* FIXME this should use GimpColorDialog API */
-      gimp_color_selection_set_color (GIMP_COLOR_SELECTION (dialog->selection),
-                                      color);
+      gimp_color_dialog_set_color (dialog, color);
 
       g_signal_handlers_unblock_by_func (dialog,
                                          color_area_dialog_update,
@@ -153,7 +160,7 @@ color_area_background_changed (GimpContext     *context,
 
 static void
 color_area_dialog_update (GimpColorDialog      *dialog,
-                          const GimpRGB        *color,
+                          GeglColor            *color,
                           GimpColorDialogState  state,
                           GimpContext          *context)
 {
@@ -194,10 +201,13 @@ color_area_dialog_update (GimpColorDialog      *dialog,
     case GIMP_COLOR_DIALOG_CANCEL:
       gtk_widget_hide (color_dialog);
       color_dialog_active = FALSE;
-      gimp_context_set_foreground (context, &revert_fg);
-      gimp_context_set_background (context, &revert_bg);
+      gimp_context_set_foreground (context, revert_fg);
+      gimp_context_set_background (context, revert_bg);
       break;
     }
+
+  if (gimp_context_get_display (context))
+    gimp_display_grab_focus (gimp_context_get_display (context));
 }
 
 static void
@@ -205,23 +215,26 @@ color_area_color_clicked (GimpFgBgEditor  *editor,
                           GimpActiveColor  active_color,
                           GimpContext     *context)
 {
-  GimpRGB      color;
+  GeglColor   *color;
   const gchar *title;
 
   if (! color_dialog_active)
     {
-      gimp_context_get_foreground (context, &revert_fg);
-      gimp_context_get_background (context, &revert_bg);
+      g_clear_object (&revert_fg);
+      revert_fg = gegl_color_duplicate (gimp_context_get_foreground (context));
+
+      g_clear_object (&revert_bg);
+      revert_bg = gegl_color_duplicate (gimp_context_get_background (context));
     }
 
   if (active_color == GIMP_ACTIVE_COLOR_FOREGROUND)
     {
-      gimp_context_get_foreground (context, &color);
+      color = gimp_context_get_foreground (context);
       title = _("Change Foreground Color");
     }
   else
     {
-      gimp_context_get_background (context, &color);
+      color = gimp_context_get_background (context);
       title = _("Change Background Color");
     }
 
@@ -229,13 +242,12 @@ color_area_color_clicked (GimpFgBgEditor  *editor,
 
   if (! color_dialog)
     {
-      color_dialog = gimp_color_dialog_new (NULL, context,
+      color_dialog = gimp_color_dialog_new (NULL, context, TRUE,
                                             NULL, NULL, NULL,
                                             GTK_WIDGET (editor),
                                             gimp_dialog_factory_get_singleton (),
                                             "gimp-toolbox-color-dialog",
-                                            &color,
-                                            TRUE, FALSE);
+                                            color, TRUE, FALSE);
 
       g_signal_connect_object (color_dialog, "update",
                                G_CALLBACK (color_area_dialog_update),
@@ -253,23 +265,21 @@ color_area_color_clicked (GimpFgBgEditor  *editor,
       gimp_dialog_factory_position_dialog (gimp_dialog_factory_get_singleton (),
                                            "gimp-toolbox-color-dialog",
                                            color_dialog,
-                                           gtk_widget_get_screen (GTK_WIDGET (editor)),
                                            gimp_widget_get_monitor (GTK_WIDGET (editor)));
     }
 
   gtk_window_set_title (GTK_WINDOW (color_dialog), title);
-  gimp_color_dialog_set_color (GIMP_COLOR_DIALOG (color_dialog), &color);
+  gimp_color_dialog_set_color (GIMP_COLOR_DIALOG (color_dialog), color);
 
   gtk_window_present (GTK_WINDOW (color_dialog));
   color_dialog_active = TRUE;
 }
 
-static gboolean
-accel_find_func (GtkAccelKey *key,
-                 GClosure    *closure,
-                 gpointer     data)
+static void
+color_area_color_changed (GimpContext *context)
 {
-  return (GClosure *) data == closure;
+  if (gimp_context_get_display (context))
+    gimp_display_grab_focus (gimp_context_get_display (context));
 }
 
 static void
@@ -316,30 +326,17 @@ color_area_tooltip (GimpFgBgEditor *editor,
 
       if (action)
         {
-          GtkAccelGroup *accel_group;
-          GClosure      *accel_closure;
-          GtkAccelKey   *accel_key;
+          gchar **accels = gimp_action_get_display_accels (action);
 
-          accel_closure = gimp_action_get_accel_closure (action);
-          accel_group   = gtk_accel_group_from_accel_closure (accel_closure);
-
-          accel_key = gtk_accel_group_find (accel_group,
-                                            accel_find_func,
-                                            accel_closure);
-
-          if (accel_key            &&
-              accel_key->accel_key &&
-              (accel_key->accel_flags & GTK_ACCEL_VISIBLE))
+          if (accels && accels[0])
             {
               gchar *escaped = g_markup_escape_text (text, -1);
-              gchar *accel   = gtk_accelerator_get_label (accel_key->accel_key,
-                                                          accel_key->accel_mods);
 
-              markup = g_strdup_printf ("%s  <b>%s</b>", escaped, accel);
-
-              g_free (accel);
+              markup = g_strdup_printf ("%s  <b>%s</b>", escaped, accels[0]);
               g_free (escaped);
             }
+
+          g_strfreev (accels);
         }
 
       if (markup)

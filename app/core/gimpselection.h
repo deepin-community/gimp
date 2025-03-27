@@ -55,7 +55,7 @@ gint          gimp_selection_suspend  (GimpSelection *selection);
 gint          gimp_selection_resume   (GimpSelection *selection);
 
 GeglBuffer  * gimp_selection_extract  (GimpSelection *selection,
-                                       GimpPickable  *pickable,
+                                       GList         *pickables,
                                        GimpContext   *context,
                                        gboolean       cut_image,
                                        gboolean       keep_indexed,
@@ -65,7 +65,7 @@ GeglBuffer  * gimp_selection_extract  (GimpSelection *selection,
                                        GError       **error);
 
 GimpLayer   * gimp_selection_float    (GimpSelection *selection,
-                                       GimpDrawable  *drawable,
+                                       GList         *drawables,
                                        GimpContext   *context,
                                        gboolean       cut_image,
                                        gint           off_x,

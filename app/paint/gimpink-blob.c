@@ -463,7 +463,22 @@ gimp_blob_duplicate (GimpBlob *b)
 {
   g_return_val_if_fail (b != NULL, NULL);
 
-  return g_memdup (b, sizeof (GimpBlob) +  sizeof (GimpBlobSpan) * (b->height - 1));
+  return g_memdup2 (b, sizeof (GimpBlob) +  sizeof (GimpBlobSpan) * (b->height - 1));
+}
+
+void
+gimp_blob_move (GimpBlob *b,
+                gint      x,
+                gint      y)
+{
+  gint i = 0;
+
+  b->y += y;
+  for (i = 0; i < b->height; i++)
+    {
+      b->data[i].left  += x;
+      b->data[i].right += x;
+    }
 }
 
 #if 0

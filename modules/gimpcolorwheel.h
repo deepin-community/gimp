@@ -46,9 +46,6 @@ typedef struct _GimpColorWheelClass GimpColorWheelClass;
 struct _GimpColorWheel
 {
   GtkWidget parent_instance;
-
-  /* Private data */
-  gpointer priv;
 };
 
 struct _GimpColorWheelClass
@@ -80,14 +77,16 @@ void        gimp_color_wheel_set_color         (GimpColorWheel  *wheel,
                                                 double           s,
                                                 double           v);
 void        gimp_color_wheel_get_color         (GimpColorWheel  *wheel,
-                                                gdouble         *h,
-                                                gdouble         *s,
-                                                gdouble         *v);
+                                                gfloat          *h,
+                                                gfloat          *s,
+                                                gfloat          *v);
 
 void        gimp_color_wheel_set_ring_fraction (GimpColorWheel  *wheel,
                                                 gdouble          fraction);
 gdouble     gimp_color_wheel_get_ring_fraction (GimpColorWheel  *wheel);
 
+void        gimp_color_wheel_set_format        (GimpColorWheel  *wheel,
+                                                const Babl      *format);
 void        gimp_color_wheel_set_color_config  (GimpColorWheel  *wheel,
                                                 GimpColorConfig *config);
 

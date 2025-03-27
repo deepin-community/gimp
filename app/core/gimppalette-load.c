@@ -19,14 +19,18 @@
 
 #include <stdlib.h>
 
+#include <archive.h>
+#include <archive_entry.h>
 #include <cairo.h>
-#include <gegl.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#include <gegl.h>
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
 
 #include "core-types.h"
+
+#include "config/gimpxmlparser.h"
 
 #include "gimp-utils.h"
 #include "gimppalette.h"
@@ -34,6 +38,43 @@
 
 #include "gimp-intl.h"
 
+typedef struct
+{
+  GimpColorProfile *profile;
+  gchar            *id;
+} SwatchBookerColorProfile;
+
+typedef struct
+{
+  GimpPalette *palette;
+  gint         position;
+  gchar       *palette_name;
+  gchar       *color_model;
+  gchar       *color_space;
+  GList       *embedded_profiles;
+  gboolean     in_color_tag;
+  gboolean     in_book_tag;
+  gboolean     copy_name;
+  gboolean     copy_values;
+  gint         sorted_position;
+} SwatchBookerData;
+
+/* SwatchBooker XML parser functions */
+static void swatchbooker_load_start_element (GMarkupParseContext *context,
+                                             const gchar         *element_name,
+                                             const gchar        **attribute_names,
+                                             const gchar        **attribute_values,
+                                             gpointer             user_data,
+                                             GError             **error);
+static void swatchbooker_load_end_element   (GMarkupParseContext *context,
+                                             const gchar         *element_name,
+                                             gpointer             user_data,
+                                             GError             **error);
+static void swatchbooker_load_text          (GMarkupParseContext *context,
+                                             const gchar         *text,
+                                             gsize                text_len,
+                                             gpointer             user_data,
+                                             GError             **error);
 
 static gchar * gimp_palette_load_acb_string     (GInputStream  *input,
                                                  goffset        file_size,
@@ -50,12 +91,10 @@ gimp_palette_load (GimpContext   *context,
                    GError       **error)
 {
   GimpPalette      *palette = NULL;
-  GimpPaletteEntry *entry;
   GDataInputStream *data_input;
   gchar            *str;
   gsize             str_len;
   gchar            *tok;
-  gint              r, g, b;
   gint              linenum;
 
   g_return_val_if_fail (G_IS_FILE (file), NULL);
@@ -63,8 +102,6 @@ gimp_palette_load (GimpContext   *context,
   g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
   data_input = g_data_input_stream_new (input);
-
-  r = g = b = 0;
 
   linenum = 1;
   str_len = 1024;
@@ -156,54 +193,67 @@ gimp_palette_load (GimpContext   *context,
 
       if (str[0] != '#' && str[0] != '\0')
         {
+          GeglColor *color  = gegl_color_new ("black");
+          guint8     rgb[3] = { 0 };
+
           tok = strtok (str, " \t");
           if (tok)
-            r = atoi (tok);
+            {
+              if (atoi (tok) < 0 || atoi (tok) > 255)
+                g_message (_("Reading palette file '%s': "
+                             "red component out of range in line %d."),
+                           gimp_file_get_utf8_name (file), linenum);
+
+              rgb[0] = CLAMP (atoi (tok), 0, 255);
+            }
           else
-            g_message (_("Reading palette file '%s': "
-                         "Missing RED component in line %d."),
-                       gimp_file_get_utf8_name (file), linenum);
+            {
+              g_message (_("Reading palette file '%s': "
+                           "Missing RED component in line %d."),
+                         gimp_file_get_utf8_name (file), linenum);
+            }
 
           tok = strtok (NULL, " \t");
           if (tok)
-            g = atoi (tok);
+            {
+              if (atoi (tok) < 0 || atoi (tok) > 255)
+                g_message (_("Reading palette file '%s': "
+                             "green component out of range in line %d."),
+                           gimp_file_get_utf8_name (file), linenum);
+
+              rgb[1] = CLAMP (atoi (tok), 0, 255);
+            }
           else
-            g_message (_("Reading palette file '%s': "
-                         "Missing GREEN component in line %d."),
-                       gimp_file_get_utf8_name (file), linenum);
+            {
+              g_message (_("Reading palette file '%s': "
+                           "Missing GREEN component in line %d."),
+                         gimp_file_get_utf8_name (file), linenum);
+            }
 
           tok = strtok (NULL, " \t");
           if (tok)
-            b = atoi (tok);
+            {
+              if (atoi (tok) < 0 || atoi (tok) > 255)
+                g_message (_("Reading palette file '%s': "
+                             "blue component out of range in line %d."),
+                           gimp_file_get_utf8_name (file), linenum);
+
+              rgb[2] = CLAMP (atoi (tok), 0, 255);
+            }
           else
-            g_message (_("Reading palette file '%s': "
-                         "Missing BLUE component in line %d."),
-                       gimp_file_get_utf8_name (file), linenum);
+            {
+              g_message (_("Reading palette file '%s': "
+                           "Missing BLUE component in line %d."),
+                         gimp_file_get_utf8_name (file), linenum);
+            }
 
           /* optional name */
           tok = strtok (NULL, "\n");
 
-          if (r < 0 || r > 255 ||
-              g < 0 || g > 255 ||
-              b < 0 || b > 255)
-            g_message (_("Reading palette file '%s': "
-                         "RGB value out of range in line %d."),
-                       gimp_file_get_utf8_name (file), linenum);
-
-          /* don't call gimp_palette_add_entry here, it's rather inefficient */
-          entry = g_slice_new0 (GimpPaletteEntry);
-
-          gimp_rgba_set_uchar (&entry->color,
-                               (guchar) r,
-                               (guchar) g,
-                               (guchar) b,
-                               255);
-
-          entry->name     = g_strdup (tok ? tok : _("Untitled"));
-          entry->position = gimp_palette_get_n_colors (palette);
-
-          palette->colors = g_list_prepend (palette->colors, entry);
-          palette->n_colors++;
+          /* Historical .gpl format is sRGB. */
+          gegl_color_set_pixel (color, babl_format ("R'G'B' u8"), rgb);
+          gimp_palette_add_entry (palette, -1, tok, color);
+          g_object_unref (color);
         }
 
       g_free (str);
@@ -222,8 +272,6 @@ gimp_palette_load (GimpContext   *context,
           g_clear_error (&my_error);
         }
     }
-
-  palette->colors = g_list_reverse (palette->colors);
 
   g_object_unref (data_input);
 
@@ -264,14 +312,20 @@ gimp_palette_load_act (GimpContext   *context,
                                   &bytes_read, NULL, NULL) &&
          bytes_read == sizeof (color_bytes))
     {
-      GimpRGB color;
+      /* The spec is absolutely unclear and just says:
+       * > If loaded into the Colors palette, the colors will be installed in the color swatch list as RGB colors.
+       * So should these be sRGB colors? Anyway since palettes are not attached
+       * to images (except in specific case of indexed images), we can't use a
+       * specific image's color space and the format simply has no color space
+       * information.
+       * So we just assume these colors are sRGB.
+       */
+      GeglColor *color = gegl_color_new (NULL);
 
-      gimp_rgba_set_uchar (&color,
-                           color_bytes[0],
-                           color_bytes[1],
-                           color_bytes[2],
-                           255);
-      gimp_palette_add_entry (palette, -1, NULL, &color);
+      gegl_color_set_pixel (color, babl_format ("R'G'B' u8"), color_bytes);
+      gimp_palette_add_entry (palette, -1, NULL, color);
+
+      g_object_unref (color);
     }
 
   return g_list_prepend (NULL, palette);
@@ -306,14 +360,18 @@ gimp_palette_load_riff (GimpContext   *context,
                                   &bytes_read, NULL, NULL) &&
          bytes_read == sizeof (color_bytes))
     {
-      GimpRGB color;
+      GeglColor *color = gegl_color_new (NULL);
 
-      gimp_rgba_set_uchar (&color,
-                           color_bytes[0],
-                           color_bytes[1],
-                           color_bytes[2],
-                           255);
-      gimp_palette_add_entry (palette, -1, NULL, &color);
+      /* The format does not include color space information. The fourth byte is
+       * called peFlags but possible values in Microsoft documentation does not
+       * list space-related flags.
+       * So as often with such historical formats, we assume that by "RGB" they
+       * meant "sRGB".
+       */
+      gegl_color_set_pixel (color, babl_format ("R'G'B' u8"), color_bytes);
+      gimp_palette_add_entry (palette, -1, NULL, color);
+
+      g_object_unref (color);
     }
 
   return g_list_prepend (NULL, palette);
@@ -391,14 +449,15 @@ gimp_palette_load_psp (GimpContext   *context,
 
       if (color_ok)
         {
-          GimpRGB color;
+          GeglColor *color = gegl_color_new (NULL);
 
-          gimp_rgba_set_uchar (&color,
-                               color_bytes[0],
-                               color_bytes[1],
-                               color_bytes[2],
-                               255);
-          gimp_palette_add_entry (palette, -1, NULL, &color);
+          /* The format does not include color space information. Assuming sRGB
+           * like for all such historical formats.
+           */
+          gegl_color_set_pixel (color, babl_format ("R'G'B' u8"), color_bytes);
+          gimp_palette_add_entry (palette, -1, NULL, color);
+
+          g_object_unref (color);
         }
 
       g_strfreev (ascii_colors);
@@ -431,9 +490,9 @@ gimp_palette_load_aco (GimpContext   *context,
                                  &bytes_read, NULL, error) ||
       bytes_read != sizeof (header))
     {
-      g_prefix_error (error,
-                      _("Could not read header from palette file '%s': "),
-                      gimp_file_get_utf8_name (file));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Could not read header from palette file '%s': "),
+                   gimp_file_get_utf8_name (file));
       return NULL;
     }
 
@@ -446,12 +505,14 @@ gimp_palette_load_aco (GimpContext   *context,
 
   for (i = 0; i < number_of_colors; i++)
     {
-      gchar     color_info[10];
-      gint      color_space;
-      gint      w, x, y, z;
-      gboolean  color_ok = FALSE;
-      GimpRGB   color;
-      GError   *my_error = NULL;
+      GeglColor  *color;
+      gchar       color_info[10];
+      gint        color_space;
+      gint        w, x, y, z;
+      gint        xLab;
+      gint        yLab;
+      gboolean    color_ok   = FALSE;
+      GError     *my_error   = NULL;
 
       if (! g_input_stream_read_all (input, color_info, sizeof (color_info),
                                      &bytes_read, NULL, &my_error) ||
@@ -481,64 +542,75 @@ gimp_palette_load_aco (GimpContext   *context,
       x = (guchar) color_info[5] + ((guchar) color_info[4] << 8);
       y = (guchar) color_info[7] + ((guchar) color_info[6] << 8);
       z = (guchar) color_info[9] + ((guchar) color_info[8] << 8);
+      /* Lab-specific values */
+      xLab = (gint) color_info[5] | ((gint) color_info[4] << 8);
+      yLab = (gint) color_info[7] | ((gint) color_info[6] << 8);
+      if (xLab >= 32768)
+        xLab -= 65536;
+      if (yLab >= 32768)
+        yLab -= 65536;
 
+      color = gegl_color_new (NULL);
       if (color_space == 0) /* RGB */
         {
-          gdouble R = ((gdouble) w) / 65536.0;
-          gdouble G = ((gdouble) x) / 65536.0;
-          gdouble B = ((gdouble) y) / 65536.0;
+          gdouble rgb[3] = { ((gdouble) w) / 65536.0,
+                             ((gdouble) x) / 65536.0,
+                             ((gdouble) y) / 65536.0 };
 
-          gimp_rgba_set (&color, R, G, B, 1.0);
-
+          /* No color space information in the format. */
+          gegl_color_set_pixel (color, babl_format ("R'G'B' double"), rgb);
           color_ok = TRUE;
         }
       else if (color_space == 1) /* HSV */
         {
-          GimpHSV hsv;
+          gfloat hsv[3] = { ((gfloat) w) / 65536.0f,
+                            ((gfloat) x) / 65536.0f,
+                            ((gfloat) y) / 65536.0f};
 
-          gdouble H = ((gdouble) w) / 65536.0;
-          gdouble S = ((gdouble) x) / 65536.0;
-          gdouble V = ((gdouble) y) / 65536.0;
-
-          gimp_hsva_set (&hsv, H, S, V, 1.0);
-          gimp_hsv_to_rgb (&hsv, &color);
-
+          gegl_color_set_pixel (color, babl_format ("HSV float"), hsv);
           color_ok = TRUE;
         }
       else if (color_space == 2) /* CMYK */
         {
-          GimpCMYK cmyk;
+          float cmyk[4] = { 1.0f - ((gfloat) w) / 65536.0f,
+                            1.0f - ((gfloat) x) / 65536.0f,
+                            1.0f - ((gfloat) y) / 65536.0f,
+                            1.0f - ((gfloat) z) / 65536.0f };
 
-          gdouble C = 1.0 - (((gdouble) w) / 65536.0);
-          gdouble M = 1.0 - (((gdouble) x) / 65536.0);
-          gdouble Y = 1.0 - (((gdouble) y) / 65536.0);
-          gdouble K = 1.0 - (((gdouble) z) / 65536.0);
+          /* No color space information in the format. */
+          gegl_color_set_pixel (color, babl_format ("CMYK float"), cmyk);
+          color_ok = TRUE;
+        }
+      else if (color_space == 7) /* CIE Lab */
+        {
+          gfloat lab[3] = { ((gfloat) w) / 10000.0f,
+                            ((gfloat) xLab) / 25500.0f,
+                            ((gfloat) yLab) / 25500.0f };
 
-          gimp_cmyka_set (&cmyk, C, M, Y, K, 1.0);
-          gimp_cmyk_to_rgb (&cmyk, &color);
-
+          gegl_color_set_pixel (color, babl_format ("CIE Lab float"), lab);
           color_ok = TRUE;
         }
       else if (color_space == 8) /* Grayscale */
         {
-          gdouble K = 1.0 - (((gdouble) w) / 10000.0);
+          gdouble k[1] = { 1.0 - (((gdouble) w) / 10000.0) };
 
-          gimp_rgba_set (&color, K, K, K, 1.0);
-
+          /* No color space information in the format. */
+          gegl_color_set_pixel (color, babl_format ("Y' double"), k);
           color_ok = TRUE;
         }
       else if (color_space == 9) /* Wide? CMYK */
         {
-          GimpCMYK cmyk;
+          /* XXX: this "Color Space ID" 8 does not exist in Adobe specification.
+           * Apparently this case was present ever since the first
+           * implementation in GIMP so it's hard to know the origin behind it.
+           * Where does it come from?
+           */
+          gfloat cmyk[4] = { 1.0f - ((gfloat) w) / 10000.0,
+                             1.0f - ((gfloat) x) / 10000.0,
+                             1.0f - ((gfloat) y) / 10000.0,
+                             1.0f - ((gfloat) z) / 10000.0 };
 
-          gdouble C = 1.0 - (((gdouble) w) / 10000.0);
-          gdouble M = 1.0 - (((gdouble) x) / 10000.0);
-          gdouble Y = 1.0 - (((gdouble) y) / 10000.0);
-          gdouble K = 1.0 - (((gdouble) z) / 10000.0);
-
-          gimp_cmyka_set (&cmyk, C, M, Y, K, 1.0);
-          gimp_cmyk_to_rgb (&cmyk, &color);
-
+          gegl_color_set_pixel (color, babl_format ("CMYK float"), cmyk);
           color_ok = TRUE;
         }
       else
@@ -559,21 +631,31 @@ gimp_palette_load_aco (GimpContext   *context,
               bytes_read != sizeof (format2_preamble))
             {
               g_object_unref (palette);
+              g_object_unref (color);
               return NULL;
             }
 
           number_of_chars = format2_preamble[3] + (format2_preamble[2] << 8);
 
+          /* TODO: color name should be used (by converting from UTF-16 to
+           * UTF-8), not ignored. Also according to spec, there should be 2
+           * additional NUL bytes at the end, which are not (I think) counted in
+           * number_of_chars). Therefore this code may be wrong and missing 2
+           * bytes.
+           */
           if (! g_seekable_seek (G_SEEKABLE (input), number_of_chars * 2,
                                  G_SEEK_SET, NULL, error))
             {
               g_object_unref (palette);
+              g_object_unref (color);
               return NULL;
             }
         }
 
       if (color_ok)
-        gimp_palette_add_entry (palette, -1, NULL, &color);
+        gimp_palette_add_entry (palette, -1, NULL, color);
+
+      g_object_unref (color);
     }
 
   return g_list_prepend (NULL, palette);
@@ -596,8 +678,6 @@ gimp_palette_load_acb (GimpContext   *context,
   gushort       number_of_colors;
   gushort       page;
   gushort       color_space;
-  const Babl   *src_format = NULL;
-  const Babl   *dst_format = babl_format ("R'G'B' double");
   gint          i;
   goffset       file_size;
   gsize         bytes_read;
@@ -615,9 +695,9 @@ gimp_palette_load_acb (GimpContext   *context,
                                  &bytes_read, NULL, error) ||
       bytes_read != sizeof (header))
     {
-      g_prefix_error (error,
-                      _("Could not read header from palette file '%s': "),
-                      gimp_file_get_utf8_name (file));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Could not read header from palette file '%s': "),
+                   gimp_file_get_utf8_name (file));
       return NULL;
     }
 
@@ -625,20 +705,23 @@ gimp_palette_load_acb (GimpContext   *context,
   if (! g_input_stream_read_all (input, &version, sizeof (version),
                                  &bytes_read, NULL, error))
     {
-      g_prefix_error (error, _("Invalid ACB palette version."));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid ACB palette version."));
       return NULL;
     }
   version = GUINT16_FROM_BE (version);
   if (version != 1)
     {
-      g_prefix_error (error, _("GIMP only supports version 1 ACB palettes"));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("GIMP only supports version 1 ACB palettes"));
       return NULL;
     }
 
   if (! g_input_stream_read_all (input, &version, sizeof (version),
                                  &bytes_read, NULL, error))
     {
-      g_prefix_error (error, _("Invalid ACB palette identifier."));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid ACB palette identifier."));
       return NULL;
     }
 
@@ -653,7 +736,8 @@ gimp_palette_load_acb (GimpContext   *context,
           g_strfreev (palette_strings);
           g_free (palette_name);
         }
-      g_prefix_error (error, _("Invalid ACB palette name."));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid ACB palette name."));
       return NULL;
     }
   palette = GIMP_PALETTE (gimp_palette_new (context, palette_strings[1]));
@@ -671,7 +755,8 @@ gimp_palette_load_acb (GimpContext   *context,
           g_strfreev (palette_prefix);
           g_free (palette_name);
         }
-      g_prefix_error (error, _("Invalid ACB palette prefix."));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid ACB palette name."));
       return NULL;
     }
   g_free (palette_name);
@@ -686,7 +771,8 @@ gimp_palette_load_acb (GimpContext   *context,
           g_strfreev (palette_suffix);
           g_free (palette_name);
         }
-      g_prefix_error (error, _("Invalid ACB palette suffix."));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid ACB palette suffix."));
       return NULL;
     }
   g_free (palette_name);
@@ -704,14 +790,16 @@ gimp_palette_load_acb (GimpContext   *context,
       g_strfreev (palette_prefix);
       g_strfreev (palette_suffix);
 
-      g_prefix_error (error, _("Invalid number of colors in palette."));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid number of colors in palette."));
       return NULL;
     }
   number_of_colors = GUINT16_FROM_BE (number_of_colors);
   if (number_of_colors <= 1)
     {
-      g_prefix_error (error, _("Invalid number of colors: %s."),
-                      gimp_file_get_utf8_name (file));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid number of colors: %s."),
+                   gimp_file_get_utf8_name (file));
       return NULL;
     }
 
@@ -722,7 +810,8 @@ gimp_palette_load_acb (GimpContext   *context,
       g_strfreev (palette_prefix);
       g_strfreev (palette_suffix);
 
-      g_prefix_error (error, _("Invalid ACB palette page info."));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid ACB palette page info."));
       return NULL;
     }
   if (! g_input_stream_read_all (input, &page, sizeof (page),
@@ -731,7 +820,8 @@ gimp_palette_load_acb (GimpContext   *context,
       g_strfreev (palette_prefix);
       g_strfreev (palette_suffix);
 
-      g_prefix_error (error, _("Invalid ACB palette page info."));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid ACB palette page info."));
       return NULL;
     }
 
@@ -742,41 +832,32 @@ gimp_palette_load_acb (GimpContext   *context,
       g_strfreev (palette_prefix);
       g_strfreev (palette_suffix);
 
-      g_prefix_error (error, _("Invalid ACB palette color space."));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid ACB palette color space."));
       return NULL;
     }
   color_space = GUINT16_FROM_BE (color_space);
 
-  if (color_space == 0)
-    {
-      src_format = babl_format ("R'G'B' u8");
-    }
-  else if (color_space == 2)
-    {
-      src_format = babl_format ("cmyk u8");
-    }
-  else if (color_space == 7)
-    {
-      src_format = babl_format ("CIE Lab u8");
-    }
-  else
+  if (color_space != 0 &&
+      color_space != 2 &&
+      color_space != 7)
     {
       g_strfreev (palette_prefix);
       g_strfreev (palette_suffix);
 
-      g_prefix_error (error, _("Invalid ACB palette color space."));
+     g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                  _("Invalid ACB palette color space."));
       return NULL;
     }
 
   /* Color records */
   for (i = 0; i < number_of_colors; i++)
     {
-      gchar     color_code[6];
-      gchar    *palette_entry     = NULL;
-      gchar    *full_palette_name = NULL;
-      void     *pixels            = NULL;
-      gboolean  color_ok          = FALSE;
-      GimpRGB   color;
+      GeglColor *color             = gegl_color_new (NULL);
+      gchar      color_code[6];
+      gchar     *palette_entry     = NULL;
+      gchar     *full_palette_name = NULL;
+      gboolean   color_ok          = FALSE;
 
       palette_entry = gimp_palette_load_acb_string (input, file_size,
                                                     error);
@@ -791,6 +872,7 @@ gimp_palette_load_acb (GimpContext   *context,
         {
           g_free (palette_entry);
           g_free (full_palette_name);
+          g_object_unref (color);
 
           g_printerr ("Invalid ACB palette color code");
           break;
@@ -805,12 +887,13 @@ gimp_palette_load_acb (GimpContext   *context,
             {
               g_free (palette_entry);
               g_free (full_palette_name);
+              g_object_unref (color);
 
               g_printerr ("Invalid ACB palette colors");
               break;
             }
 
-          pixels   = rgb;
+          gegl_color_set_pixel (color, babl_format ("R'G'B u8"), rgb);
           color_ok = TRUE;
         }
       else if (color_space == 2)
@@ -822,6 +905,7 @@ gimp_palette_load_acb (GimpContext   *context,
             {
               g_free (palette_entry);
               g_free (full_palette_name);
+              g_object_unref (color);
 
               g_printerr ("Invalid ACB palette colors");
               break;
@@ -830,7 +914,7 @@ gimp_palette_load_acb (GimpContext   *context,
           for (gint j = 0; j < 4; j++)
             cmyk[j] = ((255 - cmyk[j]) / 2.55f) + 0.5f;
 
-          pixels   = cmyk;
+          gegl_color_set_pixel (color, babl_format ("cmyk u8"), cmyk);
           color_ok = TRUE;
         }
       else if (color_space == 7)
@@ -842,6 +926,7 @@ gimp_palette_load_acb (GimpContext   *context,
             {
               g_free (palette_entry);
               g_free (full_palette_name);
+              g_object_unref (color);
 
               g_printerr ("Invalid ACB palette colors");
               break;
@@ -851,19 +936,16 @@ gimp_palette_load_acb (GimpContext   *context,
           lab[1] = lab[1] - 128;
           lab[2] = lab[2] - 128;
 
-          pixels   = lab;
+          gegl_color_set_pixel (color, babl_format ("CIE Lab u8"), lab);
           color_ok = TRUE;
         }
 
       if (color_ok && palette_entry)
-        {
-          babl_process (babl_fish (src_format, dst_format), (gdouble *) pixels,
-                        &color, 1);
-          gimp_palette_add_entry (palette, -1, full_palette_name, &color);
-        }
+        gimp_palette_add_entry (palette, -1, full_palette_name, color);
 
       g_free (palette_entry);
       g_free (full_palette_name);
+      g_object_unref (color);
 
       if (! color_ok)
         {
@@ -943,7 +1025,7 @@ gimp_palette_load_ase (GimpContext   *context,
   gsize        bytes_read;
   gboolean     skip_first = FALSE;
   const Babl  *src_format = NULL;
-  const Babl  *dst_format = babl_format ("R'G'B' double");
+  gfloat       pixels[4];
 
   g_return_val_if_fail (G_IS_FILE (file), NULL);
   g_return_val_if_fail (G_IS_INPUT_STREAM (input), NULL);
@@ -958,9 +1040,9 @@ gimp_palette_load_ase (GimpContext   *context,
                                  &bytes_read, NULL, error) ||
       bytes_read != sizeof (header))
     {
-      g_prefix_error (error,
-                      _("Could not read header from palette file '%s': "),
-                      gimp_file_get_utf8_name (file));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Could not read header from palette file '%s': "),
+                   gimp_file_get_utf8_name (file));
       return NULL;
     }
 
@@ -969,23 +1051,25 @@ gimp_palette_load_ase (GimpContext   *context,
   if (! g_str_has_prefix (header + 0, "ASEF") ||
       header[5] != 0x01)
     {
-      g_prefix_error (error, _("Invalid ASE header: %s"),
-                      gimp_file_get_utf8_name (file));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid ASE header: %s"),
+                   gimp_file_get_utf8_name (file));
       return NULL;
     }
 
   if (! g_input_stream_read_all (input, &num_cols, sizeof (num_cols),
                                  &bytes_read, NULL, error))
     {
-      g_prefix_error (error,
-                      _("Invalid number of colors in palette."));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid number of colors in palette."));
       return NULL;
     }
   num_cols = GINT32_FROM_BE (num_cols);
   if (num_cols <= 1)
     {
-      g_prefix_error (error, _("Invalid number of colors: %s."),
-                      gimp_file_get_utf8_name (file));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid number of colors: %s."),
+                   gimp_file_get_utf8_name (file));
       return NULL;
     }
 
@@ -994,8 +1078,9 @@ gimp_palette_load_ase (GimpContext   *context,
   if (! g_input_stream_read_all (input, &group, sizeof (group),
                                  &bytes_read, NULL, error))
     {
-      g_prefix_error (error, _("Invalid ASE file: %s."),
-                      gimp_file_get_utf8_name (file));
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Invalid ASE file: %s."),
+                   gimp_file_get_utf8_name (file));
       return NULL;
     }
   group = GINT16_FROM_BE (group);
@@ -1016,18 +1101,14 @@ gimp_palette_load_ase (GimpContext   *context,
     }
   g_free (palette_name);
 
-  /* Header blocks are considered a "color" so we offset the count here */
-  num_cols -= 1;
-
   for (i = 0; i < num_cols; i++)
     {
-      gchar    color_space[4];
-      gchar   *color_name;
-      GimpRGB  color;
-      gshort   spot_color;
-      gfloat  *pixels;
-      gint     components  = 0;
-      gboolean valid_color = TRUE;
+      GeglColor *color;
+      gchar      color_space[4];
+      gchar     *color_name;
+      gshort     spot_color;
+      gint       components  = 0;
+      gboolean   valid_color = TRUE;
 
       if (! skip_first)
         {
@@ -1040,6 +1121,23 @@ gimp_palette_load_ase (GimpContext   *context,
             }
         }
       skip_first = FALSE;
+
+      /* Skip group marker padding */
+      group = GINT16_FROM_BE (group);
+      if (group < 0)
+        {
+          gchar marker[4];
+
+          if (! g_input_stream_read_all (input, &marker, sizeof (marker),
+                                         &bytes_read, NULL, error))
+            {
+              g_printerr ("Invalid ASE group marker: %s.",
+                          gimp_file_get_utf8_name (file));
+              break;
+            }
+          num_cols--;
+          continue;
+        }
 
       color_name = gimp_palette_load_ase_block_name (input, file_size, error);
       if (! color_name)
@@ -1077,11 +1175,9 @@ gimp_palette_load_ase (GimpContext   *context,
           break;
         }
 
-      pixels = g_malloc (sizeof (gfloat) * components);
-
       for (gint j = 0; j < components; j++)
         {
-          gint tmp;
+          gint32 tmp;
 
           if (! g_input_stream_read_all (input, &tmp, sizeof (tmp),
                                          &bytes_read, NULL, error))
@@ -1102,11 +1198,9 @@ gimp_palette_load_ase (GimpContext   *context,
         break;
 
       /* The L component of LAB goes from 0 to 100 percent */
-      if (g_str_has_prefix (color_space, "LAB"))
+      if (g_str_has_prefix (g_strstrip (color_space), "LAB"))
         pixels[0] *= 100;
 
-      babl_process (babl_fish (src_format, dst_format), pixels, &color, 1);
-      g_free (pixels);
 
       /* TODO: When GIMP supports spot colors, use this information in
        * the palette. */
@@ -1119,8 +1213,12 @@ gimp_palette_load_ase (GimpContext   *context,
           break;
         }
 
-      gimp_palette_add_entry (palette, -1, color_name, &color);
+      color = gegl_color_new (NULL);
+      gegl_color_set_pixel (color, src_format, pixels);
+
+      gimp_palette_add_entry (palette, -1, color_name, color);
       g_free (color_name);
+      g_object_unref (color);
     }
 
   return g_list_prepend (NULL, palette);
@@ -1228,15 +1326,16 @@ gimp_palette_load_css (GimpContext   *context,
 
           if (g_regex_match (regex, buf, 0, &matches))
             {
-              GimpRGB  color;
-              gchar   *word = g_match_info_fetch_named (matches, "param");
+              GeglColor *color;
+              gchar     *word = g_match_info_fetch_named (matches, "param");
 
-              if (gimp_rgb_parse_css (&color, word, -1))
+              color = gimp_color_parse_css (word);
+              if (color)
                 {
-                  if (! gimp_palette_find_entry (palette, &color, NULL))
-                    {
-                      gimp_palette_add_entry (palette, -1, NULL, &color);
-                    }
+                  if (! gimp_palette_find_entry (palette, color, NULL))
+                    gimp_palette_add_entry (palette, -1, NULL, color);
+
+                  g_object_unref (color);
                 }
 
               g_free (word);
@@ -1253,6 +1352,350 @@ gimp_palette_load_css (GimpContext   *context,
   return g_list_prepend (NULL, palette);
 }
 
+GList *
+gimp_palette_load_sbz (GimpContext   *context,
+                       GFile         *file,
+                       GInputStream  *input,
+                       GError       **error)
+{
+  SwatchBookerData      sbz_data;
+  gchar                *palette_name;
+  gchar                *xml_data = NULL;
+  struct archive       *a;
+  struct archive_entry *entry;
+  size_t                entry_size;
+  int                   r;
+
+  g_return_val_if_fail (G_IS_FILE (file), NULL);
+  g_return_val_if_fail (G_IS_INPUT_STREAM (input), NULL);
+  g_return_val_if_fail (error == NULL || *error == NULL, NULL);
+
+  palette_name     = g_path_get_basename (gimp_file_get_utf8_name (file));
+  sbz_data.palette = GIMP_PALETTE (gimp_palette_new (context, palette_name));
+  g_free (palette_name);
+
+  sbz_data.position          = 0;
+  sbz_data.sorted_position   = 0;
+  sbz_data.in_color_tag      = FALSE;
+  sbz_data.in_book_tag       = FALSE;
+  sbz_data.copy_name         = FALSE;
+  sbz_data.copy_values       = FALSE;
+  sbz_data.embedded_profiles = NULL;
+
+  if ((a = archive_read_new ()))
+    {
+      const gchar *name = gimp_file_get_utf8_name (file);
+
+      archive_read_support_format_all (a);
+      r = archive_read_open_filename (a, name, 10240);
+      if (r != ARCHIVE_OK)
+        {
+          archive_read_free (a);
+
+          g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                       _("Unable to read SBZ file"));
+          return NULL;
+        }
+
+      while (archive_read_next_header (a, &entry) == ARCHIVE_OK)
+        {
+          const gchar *lower = g_ascii_strdown (archive_entry_pathname (entry), -1);
+
+          if (g_str_has_suffix (lower, ".xml"))
+            {
+              entry_size = archive_entry_size (entry);
+              xml_data   = (gchar *) g_malloc (entry_size);
+
+              r = archive_read_data (a, xml_data, entry_size);
+            }
+          else if (g_str_has_suffix (lower, ".icc") || g_str_has_suffix (lower, ".icm"))
+            {
+              GimpColorProfile *profile  = NULL;
+              size_t            icc_size = archive_entry_size (entry);
+              uint8_t          *icc_data = g_malloc (icc_size);
+
+              r = archive_read_data (a, icc_data, icc_size);
+
+              if (icc_data)
+                profile = gimp_color_profile_new_from_icc_profile (icc_data, icc_size,
+                                                                   NULL);
+
+              if (profile)
+                {
+                  SwatchBookerColorProfile sbz_profile;
+
+                  sbz_profile.profile = profile;
+                  sbz_profile.id = g_strdup (archive_entry_pathname (entry));
+
+                  sbz_data.embedded_profiles =
+                    g_list_append (sbz_data.embedded_profiles, &sbz_profile);
+                }
+            }
+        }
+
+      if (xml_data)
+        {
+          GimpXmlParser *xml_parser;
+          GMarkupParser  markup_parser;
+
+          markup_parser.start_element = swatchbooker_load_start_element;
+          markup_parser.end_element   = swatchbooker_load_end_element;
+          markup_parser.text          = swatchbooker_load_text;
+          markup_parser.passthrough   = NULL;
+          markup_parser.error         = NULL;
+
+          xml_parser = gimp_xml_parser_new (&markup_parser, &sbz_data);
+
+          gimp_xml_parser_parse_buffer (xml_parser, xml_data, entry_size, NULL);
+          gimp_xml_parser_free (xml_parser);
+
+          g_free (xml_data);
+        }
+
+      r = archive_read_free (a);
+    }
+  else
+    {
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Unable to open SBZ file"));
+      return NULL;
+    }
+
+  return g_list_prepend (NULL, sbz_data.palette);
+}
+
+static void
+swatchbooker_load_start_element (GMarkupParseContext *context,
+                                 const gchar         *element_name,
+                                 const gchar        **attribute_names,
+                                 const gchar        **attribute_values,
+                                 gpointer             user_data,
+                                 GError             **error)
+{
+  SwatchBookerData *sbz_data = user_data;
+
+  sbz_data->copy_values = FALSE;
+  sbz_data->color_model = NULL;
+  sbz_data->color_space = NULL;
+
+  if (! strcmp (g_ascii_strdown (element_name, -1), "color"))
+    {
+      sbz_data->in_color_tag = TRUE;
+    }
+  else if (! strcmp (g_ascii_strdown (element_name, -1), "dc:identifier"))
+    {
+      if (sbz_data->in_color_tag)
+        sbz_data->copy_name = TRUE;
+    }
+  else if (! strcmp (g_ascii_strdown (element_name, -1), "values"))
+    {
+      while (*attribute_names)
+        {
+          if (! strcmp (g_ascii_strdown (*attribute_names, -1), "model"))
+            {
+              sbz_data->color_model =
+                g_strdup (g_ascii_strdown (*attribute_values, -1));
+            }
+          else if (! strcmp (g_ascii_strdown (*attribute_names, -1), "space"))
+            {
+              sbz_data->color_space = g_strdup (*attribute_values);
+            }
+
+          attribute_names++;
+          attribute_values++;
+        }
+
+      sbz_data->copy_values = TRUE;
+    }
+  else if (! strcmp (g_ascii_strdown (element_name, -1), "book"))
+    {
+      sbz_data->in_book_tag = TRUE;
+
+      while (*attribute_names)
+        {
+          if (! strcmp (g_ascii_strdown (*attribute_names, -1), "columns"))
+            {
+              gint columns = atoi (*attribute_values);
+
+              if (columns > 0)
+                gimp_palette_set_columns (sbz_data->palette, columns);
+
+              break;
+            }
+
+          attribute_names++;
+          attribute_values++;
+        }
+    }
+  else if (! strcmp (g_ascii_strdown (element_name, -1), "swatch") &&
+           sbz_data->in_book_tag)
+    {
+      while (*attribute_names)
+        {
+          if (! strcmp (g_ascii_strdown (*attribute_names, -1), "material"))
+            {
+              GList *cols;
+              gint   original_id = 0;
+
+              for (cols = gimp_palette_get_colors (sbz_data->palette);
+                   cols;
+                   cols = g_list_next (cols))
+                {
+                  GimpPaletteEntry *entry = cols->data;
+
+                  if (! strcmp (*attribute_values, entry->name))
+                    {
+                      gimp_palette_move_entry (sbz_data->palette, entry,
+                                               sbz_data->sorted_position);
+
+                      sbz_data->sorted_position++;
+                      break;
+                    }
+                  original_id++;
+                }
+              break;
+            }
+
+          attribute_names++;
+          attribute_values++;
+        }
+    }
+}
+
+static void
+swatchbooker_load_end_element (GMarkupParseContext *context,
+                               const gchar         *element_name,
+                               gpointer             user_data,
+                               GError             **error)
+{
+  SwatchBookerData *sbz_data = user_data;
+
+  if (! strcmp (g_ascii_strdown (element_name, -1), "color"))
+    sbz_data->in_color_tag = FALSE;
+  else if (! strcmp (g_ascii_strdown (element_name, -1), "book"))
+    sbz_data->in_book_tag = FALSE;
+}
+
+static void
+swatchbooker_load_text (GMarkupParseContext *context,
+                        const gchar         *text,
+                        gsize                text_len,
+                        gpointer             user_data,
+                        GError             **error)
+{
+  SwatchBookerData  *sbz_data = user_data;
+  gchar            **values;
+  gint               i;
+  gint               total = 0;
+
+  /* Save palette name */
+  if (sbz_data->copy_name)
+    {
+      if (! sbz_data->palette_name)
+        sbz_data->palette_name = g_strdup (text);
+
+      sbz_data->copy_name = FALSE;
+    }
+
+  /* Load palette entry */
+  if (sbz_data->copy_values)
+    {
+      values = g_strsplit (text, " ", 0);
+
+      for (i = 0; values[i]; i++)
+        total++;
+
+      if (total > 0)
+        {
+          gfloat      true_values[total];
+          GeglColor  *color      = NULL;
+          const Babl *src_format = NULL;
+          const Babl *space      = NULL;
+
+          /* Load profile if applicable */
+          if (sbz_data->embedded_profiles &&
+              sbz_data->color_space)
+            {
+              GList *profile_list;
+
+              for (profile_list = g_list_copy (sbz_data->embedded_profiles);
+                   profile_list;
+                   profile_list = g_list_next (profile_list))
+                {
+                  SwatchBookerColorProfile *icc = profile_list->data;
+
+                  if (! strcmp (sbz_data->color_space, icc->id))
+                    {
+                      space = gimp_color_profile_get_space (icc->profile,
+                                                            GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
+                                                            NULL);
+                      break;
+                    }
+                }
+            }
+
+          for (i = 0; values[i]; i++)
+            true_values[i] = atof (values[i]);
+
+          /* No need for babl conversion for sRGB colors */
+          if (! strcmp (sbz_data->color_model, "srgb"))
+            {
+              src_format = babl_format_with_space ("R'G'B' float", NULL);
+            }
+          else if (! strcmp (sbz_data->color_model, "rgb"))
+            {
+              src_format = babl_format_with_space ("R'G'B' float", space);
+            }
+          else if (! strcmp (sbz_data->color_model, "gray"))
+            {
+              src_format = babl_format_with_space ("Y' float", space);
+            }
+          else if (! strcmp (sbz_data->color_model, "cmyk"))
+            {
+              src_format = babl_format_with_space ("CMYK float", space);
+            }
+          else if (! strcmp (sbz_data->color_model, "hsl"))
+            {
+              src_format = babl_format_with_space ("HSL float", space);
+            }
+          else if (! strcmp (sbz_data->color_model, "hsv"))
+            {
+              src_format = babl_format_with_space ("HSV float", space);
+            }
+          else if (! strcmp (sbz_data->color_model, "lab"))
+            {
+              src_format = babl_format_with_space ("CIE Lab float", space);
+            }
+          else if (! strcmp (sbz_data->color_model, "xyz"))
+            {
+              src_format = babl_format_with_space ("CIE XYZ float", space);
+            }
+
+          if (src_format != NULL)
+            {
+              color = gegl_color_new (NULL);
+              gegl_color_set_pixel (color, src_format, true_values);
+            }
+
+          if (color)
+            {
+              gimp_palette_add_entry (sbz_data->palette, sbz_data->position,
+                                      NULL, color);
+              if (sbz_data->palette_name)
+                gimp_palette_set_entry_name (sbz_data->palette,
+                                             sbz_data->position,
+                                             sbz_data->palette_name);
+              sbz_data->position++;
+            }
+        }
+
+      sbz_data->palette_name = NULL;
+      sbz_data->copy_values  = FALSE;
+      if (sbz_data->color_model)
+        g_free (sbz_data->color_model);
+    }
+}
+
 GimpPaletteFileFormat
 gimp_palette_load_detect_format (GFile        *file,
                                  GInputStream *input)
@@ -1266,6 +1709,10 @@ gimp_palette_load_detect_format (GFile        *file,
       bytes_read == sizeof (header))
     {
       if (g_str_has_prefix (header + 0, "RIFF") &&
+          /* TODO: only the Simple PAL format is supported right now.
+           * Extended PAL Format with "PAL plth" header support could be added
+           * later on.
+           */
           g_str_has_prefix (header + 8, "PAL data"))
         {
           format = GIMP_PALETTE_FILE_FORMAT_RIFF_PAL;
@@ -1292,13 +1739,17 @@ gimp_palette_load_detect_format (GFile        *file,
         {
           format = GIMP_PALETTE_FILE_FORMAT_ACO;
         }
-      else if (g_str_has_suffix (lower, ".ase"))
+      if (g_str_has_suffix (lower, ".ase"))
         {
           format = GIMP_PALETTE_FILE_FORMAT_ASE;
         }
       else if (g_str_has_suffix (lower, ".css"))
         {
           format = GIMP_PALETTE_FILE_FORMAT_CSS;
+        }
+      else if (g_str_has_suffix (lower, ".sbz"))
+        {
+          format = GIMP_PALETTE_FILE_FORMAT_SBZ;
         }
 
       g_free (lower);
@@ -1313,8 +1764,12 @@ gimp_palette_load_detect_format (GFile        *file,
 
       if (info)
         {
-          goffset size = g_file_info_get_size (info);
+          goffset size = g_file_info_get_attribute_uint64 (info, G_FILE_ATTRIBUTE_STANDARD_SIZE);
 
+          /* TODO: the file can optionally be 772 bytes long.
+           * See: https://www.adobe.com/devnet-apps/photoshop/fileformatashtml/
+           * Section: "Color Table "
+           */
           if (size == 768)
             format = GIMP_PALETTE_FILE_FORMAT_ACT;
 

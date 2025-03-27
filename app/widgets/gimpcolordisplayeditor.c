@@ -133,6 +133,7 @@ gimp_color_display_editor_init (GimpColorDisplayEditor *editor)
                                   GTK_ORIENTATION_VERTICAL);
 
   paned = gtk_paned_new (GTK_ORIENTATION_VERTICAL);
+  gtk_paned_set_wide_handle (GTK_PANED (paned), TRUE);
   gtk_box_pack_start (GTK_BOX (editor), paned, TRUE, TRUE, 0);
   gtk_widget_show (paned);
 
@@ -348,12 +349,7 @@ gimp_color_display_editor_dispose (GObject *object)
 {
   GimpColorDisplayEditor *editor = GIMP_COLOR_DISPLAY_EDITOR (object);
 
-  if (editor->selected)
-    {
-      g_object_remove_weak_pointer (G_OBJECT (editor->selected),
-                                    (gpointer) &editor->selected);
-      editor->selected = NULL;
-    }
+  g_clear_weak_pointer (&editor->selected);
 
   g_clear_object (&editor->stack);
   g_clear_object (&editor->config);
@@ -408,7 +404,9 @@ gimp_color_display_editor_new (Gimp                  *gimp,
 
   g_free (display_types);
 
-  for (list = stack->filters; list; list = g_list_next (list))
+  for (list = gimp_color_display_stack_get_filters (stack);
+       list;
+       list = g_list_next (list))
     {
       GimpColorDisplay *display = list->data;
       GtkTreeIter       iter;
@@ -544,12 +542,7 @@ gimp_color_display_editor_dest_changed (GtkTreeSelection       *sel,
   GimpColorDisplay *display = NULL;
   gchar            *tip     = NULL;
 
-  if (editor->selected)
-    {
-      g_object_remove_weak_pointer (G_OBJECT (editor->selected),
-                                    (gpointer) &editor->selected);
-      editor->selected = NULL;
-    }
+  g_clear_weak_pointer (&editor->selected);
 
   if (gtk_tree_selection_get_selected (sel, &model, &iter))
     {
@@ -577,10 +570,7 @@ gimp_color_display_editor_dest_changed (GtkTreeSelection       *sel,
 
   if (display)
     {
-      editor->selected = display;
-
-      g_object_add_weak_pointer (G_OBJECT (display),
-                                 (gpointer) &editor->selected);
+      g_set_weak_pointer (&editor->selected, display);
 
       editor->config_widget = gimp_color_display_configure (display);
 
@@ -711,6 +701,7 @@ gimp_color_display_editor_reordered (GimpColorDisplayStack  *stack,
 
       if (display == display2)
         {
+          GList       *filters = gimp_color_display_stack_get_filters (stack);
           GtkTreePath *path;
           gint         old_position;
 
@@ -721,7 +712,7 @@ gimp_color_display_editor_reordered (GimpColorDisplayStack  *stack,
           if (position == old_position)
             return;
 
-          if (position == -1 || position == g_list_length (stack->filters) - 1)
+          if (position == -1 || position == g_list_length (filters) - 1)
             {
               gtk_list_store_move_before (editor->dest, &iter, NULL);
             }
@@ -822,11 +813,12 @@ gimp_color_display_editor_update_buttons (GimpColorDisplayEditor *editor)
 
   if (gtk_tree_selection_get_selected (editor->dest_sel, &model, &iter))
     {
+      GList       *filters = gimp_color_display_stack_get_filters (editor->stack);
       GtkTreePath *path    = gtk_tree_model_get_path (model, &iter);
       gint        *indices = gtk_tree_path_get_indices (path);
 
       up_sensitive   = indices[0] > 0;
-      down_sensitive = indices[0] < (g_list_length (editor->stack->filters) - 1);
+      down_sensitive = indices[0] < (g_list_length (filters) - 1);
 
       gtk_tree_path_free (path);
     }

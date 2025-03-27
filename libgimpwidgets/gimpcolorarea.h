@@ -34,62 +34,27 @@
 G_BEGIN_DECLS
 
 
-#define GIMP_TYPE_COLOR_AREA            (gimp_color_area_get_type ())
-#define GIMP_COLOR_AREA(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_COLOR_AREA, GimpColorArea))
-#define GIMP_COLOR_AREA_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_COLOR_AREA, GimpColorAreaClass))
-#define GIMP_IS_COLOR_AREA(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_COLOR_AREA))
-#define GIMP_IS_COLOR_AREA_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_COLOR_AREA))
-#define GIMP_COLOR_AREA_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_COLOR_AREA, GimpColorAreaClass))
+#define GIMP_TYPE_COLOR_AREA (gimp_color_area_get_type ())
+G_DECLARE_FINAL_TYPE (GimpColorArea, gimp_color_area, GIMP, COLOR_AREA, GtkDrawingArea)
 
 
-typedef struct _GimpColorAreaClass  GimpColorAreaClass;
-
-struct _GimpColorArea
-{
-  GtkDrawingArea       parent_instance;
-
-  /*< private >*/
-  guchar              *buf;
-  guint                width;
-  guint                height;
-  guint                rowstride;
-
-  GimpColorAreaType    type;
-  GimpRGB              color;
-  guint                draw_border  : 1;
-  guint                needs_render : 1;
-};
-
-struct _GimpColorAreaClass
-{
-  GtkDrawingAreaClass  parent_class;
-
-  void (* color_changed) (GimpColorArea *area);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-};
-
-
-GType       gimp_color_area_get_type         (void) G_GNUC_CONST;
-
-GtkWidget * gimp_color_area_new              (const GimpRGB     *color,
+GtkWidget * gimp_color_area_new              (GeglColor         *color,
                                               GimpColorAreaType  type,
                                               GdkModifierType    drag_mask);
 
 void        gimp_color_area_set_color        (GimpColorArea     *area,
-                                              const GimpRGB     *color);
-void        gimp_color_area_get_color        (GimpColorArea     *area,
-                                              GimpRGB           *color);
+                                              GeglColor         *color);
+GeglColor * gimp_color_area_get_color        (GimpColorArea     *area);
 
 gboolean    gimp_color_area_has_alpha        (GimpColorArea     *area);
 void        gimp_color_area_set_type         (GimpColorArea     *area,
                                               GimpColorAreaType  type);
+void        gimp_color_area_enable_drag      (GimpColorArea     *area,
+                                              GdkModifierType    drag_mask);
 void        gimp_color_area_set_draw_border  (GimpColorArea     *area,
                                               gboolean           draw_border);
+void        gimp_color_area_set_out_of_gamut (GimpColorArea     *area,
+                                              gboolean           out_of_gamut);
 
 void        gimp_color_area_set_color_config (GimpColorArea     *area,
                                               GimpColorConfig   *config);

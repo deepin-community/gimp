@@ -59,7 +59,7 @@ static GimpBoundary * gimp_boundary_new        (const GeglRectangle *region);
 static GimpBoundSeg * gimp_boundary_free       (GimpBoundary        *boundary,
                                                 gboolean             free_segs);
 
-static void           gimp_boundary_add_seg    (GimpBoundary        *bounrady,
+static void           gimp_boundary_add_seg    (GimpBoundary        *boundary,
                                                 gint                 x1,
                                                 gint                 y1,
                                                 gint                 x2,
@@ -150,7 +150,7 @@ static void       simplify_subdivide  (const GimpBoundSeg  *segs,
  * more than 1 bytes/pixel, the last byte of each pixel is used to
  * determine the boundary outline.
  *
- * Return value: the boundary array.
+ * Returns: the boundary array.
  **/
 GimpBoundSeg *
 gimp_boundary_find (GeglBuffer          *buffer,
@@ -202,7 +202,7 @@ gimp_boundary_find (GeglBuffer          *buffer,
  * array contains markers consisting of -1 coordinates and is
  * @num_groups elements longer than @segs.
  *
- * Return value: the sorted segs
+ * Returns: the sorted segs
  **/
 GimpBoundSeg *
 gimp_boundary_sort (const GimpBoundSeg *segs,
@@ -316,7 +316,7 @@ gimp_boundary_sort (const GimpBoundSeg *segs,
  * with gimp_boundary_sort() and reduces the number of segments while
  * preserving the general shape as close as possible.
  *
- * Return value: the simplified segs.
+ * Returns: the simplified segs.
  **/
 GimpBoundSeg *
 gimp_boundary_simplify (GimpBoundSeg *sorted_segs,
@@ -965,7 +965,7 @@ simplify_subdivide (const GimpBoundSeg *segs,
       /* start and endpoint are at the same coordinates */
       for (i = start_idx + 1; i < end_idx; i++)
         {
-          /* compare the sqared distances */
+          /* compare the squared distances */
           gint dist = (SQR (segs[i].x1 - segs[start_idx].x1) +
                        SQR (segs[i].y1 - segs[start_idx].y1));
 

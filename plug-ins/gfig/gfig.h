@@ -31,6 +31,24 @@
 #define MAX_UNDO         10
 #define MIN_UNDO         1
 
+struct _GimpGfig
+{
+  GimpPlugIn      parent_instance;
+  GtkApplication *app;
+
+  GtkWidget      *top_level_dlg;
+  gboolean        success;
+
+  GtkBuilder     *builder;
+};
+
+#define PLUG_IN_PROC   "plug-in-gfig"
+#define PLUG_IN_BINARY "gfig"
+#define PLUG_IN_ROLE   "gimp-gfig"
+
+#define GIMP_TYPE_GFIG  (gimp_gfig_get_type ())
+G_DECLARE_FINAL_TYPE (GimpGfig, gimp_gfig, GIMP, GFIG, GimpPlugIn)
+
 typedef struct
 {
   gint     gridspacing;
@@ -48,27 +66,27 @@ typedef struct
 
 typedef struct
 {
-  SelectionType type;           /* ADD etc .. */
-  gint          antia;          /* Boolean for Antia */
-  gint          feather;        /* Feather it ? */
-  gdouble       feather_radius; /* Radius to feather */
-  ArcType       as_pie;         /* Arc type selection segment/sector */
-  FillType      fill_type;      /* Fill type for selection */
-  gdouble       fill_opacity;   /* You can guess this one */
+  GimpChannelOps type;           /* ADD etc .. */
+  gint           antia;          /* Boolean for Antia */
+  gint           feather;        /* Feather it ? */
+  gdouble        feather_radius; /* Radius to feather */
+  ArcType        as_pie;         /* Arc type selection segment/sector */
+  FillType       fill_type;      /* Fill type for selection */
+  gdouble        fill_opacity;   /* You can guess this one */
 } selection_option;
 
 void       object_start            (GdkPoint *pnt, gint);
 void       object_operation        (GdkPoint *pnt, gint);
-void       object_operation_start  (GdkPoint *pnt, gint shift_down);
+void       object_operation_start  (GimpGfig *gfig,
+                                    GdkPoint *pnt,
+                                    gint shift_down);
 void       object_operation_end    (GdkPoint *pnt, gint);
-void       object_end              (GdkPoint *pnt, gint shift_down);
+void       object_end              (GimpGfig *gfig,
+                                    GdkPoint *pnt,
+                                    gint shift_down);
 
 #define MAX_LOAD_LINE    256
 #define SQ_SIZE 8
-
-#define PLUG_IN_PROC   "plug-in-gfig"
-#define PLUG_IN_BINARY "gfig"
-#define PLUG_IN_ROLE   "gimp-gfig"
 
 extern gint       line_no;
 extern gint       preview_width, preview_height;
@@ -115,7 +133,7 @@ struct _GFigObj
 /* this is temp, should be able to get rid of */
 typedef struct BrushDesc
 {
-  gchar         *name;
+  GimpBrush     *brush;
   gdouble        opacity;
   gint           spacing;
   GimpLayerMode  paint_mode;
@@ -131,8 +149,8 @@ typedef struct
 {
   gboolean     debug_styles;
   gboolean     show_background;  /* show thumbnail of image behind figure */
-  gint32       image_id;         /* Gimp image id */
-  gint32       drawable_id;      /* Gimp drawable to paint on */
+  GimpImage    *image;           /* Gimp image */
+  GimpDrawable *drawable;        /* Gimp drawable to paint on */
   GFigObj     *current_obj;
   GfigObject  *selected_obj;
   GtkWidget   *preview;
@@ -145,8 +163,8 @@ typedef struct
   GtkWidget   *gradient_select;
   GtkWidget   *fillstyle_combo;
   GtkWidget   *paint_type_toggle;
-  GimpRGB     *fg_color;
-  GimpRGB     *bg_color;
+  GeglColor   *fg_color;
+  GeglColor   *bg_color;
   gboolean     enable_repaint;
   gboolean     using_new_layer;
 } GFigContext;
@@ -156,7 +174,8 @@ extern GFigContext *gfig_context;
 extern selection_option selopt;
 extern SelectItVals selvals;
 
-void       add_to_all_obj          (GFigObj    *fobj,
+void       add_to_all_obj          (GimpGfig   *gfig,
+                                    GFigObj    *fobj,
                                     GfigObject *obj);
 
 gchar *get_line (gchar *buf,
@@ -171,10 +190,10 @@ void            scale_to_xy     (gdouble *list,
 void            scale_to_original_xy (gdouble *list,
                                       gint     size);
 
-void gfig_paint (BrushType brush_type,
-                 gint32    drawable_ID,
-                 gint      seg_count,
-                 gdouble   line_pnts[]);
+void gfig_paint (BrushType     brush_type,
+                 GimpDrawable *drawable,
+                 gint          seg_count,
+                 gdouble       line_pnts[]);
 
 void draw_item   (cairo_t *cr,
                   gboolean fill);
@@ -193,10 +212,11 @@ GtkWidget *num_sides_widget     (const gchar *d_title,
                                  gint         adj_min,
                                  gint         adj_max);
 
-void    setup_undo              (void);
+void    setup_undo              (GimpGfig    *gfig);
 void    draw_grid_clear         (void);
-void    prepend_to_all_obj      (GFigObj *fobj,
-                                 GList   *nobj);
+void    prepend_to_all_obj      (GimpGfig    *gfig,
+                                 GFigObj     *fobj,
+                                 GList       *nobj);
 
 void    gfig_draw_arc           (gint x,
                                  gint y,
@@ -213,7 +233,8 @@ void    gfig_draw_line          (gint x0,
                                  cairo_t *cr);
 
 void      gfig_paint_callback   (void);
-GFigObj  *gfig_load             (const gchar *filename,
+GFigObj  *gfig_load             (GimpGfig    *gfig,
+                                 const gchar *filename,
                                  const gchar *name);
 void   gfig_name_encode         (gchar *dest,
                                  gchar *src);
@@ -228,7 +249,7 @@ void   save_options             (GString *string);
 
 GString   *gfig_save_as_string     (void);
 gboolean   gfig_save_as_parasite   (void);
-GFigObj   *gfig_load_from_parasite (void);
+GFigObj   *gfig_load_from_parasite (GimpGfig *gfig);
 GFigObj   *gfig_new                (void);
 void       gfig_save_callbk        (void);
 void       paint_layer_fill        (gdouble x1,

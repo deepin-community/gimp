@@ -20,6 +20,7 @@
 
 #include "config.h"
 
+#include <gegl.h>
 #include <gio/gio.h>
 
 #include "libgimpbase/gimpbase.h"
@@ -45,18 +46,11 @@
 
 enum
 {
-  SIZE_CHANGED,
-  LAST_SIGNAL
-};
-
-enum
-{
   PROP_0,
   PROP_EDIT_NON_VISIBLE,
   PROP_MOVE_TOOL_CHANGES_ACTIVE,
   PROP_FILTER_TOOL_MAX_RECENT,
   PROP_FILTER_TOOL_USE_LAST_SETTINGS,
-  PROP_FILTER_TOOL_SHOW_COLOR_OPTIONS,
   PROP_TRUST_DIRTY_FLAG,
   PROP_SAVE_DEVICE_STATUS,
   PROP_DEVICES_SHARE_TOOL,
@@ -64,9 +58,6 @@ enum
   PROP_RESTORE_SESSION,
   PROP_RESTORE_MONITOR,
   PROP_SAVE_TOOL_OPTIONS,
-  PROP_COMPACT_SLIDERS,
-  PROP_SHOW_TOOLTIPS,
-  PROP_TEAROFF_MENUS,
   PROP_CAN_CHANGE_ACCELS,
   PROP_SAVE_ACCELS,
   PROP_RESTORE_ACCELS,
@@ -77,31 +68,36 @@ enum
   PROP_TOOLBOX_IMAGE_AREA,
   PROP_TOOLBOX_WILBER,
   PROP_TOOLBOX_GROUPS,
-  PROP_TOOLBOX_GROUP_MENU_MODE,
   PROP_THEME_PATH,
   PROP_THEME,
+  PROP_THEME_SCHEME,
+  PROP_OVERRIDE_THEME_ICON_SIZE,
+  PROP_CUSTOM_ICON_SIZE,
   PROP_ICON_THEME_PATH,
   PROP_ICON_THEME,
-  PROP_ICON_SIZE,
+  PROP_PREFER_SYMBOLIC_ICONS,
+  PROP_FONT_RELATIVE_SIZE,
   PROP_USE_HELP,
   PROP_SHOW_HELP_BUTTON,
   PROP_HELP_LOCALES,
   PROP_HELP_BROWSER,
-  PROP_SEARCH_SHOW_UNAVAILABLE_ACTIONS,
   PROP_ACTION_HISTORY_SIZE,
   PROP_USER_MANUAL_ONLINE,
   PROP_USER_MANUAL_ONLINE_URI,
   PROP_DOCK_WINDOW_HINT,
   PROP_CURSOR_HANDEDNESS,
+  PROP_CUSTOM_TITLE_BAR,
 
   PROP_PLAYGROUND_NPD_TOOL,
   PROP_PLAYGROUND_SEAMLESS_CLONE_TOOL,
+  PROP_PLAYGROUND_PAINT_SELECT_TOOL,
 
   PROP_HIDE_DOCKS,
   PROP_SINGLE_WINDOW_MODE,
   PROP_SHOW_TABS,
   PROP_TABS_POSITION,
   PROP_LAST_TIP_SHOWN,
+  PROP_SHOW_WELCOME_DIALOG,
 
   /* ignored, only for backward compatibility: */
   PROP_CURSOR_FORMAT,
@@ -126,30 +122,15 @@ static void   gimp_gui_config_get_property (GObject      *object,
                                             GValue       *value,
                                             GParamSpec   *pspec);
 
-static void   monitor_resolution_changed   (GimpDisplayConfig *display_config,
-                                            GParamSpec        *pspec,
-                                            GimpGuiConfig     *gui_config);
-
 G_DEFINE_TYPE (GimpGuiConfig, gimp_gui_config, GIMP_TYPE_DISPLAY_CONFIG)
 
 #define parent_class gimp_gui_config_parent_class
-
-static guint signals[LAST_SIGNAL] = { 0, };
 
 static void
 gimp_gui_config_class_init (GimpGuiConfigClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
   gchar        *path;
-
-  signals[SIZE_CHANGED] =
-    g_signal_new ("size-changed",
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (GimpGuiConfigClass, size_changed),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
-                  G_TYPE_NONE, 0);
 
   object_class->finalize     = gimp_gui_config_finalize;
   object_class->set_property = gimp_gui_config_set_property;
@@ -180,13 +161,6 @@ gimp_gui_config_class_init (GimpGuiConfigClass *klass)
                             "filter-tool-use-last-settings",
                             "Use last used settings in filters",
                             FILTER_TOOL_USE_LAST_SETTINGS_BLURB,
-                            FALSE,
-                            GIMP_PARAM_STATIC_STRINGS);
-
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_FILTER_TOOL_SHOW_COLOR_OPTIONS,
-                            "filter-tool-show-color-options",
-                            "Show avanced color options in filters",
-                            FILTER_TOOL_SHOW_COLOR_OPTIONS_BLURB,
                             FALSE,
                             GIMP_PARAM_STATIC_STRINGS);
 
@@ -239,28 +213,15 @@ gimp_gui_config_class_init (GimpGuiConfigClass *klass)
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_COMPACT_SLIDERS,
-                            "compact-sliders",
-                            "Compact sliders",
-                            COMPACT_SLIDERS_BLURB,
-                            TRUE,
-                            GIMP_PARAM_STATIC_STRINGS);
-
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_SHOW_TOOLTIPS,
-                            "show-tooltips",
-                            "Show tooltips",
-                            SHOW_TOOLTIPS_BLURB,
-                            TRUE,
-                            GIMP_PARAM_STATIC_STRINGS |
-                            GIMP_CONFIG_PARAM_RESTART);
-
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_TEAROFF_MENUS,
-                            "tearoff-menus",
-                            "Tearoff menus",
-                            TEAROFF_MENUS_BLURB,
-                            TRUE,
-                            GIMP_PARAM_STATIC_STRINGS);
-
+  /* XXX: this is now ignored and unsed because we were relying on
+   * "gtk-can-change-accels" property of GtkSettings which is deprecated and
+   * ignored since GTK+ 3.10.
+   *
+   * Keeping the property around as a reminder of the regression in GIMP 3.
+   * Maybe we can reimplement this with custom code if there are requests. If we
+   * end up deciding to completely getting rid of the property, we must add
+   * update rules in gimp-user-install.c for the gimprc parsing not to break.
+   */
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_CAN_CHANGE_ACCELS,
                             "can-change-accels",
                             "Can change accelerators",
@@ -277,7 +238,7 @@ gimp_gui_config_class_init (GimpGuiConfigClass *klass)
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_RESTORE_ACCELS,
                             "restore-accels",
-                            "Restore acclerator",
+                            "Restore accelerator",
                             RESTORE_ACCELS_BLURB,
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS);
@@ -332,14 +293,6 @@ gimp_gui_config_class_init (GimpGuiConfigClass *klass)
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_ENUM (object_class, PROP_TOOLBOX_GROUP_MENU_MODE,
-                         "toolbox-group-menu-mode",
-                         "Toolbox group menu mode",
-                         TOOLBOX_GROUP_MENU_MODE_BLURB,
-                         GIMP_TYPE_TOOL_GROUP_MENU_MODE,
-                         GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_HOVER_SINGLE_COLUMN,
-                         GIMP_PARAM_STATIC_STRINGS);
-
   path = gimp_config_build_data_path ("themes");
   GIMP_CONFIG_PROP_PATH (object_class, PROP_THEME_PATH,
                          "theme-path",
@@ -350,12 +303,32 @@ gimp_gui_config_class_init (GimpGuiConfigClass *klass)
                          GIMP_CONFIG_PARAM_RESTART);
   g_free (path);
 
-  GIMP_CONFIG_PROP_STRING (object_class, PROP_THEME,
-                           "theme",
-                           "Theme",
-                           THEME_BLURB,
-                           GIMP_CONFIG_DEFAULT_THEME,
-                           GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_STRING  (object_class, PROP_THEME,
+                            "theme",
+                            "Theme",
+                            THEME_BLURB,
+                            GIMP_CONFIG_DEFAULT_THEME,
+                            GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_ENUM    (object_class, PROP_THEME_SCHEME,
+                            "theme-color-scheme",
+                            "Theme's Color Scheme",
+                            THEME_SCHEME_BLURB,
+                            GIMP_TYPE_THEME_SCHEME,
+                            GIMP_THEME_DARK,
+                            GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_OVERRIDE_THEME_ICON_SIZE,
+                            "override-theme-icon-size",
+                            "Override theme-set icon sizes",
+                            OVERRIDE_THEME_ICON_SIZE_BLURB,
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_ENUM    (object_class, PROP_CUSTOM_ICON_SIZE,
+                            "custom-icon-size",
+                            "Custom icon size",
+                            ICON_SIZE_BLURB,
+                            GIMP_TYPE_ICON_SIZE,
+                            GIMP_ICON_SIZE_MEDIUM,
+                            GIMP_PARAM_STATIC_STRINGS);
 
   path = gimp_config_build_data_path ("icons");
   GIMP_CONFIG_PROP_PATH (object_class, PROP_ICON_THEME_PATH,
@@ -373,13 +346,20 @@ gimp_gui_config_class_init (GimpGuiConfigClass *klass)
                            ICON_THEME_BLURB,
                            GIMP_CONFIG_DEFAULT_ICON_THEME,
                            GIMP_PARAM_STATIC_STRINGS);
-  GIMP_CONFIG_PROP_ENUM (object_class, PROP_ICON_SIZE,
-                         "icon-size",
-                         "icon-size",
-                         ICON_SIZE_BLURB,
-                         GIMP_TYPE_ICON_SIZE,
-                         GIMP_ICON_SIZE_AUTO,
-                         GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_PREFER_SYMBOLIC_ICONS,
+                            "prefer-symbolic-icons",
+                            "Prefer symbolic icons",
+                            PREFER_SYMBOLIC_ICONS_BLURB,
+                            TRUE,
+                            GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_DOUBLE (object_class, PROP_FONT_RELATIVE_SIZE,
+                           "font-relative-size",
+                           "Tweak font-size from the theme",
+                           FONT_SIZE_BLURB,
+                           0.5, 2.0, 1.0,
+                           GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_USE_HELP,
                             "use-help",
@@ -424,13 +404,6 @@ gimp_gui_config_class_init (GimpGuiConfigClass *klass)
                            DEFAULT_USER_MANUAL_ONLINE_URI,
                            GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_SEARCH_SHOW_UNAVAILABLE_ACTIONS,
-                            "search-show-unavailable-actions",
-                            "Show unavailable actions",
-                            SEARCH_SHOW_UNAVAILABLE_BLURB,
-                            FALSE,
-                            GIMP_PARAM_STATIC_STRINGS);
-
   GIMP_CONFIG_PROP_INT (object_class, PROP_ACTION_HISTORY_SIZE,
                         "action-history-size",
                         "Action history size",
@@ -455,6 +428,14 @@ gimp_gui_config_class_init (GimpGuiConfigClass *klass)
                          GIMP_HANDEDNESS_RIGHT,
                          GIMP_PARAM_STATIC_STRINGS);
 
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_CUSTOM_TITLE_BAR,
+                            "custom-title-bar",
+                            "Custom title bar embedding the menu",
+                            CUSTOM_TITLE_BAR_BLURB,
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS |
+                            GIMP_CONFIG_PARAM_RESTART);
+
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_PLAYGROUND_NPD_TOOL,
                             "playground-npd-tool",
                             "Playground N-Point Deformation tool",
@@ -468,6 +449,15 @@ gimp_gui_config_class_init (GimpGuiConfigClass *klass)
                             "playground-seamless-clone-tool",
                             "Playground Seamless Clone tool",
                             PLAYGROUND_SEAMLESS_CLONE_TOOL_BLURB,
+                            FALSE,
+                            GIMP_PARAM_STATIC_STRINGS |
+                            GIMP_CONFIG_PARAM_RESTART);
+
+  GIMP_CONFIG_PROP_BOOLEAN (object_class,
+                            PROP_PLAYGROUND_PAINT_SELECT_TOOL,
+                            "playground-paint-select-tool",
+                            "Playground Paint Select tool",
+                            PLAYGROUND_PAINT_SELECT_TOOL_BLURB,
                             FALSE,
                             GIMP_PARAM_STATIC_STRINGS |
                             GIMP_CONFIG_PARAM_RESTART);
@@ -514,6 +504,14 @@ gimp_gui_config_class_init (GimpGuiConfigClass *klass)
                                                      G_PARAM_READWRITE |
                                                      G_PARAM_CONSTRUCT |
                                                      GIMP_PARAM_STATIC_STRINGS));
+
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_SHOW_WELCOME_DIALOG,
+                            "show-welcome-dialog",
+                            "Show Welcome Dialog each time",
+                            NULL, TRUE,
+                            G_PARAM_READWRITE |
+                            G_PARAM_CONSTRUCT |
+                            GIMP_PARAM_STATIC_STRINGS);
 
   /*  only for backward compatibility:  */
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_CURSOR_FORMAT,
@@ -626,9 +624,6 @@ gimp_gui_config_set_property (GObject      *object,
     case PROP_FILTER_TOOL_USE_LAST_SETTINGS:
       gui_config->filter_tool_use_last_settings = g_value_get_boolean (value);
       break;
-    case PROP_FILTER_TOOL_SHOW_COLOR_OPTIONS:
-      gui_config->filter_tool_show_color_options = g_value_get_boolean (value);
-      break;
     case PROP_TRUST_DIRTY_FLAG:
       gui_config->trust_dirty_flag = g_value_get_boolean (value);
       break;
@@ -649,15 +644,6 @@ gimp_gui_config_set_property (GObject      *object,
       break;
     case PROP_SAVE_TOOL_OPTIONS:
       gui_config->save_tool_options = g_value_get_boolean (value);
-      break;
-    case PROP_COMPACT_SLIDERS:
-      gui_config->compact_sliders = g_value_get_boolean (value);
-      break;
-    case PROP_SHOW_TOOLTIPS:
-      gui_config->show_tooltips = g_value_get_boolean (value);
-      break;
-    case PROP_TEAROFF_MENUS:
-      gui_config->tearoff_menus = g_value_get_boolean (value);
       break;
     case PROP_CAN_CHANGE_ACCELS:
       gui_config->can_change_accels = g_value_get_boolean (value);
@@ -689,9 +675,6 @@ gimp_gui_config_set_property (GObject      *object,
     case PROP_TOOLBOX_GROUPS:
       gui_config->toolbox_groups = g_value_get_boolean (value);
       break;
-    case PROP_TOOLBOX_GROUP_MENU_MODE:
-      gui_config->toolbox_group_menu_mode = g_value_get_enum (value);
-      break;
      case PROP_THEME_PATH:
       g_free (gui_config->theme_path);
       gui_config->theme_path = g_value_dup_string (value);
@@ -699,6 +682,15 @@ gimp_gui_config_set_property (GObject      *object,
     case PROP_THEME:
       g_free (gui_config->theme);
       gui_config->theme = g_value_dup_string (value);
+      break;
+    case PROP_THEME_SCHEME:
+      gui_config->theme_scheme = g_value_get_enum (value);
+      break;
+    case PROP_OVERRIDE_THEME_ICON_SIZE:
+      gui_config->override_icon_size = g_value_get_boolean (value);
+      break;
+    case PROP_CUSTOM_ICON_SIZE:
+      gui_config->custom_icon_size = g_value_get_enum (value);
       break;
      case PROP_ICON_THEME_PATH:
       g_free (gui_config->icon_theme_path);
@@ -708,27 +700,11 @@ gimp_gui_config_set_property (GObject      *object,
       g_free (gui_config->icon_theme);
       gui_config->icon_theme = g_value_dup_string (value);
       break;
-    case PROP_ICON_SIZE:
-        {
-          GimpIconSize size = g_value_get_enum (value);
-
-          g_signal_handlers_disconnect_by_func (GIMP_DISPLAY_CONFIG (gui_config),
-                                                G_CALLBACK (monitor_resolution_changed),
-                                                gui_config);
-          if (size == GIMP_ICON_SIZE_AUTO)
-            {
-              g_signal_connect (GIMP_DISPLAY_CONFIG (gui_config),
-                                "notify::monitor-xresolution",
-                                G_CALLBACK (monitor_resolution_changed),
-                                gui_config);
-              g_signal_connect (GIMP_DISPLAY_CONFIG (gui_config),
-                                "notify::monitor-yresolution",
-                                G_CALLBACK (monitor_resolution_changed),
-                                gui_config);
-            }
-          gui_config->icon_size = size;
-          g_signal_emit (gui_config, signals[SIZE_CHANGED], 0);
-        }
+    case PROP_PREFER_SYMBOLIC_ICONS:
+      gui_config->prefer_symbolic_icons = g_value_get_boolean (value);
+      break;
+    case PROP_FONT_RELATIVE_SIZE:
+      gui_config->font_relative_size = g_value_get_double (value);
       break;
     case PROP_USE_HELP:
       gui_config->use_help = g_value_get_boolean (value);
@@ -750,9 +726,6 @@ gimp_gui_config_set_property (GObject      *object,
       g_free (gui_config->user_manual_online_uri);
       gui_config->user_manual_online_uri = g_value_dup_string (value);
       break;
-    case PROP_SEARCH_SHOW_UNAVAILABLE_ACTIONS:
-      gui_config->search_show_unavailable = g_value_get_boolean (value);
-      break;
     case PROP_ACTION_HISTORY_SIZE:
       gui_config->action_history_size = g_value_get_int (value);
       break;
@@ -762,12 +735,18 @@ gimp_gui_config_set_property (GObject      *object,
     case PROP_CURSOR_HANDEDNESS:
       gui_config->cursor_handedness = g_value_get_enum (value);
       break;
+    case PROP_CUSTOM_TITLE_BAR:
+      gui_config->custom_title_bar = g_value_get_boolean (value);
+      break;
 
     case PROP_PLAYGROUND_NPD_TOOL:
       gui_config->playground_npd_tool = g_value_get_boolean (value);
       break;
     case PROP_PLAYGROUND_SEAMLESS_CLONE_TOOL:
       gui_config->playground_seamless_clone_tool = g_value_get_boolean (value);
+      break;
+    case PROP_PLAYGROUND_PAINT_SELECT_TOOL:
+      gui_config->playground_paint_select_tool = g_value_get_boolean (value);
       break;
 
     case PROP_HIDE_DOCKS:
@@ -784,6 +763,9 @@ gimp_gui_config_set_property (GObject      *object,
       break;
     case PROP_LAST_TIP_SHOWN:
       gui_config->last_tip_shown = g_value_get_int (value);
+      break;
+    case PROP_SHOW_WELCOME_DIALOG:
+      gui_config->show_welcome_dialog = g_value_get_boolean (value);
       break;
 
     case PROP_CURSOR_FORMAT:
@@ -826,9 +808,6 @@ gimp_gui_config_get_property (GObject    *object,
     case PROP_FILTER_TOOL_USE_LAST_SETTINGS:
       g_value_set_boolean (value, gui_config->filter_tool_use_last_settings);
       break;
-    case PROP_FILTER_TOOL_SHOW_COLOR_OPTIONS:
-      g_value_set_boolean (value, gui_config->filter_tool_show_color_options);
-      break;
     case PROP_TRUST_DIRTY_FLAG:
       g_value_set_boolean (value, gui_config->trust_dirty_flag);
       break;
@@ -849,15 +828,6 @@ gimp_gui_config_get_property (GObject    *object,
       break;
     case PROP_SAVE_TOOL_OPTIONS:
       g_value_set_boolean (value, gui_config->save_tool_options);
-      break;
-    case PROP_COMPACT_SLIDERS:
-      g_value_set_boolean (value, gui_config->compact_sliders);
-      break;
-    case PROP_SHOW_TOOLTIPS:
-      g_value_set_boolean (value, gui_config->show_tooltips);
-      break;
-    case PROP_TEAROFF_MENUS:
-      g_value_set_boolean (value, gui_config->tearoff_menus);
       break;
     case PROP_CAN_CHANGE_ACCELS:
       g_value_set_boolean (value, gui_config->can_change_accels);
@@ -889,14 +859,20 @@ gimp_gui_config_get_property (GObject    *object,
     case PROP_TOOLBOX_GROUPS:
       g_value_set_boolean (value, gui_config->toolbox_groups);
       break;
-    case PROP_TOOLBOX_GROUP_MENU_MODE:
-      g_value_set_enum (value, gui_config->toolbox_group_menu_mode);
-      break;
     case PROP_THEME_PATH:
       g_value_set_string (value, gui_config->theme_path);
       break;
     case PROP_THEME:
       g_value_set_string (value, gui_config->theme);
+      break;
+    case PROP_THEME_SCHEME:
+      g_value_set_enum (value, gui_config->theme_scheme);
+      break;
+    case PROP_OVERRIDE_THEME_ICON_SIZE:
+      g_value_set_boolean (value, gui_config->override_icon_size);
+      break;
+    case PROP_CUSTOM_ICON_SIZE:
+      g_value_set_enum (value, gui_config->custom_icon_size);
       break;
     case PROP_ICON_THEME_PATH:
       g_value_set_string (value, gui_config->icon_theme_path);
@@ -904,8 +880,11 @@ gimp_gui_config_get_property (GObject    *object,
     case PROP_ICON_THEME:
       g_value_set_string (value, gui_config->icon_theme);
       break;
-    case PROP_ICON_SIZE:
-      g_value_set_enum (value, gui_config->icon_size);
+    case PROP_PREFER_SYMBOLIC_ICONS:
+      g_value_set_boolean (value, gui_config->prefer_symbolic_icons);
+      break;
+    case PROP_FONT_RELATIVE_SIZE:
+      g_value_set_double (value, gui_config->font_relative_size);
       break;
     case PROP_USE_HELP:
       g_value_set_boolean (value, gui_config->use_help);
@@ -925,9 +904,6 @@ gimp_gui_config_get_property (GObject    *object,
     case PROP_USER_MANUAL_ONLINE_URI:
       g_value_set_string (value, gui_config->user_manual_online_uri);
       break;
-    case PROP_SEARCH_SHOW_UNAVAILABLE_ACTIONS:
-      g_value_set_boolean (value, gui_config->search_show_unavailable);
-      break;
     case PROP_ACTION_HISTORY_SIZE:
       g_value_set_int (value, gui_config->action_history_size);
       break;
@@ -937,12 +913,18 @@ gimp_gui_config_get_property (GObject    *object,
     case PROP_CURSOR_HANDEDNESS:
       g_value_set_enum (value, gui_config->cursor_handedness);
       break;
+    case PROP_CUSTOM_TITLE_BAR:
+      g_value_set_boolean (value, gui_config->custom_title_bar);
+      break;
 
     case PROP_PLAYGROUND_NPD_TOOL:
       g_value_set_boolean (value, gui_config->playground_npd_tool);
       break;
     case PROP_PLAYGROUND_SEAMLESS_CLONE_TOOL:
       g_value_set_boolean (value, gui_config->playground_seamless_clone_tool);
+      break;
+    case PROP_PLAYGROUND_PAINT_SELECT_TOOL:
+      g_value_set_boolean (value, gui_config->playground_paint_select_tool);
       break;
 
     case PROP_HIDE_DOCKS:
@@ -960,6 +942,9 @@ gimp_gui_config_get_property (GObject    *object,
     case PROP_LAST_TIP_SHOWN:
       g_value_set_int (value, gui_config->last_tip_shown);
       break;
+    case PROP_SHOW_WELCOME_DIALOG:
+      g_value_set_boolean (value, gui_config->show_welcome_dialog);
+      break;
 
     case PROP_CURSOR_FORMAT:
     case PROP_INFO_WINDOW_PER_DISPLAY:
@@ -976,42 +961,4 @@ gimp_gui_config_get_property (GObject    *object,
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
     }
-}
-
-static void
-monitor_resolution_changed (GimpDisplayConfig *display_config,
-                            GParamSpec        *pspec,
-                            GimpGuiConfig     *gui_config)
-{
-  if (gui_config->icon_size == GIMP_ICON_SIZE_AUTO)
-    {
-      g_signal_emit (gui_config, signals[SIZE_CHANGED], 0);
-    }
-}
-
-GimpIconSize
-gimp_gui_config_detect_icon_size (GimpGuiConfig *gui_config)
-{
-  GimpIconSize size = gui_config->icon_size;
-
-  if (size == GIMP_ICON_SIZE_AUTO)
-    {
-      GimpDisplayConfig *display_config;
-
-      display_config = GIMP_DISPLAY_CONFIG (gui_config);
-
-      if (display_config->monitor_xres < 100.0 ||
-          display_config->monitor_yres < 100.0)
-        size = GIMP_ICON_SIZE_SMALL;
-      else if (display_config->monitor_xres < 192.0 ||
-               display_config->monitor_yres < 192.0)
-        size = GIMP_ICON_SIZE_MEDIUM;
-      else if (display_config->monitor_xres < 250.0 ||
-               display_config->monitor_yres < 250.0)
-        size = GIMP_ICON_SIZE_LARGE;
-      else
-        size = GIMP_ICON_SIZE_HUGE;
-    }
-
-  return size;
 }

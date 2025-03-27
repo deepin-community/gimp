@@ -30,7 +30,6 @@
 
 #include "core/gimpcontext.h"
 #include "core/gimpgrid.h"
-#include "core/gimpmarshal.h"
 
 #include "gimpcolorpanel.h"
 #include "gimpgrideditor.h"
@@ -122,7 +121,7 @@ gimp_grid_editor_constructed (GObject *object)
   GimpGridEditor *editor = GIMP_GRID_EDITOR (object);
   GtkWidget      *frame;
   GtkWidget      *hbox;
-  GtkWidget      *table;
+  GtkWidget      *grid;
   GtkWidget      *style;
   GtkWidget      *color_button;
   GtkWidget      *sizeentry;
@@ -135,47 +134,50 @@ gimp_grid_editor_constructed (GObject *object)
   gtk_box_pack_start (GTK_BOX (editor), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
 
-  table = gtk_table_new (3, 2, FALSE);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_container_add (GTK_CONTAINER (frame), table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+  gtk_container_add (GTK_CONTAINER (frame), grid);
 
   style = gimp_prop_enum_combo_box_new (G_OBJECT (editor->grid), "style",
                                         GIMP_GRID_DOTS,
                                         GIMP_GRID_SOLID);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 0,
-                             _("Line _style:"), 0.0, 0.5,
-                             style, 1, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, 0,
+                            _("Line _style:"), 0.0, 0.5,
+                            style, 1);
 
   color_button = gimp_prop_color_button_new (G_OBJECT (editor->grid), "fgcolor",
                                              _("Change grid foreground color"),
                                              GRID_EDITOR_COLOR_BUTTON_WIDTH,
                                              GRID_EDITOR_COLOR_BUTTON_HEIGHT,
                                              GIMP_COLOR_AREA_FLAT);
+  gtk_widget_set_halign (color_button, GTK_ALIGN_START);
   gimp_color_panel_set_context (GIMP_COLOR_PANEL (color_button),
                                 editor->context);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 1,
-                             _("_Foreground color:"), 0.0, 0.5,
-                             color_button, 1, TRUE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, 1,
+                            _("_Foreground color:"), 0.0, 0.5,
+                            color_button, 1);
 
   color_button = gimp_prop_color_button_new (G_OBJECT (editor->grid), "bgcolor",
                                              _("Change grid background color"),
                                              GRID_EDITOR_COLOR_BUTTON_WIDTH,
                                              GRID_EDITOR_COLOR_BUTTON_HEIGHT,
                                              GIMP_COLOR_AREA_FLAT);
+  gtk_widget_set_halign (color_button, GTK_ALIGN_START);
   gimp_color_panel_set_context (GIMP_COLOR_PANEL (color_button),
                                 editor->context);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 2,
-                             _("_Background color:"), 0.0, 0.5,
-                             color_button, 1, TRUE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, 2,
+                            _("_Background color:"), 0.0, 0.5,
+                            color_button, 1);
 
-  gtk_widget_show (table);
+  gtk_widget_show (grid);
 
   frame = gimp_frame_new (_("Spacing"));
   gtk_box_pack_start (GTK_BOX (editor), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+  gtk_widget_set_halign (hbox, GTK_ALIGN_START);
   gtk_container_add (GTK_CONTAINER (frame), hbox);
 
   sizeentry = gimp_prop_coordinates_new (G_OBJECT (editor->grid),
@@ -188,8 +190,8 @@ gimp_grid_editor_constructed (GObject *object)
                                          editor->yresolution,
                                          TRUE);
 
-  gtk_table_set_col_spacings (GTK_TABLE (sizeentry), 2);
-  gtk_table_set_row_spacings (GTK_TABLE (sizeentry), 2);
+  gtk_grid_set_column_spacing (GTK_GRID (sizeentry), 2);
+  gtk_grid_set_row_spacing (GTK_GRID (sizeentry), 2);
 
   gimp_size_entry_attach_label (GIMP_SIZE_ENTRY (sizeentry),
                                 _("Horizontal"), 0, 1, 0.0);
@@ -202,7 +204,6 @@ gimp_grid_editor_constructed (GObject *object)
   gimp_size_entry_set_refval_digits (GIMP_SIZE_ENTRY (sizeentry), 1, 2);
 
   gtk_box_pack_start (GTK_BOX (hbox), sizeentry, FALSE, FALSE, 0);
-  gtk_widget_show (sizeentry);
 
   gtk_widget_show (hbox);
 
@@ -211,6 +212,7 @@ gimp_grid_editor_constructed (GObject *object)
   gtk_widget_show (frame);
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+  gtk_widget_set_halign (hbox, GTK_ALIGN_START);
   gtk_container_add (GTK_CONTAINER (frame), hbox);
 
   sizeentry = gimp_prop_coordinates_new (G_OBJECT (editor->grid),
@@ -223,8 +225,8 @@ gimp_grid_editor_constructed (GObject *object)
                                          editor->yresolution,
                                          TRUE);
 
-  gtk_table_set_col_spacings (GTK_TABLE (sizeentry), 2);
-  gtk_table_set_row_spacings (GTK_TABLE (sizeentry), 2);
+  gtk_grid_set_column_spacing (GTK_GRID (sizeentry), 2);
+  gtk_grid_set_row_spacing (GTK_GRID (sizeentry), 2);
 
   gimp_size_entry_attach_label (GIMP_SIZE_ENTRY (sizeentry),
                                 _("Horizontal"), 0, 1, 0.0);
@@ -237,7 +239,6 @@ gimp_grid_editor_constructed (GObject *object)
   gimp_size_entry_set_refval_digits (GIMP_SIZE_ENTRY (sizeentry), 1, 2);
 
   gtk_box_pack_start (GTK_BOX (hbox), sizeentry, FALSE, FALSE, 0);
-  gtk_widget_show (sizeentry);
 
   gtk_widget_show (hbox);
 }

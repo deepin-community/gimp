@@ -7,299 +7,241 @@ msgid ""
 msgstr ""
 "Project-Id-Version: \n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gimp/issues\n"
-"POT-Creation-Date: 2020-09-21 23:46+0000\n"
-"PO-Revision-Date: 2020-09-26 14:27+0100\n"
+"POT-Creation-Date: 2021-12-04 14:34+0000\n"
+"PO-Revision-Date: 2021-12-05 20:54+0100\n"
+"Last-Translator: Yacine Bouklif <yacinebouklif@gmail.com>\n"
 "Language-Team: \n"
+"Language: kab\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
-"X-Generator: Poedit 2.3\n"
-"Last-Translator: Kahina Messaoudi <kahinamessaodi@gmail.com>\n"
-"Language: kab\n"
+"X-Generator: Poedit 3.0\n"
 
-#. procedure executed successfully
-#: ../libgimp/gimp.c:1265
-msgid "success"
-msgstr "yedda"
-
-#. procedure execution failed
-#: ../libgimp/gimp.c:1269
-msgid "execution error"
-msgstr "tuccḍa deg uselkem"
-
-#. procedure called incorrectly
-#: ../libgimp/gimp.c:1273
-msgid "calling error"
-msgstr "tuccḍa deg usiwel"
-
-#. procedure execution cancelled
-#: ../libgimp/gimp.c:1277
-msgid "cancelled"
-msgstr "yettwasefsex"
-
-#: ../libgimp/gimpbrushselectbutton.c:179
+#: ../libgimp/gimpbrushselectbutton.c:177
 msgid "Brush Selection"
 msgstr ""
 
-#: ../libgimp/gimpbrushselectbutton.c:920
-#: ../libgimp/gimppatternselectbutton.c:718
+#: ../libgimp/gimpbrushselectbutton.c:884
+#: ../libgimp/gimppatternselectbutton.c:674
 msgid "_Browse..."
 msgstr "Snirem..."
 
-#: ../libgimp/gimpexport.c:295 ../libgimp/gimpexport.c:331
+#: ../libgimp/gimpexport.c:332 ../libgimp/gimpexport.c:368
 #, c-format
 msgid "%s plug-in can't handle layers"
-msgstr ""
+msgstr "Asiɣzef %s ur yezmir ara ad isefrek tissiyin"
 
-#: ../libgimp/gimpexport.c:296 ../libgimp/gimpexport.c:305
-#: ../libgimp/gimpexport.c:314 ../libgimp/gimpexport.c:332
+#: ../libgimp/gimpexport.c:333 ../libgimp/gimpexport.c:342
+#: ../libgimp/gimpexport.c:351 ../libgimp/gimpexport.c:369
 msgid "Merge Visible Layers"
 msgstr "Smezdi tissiyin yettbanen"
 
-#: ../libgimp/gimpexport.c:304
+#: ../libgimp/gimpexport.c:341
 #, c-format
 msgid "%s plug-in can't handle layer offsets, size or opacity"
 msgstr ""
+"Asiɣzef %s ur yezmir ara ad isefrek asekḥer n tissi, tiddi akked tiḍullest"
 
-#: ../libgimp/gimpexport.c:313 ../libgimp/gimpexport.c:322
+#: ../libgimp/gimpexport.c:350 ../libgimp/gimpexport.c:359
 #, c-format
 msgid "%s plug-in can only handle layers as animation frames"
+msgstr "Asiɣzef %s yezmer kan ad isefrek tissiyin akkd ikataren yettemwiwilen"
+
+#: ../libgimp/gimpexport.c:351 ../libgimp/gimpexport.c:360
+msgid "Save as Animation"
 msgstr ""
 
-#: ../libgimp/gimpexport.c:314 ../libgimp/gimpexport.c:323
-msgid "Save as Animation"
-msgstr "Sekles am umray"
-
-#: ../libgimp/gimpexport.c:323 ../libgimp/gimpexport.c:332
-#: ../libgimp/gimpexport.c:341 ../libgimp/gimpexport.c:350
+#: ../libgimp/gimpexport.c:360 ../libgimp/gimpexport.c:369
+#: ../libgimp/gimpexport.c:378 ../libgimp/gimpexport.c:387
 msgid "Flatten Image"
 msgstr "Lebbeḍ tugna"
 
-#: ../libgimp/gimpexport.c:340
+#: ../libgimp/gimpexport.c:377
 #, c-format
 msgid "%s plug-in can't handle transparency"
-msgstr "Asiɣzef %s ur izmir ara ad issefrek tafrawant"
+msgstr "Asiɣzef %s ur yezmir ara ad isefrek tafrawant"
 
-#: ../libgimp/gimpexport.c:349
+#: ../libgimp/gimpexport.c:386
 #, c-format
 msgid "%s plug-in can't handle transparent layers"
-msgstr "Asiɣzef %s ur izmir ara ad issefrek tissiyin n tefrawant"
+msgstr "Asiɣzef %s ur yezmir ara ad isefrek tissiyin tifrawanin"
 
-#: ../libgimp/gimpexport.c:358
+#: ../libgimp/gimpexport.c:395
 #, c-format
 msgid "%s plug-in can't handle layer masks"
-msgstr ""
+msgstr "Asiɣzef %s ur yezmir ara ad isefrek tissiyin n tgelmust"
 
-#: ../libgimp/gimpexport.c:359
+#: ../libgimp/gimpexport.c:396
 msgid "Apply Layer Masks"
 msgstr "Snes tigelmusin n tissi"
 
-#: ../libgimp/gimpexport.c:367
+#: ../libgimp/gimpexport.c:404
 #, c-format
 msgid "%s plug-in can only handle RGB images"
-msgstr "Asiɣzef %s izmer kan ad issefrek tugniwin RGB"
+msgstr "Asiɣzef %s yezmer kan ad isefrek tugniwin RVB"
 
-#: ../libgimp/gimpexport.c:368 ../libgimp/gimpexport.c:406
-#: ../libgimp/gimpexport.c:415
+#: ../libgimp/gimpexport.c:405 ../libgimp/gimpexport.c:443
+#: ../libgimp/gimpexport.c:452
 msgid "Convert to RGB"
 msgstr "Selket ɣer RGB"
 
-#: ../libgimp/gimpexport.c:376
+#: ../libgimp/gimpexport.c:413
 #, c-format
 msgid "%s plug-in can only handle grayscale images"
-msgstr "Asiɣzef %s izmer kan ad issefrek tugniwin n yiswiren n uɣiɣdan"
+msgstr "Asiɣzef %s yezmer kan ad isefrek tugniwin s tfesna n umelliɣdi"
 
-#: ../libgimp/gimpexport.c:377 ../libgimp/gimpexport.c:406
-#: ../libgimp/gimpexport.c:427
+#: ../libgimp/gimpexport.c:414 ../libgimp/gimpexport.c:443
+#: ../libgimp/gimpexport.c:464
 msgid "Convert to Grayscale"
 msgstr "Selket ɣer teskala n umelliɣdi"
 
-#: ../libgimp/gimpexport.c:385
+#: ../libgimp/gimpexport.c:422
 #, c-format
 msgid "%s plug-in can only handle indexed images"
-msgstr "Asiɣzef %s izmer kan ad issefrek tugniwin yettwasmitren"
+msgstr "Asiɣzef %s yezmer kan ad isefrek tugniwin yettusmitren"
 
-#: ../libgimp/gimpexport.c:386 ../libgimp/gimpexport.c:415
-#: ../libgimp/gimpexport.c:425
+#: ../libgimp/gimpexport.c:423 ../libgimp/gimpexport.c:452
+#: ../libgimp/gimpexport.c:462
 msgid ""
 "Convert to Indexed using default settings\n"
 "(Do it manually to tune the result)"
 msgstr ""
 
-#: ../libgimp/gimpexport.c:395
+#: ../libgimp/gimpexport.c:432
 #, c-format
 msgid "%s plug-in can only handle bitmap (two color) indexed images"
 msgstr ""
+"Asiɣzef %s yezmer kan ad isefrek tugniwin bitmap yettusmitren (sin n yiniten)"
 
-#: ../libgimp/gimpexport.c:396
+#: ../libgimp/gimpexport.c:433
 msgid ""
 "Convert to Indexed using bitmap default settings\n"
 "(Do it manually to tune the result)"
 msgstr ""
 
-#: ../libgimp/gimpexport.c:405
+#: ../libgimp/gimpexport.c:442
 #, c-format
 msgid "%s plug-in can only handle RGB or grayscale images"
-msgstr ""
+msgstr "Asiɣzef %s yezmer kan ad isefrek tugniwin RGB akked tfesna n umelliɣdi"
 
-#: ../libgimp/gimpexport.c:414
+#: ../libgimp/gimpexport.c:451
 #, c-format
 msgid "%s plug-in can only handle RGB or indexed images"
-msgstr "Asiɣzef %s izmer kan ad issefrek tugniwin RGB neɣ tid yettwasmitren"
+msgstr "Asiɣzef %s yezmer kan ad isefrek tugniwin RGB akked d tid yettusmitren"
 
-#: ../libgimp/gimpexport.c:424
+#: ../libgimp/gimpexport.c:461
 #, c-format
 msgid "%s plug-in can only handle grayscale or indexed images"
 msgstr ""
-"Asiɣzef %s izmer kan ad issefrek tugniwin n yiswiren n uɣiɣdan neɣ tid i "
-"yettwasmitren"
+"Asiɣzef %s yezmer kan ad isefrek tugniwin s tfesna n umelliɣdi neɣ "
+"yettusmitren"
 
-#: ../libgimp/gimpexport.c:435
+#: ../libgimp/gimpexport.c:472
 #, c-format
 msgid "%s plug-in needs an alpha channel"
-msgstr "asiɣzef %s yesra i udabu alfa"
+msgstr "Asiɣzef %s yesra abadu alfa"
 
-#: ../libgimp/gimpexport.c:436
+#: ../libgimp/gimpexport.c:473
 msgid "Add Alpha Channel"
-msgstr "Rnu adabu alfa"
+msgstr "Rnu abadu alfa"
 
-#: ../libgimp/gimpexport.c:444
+#: ../libgimp/gimpexport.c:481
 #, c-format
 msgid "%s plug-in needs to crop the layers to the image bounds"
-msgstr ""
+msgstr "Asiɣzef %s yesra ad iɣeẓ tissiyin alamma d iran n tugna"
 
-#: ../libgimp/gimpexport.c:445
+#: ../libgimp/gimpexport.c:482
 msgid "Crop Layers"
 msgstr "Ɣeẓ tissiyin"
 
-#: ../libgimp/gimpexport.c:445
+#: ../libgimp/gimpexport.c:482
 msgid "Resize Image to Layers"
 msgstr ""
 
-#: ../libgimp/gimpexport.c:504
+#: ../libgimp/gimpexport.c:541
 msgid "Confirm Save"
 msgstr "Sentem asekles"
 
-#: ../libgimp/gimpexport.c:509 ../libgimp/gimpexport.c:591
-#: ../libgimp/gimpexport.c:1125 ../libgimpwidgets/gimpcolorbutton.c:549
-#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:172
-#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:182
-#: ../libgimpwidgets/gimpfileentry.c:435 ../libgimpwidgets/gimpquerybox.c:275
-#: ../libgimpwidgets/gimpquerybox.c:335 ../libgimpwidgets/gimpquerybox.c:399
-#: ../libgimpwidgets/gimpquerybox.c:473 ../libgimpwidgets/gimpunitmenu.c:492
+#: ../libgimp/gimpexport.c:546 ../libgimp/gimpexport.c:628
+#: ../libgimp/gimpexport.c:1199 ../libgimp/gimpproceduredialog.c:303
+#: ../libgimpwidgets/gimpcolorbutton.c:553
+#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:173
+#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:183
+#: ../libgimpwidgets/gimpfileentry.c:466 ../libgimpwidgets/gimpquerybox.c:274
+#: ../libgimpwidgets/gimpquerybox.c:337 ../libgimpwidgets/gimpquerybox.c:403
+#: ../libgimpwidgets/gimpquerybox.c:479
 msgid "_Cancel"
 msgstr "_Semmet"
 
-#: ../libgimp/gimpexport.c:510
+#: ../libgimp/gimpexport.c:547
 msgid "C_onfirm"
 msgstr "Sentem"
 
-#: ../libgimp/gimpexport.c:586
+#: ../libgimp/gimpexport.c:623
 msgid "Export File"
 msgstr "Sifeḍ afaylu"
 
-#: ../libgimp/gimpexport.c:590
+#: ../libgimp/gimpexport.c:627
 msgid "_Ignore"
 msgstr "Ttu"
 
-#: ../libgimp/gimpexport.c:592 ../libgimp/gimpexport.c:1126
+#: ../libgimp/gimpexport.c:629 ../libgimp/gimpexport.c:1200
+#: ../libgimp/gimpproceduredialog.c:275
 msgid "_Export"
 msgstr "_Sifeḍ"
 
 #. the headline
-#: ../libgimp/gimpexport.c:622
+#: ../libgimp/gimpexport.c:659
 #, c-format
 msgid ""
 "Your image should be exported before it can be saved as %s for the following "
 "reasons:"
 msgstr ""
-"Tugna-k.m ilaq ad tettwasifeḍ send ad tettwasekles am %s ilmend n tmental-a:"
 
 #. the footline
-#: ../libgimp/gimpexport.c:696
+#: ../libgimp/gimpexport.c:733
 msgid "The export conversion won't modify your original image."
-msgstr "Aselket n usifeḍ ur ittbeddil ara tugna-k.m tanaslit."
+msgstr ""
 
-#: ../libgimp/gimpexport.c:800
+#: ../libgimp/gimpexport.c:853
 #, c-format
 msgid ""
 "You are about to save a layer mask as %s.\n"
 "This will not save the visible layers."
 msgstr ""
 
-#: ../libgimp/gimpexport.c:806
+#: ../libgimp/gimpexport.c:859
 #, c-format
 msgid ""
 "You are about to save a channel (saved selection) as %s.\n"
 "This will not save the visible layers."
 msgstr ""
-"Tettedduḍ ad teskelseḍ abadu (afran yettwaskelsen) am %s.\n"
-"Aya ur yesseklas ara tissiyin i d-yettbanen."
 
 #. TRANSLATORS: the %s parameter is an image format name (ex: PNG).
-#: ../libgimp/gimpexport.c:1119
+#. TRANSLATORS: %s will be a format name, e.g. "PNG" or "JPEG".
+#: ../libgimp/gimpexport.c:1193 ../libgimp/gimpsaveproceduredialog.c:388
 #, c-format
 msgid "Export Image as %s"
 msgstr "Sifeḍ tugna am %s"
 
-#: ../libgimp/gimpfontselectbutton.c:139
+#: ../libgimp/gimpfontselectbutton.c:137
 msgid "Font Selection"
 msgstr "Afran n tsefsiyin"
 
-#: ../libgimp/gimpgradientselectbutton.c:158
+#: ../libgimp/gimpgradientselectbutton.c:155
 msgid "Gradient Selection"
 msgstr "Afran n ufesnaw"
 
-#: ../libgimp/gimpimagemetadata.c:519
-msgid "GIMP 2.10"
-msgstr "GIMP 2.10"
-
-#: ../libgimp/gimpimagemetadata.c:708
+#: ../libgimp/gimpimagemetadata.c:273
 msgid "Background"
 msgstr "Agilal"
 
-#: ../libgimp/gimpimagemetadata.c:897
-#, c-format
-msgid "Rotate %s?"
-msgstr "Zzi %s?"
+#: ../libgimp/gimpimagemetadata-save.c:512 ../modules/controller-midi.c:426
+msgid "GIMP"
+msgstr "GIMP"
 
-#: ../libgimp/gimpimagemetadata.c:903
-msgid "_Keep Original"
-msgstr ""
-
-#: ../libgimp/gimpimagemetadata.c:904 ../libgimpwidgets/gimpicons.c:271
-msgid "_Rotate"
-msgstr "_Zzi"
-
-#: ../libgimp/gimpimagemetadata.c:945
-msgid "Original"
-msgstr "Anasli"
-
-#: ../libgimp/gimpimagemetadata.c:961
-msgid "Rotated"
-msgstr "Yezzi"
-
-#: ../libgimp/gimpimagemetadata.c:979
-msgid "This image contains Exif orientation metadata."
-msgstr "Tugna-a tegber idfersefka n taɣda n tuffɣa."
-
-#: ../libgimp/gimpimagemetadata.c:997
-msgid "Would you like to rotate the image?"
-msgstr "Tebɣiḍ ad tzziḍ tugna ?"
-
-#: ../libgimp/gimpimagemetadata.c:1009
-msgid "_Don't ask me again"
-msgstr "_Ur yi-d-steqssay ara tikkelt-nniḍen"
-
-#. This string appears in an empty menu as in
-#. * "nothing selected and nothing to select"
-#.
-#: ../libgimp/gimpmenu.c:462 ../libgimpwidgets/gimpintstore.c:252
-msgid "(Empty)"
-msgstr "(Ilem)"
-
-#: ../libgimp/gimppaletteselectbutton.c:139
+#: ../libgimp/gimppaletteselectbutton.c:136
 msgid "Palette Selection"
 msgstr "Afran n tpaliḍin"
 
@@ -307,117 +249,246 @@ msgstr "Afran n tpaliḍin"
 msgid "Pattern Selection"
 msgstr "Afran n wudlifen"
 
-#: ../libgimp/gimpprocbrowserdialog.c:150
+#. procedure executed successfully
+#: ../libgimp/gimppdb.c:520
+msgid "success"
+msgstr ""
+
+#. procedure execution failed
+#: ../libgimp/gimppdb.c:524
+msgid "execution error"
+msgstr ""
+
+#. procedure called incorrectly
+#: ../libgimp/gimppdb.c:528
+msgid "calling error"
+msgstr ""
+
+#. procedure execution cancelled
+#: ../libgimp/gimppdb.c:532
+msgid "cancelled"
+msgstr ""
+
+#: ../libgimp/gimpprocbrowserdialog.c:162
 msgid "by name"
 msgstr "s yisem"
 
-#: ../libgimp/gimpprocbrowserdialog.c:151
+#: ../libgimp/gimpprocbrowserdialog.c:163
 msgid "by description"
 msgstr "s uglam"
 
-#: ../libgimp/gimpprocbrowserdialog.c:152
+#: ../libgimp/gimpprocbrowserdialog.c:164
 msgid "by help"
 msgstr "s tallelt"
 
-#: ../libgimp/gimpprocbrowserdialog.c:153
-msgid "by author"
-msgstr "s umeskar"
+#: ../libgimp/gimpprocbrowserdialog.c:165
+msgid "by authors"
+msgstr "s imeskaren"
 
-#: ../libgimp/gimpprocbrowserdialog.c:154
+#: ../libgimp/gimpprocbrowserdialog.c:166
 msgid "by copyright"
-msgstr "s yizefan n umeskar"
+msgstr ""
 
-#: ../libgimp/gimpprocbrowserdialog.c:155
+#: ../libgimp/gimpprocbrowserdialog.c:167
 msgid "by date"
 msgstr "s uzemz"
 
-#: ../libgimp/gimpprocbrowserdialog.c:156
+#: ../libgimp/gimpprocbrowserdialog.c:168
 msgid "by type"
 msgstr "s wanaw"
 
 #. count label
-#: ../libgimp/gimpprocbrowserdialog.c:395
-#: ../libgimp/gimpprocbrowserdialog.c:544 ../libgimpwidgets/gimpbrowser.c:141
+#: ../libgimp/gimpprocbrowserdialog.c:369
+#: ../libgimp/gimpprocbrowserdialog.c:525 ../libgimpwidgets/gimpbrowser.c:168
 msgid "No matches"
 msgstr "Ulac tanmeɣrut"
 
-#: ../libgimp/gimpprocbrowserdialog.c:398
+#: ../libgimp/gimpprocbrowserdialog.c:372
 msgid "Search term invalid or incomplete"
-msgstr "Awal n unadi d arameɣtu neɣ d arummid"
+msgstr ""
 
-#: ../libgimp/gimpprocbrowserdialog.c:407
+#: ../libgimp/gimpprocbrowserdialog.c:381
 msgid "Searching"
 msgstr "Anadi"
 
-#: ../libgimp/gimpprocbrowserdialog.c:418
+#: ../libgimp/gimpprocbrowserdialog.c:393
 msgid "Searching by name"
 msgstr "Anadi s yisem"
 
-#: ../libgimp/gimpprocbrowserdialog.c:439
+#: ../libgimp/gimpprocbrowserdialog.c:414
 msgid "Searching by description"
 msgstr "Anadi s weglam"
 
-#: ../libgimp/gimpprocbrowserdialog.c:446
+#: ../libgimp/gimpprocbrowserdialog.c:422
 msgid "Searching by help"
 msgstr "Anadi s tallelt"
 
-#: ../libgimp/gimpprocbrowserdialog.c:453
-msgid "Searching by author"
-msgstr "Anadi s umeskar"
+#: ../libgimp/gimpprocbrowserdialog.c:430
+msgid "Searching by authors"
+msgstr "Anadi s yimeskaren"
 
-#: ../libgimp/gimpprocbrowserdialog.c:460
+#: ../libgimp/gimpprocbrowserdialog.c:438
 msgid "Searching by copyright"
-msgstr "Anadi s yizefan n umeskar"
+msgstr ""
 
-#: ../libgimp/gimpprocbrowserdialog.c:467
+#: ../libgimp/gimpprocbrowserdialog.c:446
 msgid "Searching by date"
 msgstr "Anadi s uzemz"
 
-#: ../libgimp/gimpprocbrowserdialog.c:474
+#: ../libgimp/gimpprocbrowserdialog.c:454
 msgid "Searching by type"
 msgstr "Anadi s wanaw"
 
-#: ../libgimp/gimpprocbrowserdialog.c:484
+#: ../libgimp/gimpprocbrowserdialog.c:465
 #, c-format
 msgid "%d procedure"
 msgid_plural "%d procedures"
-msgstr[0] "%d n tsekkirt"
-msgstr[1] "%d n tsekkirin"
+msgstr[0] ""
+msgstr[1] ""
 
-#: ../libgimp/gimpprocbrowserdialog.c:493
+#: ../libgimp/gimpprocbrowserdialog.c:474
 msgid "No matches for your query"
 msgstr "Ulac ayen i yeddan d tuttra-k.m"
 
-#: ../libgimp/gimpprocbrowserdialog.c:497
+#: ../libgimp/gimpprocbrowserdialog.c:478
 #, c-format
 msgid "%d procedure matches your query"
 msgid_plural "%d procedures match your query"
-msgstr[0] "%d n tsekkirt i yenmeɣran d tuttra-k.m"
-msgstr[1] "%d n tsekkirin i yenmeɣran d tuttra-k.m"
+msgstr[0] ""
+msgstr[1] ""
 
-#: ../libgimp/gimpprocview.c:173
+#: ../libgimp/gimpprocedure.c:1914
+#, c-format
+msgid "Procedure '%s' returned no return values"
+msgstr ""
+
+#: ../libgimp/gimpprocedure.c:2006
+#, c-format
+msgid ""
+"Procedure '%s' returned a wrong value type for return value '%s' (#%d). "
+"Expected %s, got %s."
+msgstr ""
+
+#: ../libgimp/gimpprocedure.c:2018
+#, c-format
+msgid ""
+"Procedure '%s' has been called with a wrong value type for argument '%s' (#"
+"%d). Expected %s, got %s."
+msgstr ""
+
+#: ../libgimp/gimpprocedure.c:2053
+#, c-format
+msgid ""
+"Procedure '%s' returned '%s' as return value '%s' (#%d, type %s). This value "
+"is out of range."
+msgstr ""
+
+#: ../libgimp/gimpprocedure.c:2067
+#, c-format
+msgid ""
+"Procedure '%s' has been called with value '%s' for argument '%s' (#%d, type "
+"%s). This value is out of range."
+msgstr ""
+
+#: ../libgimp/gimpprocedure.c:2117
+#, c-format
+msgid "Procedure '%s' returned an invalid UTF-8 string for argument '%s'."
+msgstr ""
+
+#: ../libgimp/gimpprocedure.c:2127
+#, c-format
+msgid ""
+"Procedure '%s' has been called with an invalid UTF-8 string for argument "
+"'%s'."
+msgstr ""
+
+#: ../libgimp/gimpproceduredialog.c:273
+#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:184
+msgid "_Open"
+msgstr "_Ldi"
+
+#: ../libgimp/gimpproceduredialog.c:277 ../libgimpwidgets/gimpcolorbutton.c:554
+#: ../libgimpwidgets/gimpfileentry.c:467 ../libgimpwidgets/gimpquerybox.c:274
+#: ../libgimpwidgets/gimpquerybox.c:337 ../libgimpwidgets/gimpquerybox.c:403
+#: ../libgimpwidgets/gimpquerybox.c:479
+msgid "_OK"
+msgstr "_Ih"
+
+#: ../libgimp/gimpproceduredialog.c:285 ../libgimpwidgets/gimpcolorbutton.c:552
+msgid "_Reset"
+msgstr "A_les awennez"
+
+#: ../libgimp/gimpproceduredialog.c:337
+msgid "_Load Saved Settings"
+msgstr ""
+
+#: ../libgimp/gimpproceduredialog.c:338
+msgid "Load settings saved with \"Save Settings\" button"
+msgstr ""
+
+#: ../libgimp/gimpproceduredialog.c:350
+msgid "_Save Settings"
+msgstr ""
+
+#: ../libgimp/gimpproceduredialog.c:351
+msgid "Store current settings for later reuse"
+msgstr ""
+
+#: ../libgimp/gimpproceduredialog.c:1664
+msgid "Reset to _Initial Values"
+msgstr "Ales awennez ar wazalen n lexṣas"
+
+#: ../libgimp/gimpproceduredialog.c:1673
+msgid "Reset to _Factory Defaults"
+msgstr ""
+
+#: ../libgimp/gimpprocview.c:176
+msgid "Image types:"
+msgstr "Anawen n tugna:"
+
+#: ../libgimp/gimpprocview.c:179
+msgid "Menu label:"
+msgstr "Tabzimt n wumuɣ:"
+
+#: ../libgimp/gimpprocview.c:187
+msgid "Menu path:"
+msgstr "Abrid n wumuɣ:"
+
+#: ../libgimp/gimpprocview.c:202
 msgid "Parameters"
 msgstr "Iɣewwaren"
 
-#: ../libgimp/gimpprocview.c:186
+#: ../libgimp/gimpprocview.c:216
 msgid "Return Values"
-msgstr "Azalen n tuɣalin"
+msgstr ""
 
-#: ../libgimp/gimpprocview.c:199
+#: ../libgimp/gimpprocview.c:231
 msgid "Additional Information"
 msgstr "Talɣut tamernant"
 
-#: ../libgimp/gimpprocview.c:240
-msgid "Author:"
-msgstr "Ameskar:"
+#: ../libgimp/gimpprocview.c:263
+msgid "Authors:"
+msgstr "Imeskaren:"
 
-#: ../libgimp/gimpprocview.c:253
+#: ../libgimp/gimpprocview.c:266
 msgid "Date:"
 msgstr "Azemz:"
 
-#: ../libgimp/gimpprocview.c:266
+#: ../libgimp/gimpprocview.c:269
 msgid "Copyright:"
 msgstr "Aḥraz n izerfan:"
+
+#: ../libgimp/gimpsaveproceduredialog.c:166
+msgid "Metadata"
+msgstr "Iɣefisefka"
+
+#: ../libgimp/gimpsaveproceduredialog.c:175
+msgid "Edit Metadata"
+msgstr ""
+
+#: ../libgimp/gimpsaveproceduredialog.c:175
+msgid "(edit)"
+msgstr "(Ẓreg)"
 
 #: ../libgimp/gimpunitcache.c:54
 msgid "percent"
@@ -458,1045 +529,1034 @@ msgctxt "add-mask-type"
 msgid "C_hannel"
 msgstr "Abadu"
 
-#: ../libgimpbase/gimpbaseenums.c:65
-msgctxt "blend-mode"
-msgid "FG to BG (RGB)"
-msgstr "FG ɣer BG (RGB)"
-
-#: ../libgimpbase/gimpbaseenums.c:66
-msgctxt "blend-mode"
-msgid "FG to BG (HSV)"
-msgstr "FG ɣer BG ( HSV)"
-
-#: ../libgimpbase/gimpbaseenums.c:67
-msgctxt "blend-mode"
-msgid "FG to transparent"
-msgstr "FG ɣer ufrawan"
-
-#: ../libgimpbase/gimpbaseenums.c:68
-msgctxt "blend-mode"
-msgid "Custom gradient"
-msgstr "Sagen afesnaw"
-
-#: ../libgimpbase/gimpbaseenums.c:98
+#: ../libgimpbase/gimpbaseenums.c:64
 msgctxt "brush-generated-shape"
 msgid "Circle"
 msgstr "Tawinest"
 
-#: ../libgimpbase/gimpbaseenums.c:99
+#: ../libgimpbase/gimpbaseenums.c:65
 msgctxt "brush-generated-shape"
 msgid "Square"
 msgstr "Amkuẓ"
 
-#: ../libgimpbase/gimpbaseenums.c:100
+#: ../libgimpbase/gimpbaseenums.c:66
 msgctxt "brush-generated-shape"
 msgid "Diamond"
-msgstr ""
+msgstr "Amkuẓ"
 
-#: ../libgimpbase/gimpbaseenums.c:130
-msgctxt "bucket-fill-mode"
-msgid "FG color fill"
-msgstr "Taččart n yini FG"
-
-#: ../libgimpbase/gimpbaseenums.c:131
-msgctxt "bucket-fill-mode"
-msgid "BG color fill"
-msgstr "Taččart n yini BG"
-
-#: ../libgimpbase/gimpbaseenums.c:132
-msgctxt "bucket-fill-mode"
-msgid "Pattern fill"
-msgstr "Taččart n udlif"
-
-#: ../libgimpbase/gimpbaseenums.c:162
+#: ../libgimpbase/gimpbaseenums.c:96
 msgctxt "cap-style"
 msgid "Butt"
-msgstr "Ixef"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:163
+#: ../libgimpbase/gimpbaseenums.c:97
 msgctxt "cap-style"
 msgid "Round"
 msgstr "Imdewwer"
 
-#: ../libgimpbase/gimpbaseenums.c:164
+#: ../libgimpbase/gimpbaseenums.c:98
 msgctxt "cap-style"
 msgid "Square"
 msgstr "Amkuẓ"
 
-#: ../libgimpbase/gimpbaseenums.c:195
+#: ../libgimpbase/gimpbaseenums.c:129
 msgctxt "channel-ops"
 msgid "Add to the current selection"
 msgstr "Rnu ɣer tefrayt tamirant"
 
-#: ../libgimpbase/gimpbaseenums.c:196
+#: ../libgimpbase/gimpbaseenums.c:130
 msgctxt "channel-ops"
 msgid "Subtract from the current selection"
 msgstr "Sukks-d seg tefrayt tamirant"
 
-#: ../libgimpbase/gimpbaseenums.c:197
+#: ../libgimpbase/gimpbaseenums.c:131
 msgctxt "channel-ops"
 msgid "Replace the current selection"
 msgstr "Semselsi tafrayt tamirant"
 
-#: ../libgimpbase/gimpbaseenums.c:198
+#: ../libgimpbase/gimpbaseenums.c:132
 msgctxt "channel-ops"
 msgid "Intersect with the current selection"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:231
+#: ../libgimpbase/gimpbaseenums.c:165
 msgctxt "channel-type"
 msgid "Red"
 msgstr "Azeggaɣ"
 
-#: ../libgimpbase/gimpbaseenums.c:232
+#: ../libgimpbase/gimpbaseenums.c:166
 msgctxt "channel-type"
 msgid "Green"
 msgstr "Azegzaw"
 
-#: ../libgimpbase/gimpbaseenums.c:233
+#: ../libgimpbase/gimpbaseenums.c:167
 msgctxt "channel-type"
 msgid "Blue"
 msgstr "Anili"
 
-#: ../libgimpbase/gimpbaseenums.c:234
+#: ../libgimpbase/gimpbaseenums.c:168
 msgctxt "channel-type"
 msgid "Gray"
 msgstr "Amelliɣdi"
 
-#: ../libgimpbase/gimpbaseenums.c:235
+#: ../libgimpbase/gimpbaseenums.c:169
 msgctxt "channel-type"
 msgid "Indexed"
 msgstr "Yettwasmiter"
 
-#: ../libgimpbase/gimpbaseenums.c:236
+#: ../libgimpbase/gimpbaseenums.c:170
 msgctxt "channel-type"
 msgid "Alpha"
 msgstr "Alfa"
 
-#: ../libgimpbase/gimpbaseenums.c:266
+#: ../libgimpbase/gimpbaseenums.c:200
 msgctxt "check-size"
 msgid "Small"
 msgstr "Amecṭuḥ"
 
-#: ../libgimpbase/gimpbaseenums.c:267
+#: ../libgimpbase/gimpbaseenums.c:201
 msgctxt "check-size"
 msgid "Medium"
 msgstr "D alemmas"
 
-#: ../libgimpbase/gimpbaseenums.c:268
+#: ../libgimpbase/gimpbaseenums.c:202
 msgctxt "check-size"
 msgid "Large"
 msgstr "Ameqran"
 
-#: ../libgimpbase/gimpbaseenums.c:301
+#: ../libgimpbase/gimpbaseenums.c:235
 msgctxt "check-type"
 msgid "Light checks"
-msgstr "Isenqaden n tafat"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:302
+#: ../libgimpbase/gimpbaseenums.c:236
 msgctxt "check-type"
 msgid "Mid-tone checks"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:303
+#: ../libgimpbase/gimpbaseenums.c:237
 msgctxt "check-type"
 msgid "Dark checks"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:304
+#: ../libgimpbase/gimpbaseenums.c:238
 msgctxt "check-type"
 msgid "White only"
 msgstr "Amellal kan"
 
-#: ../libgimpbase/gimpbaseenums.c:305
+#: ../libgimpbase/gimpbaseenums.c:239
 msgctxt "check-type"
 msgid "Gray only"
 msgstr "Amelliɣdi kan"
 
-#: ../libgimpbase/gimpbaseenums.c:306
+#: ../libgimpbase/gimpbaseenums.c:240
 msgctxt "check-type"
 msgid "Black only"
 msgstr "Aberkan kan"
 
-#: ../libgimpbase/gimpbaseenums.c:335
+#: ../libgimpbase/gimpbaseenums.c:269
 msgctxt "clone-type"
 msgid "Image"
 msgstr "Tugna"
 
-#: ../libgimpbase/gimpbaseenums.c:336
+#: ../libgimpbase/gimpbaseenums.c:270
 msgctxt "clone-type"
 msgid "Pattern"
 msgstr "Udlif"
 
-#: ../libgimpbase/gimpbaseenums.c:372
+#: ../libgimpbase/gimpbaseenums.c:306
 msgctxt "color-tag"
 msgid "None"
-msgstr "Ulac"
+msgstr "Ula yiwen"
 
-#: ../libgimpbase/gimpbaseenums.c:373
+#: ../libgimpbase/gimpbaseenums.c:307
 msgctxt "color-tag"
 msgid "Blue"
 msgstr "Anili"
 
-#: ../libgimpbase/gimpbaseenums.c:374
+#: ../libgimpbase/gimpbaseenums.c:308
 msgctxt "color-tag"
 msgid "Green"
 msgstr "Azegzaw"
 
-#: ../libgimpbase/gimpbaseenums.c:375
+#: ../libgimpbase/gimpbaseenums.c:309
 msgctxt "color-tag"
 msgid "Yellow"
 msgstr "Awraɣ"
 
-#: ../libgimpbase/gimpbaseenums.c:376
+#: ../libgimpbase/gimpbaseenums.c:310
 msgctxt "color-tag"
 msgid "Orange"
 msgstr "Ačinawi"
 
-#: ../libgimpbase/gimpbaseenums.c:377
+#: ../libgimpbase/gimpbaseenums.c:311
 msgctxt "color-tag"
 msgid "Brown"
 msgstr "Aqahwi"
 
-#: ../libgimpbase/gimpbaseenums.c:378
+#: ../libgimpbase/gimpbaseenums.c:312
 msgctxt "color-tag"
 msgid "Red"
 msgstr "Azeggaɣ"
 
-#: ../libgimpbase/gimpbaseenums.c:379
+#: ../libgimpbase/gimpbaseenums.c:313
 msgctxt "color-tag"
 msgid "Violet"
 msgstr "Akeẓẓal"
 
-#: ../libgimpbase/gimpbaseenums.c:380
+#: ../libgimpbase/gimpbaseenums.c:314
 msgctxt "color-tag"
 msgid "Gray"
 msgstr "Amelliɣdi"
 
-#: ../libgimpbase/gimpbaseenums.c:413
+#: ../libgimpbase/gimpbaseenums.c:347
 msgctxt "component-type"
 msgid "8-bit integer"
-msgstr "Ummid 8-bit"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:414
+#: ../libgimpbase/gimpbaseenums.c:348
 msgctxt "component-type"
 msgid "16-bit integer"
-msgstr "Ummid 16-bit"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:415
+#: ../libgimpbase/gimpbaseenums.c:349
 msgctxt "component-type"
 msgid "32-bit integer"
-msgstr "Ummi 32-bit"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:416
+#: ../libgimpbase/gimpbaseenums.c:350
 msgctxt "component-type"
 msgid "16-bit floating point"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:417
+#: ../libgimpbase/gimpbaseenums.c:351
 msgctxt "component-type"
 msgid "32-bit floating point"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:418
+#: ../libgimpbase/gimpbaseenums.c:352
 msgctxt "component-type"
 msgid "64-bit floating point"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:449
+#: ../libgimpbase/gimpbaseenums.c:383
 msgctxt "convert-palette-type"
 msgid "Generate optimum palette"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:450
+#: ../libgimpbase/gimpbaseenums.c:384
 msgctxt "convert-palette-type"
 msgid "Use web-optimized palette"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:451
+#: ../libgimpbase/gimpbaseenums.c:385
 msgctxt "convert-palette-type"
 msgid "Use black and white (1-bit) palette"
-msgstr "Seqdec agalis n yiniten aberkan d umellal (1-bit)"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:452
+#: ../libgimpbase/gimpbaseenums.c:386
 msgctxt "convert-palette-type"
 msgid "Use custom palette"
-msgstr "Seqdec agalis n yiniten udmawan"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:481
+#: ../libgimpbase/gimpbaseenums.c:415
 msgctxt "convolve-type"
 msgid "Blur"
 msgstr "Aluɣu"
 
-#: ../libgimpbase/gimpbaseenums.c:482
+#: ../libgimpbase/gimpbaseenums.c:416
 msgctxt "convolve-type"
 msgid "Sharpen"
 msgstr "Semsed"
 
-#: ../libgimpbase/gimpbaseenums.c:514
+#: ../libgimpbase/gimpbaseenums.c:448
 msgctxt "desaturate-mode"
 msgid "Lightness (HSL)"
 msgstr "Tifawit (HSL)"
 
-#: ../libgimpbase/gimpbaseenums.c:515
+#: ../libgimpbase/gimpbaseenums.c:449
 msgctxt "desaturate-mode"
 msgid "Luma"
-msgstr "Luma"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:516
+#: ../libgimpbase/gimpbaseenums.c:450
 msgctxt "desaturate-mode"
 msgid "Average (HSI Intensity)"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:517
+#: ../libgimpbase/gimpbaseenums.c:451
 msgctxt "desaturate-mode"
 msgid "Luminance"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:518
+#: ../libgimpbase/gimpbaseenums.c:452
 msgctxt "desaturate-mode"
 msgid "Value (HSV)"
 msgstr "Azal (HSV)"
 
-#: ../libgimpbase/gimpbaseenums.c:547
+#: ../libgimpbase/gimpbaseenums.c:481
 msgctxt "dodge-burn-type"
 msgid "Dodge"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:548
+#: ../libgimpbase/gimpbaseenums.c:482
 msgctxt "dodge-burn-type"
 msgid "Burn"
-msgstr "Irɣa"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:580
+#: ../libgimpbase/gimpbaseenums.c:514
 msgctxt "fill-type"
 msgid "Foreground color"
-msgstr "Ini n sdat"
+msgstr "Ini n uɣawas amezwaru"
 
-#: ../libgimpbase/gimpbaseenums.c:581
+#: ../libgimpbase/gimpbaseenums.c:515
 msgctxt "fill-type"
 msgid "Background color"
 msgstr "Ini n ugilal"
 
-#: ../libgimpbase/gimpbaseenums.c:582
+#: ../libgimpbase/gimpbaseenums.c:516
 msgctxt "fill-type"
 msgid "White"
-msgstr "Amlal"
+msgstr "Amellal"
 
-#: ../libgimpbase/gimpbaseenums.c:583
+#: ../libgimpbase/gimpbaseenums.c:517
 msgctxt "fill-type"
 msgid "Transparency"
 msgstr "Tafrawant"
 
-#: ../libgimpbase/gimpbaseenums.c:584
+#: ../libgimpbase/gimpbaseenums.c:518
 msgctxt "fill-type"
 msgid "Pattern"
 msgstr "Udlif"
 
-#: ../libgimpbase/gimpbaseenums.c:644
+#: ../libgimpbase/gimpbaseenums.c:576
 msgctxt "gradient-blend-color-space"
 msgid "Perceptual RGB"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:645
+#: ../libgimpbase/gimpbaseenums.c:577
 msgctxt "gradient-blend-color-space"
 msgid "Linear RGB"
 msgstr "RGB imzireg"
 
-#: ../libgimpbase/gimpbaseenums.c:646
+#: ../libgimpbase/gimpbaseenums.c:578
 msgctxt "gradient-blend-color-space"
 msgid "CIE Lab"
 msgstr "CIE Lab"
 
-#: ../libgimpbase/gimpbaseenums.c:676
+#: ../libgimpbase/gimpbaseenums.c:608
 msgctxt "gradient-segment-color"
 msgid "RGB"
 msgstr "RGB"
 
-#: ../libgimpbase/gimpbaseenums.c:677
+#: ../libgimpbase/gimpbaseenums.c:609
 msgctxt "gradient-segment-color"
 msgid "HSV (counter-clockwise hue)"
-msgstr "HSV (tiɣmi s tnila mgal tamrilt)"
+msgstr ""
 
 #. Translators: this is an abbreviated version of "HSV (counter-clockwise hue)".
 #. Keep it short.
-#: ../libgimpbase/gimpbaseenums.c:680
+#: ../libgimpbase/gimpbaseenums.c:612
 msgctxt "gradient-segment-color"
 msgid "HSV (ccw)"
-msgstr "HSV (ccw)"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:681
+#: ../libgimpbase/gimpbaseenums.c:613
 msgctxt "gradient-segment-color"
 msgid "HSV (clockwise hue)"
-msgstr "HSV (tiɣmi s tnila n temrilt)"
+msgstr ""
 
 #. Translators: this is an abbreviated version of "HSV (clockwise hue)".
 #. Keep it short.
-#: ../libgimpbase/gimpbaseenums.c:684
+#: ../libgimpbase/gimpbaseenums.c:616
 msgctxt "gradient-segment-color"
 msgid "HSV (cw)"
-msgstr "HSV (cw)"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:717
+#: ../libgimpbase/gimpbaseenums.c:649
 msgctxt "gradient-segment-type"
 msgid "Linear"
 msgstr "Imzireg"
 
-#: ../libgimpbase/gimpbaseenums.c:718
+#: ../libgimpbase/gimpbaseenums.c:650
 msgctxt "gradient-segment-type"
 msgid "Curved"
-msgstr "Ikna"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:719
+#: ../libgimpbase/gimpbaseenums.c:651
 msgctxt "gradient-segment-type"
 msgid "Sinusoidal"
 msgstr "Asinusan"
 
-#: ../libgimpbase/gimpbaseenums.c:720
+#: ../libgimpbase/gimpbaseenums.c:652
 msgctxt "gradient-segment-type"
 msgid "Spherical (increasing)"
-msgstr "Akuran (d asawen)"
+msgstr ""
 
 #. Translators: this is an abbreviated version of "Spherical (increasing)".
 #. Keep it short.
-#: ../libgimpbase/gimpbaseenums.c:723
+#: ../libgimpbase/gimpbaseenums.c:655
 msgctxt "gradient-segment-type"
 msgid "Spherical (inc)"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:724
+#: ../libgimpbase/gimpbaseenums.c:656
 msgctxt "gradient-segment-type"
 msgid "Spherical (decreasing)"
-msgstr "Akuran (d akessar)"
+msgstr ""
 
 #. Translators: this is an abbreviated version of "Spherical (decreasing)".
 #. Keep it short.
-#: ../libgimpbase/gimpbaseenums.c:727
+#: ../libgimpbase/gimpbaseenums.c:659
 msgctxt "gradient-segment-type"
 msgid "Spherical (dec)"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:728
+#: ../libgimpbase/gimpbaseenums.c:660
 msgctxt "gradient-segment-type"
 msgid "Step"
-msgstr "Asurif"
+msgstr "Amecwaṛ"
 
-#: ../libgimpbase/gimpbaseenums.c:766
+#: ../libgimpbase/gimpbaseenums.c:698
 msgctxt "gradient-type"
 msgid "Linear"
 msgstr "Imzireg"
 
-#: ../libgimpbase/gimpbaseenums.c:767
+#: ../libgimpbase/gimpbaseenums.c:699
 msgctxt "gradient-type"
 msgid "Bi-linear"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:768
+#: ../libgimpbase/gimpbaseenums.c:700
 msgctxt "gradient-type"
 msgid "Radial"
-msgstr ""
+msgstr "Azenẓaran"
 
-#: ../libgimpbase/gimpbaseenums.c:769
+#: ../libgimpbase/gimpbaseenums.c:701
 msgctxt "gradient-type"
 msgid "Square"
 msgstr "Amkuẓ"
 
-#: ../libgimpbase/gimpbaseenums.c:770
+#: ../libgimpbase/gimpbaseenums.c:702
 msgctxt "gradient-type"
 msgid "Conical (symmetric)"
-msgstr "Uzmig (ujjur)"
+msgstr ""
 
 #. Translators: this is an abbreviated version of "Conical (symmetric)".
 #. Keep it short.
-#: ../libgimpbase/gimpbaseenums.c:773
+#: ../libgimpbase/gimpbaseenums.c:705
 msgctxt "gradient-type"
 msgid "Conical (sym)"
-msgstr "Uzmig (ujj)"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:774
+#: ../libgimpbase/gimpbaseenums.c:706
 msgctxt "gradient-type"
 msgid "Conical (asymmetric)"
-msgstr "Uzmig (arujjur)"
+msgstr ""
 
 #. Translators: this is an abbreviated version of "Conical (asymmetric)".
 #. Keep it short.
-#: ../libgimpbase/gimpbaseenums.c:777
+#: ../libgimpbase/gimpbaseenums.c:709
 msgctxt "gradient-type"
 msgid "Conical (asym)"
-msgstr "Uzmig (aruj)"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:778
+#: ../libgimpbase/gimpbaseenums.c:710
 msgctxt "gradient-type"
 msgid "Shaped (angular)"
-msgstr "S talɣa (uɣmir)"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:779
+#: ../libgimpbase/gimpbaseenums.c:711
 msgctxt "gradient-type"
 msgid "Shaped (spherical)"
-msgstr "S talɣa (akuran)"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:780
+#: ../libgimpbase/gimpbaseenums.c:712
 msgctxt "gradient-type"
 msgid "Shaped (dimpled)"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:781
+#: ../libgimpbase/gimpbaseenums.c:713
 msgctxt "gradient-type"
 msgid "Spiral (clockwise)"
-msgstr "Tagriwelt (s tnila n temrilt)"
+msgstr ""
 
 #. Translators: this is an abbreviated version of "Spiral (clockwise)".
 #. Keep it short.
-#: ../libgimpbase/gimpbaseenums.c:784
+#: ../libgimpbase/gimpbaseenums.c:716
 msgctxt "gradient-type"
 msgid "Spiral (cw)"
-msgstr "Tagriwelt (s tem)"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:785
+#: ../libgimpbase/gimpbaseenums.c:717
 msgctxt "gradient-type"
 msgid "Spiral (counter-clockwise)"
-msgstr "Tagriwelt (s tnila mgal tamrilt)"
+msgstr ""
 
 #. Translators: this is an abbreviated version of "Spiral (counter-clockwise)".
 #. Keep it short.
-#: ../libgimpbase/gimpbaseenums.c:788
+#: ../libgimpbase/gimpbaseenums.c:720
 msgctxt "gradient-type"
 msgid "Spiral (ccw)"
-msgstr "Tagriwelt (mgl tam)"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:820
+#: ../libgimpbase/gimpbaseenums.c:752
 msgctxt "grid-style"
 msgid "Intersections (dots)"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:821
+#: ../libgimpbase/gimpbaseenums.c:753
 msgctxt "grid-style"
 msgid "Intersections (crosshairs)"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:822
+#: ../libgimpbase/gimpbaseenums.c:754
 msgctxt "grid-style"
 msgid "Dashed"
-msgstr ""
+msgstr "Ijerriḍen"
 
-#: ../libgimpbase/gimpbaseenums.c:823
+#: ../libgimpbase/gimpbaseenums.c:755
 msgctxt "grid-style"
 msgid "Double dashed"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:824
+#: ../libgimpbase/gimpbaseenums.c:756
 msgctxt "grid-style"
 msgid "Solid"
-msgstr ""
+msgstr "Aquran"
 
-#: ../libgimpbase/gimpbaseenums.c:894
+#: ../libgimpbase/gimpbaseenums.c:826
 msgctxt "icon-type"
 msgid "Icon name"
 msgstr "Isem n tignit"
 
-#: ../libgimpbase/gimpbaseenums.c:895
+#: ../libgimpbase/gimpbaseenums.c:827
 msgctxt "icon-type"
-msgid "Inline pixbuf"
+msgid "Pixbuf"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:896
+#: ../libgimpbase/gimpbaseenums.c:828
 msgctxt "icon-type"
 msgid "Image file"
 msgstr "Afaylu n tugna"
 
-#: ../libgimpbase/gimpbaseenums.c:926
+#: ../libgimpbase/gimpbaseenums.c:858
 msgctxt "image-base-type"
 msgid "RGB color"
 msgstr "Ini RGB"
 
-#: ../libgimpbase/gimpbaseenums.c:927
+#: ../libgimpbase/gimpbaseenums.c:859
 msgctxt "image-base-type"
 msgid "Grayscale"
 msgstr "Taskala n umelliɣdi"
 
-#: ../libgimpbase/gimpbaseenums.c:928
+#: ../libgimpbase/gimpbaseenums.c:860
 msgctxt "image-base-type"
 msgid "Indexed color"
-msgstr "Ini yettwasmitren"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:961
+#: ../libgimpbase/gimpbaseenums.c:893
 msgctxt "image-type"
 msgid "RGB"
 msgstr "RGB"
 
-#: ../libgimpbase/gimpbaseenums.c:962
+#: ../libgimpbase/gimpbaseenums.c:894
 msgctxt "image-type"
 msgid "RGB-alpha"
-msgstr "RGB-alfa"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:963
+#: ../libgimpbase/gimpbaseenums.c:895
 msgctxt "image-type"
 msgid "Grayscale"
 msgstr "Taskala n umelliɣdi"
 
-#: ../libgimpbase/gimpbaseenums.c:964
+#: ../libgimpbase/gimpbaseenums.c:896
 msgctxt "image-type"
 msgid "Grayscale-alpha"
-msgstr "Iswiren n uɣiɣdan-alfa"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:965
+#: ../libgimpbase/gimpbaseenums.c:897
 msgctxt "image-type"
 msgid "Indexed"
 msgstr "Yettwasmiter"
 
-#: ../libgimpbase/gimpbaseenums.c:966
+#: ../libgimpbase/gimpbaseenums.c:898
 msgctxt "image-type"
 msgid "Indexed-alpha"
-msgstr "Yettwasmiter-alfa"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:996
+#: ../libgimpbase/gimpbaseenums.c:928
 msgctxt "ink-blob-type"
 msgid "Circle"
 msgstr "Tawinest"
 
-#: ../libgimpbase/gimpbaseenums.c:997
+#: ../libgimpbase/gimpbaseenums.c:929
 msgctxt "ink-blob-type"
 msgid "Square"
 msgstr "Amkuẓ"
 
-#: ../libgimpbase/gimpbaseenums.c:998
+#: ../libgimpbase/gimpbaseenums.c:930
 msgctxt "ink-blob-type"
 msgid "Diamond"
-msgstr ""
+msgstr "Amkuẓ"
 
-#: ../libgimpbase/gimpbaseenums.c:1030
+#: ../libgimpbase/gimpbaseenums.c:962
 msgctxt "interpolation-type"
 msgid "None"
-msgstr "Ulac"
+msgstr "Ula yiwen"
 
-#: ../libgimpbase/gimpbaseenums.c:1031
+#: ../libgimpbase/gimpbaseenums.c:963
 msgctxt "interpolation-type"
 msgid "Linear"
 msgstr "Imzireg"
 
-#: ../libgimpbase/gimpbaseenums.c:1032
+#: ../libgimpbase/gimpbaseenums.c:964
 msgctxt "interpolation-type"
 msgid "Cubic"
-msgstr "Am ugasis"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1033
+#: ../libgimpbase/gimpbaseenums.c:965
 msgctxt "interpolation-type"
 msgid "NoHalo"
-msgstr "NoHalo"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1034
+#: ../libgimpbase/gimpbaseenums.c:966
 msgctxt "interpolation-type"
 msgid "LoHalo"
-msgstr "LoHalo"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1064
+#: ../libgimpbase/gimpbaseenums.c:996
 msgctxt "join-style"
 msgid "Miter"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1065
+#: ../libgimpbase/gimpbaseenums.c:997
 msgctxt "join-style"
 msgid "Round"
 msgstr "Imdewwer"
 
-#: ../libgimpbase/gimpbaseenums.c:1066
+#: ../libgimpbase/gimpbaseenums.c:998
 msgctxt "join-style"
 msgid "Bevel"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1127
+#: ../libgimpbase/gimpbaseenums.c:1059
 msgctxt "merge-type"
 msgid "Expanded as necessary"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1128
+#: ../libgimpbase/gimpbaseenums.c:1060
 msgctxt "merge-type"
 msgid "Clipped to image"
-msgstr "Ittwagzem ɣer tugna"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1129
+#: ../libgimpbase/gimpbaseenums.c:1061
 msgctxt "merge-type"
 msgid "Clipped to bottom layer"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1130
+#: ../libgimpbase/gimpbaseenums.c:1062
 msgctxt "merge-type"
 msgid "Flatten"
 msgstr "Lebbeḍ"
 
-#: ../libgimpbase/gimpbaseenums.c:1224
+#: ../libgimpbase/gimpbaseenums.c:1156
 msgctxt "orientation-type"
 msgid "Horizontal"
 msgstr "Aglawan"
 
-#: ../libgimpbase/gimpbaseenums.c:1225
+#: ../libgimpbase/gimpbaseenums.c:1157
 msgctxt "orientation-type"
 msgid "Vertical"
 msgstr "Ubdid"
 
-#: ../libgimpbase/gimpbaseenums.c:1226
+#: ../libgimpbase/gimpbaseenums.c:1158
 msgctxt "orientation-type"
 msgid "Unknown"
-msgstr "Arussin"
+msgstr "Arusin"
 
-#: ../libgimpbase/gimpbaseenums.c:1255
+#: ../libgimpbase/gimpbaseenums.c:1187
 msgctxt "paint-application-mode"
 msgid "Constant"
-msgstr "Imezgi"
+msgstr "Timezgit"
 
-#: ../libgimpbase/gimpbaseenums.c:1256
+#: ../libgimpbase/gimpbaseenums.c:1188
 msgctxt "paint-application-mode"
 msgid "Incremental"
-msgstr "Aseffasan"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1389
+#: ../libgimpbase/gimpbaseenums.c:1249
 msgctxt "pdb-proc-type"
 msgid "Internal GIMP procedure"
-msgstr "Tasekkirt GIMP tagensant"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1390
+#: ../libgimpbase/gimpbaseenums.c:1250
 msgctxt "pdb-proc-type"
 msgid "GIMP Plug-In"
 msgstr "Asiɣzef n GIMP"
 
-#: ../libgimpbase/gimpbaseenums.c:1391
+#: ../libgimpbase/gimpbaseenums.c:1251
 msgctxt "pdb-proc-type"
 msgid "GIMP Extension"
 msgstr "Azegrir n GIMP"
 
-#: ../libgimpbase/gimpbaseenums.c:1392
+#: ../libgimpbase/gimpbaseenums.c:1252
 msgctxt "pdb-proc-type"
 msgid "Temporary Procedure"
-msgstr "Tasekkirt takudant"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1467
+#: ../libgimpbase/gimpbaseenums.c:1339
 msgctxt "precision"
 msgid "8-bit linear integer"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1468
+#: ../libgimpbase/gimpbaseenums.c:1340
 msgctxt "precision"
-msgid "8-bit gamma integer"
+msgid "8-bit non-linear integer"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1469
+#: ../libgimpbase/gimpbaseenums.c:1341
+msgctxt "precision"
+msgid "8-bit perceptual integer"
+msgstr ""
+
+#: ../libgimpbase/gimpbaseenums.c:1342
 msgctxt "precision"
 msgid "16-bit linear integer"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1470
+#: ../libgimpbase/gimpbaseenums.c:1343
 msgctxt "precision"
-msgid "16-bit gamma integer"
+msgid "16-bit non-linear integer"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1471
+#: ../libgimpbase/gimpbaseenums.c:1344
+msgctxt "precision"
+msgid "16-bit perceptual integer"
+msgstr ""
+
+#: ../libgimpbase/gimpbaseenums.c:1345
 msgctxt "precision"
 msgid "32-bit linear integer"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1472
+#: ../libgimpbase/gimpbaseenums.c:1346
 msgctxt "precision"
-msgid "32-bit gamma integer"
+msgid "32-bit non-linear integer"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1473
+#: ../libgimpbase/gimpbaseenums.c:1347
+msgctxt "precision"
+msgid "32-bit perceptual integer"
+msgstr ""
+
+#: ../libgimpbase/gimpbaseenums.c:1348
 msgctxt "precision"
 msgid "16-bit linear floating point"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1474
+#: ../libgimpbase/gimpbaseenums.c:1349
 msgctxt "precision"
-msgid "16-bit gamma floating point"
+msgid "16-bit non-linear floating point"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1475
+#: ../libgimpbase/gimpbaseenums.c:1350
+msgctxt "precision"
+msgid "16-bit perceptual floating point"
+msgstr ""
+
+#: ../libgimpbase/gimpbaseenums.c:1351
 msgctxt "precision"
 msgid "32-bit linear floating point"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1476
+#: ../libgimpbase/gimpbaseenums.c:1352
 msgctxt "precision"
-msgid "32-bit gamma floating point"
+msgid "32-bit non-linear floating point"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1477
+#: ../libgimpbase/gimpbaseenums.c:1353
+msgctxt "precision"
+msgid "32-bit perceptual floating point"
+msgstr ""
+
+#: ../libgimpbase/gimpbaseenums.c:1354
 msgctxt "precision"
 msgid "64-bit linear floating point"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1478
+#: ../libgimpbase/gimpbaseenums.c:1355
 msgctxt "precision"
-msgid "64-bit gamma floating point"
+msgid "64-bit non-linear floating point"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1547
+#: ../libgimpbase/gimpbaseenums.c:1356
+msgctxt "precision"
+msgid "64-bit perceptual floating point"
+msgstr ""
+
+#: ../libgimpbase/gimpbaseenums.c:1467
 msgctxt "repeat-mode"
 msgid "None (extend)"
-msgstr "Ulac (siɣzef)"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1548
+#: ../libgimpbase/gimpbaseenums.c:1468
 msgctxt "repeat-mode"
 msgid "Sawtooth wave"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1549
+#: ../libgimpbase/gimpbaseenums.c:1469
 msgctxt "repeat-mode"
 msgid "Triangular wave"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1550
+#: ../libgimpbase/gimpbaseenums.c:1470
 msgctxt "repeat-mode"
 msgid "Truncate"
-msgstr "Agzam"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1612
+#: ../libgimpbase/gimpbaseenums.c:1532
 msgctxt "run-mode"
 msgid "Run interactively"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1613
+#: ../libgimpbase/gimpbaseenums.c:1533
 msgctxt "run-mode"
 msgid "Run non-interactively"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1614
+#: ../libgimpbase/gimpbaseenums.c:1534
 msgctxt "run-mode"
 msgid "Run with last used values"
-msgstr "Selkem s wazalen ineggura i yettwaseqdcen"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1652
+#: ../libgimpbase/gimpbaseenums.c:1572
 msgctxt "select-criterion"
 msgid "Composite"
 msgstr "Uddis"
 
-#: ../libgimpbase/gimpbaseenums.c:1653
+#: ../libgimpbase/gimpbaseenums.c:1573
 msgctxt "select-criterion"
 msgid "Red"
 msgstr "Azeggaɣ"
 
-#: ../libgimpbase/gimpbaseenums.c:1654
+#: ../libgimpbase/gimpbaseenums.c:1574
 msgctxt "select-criterion"
 msgid "Green"
 msgstr "Azegzaw"
 
-#: ../libgimpbase/gimpbaseenums.c:1655
+#: ../libgimpbase/gimpbaseenums.c:1575
 msgctxt "select-criterion"
 msgid "Blue"
 msgstr "Anili"
 
-#: ../libgimpbase/gimpbaseenums.c:1656
+#: ../libgimpbase/gimpbaseenums.c:1576
 msgctxt "select-criterion"
 msgid "HSV Hue"
 msgstr "Tiɣmi HSV"
 
-#: ../libgimpbase/gimpbaseenums.c:1657
+#: ../libgimpbase/gimpbaseenums.c:1577
 msgctxt "select-criterion"
 msgid "HSV Saturation"
 msgstr "Tawant HSV"
 
-#: ../libgimpbase/gimpbaseenums.c:1658
+#: ../libgimpbase/gimpbaseenums.c:1578
 msgctxt "select-criterion"
 msgid "HSV Value"
 msgstr "Azal HSV"
 
-#: ../libgimpbase/gimpbaseenums.c:1659
-msgctxt "select-criterion"
-msgid "Alpha"
-msgstr "Alfa"
-
-#: ../libgimpbase/gimpbaseenums.c:1660
+#: ../libgimpbase/gimpbaseenums.c:1579
 msgctxt "select-criterion"
 msgid "LCh Lightness"
 msgstr "Tifawit LCh"
 
-#: ../libgimpbase/gimpbaseenums.c:1661
+#: ../libgimpbase/gimpbaseenums.c:1580
 msgctxt "select-criterion"
 msgid "LCh Chroma"
-msgstr "LCh Chroma"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1662
+#: ../libgimpbase/gimpbaseenums.c:1581
 msgctxt "select-criterion"
 msgid "LCh Hue"
 msgstr "Tiɣmi LCh"
 
-#: ../libgimpbase/gimpbaseenums.c:1691
+#: ../libgimpbase/gimpbaseenums.c:1582
+msgctxt "select-criterion"
+msgid "Alpha"
+msgstr "Alfa"
+
+#: ../libgimpbase/gimpbaseenums.c:1611
 msgctxt "size-type"
 msgid "Pixels"
 msgstr "Ipiksilen"
 
-#: ../libgimpbase/gimpbaseenums.c:1692
+#: ../libgimpbase/gimpbaseenums.c:1612
 msgctxt "size-type"
 msgid "Points"
-msgstr "Agazen"
+msgstr "Tineqqiḍin"
 
-#: ../libgimpbase/gimpbaseenums.c:1753
+#: ../libgimpbase/gimpbaseenums.c:1673
 msgctxt "stroke-method"
 msgid "Stroke line"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1754
+#: ../libgimpbase/gimpbaseenums.c:1674
 msgctxt "stroke-method"
 msgid "Stroke with a paint tool"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1787
+#: ../libgimpbase/gimpbaseenums.c:1707
 msgctxt "text-direction"
 msgid "From left to right"
 msgstr "Seg uzelmaḍ s ayefus"
 
-#: ../libgimpbase/gimpbaseenums.c:1788
+#: ../libgimpbase/gimpbaseenums.c:1708
 msgctxt "text-direction"
 msgid "From right to left"
 msgstr "Seg uyeffus s azelmaḍ"
 
-#: ../libgimpbase/gimpbaseenums.c:1789
+#: ../libgimpbase/gimpbaseenums.c:1709
 msgctxt "text-direction"
 msgid "Vertical, right to left (mixed orientation)"
-msgstr "Ubdid, seg uyeffus ɣer uẓelmaḍ (taɣda tamsayant)"
+msgstr "Ubdid, seg uyefus s azelmaḍ (taɣda ixelḍen)"
 
-#: ../libgimpbase/gimpbaseenums.c:1790
+#: ../libgimpbase/gimpbaseenums.c:1710
 msgctxt "text-direction"
 msgid "Vertical, right to left (upright orientation)"
-msgstr "Ubdid, seg uyeffus ɣer uẓelmaḍ (taɣda tubdidt)"
+msgstr "Ubdid, seg uyefus s azelmaḍ (taɣda s ibeddi)"
 
-#: ../libgimpbase/gimpbaseenums.c:1791
+#: ../libgimpbase/gimpbaseenums.c:1711
 msgctxt "text-direction"
 msgid "Vertical, left to right (mixed orientation)"
-msgstr "Ubdid, seg uẓelmaḍ ɣer uyeffus (taɣda tamsayant)"
+msgstr "Ubdid, seg uzelmaḍ s ayefus (taɣda ixelḍen)"
 
-#: ../libgimpbase/gimpbaseenums.c:1792
+#: ../libgimpbase/gimpbaseenums.c:1712
 msgctxt "text-direction"
 msgid "Vertical, left to right (upright orientation)"
-msgstr "Ubdid, seg uẓelmaḍ ɣer uyeffus (taɣda tubdidt)"
+msgstr "Ubdid, seg uzelmaḍ s ayefus (taɣda s ibeddi)"
 
-#: ../libgimpbase/gimpbaseenums.c:1823
+#: ../libgimpbase/gimpbaseenums.c:1743
 msgctxt "text-hint-style"
 msgid "None"
-msgstr "Ulac"
+msgstr "Ula yiwen"
 
-#: ../libgimpbase/gimpbaseenums.c:1824
+#: ../libgimpbase/gimpbaseenums.c:1744
 msgctxt "text-hint-style"
 msgid "Slight"
-msgstr "Fessus"
+msgstr "Afessas"
 
-#: ../libgimpbase/gimpbaseenums.c:1825
+#: ../libgimpbase/gimpbaseenums.c:1745
 msgctxt "text-hint-style"
 msgid "Medium"
 msgstr "D alemmas"
 
-#: ../libgimpbase/gimpbaseenums.c:1826
+#: ../libgimpbase/gimpbaseenums.c:1746
 msgctxt "text-hint-style"
 msgid "Full"
 msgstr "Aččuran"
 
-#: ../libgimpbase/gimpbaseenums.c:1857
+#: ../libgimpbase/gimpbaseenums.c:1777
 msgctxt "text-justification"
 msgid "Left justified"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1858
+#: ../libgimpbase/gimpbaseenums.c:1778
 msgctxt "text-justification"
 msgid "Right justified"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1859
+#: ../libgimpbase/gimpbaseenums.c:1779
 msgctxt "text-justification"
 msgid "Centered"
 msgstr "Deg tlemmast"
 
-#: ../libgimpbase/gimpbaseenums.c:1860
+#: ../libgimpbase/gimpbaseenums.c:1780
 msgctxt "text-justification"
 msgid "Filled"
-msgstr ""
+msgstr "Yeččur"
 
-#: ../libgimpbase/gimpbaseenums.c:1890
+#: ../libgimpbase/gimpbaseenums.c:1810
 msgctxt "transfer-mode"
 msgid "Shadows"
 msgstr "Tili"
 
-#: ../libgimpbase/gimpbaseenums.c:1891
+#: ../libgimpbase/gimpbaseenums.c:1811
 msgctxt "transfer-mode"
 msgid "Midtones"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1892
+#: ../libgimpbase/gimpbaseenums.c:1812
 msgctxt "transfer-mode"
 msgid "Highlights"
 msgstr "Asebrureq"
 
-#: ../libgimpbase/gimpbaseenums.c:1921
+#: ../libgimpbase/gimpbaseenums.c:1841
 msgctxt "transform-direction"
 msgid "Normal (Forward)"
-msgstr "Amagnu (Ɣer sdar)"
+msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1922
+#: ../libgimpbase/gimpbaseenums.c:1842
 msgctxt "transform-direction"
 msgid "Corrective (Backward)"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1953
+#: ../libgimpbase/gimpbaseenums.c:1873
 msgctxt "transform-resize"
 msgid "Adjust"
-msgstr "Seggem"
+msgstr "Sgaddi"
 
-#: ../libgimpbase/gimpbaseenums.c:1954
+#: ../libgimpbase/gimpbaseenums.c:1874
 msgctxt "transform-resize"
 msgid "Clip"
-msgstr "Ṭṭef"
+msgstr "Aklip"
 
-#: ../libgimpbase/gimpbaseenums.c:1955
+#: ../libgimpbase/gimpbaseenums.c:1875
 msgctxt "transform-resize"
 msgid "Crop to result"
 msgstr ""
 
-#: ../libgimpbase/gimpbaseenums.c:1956
+#: ../libgimpbase/gimpbaseenums.c:1876
 msgctxt "transform-resize"
 msgid "Crop with aspect"
 msgstr ""
 
-#: ../libgimpbase/gimpmetadata.c:878
+#: ../libgimpbase/gimpmetadata.c:943
 #, c-format
 msgid "Can load metadata only from local files"
-msgstr "Izmer ad d-issali idfersefka seg yifuyla idiganen kan"
-
-#: ../libgimpbase/gimpmetadata.c:892 ../libgimpbase/gimpmetadata.c:962
-#, c-format
-msgid "Conversion of the filename to system codepage failed."
 msgstr ""
-"Aselket n yisem n ufaylu ɣer usebter n uwgelhen n unagraw ur yeddi ara."
 
-#: ../libgimpbase/gimpmetadata.c:949
+#: ../libgimpbase/gimpmetadata.c:999
 #, c-format
 msgid "Can save metadata only to local files"
-msgstr "Izmer ad issekles idfersefka deg yifuyla idiganen kan"
+msgstr ""
 
-#: ../libgimpbase/gimpmetadata.c:1011
+#: ../libgimpbase/gimpmetadata.c:1047
 #, c-format
 msgid "Invalid Exif data size."
-msgstr "Teɣzi n yisefka n tuffɣa d tarameɣtut."
+msgstr ""
 
-#: ../libgimpbase/gimpmetadata.c:1040
+#: ../libgimpbase/gimpmetadata.c:1076
 #, c-format
 msgid "Parsing Exif data failed."
-msgstr "Tasleḍt n yisefka n tuffɣa ur teddi ara."
+msgstr ""
 
-#: ../libgimpbase/gimpmetadata.c:1090
+#: ../libgimpbase/gimpmetadata.c:1126
 #, c-format
 msgid "Parsing IPTC data failed."
-msgstr "Tasleḍt n yisefka IPTC ur teddi ara."
+msgstr ""
 
-#: ../libgimpbase/gimpmetadata.c:1138
+#: ../libgimpbase/gimpmetadata.c:1174
 #, c-format
 msgid "Parsing XMP data failed."
-msgstr "Tasleḍt n yisefka XMP ur teddi ara."
+msgstr ""
 
 #: ../libgimpbase/gimputils.c:219 ../libgimpbase/gimputils.c:224
 msgid "(invalid UTF-8 string)"
-msgstr "(azrar UTF-8 d arameɣtu)"
+msgstr "(azrar UTF-8 arameɣtu)"
 
 #: ../libgimpbase/gimputils.c:394
 msgid "File path is NULL"
-msgstr "Abrid n ufaylu d NULL"
+msgstr ""
 
 #: ../libgimpbase/gimputils.c:403 ../libgimpbase/gimputils.c:414
 msgid "Error converting UTF-8 filename to wide char"
@@ -1509,7 +1569,7 @@ msgstr ""
 #: ../libgimpbase/gimputils.c:459
 #, c-format
 msgid "Cannot convert '%s' into a valid NSURL."
-msgstr "Ur izmir ara ad iselket '%s' ɣer NSURL ameɣtu."
+msgstr ""
 
 #: ../libgimpbase/gimputils.c:487
 msgid "Connecting to org.freedesktop.FileManager1 failed: "
@@ -1522,11 +1582,11 @@ msgstr ""
 #: ../libgimpcolor/gimpcolorprofile.c:258
 #, c-format
 msgid "'%s' does not appear to be an ICC color profile"
-msgstr "'%s' ur d-ittban ara d afaylu n yini ICC"
+msgstr "'%s' yettban-d mačči d amaɣnu n yini ICC"
 
 #: ../libgimpcolor/gimpcolorprofile.c:304
 msgid "Data does not appear to be an ICC color profile"
-msgstr "Isefka ur d-ttbanen ara d afaylu n yini ICC"
+msgstr ""
 
 #: ../libgimpcolor/gimpcolorprofile.c:361
 msgid "Could not save color profile to memory"
@@ -1544,12 +1604,12 @@ msgstr "Azegrir: %s"
 #: ../libgimpcolor/gimpcolorprofile.c:629
 #, c-format
 msgid "Manufacturer: %s"
-msgstr "Ameɣraf: %s"
+msgstr ""
 
 #: ../libgimpcolor/gimpcolorprofile.c:638
 #, c-format
 msgid "Copyright: %s"
-msgstr "Izefan n umeskar: %s"
+msgstr ""
 
 #: ../libgimpconfig/gimpconfigenums.c:24
 msgctxt "color-management-mode"
@@ -1559,7 +1619,7 @@ msgstr "Ulac asefrek n yini"
 #: ../libgimpconfig/gimpconfigenums.c:25
 msgctxt "color-management-mode"
 msgid "Color-managed display"
-msgstr "Agdil n usefrek n yiniten"
+msgstr ""
 
 #: ../libgimpconfig/gimpconfigenums.c:26
 msgctxt "color-management-mode"
@@ -1599,7 +1659,7 @@ msgstr "Amek ttwabeqqaḍent tugniwin deg ugdil."
 
 #: ../libgimpconfig/gimpcolorconfig.c:55
 msgid "The color profile of your (primary) monitor."
-msgstr "Amaɣnu n yini n ugdil-ik.im (amezwaru)."
+msgstr ""
 
 #: ../libgimpconfig/gimpcolorconfig.c:58
 msgid ""
@@ -1628,7 +1688,7 @@ msgstr ""
 msgid ""
 "The color profile to use for soft-proofing from your image's color space to "
 "some other color space, including soft-proofing to a printer or other output "
-"device profile. "
+"device profile."
 msgstr ""
 
 #: ../libgimpconfig/gimpcolorconfig.c:79
@@ -1653,12 +1713,12 @@ msgstr ""
 msgid ""
 "How colors are converted from your image's color space to the output "
 "simulation device (usually your monitor). Try them all and choose what looks "
-"the best. "
+"the best."
 msgstr ""
 
 #: ../libgimpconfig/gimpcolorconfig.c:99
 msgid ""
-"Try with and without black point compensation and choose what looks best. "
+"Try with and without black point compensation and choose what looks best."
 msgstr ""
 
 #: ../libgimpconfig/gimpcolorconfig.c:103
@@ -1676,183 +1736,183 @@ msgstr ""
 msgid "The color to use for marking colors which are out of gamut."
 msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:198
+#: ../libgimpconfig/gimpcolorconfig.c:210
 msgid "Mode of operation"
-msgstr "Askar n temhelt"
+msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:206
+#: ../libgimpconfig/gimpcolorconfig.c:218
 msgid "Preferred RGB profile"
 msgstr "Alegdis RGB anurif"
 
-#: ../libgimpconfig/gimpcolorconfig.c:213
+#: ../libgimpconfig/gimpcolorconfig.c:225
 msgid "Preferred grayscale profile"
-msgstr "Amaɣnu n yiswiren n uɣiɣdan amenyaf"
+msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:220
+#: ../libgimpconfig/gimpcolorconfig.c:232
 msgid "CMYK profile"
 msgstr "Alegdis CMYK"
 
-#: ../libgimpconfig/gimpcolorconfig.c:227
+#: ../libgimpconfig/gimpcolorconfig.c:239
 msgid "Monitor profile"
 msgstr "Alegdis n umsefrak"
 
-#: ../libgimpconfig/gimpcolorconfig.c:234
+#: ../libgimpconfig/gimpcolorconfig.c:246
 msgid "Use the system monitor profile"
-msgstr "Seqdec amaɣnu n usefrak n unagraw"
+msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:242
+#: ../libgimpconfig/gimpcolorconfig.c:253
 msgid "Simulation profile for soft-proofing"
 msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:249
+#: ../libgimpconfig/gimpcolorconfig.c:260
 msgid "Display rendering intent"
 msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:257
+#: ../libgimpconfig/gimpcolorconfig.c:268
 msgid "Use black point compensation for the display"
 msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:264
+#: ../libgimpconfig/gimpcolorconfig.c:275
 msgid "Optimize display color transformations"
 msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:271
+#: ../libgimpconfig/gimpcolorconfig.c:282
 msgid "Soft-proofing rendering intent"
 msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:279
+#: ../libgimpconfig/gimpcolorconfig.c:290
 msgid "Use black point compensation for soft-proofing"
 msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:286
+#: ../libgimpconfig/gimpcolorconfig.c:297
 msgid "Optimize soft-proofing color transformations"
 msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:293
+#: ../libgimpconfig/gimpcolorconfig.c:304
 msgid "Mark out of gamut colors"
 msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:300
+#: ../libgimpconfig/gimpcolorconfig.c:311
 msgid "Out of gamut warning color"
 msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:657
-#: ../libgimpconfig/gimpcolorconfig.c:841
+#: ../libgimpconfig/gimpcolorconfig.c:661
+#: ../libgimpconfig/gimpcolorconfig.c:854
 #, c-format
 msgid "Color profile '%s' is not for RGB color space."
-msgstr "Amaɣnu n yini '%s' mačči i tallunt n yini RGB."
+msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:699
-#: ../libgimpconfig/gimpcolorconfig.c:891
+#: ../libgimpconfig/gimpcolorconfig.c:705
+#: ../libgimpconfig/gimpcolorconfig.c:904
 #, c-format
 msgid "Color profile '%s' is not for GRAY color space."
-msgstr "Amaɣnu n yini '%s' mačči i tallunt n yini GRAY."
+msgstr ""
 
-#: ../libgimpconfig/gimpcolorconfig.c:741
-#: ../libgimpconfig/gimpcolorconfig.c:941
+#: ../libgimpconfig/gimpcolorconfig.c:749
+#: ../libgimpconfig/gimpcolorconfig.c:954
 #, c-format
 msgid "Color profile '%s' is not for CMYK color space."
-msgstr "Amaɣnu n yini '%s' mačči I tallunt n yini CMYK. "
+msgstr ""
 
-#: ../libgimpconfig/gimpconfig-deserialize.c:113
+#: ../libgimpconfig/gimpconfig-deserialize.c:116
 #, c-format
 msgid "value for token %s is not a valid UTF-8 string"
-msgstr "azal i ujiṭun '%s' mačči d azrar UTF-8 ameɣtu"
+msgstr ""
 
 #. please don't translate 'yes' and 'no'
-#: ../libgimpconfig/gimpconfig-deserialize.c:473
+#: ../libgimpconfig/gimpconfig-deserialize.c:480
 #, c-format
 msgid "expected 'yes' or 'no' for boolean token %s, got '%s'"
 msgstr ""
 
-#: ../libgimpconfig/gimpconfig-deserialize.c:588
+#: ../libgimpconfig/gimpconfig-deserialize.c:595
 #, c-format
 msgid "invalid value '%s' for token %s"
-msgstr "azal arameɣtu '%s' i ujiṭun %s"
+msgstr ""
 
-#: ../libgimpconfig/gimpconfig-deserialize.c:603
+#: ../libgimpconfig/gimpconfig-deserialize.c:610
 #, c-format
 msgid "invalid value '%ld' for token %s"
-msgstr "azal arameɣtu '%ld' i ujiṭun %s"
+msgstr ""
 
-#: ../libgimpconfig/gimpconfig-deserialize.c:672
+#: ../libgimpconfig/gimpconfig-deserialize.c:679
 #, c-format
 msgid "while parsing token '%s': %s"
 msgstr ""
 
-#: ../libgimpconfig/gimpconfig-iface.c:682
-#: ../libgimpconfig/gimpconfig-iface.c:695 ../libgimpconfig/gimpscanner.c:756
-#: ../libgimpconfig/gimpscanner.c:838
-#: ../libgimpwidgets/gimpcolorprofilestore.c:710
+#: ../libgimpconfig/gimpconfig-iface.c:666
+#: ../libgimpconfig/gimpconfig-iface.c:679 ../libgimpconfig/gimpscanner.c:774
+#: ../libgimpconfig/gimpscanner.c:856
+#: ../libgimpwidgets/gimpcolorprofilestore.c:682
 msgid "fatal parse error"
 msgstr ""
 
-#: ../libgimpconfig/gimpconfig-path.c:483
+#: ../libgimpconfig/gimpconfig-path.c:506
 msgid "File has no path representation"
-msgstr "Afaylu ur isεi ara tanekda n ubrid"
+msgstr ""
 
-#: ../libgimpconfig/gimpconfig-path.c:570
+#: ../libgimpconfig/gimpconfig-path.c:593
 #, c-format
 msgid "Cannot expand ${%s}"
 msgstr ""
 
-#: ../libgimpconfig/gimpconfigwriter.c:88
-#: ../libgimpconfig/gimpconfigwriter.c:673
+#: ../libgimpconfig/gimpconfigwriter.c:95
+#: ../libgimpconfig/gimpconfigwriter.c:725
 #, c-format
 msgid "Error writing to '%s': %s"
-msgstr "Tuccḍa deg tira ɣer '%s': %s"
+msgstr ""
 
-#: ../libgimpconfig/gimpconfigwriter.c:183
+#: ../libgimpconfig/gimpconfigwriter.c:153
 #, c-format
 msgid "Could not create directory '%s' for '%s': "
-msgstr "D awezɣi usnulfu n ukaram:'%s' i '%s': "
+msgstr ""
 
-#: ../libgimpconfig/gimpconfigwriter.c:199
+#: ../libgimpconfig/gimpconfigwriter.c:169
 #, c-format
 msgid "Could not create temporary file for '%s': "
-msgstr "ur izmir ara ad d-irnu afaylu akudan i '%s': "
+msgstr ""
 
-#: ../libgimpconfig/gimpconfigwriter.c:783
+#: ../libgimpconfig/gimpconfigwriter.c:835
 #, c-format
 msgid "Error writing '%s': %s"
 msgstr "Tuccḍa n tira n '%s': %s"
 
-#: ../libgimpconfig/gimpscanner.c:409
+#: ../libgimpconfig/gimpscanner.c:422
 #, c-format
 msgid "invalid UTF-8 string"
-msgstr "azrar UTF-8 d arameɣtu"
+msgstr ""
 
 #. please don't translate 'yes' and 'no'
-#: ../libgimpconfig/gimpscanner.c:631
+#: ../libgimpconfig/gimpscanner.c:649
 #, c-format
 msgid "expected 'yes' or 'no' for boolean token, got '%s'"
 msgstr ""
 
-#: ../libgimpconfig/gimpscanner.c:865
+#: ../libgimpconfig/gimpscanner.c:883
 #, c-format
 msgid "Error while parsing '%s' in line %d: %s"
-msgstr "Tuccḍa deg tesleḍt n '%s' deg yizirig %d: %s"
+msgstr ""
 
-#: ../libgimpmodule/gimpmodule.c:148 ../libgimpmodule/gimpmodule.c:166
-#: ../libgimpmodule/gimpmodule.c:275 ../libgimpmodule/gimpmodule.c:302
-#: ../libgimpmodule/gimpmodule.c:428
+#: ../libgimpmodule/gimpmodule.c:172 ../libgimpmodule/gimpmodule.c:190
+#: ../libgimpmodule/gimpmodule.c:451 ../libgimpmodule/gimpmodule.c:474
+#: ../libgimpmodule/gimpmodule.c:524
 #, c-format
 msgid "Module '%s' load error: %s"
 msgstr "Tuccḍa n usali n uzegrir '%s': %s"
 
-#: ../libgimpmodule/gimpmodule.c:370
+#: ../libgimpmodule/gimpmoduledb.c:500
 msgid "Module error"
 msgstr "Tuccḍa n uzegrir"
 
-#: ../libgimpmodule/gimpmodule.c:371
+#: ../libgimpmodule/gimpmoduledb.c:501
 msgid "Loaded"
 msgstr "Yuli-d"
 
-#: ../libgimpmodule/gimpmodule.c:372
+#: ../libgimpmodule/gimpmoduledb.c:502
 msgid "Load failed"
 msgstr "Asali ur yeddi ara"
 
-#: ../libgimpmodule/gimpmodule.c:373
+#: ../libgimpmodule/gimpmoduledb.c:503
 msgid "Not loaded"
 msgstr "Ur d-yuli ara"
 
@@ -1866,359 +1926,267 @@ msgstr ""
 #: ../libgimpthumb/gimpthumb-utils.c:299 ../libgimpthumb/gimpthumb-utils.c:367
 #, c-format
 msgid "Failed to create thumbnail folder '%s'."
-msgstr "Asnulfu n ukaram n tenfulin '%s' ur yeddi ara."
+msgstr ""
 
-#: ../libgimpthumb/gimpthumbnail.c:479
+#: ../libgimpthumb/gimpthumbnail.c:481
 #, c-format
 msgid "Thumbnail contains no Thumb::URI tag"
-msgstr "Tanfult ur tegbir araThumb::URI tag  "
+msgstr ""
 
-#: ../libgimpthumb/gimpthumbnail.c:876
+#: ../libgimpthumb/gimpthumbnail.c:878
 #, c-format
 msgid "Could not create thumbnail for %s: %s"
-msgstr "D awezɣi usnulfu n tenfult i %s: %s"
+msgstr ""
 
-#: ../libgimpwidgets/gimpbrowser.c:114
+#: ../libgimpwidgets/gimpbrowser.c:141
 msgid "_Search:"
 msgstr "_Nadi:"
 
-#: ../libgimpwidgets/gimpcolorbutton.c:147
+#: ../libgimpwidgets/gimpcolorbutton.c:152
 msgid "_Foreground Color"
 msgstr "Ini n uɣawas amezwaru"
 
-#: ../libgimpwidgets/gimpcolorbutton.c:151
+#: ../libgimpwidgets/gimpcolorbutton.c:156
 msgid "_Background Color"
 msgstr "_Ini n ugilal"
 
-#: ../libgimpwidgets/gimpcolorbutton.c:155
+#: ../libgimpwidgets/gimpcolorbutton.c:160
 msgid "Blac_k"
 msgstr "Aberkan"
 
-#: ../libgimpwidgets/gimpcolorbutton.c:159
+#: ../libgimpwidgets/gimpcolorbutton.c:164
 msgid "_White"
-msgstr ""
+msgstr "Amellal"
 
-#: ../libgimpwidgets/gimpcolorbutton.c:548 ../libgimpwidgets/gimpicons.c:68
-msgid "_Reset"
-msgstr "A_les awennez"
-
-#: ../libgimpwidgets/gimpcolorbutton.c:550
-#: ../libgimpwidgets/gimpfileentry.c:436 ../libgimpwidgets/gimpquerybox.c:275
-#: ../libgimpwidgets/gimpquerybox.c:335 ../libgimpwidgets/gimpquerybox.c:399
-#: ../libgimpwidgets/gimpquerybox.c:473 ../libgimpwidgets/gimpunitmenu.c:493
-msgid "_OK"
-msgstr "_Ih"
-
-#: ../libgimpwidgets/gimpcolorhexentry.c:118
+#: ../libgimpwidgets/gimpcolorhexentry.c:134
 msgid ""
 "Hexadecimal color notation as used in HTML and CSS.  This entry also accepts "
 "CSS color names."
 msgstr ""
 
-#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:107
+#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:108
 msgid "All files (*.*)"
 msgstr "Akk ifuyla (*.*)"
 
-#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:112
+#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:113
 msgid "ICC color profile (*.icc, *.icm)"
 msgstr ""
 
-#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:173
+#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:174
 msgid "_Save"
 msgstr "_Sekles"
 
-#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:183
-msgid "_Open"
-msgstr "_Ldi"
-
-#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:345
-#: ../libgimpwidgets/gimppatheditor.c:270
+#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:346
+#: ../libgimpwidgets/gimppatheditor.c:267
 msgid "Folder"
 msgstr "Akaram"
 
-#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:350
+#: ../libgimpwidgets/gimpcolorprofilechooserdialog.c:351
 msgid "Not a regular file."
-msgstr "Mačči d afaylu amluggen."
+msgstr "Mačči d afaylu amagnu."
 
-#: ../libgimpwidgets/gimpcolorprofilestore.c:147
+#: ../libgimpwidgets/gimpcolorprofilestore.c:158
 msgid "Select color profile from disk..."
 msgstr "Fren alegdis n yini seg uḍebsi..."
 
-#: ../libgimpwidgets/gimpcolorprofilestore.c:315
+#: ../libgimpwidgets/gimpcolorprofilestore.c:287
 msgctxt "profile"
 msgid "None"
-msgstr "Ulac"
+msgstr "Ula yiwen"
 
 #: ../libgimpwidgets/gimpcolorprofileview.c:168
 msgid "Manufacturer: "
-msgstr "Ameɣraf:"
+msgstr ""
 
 #: ../libgimpwidgets/gimpcolorprofileview.c:180
 msgid "Copyright: "
-msgstr "Izefan n umeskar:"
+msgstr ""
 
 #: ../libgimpwidgets/gimpcolorscales.c:205
 msgid "Scales"
 msgstr ""
 
-#: ../libgimpwidgets/gimpcolorscales.c:437
+#: ../libgimpwidgets/gimpcolorscales.c:434
 msgid "0..100"
 msgstr "0..100"
 
-#: ../libgimpwidgets/gimpcolorscales.c:439
+#: ../libgimpwidgets/gimpcolorscales.c:436
 msgid "0..255"
 msgstr "0..255"
 
-#: ../libgimpwidgets/gimpcolorscales.c:460
+#: ../libgimpwidgets/gimpcolorscales.c:457
 msgid "LCh"
-msgstr "LCh"
+msgstr ""
 
-#: ../libgimpwidgets/gimpcolorscales.c:462
+#: ../libgimpwidgets/gimpcolorscales.c:459
 msgid "HSV"
 msgstr "HSV"
 
-#: ../libgimpwidgets/gimpcolorselection.c:222
+#: ../libgimpwidgets/gimpcolorselection.c:247
 msgid "Current:"
 msgstr "Amiran:"
 
-#: ../libgimpwidgets/gimpcolorselection.c:231
+#: ../libgimpwidgets/gimpcolorselection.c:256
 msgid "Old:"
 msgstr "Aqbur:"
 
-#: ../libgimpwidgets/gimpcolorselection.c:318
+#: ../libgimpwidgets/gimpcolorselection.c:343
 msgid "HTML _notation:"
 msgstr "Tira HTML:"
 
-#: ../libgimpwidgets/gimpdialog.c:178
-msgid "_Help"
-msgstr "_Tallelt"
-
-#: ../libgimpwidgets/gimpfileentry.c:152
+#: ../libgimpwidgets/gimpfileentry.c:167
 msgid "Show file location in the file manager"
 msgstr "Sken ideg n ufaylu deg umsefrak n yifuyla"
 
-#: ../libgimpwidgets/gimpfileentry.c:223
+#: ../libgimpwidgets/gimpfileentry.c:238
 msgid "Open a file selector to browse your folders"
 msgstr "Ldi amefran n ufaylu iwakken ad tesnirmeḍ ikaramen"
 
-#: ../libgimpwidgets/gimpfileentry.c:224
+#: ../libgimpwidgets/gimpfileentry.c:239
 msgid "Open a file selector to browse your files"
 msgstr "Ldi amefran n ufaylu iwakken ad tesnirmeḍ ikaramen"
 
-#: ../libgimpwidgets/gimpfileentry.c:236
+#: ../libgimpwidgets/gimpfileentry.c:251
 msgid "Indicates whether or not the folder exists"
 msgstr "Ad immel ma yella akaram yella neɣ ala"
 
-#: ../libgimpwidgets/gimpfileentry.c:237
+#: ../libgimpwidgets/gimpfileentry.c:252
 msgid "Indicates whether or not the file exists"
 msgstr "Ad immel ma yella afaylu yella neɣ ala"
 
-#: ../libgimpwidgets/gimpfileentry.c:397
+#: ../libgimpwidgets/gimpfileentry.c:428
 #, c-format
 msgid "Can't show file in file manager: %s"
 msgstr "Ulamek ara yettwasken ufaylu deg umsefrak n yifuyla: %s"
 
-#: ../libgimpwidgets/gimpfileentry.c:424
+#: ../libgimpwidgets/gimpfileentry.c:455
 msgid "Select Folder"
 msgstr "Fren akaram"
 
-#: ../libgimpwidgets/gimpfileentry.c:426
+#: ../libgimpwidgets/gimpfileentry.c:457
 msgid "Select File"
 msgstr "Fren afaylu"
 
-#: ../libgimpwidgets/gimphelpui.c:433
+#: ../libgimpwidgets/gimphelpui.c:384
 msgid "Press F1 for more help"
-msgstr "Sit ɣef F1 i wugar n tallelt"
-
-#: ../libgimpwidgets/gimpicons.c:62
-msgid "Anchor"
-msgstr "Tamdeyt"
-
-#: ../libgimpwidgets/gimpicons.c:63
-msgid "C_enter"
-msgstr "_Slemmes"
-
-#: ../libgimpwidgets/gimpicons.c:64
-msgid "_Duplicate"
-msgstr "_Sisleg"
-
-#: ../libgimpwidgets/gimpicons.c:65
-msgid "Linked"
-msgstr "Yettwaqqen"
-
-#: ../libgimpwidgets/gimpicons.c:66
-msgid "Paste as New"
-msgstr "Senṭeḍ am umaynut"
-
-#: ../libgimpwidgets/gimpicons.c:67
-msgid "Paste Into"
-msgstr "Senteḍ deg"
-
-#: ../libgimpwidgets/gimpicons.c:69
-msgid "Visible"
-msgstr "Attwalay"
-
-#: ../libgimpwidgets/gimpicons.c:105 ../libgimpwidgets/gimpicons.c:109
-msgid "_Stroke"
-msgstr "Suneɣ"
-
-#: ../libgimpwidgets/gimpicons.c:121
-msgid "L_etter Spacing"
 msgstr ""
 
-#: ../libgimpwidgets/gimpicons.c:122
-msgid "L_ine Spacing"
-msgstr ""
+#. This string appears in an empty menu as in
+#. * "nothing selected and nothing to select"
+#.
+#: ../libgimpwidgets/gimpintstore.c:255
+msgid "(Empty)"
+msgstr "(Ilem)"
 
-#: ../libgimpwidgets/gimpicons.c:139
-msgid "Re_size"
-msgstr ""
-
-#: ../libgimpwidgets/gimpicons.c:140 ../libgimpwidgets/gimpicons.c:272
-msgid "_Scale"
-msgstr ""
-
-#: ../libgimpwidgets/gimpicons.c:247
-msgid "Cr_op"
-msgstr ""
-
-#: ../libgimpwidgets/gimpicons.c:255
-msgid "_Select"
-msgstr "_Fren"
-
-#: ../libgimpwidgets/gimpicons.c:267
-msgid "_Transform"
-msgstr "_Selket"
-
-#: ../libgimpwidgets/gimpicons.c:273
-msgid "_Shear"
-msgstr ""
-
-#: ../libgimpwidgets/gimpmemsizeentry.c:256
+#: ../libgimpwidgets/gimpmemsizeentry.c:252
 msgid "Kibibyte"
 msgstr ""
 
-#: ../libgimpwidgets/gimpmemsizeentry.c:257
+#: ../libgimpwidgets/gimpmemsizeentry.c:253
 msgid "Mebibyte"
 msgstr ""
 
-#: ../libgimpwidgets/gimpmemsizeentry.c:258
+#: ../libgimpwidgets/gimpmemsizeentry.c:254
 msgid "Gibibyte"
 msgstr ""
 
 #. Count label
-#: ../libgimpwidgets/gimppageselector.c:270
-#: ../libgimpwidgets/gimppageselector.c:1066
+#: ../libgimpwidgets/gimppageselector.c:283
+#: ../libgimpwidgets/gimppageselector.c:1079
 msgid "Nothing selected"
 msgstr "Ulac acu yettwafernen"
 
-#: ../libgimpwidgets/gimppageselector.c:288
+#: ../libgimpwidgets/gimppageselector.c:301
 msgid "Select _All"
 msgstr "Fren _akk"
 
-#: ../libgimpwidgets/gimppageselector.c:308
+#: ../libgimpwidgets/gimppageselector.c:321
 msgid "Select _range:"
 msgstr "Fren tagrumma:"
 
-#: ../libgimpwidgets/gimppageselector.c:320
+#: ../libgimpwidgets/gimppageselector.c:333
 msgid "Open _pages as"
 msgstr "Ldi isebtar am"
 
-#: ../libgimpwidgets/gimppageselector.c:448
-#: ../libgimpwidgets/gimppageselector.c:646
+#: ../libgimpwidgets/gimppageselector.c:461
+#: ../libgimpwidgets/gimppageselector.c:659
 #, c-format
 msgid "Page %d"
 msgstr "Asebter %d"
 
-#: ../libgimpwidgets/gimppageselector.c:1071
+#: ../libgimpwidgets/gimppageselector.c:1084
 msgid "One page selected"
 msgstr "Ldi asebter yettwfernen"
 
-#: ../libgimpwidgets/gimppageselector.c:1078
-#: ../libgimpwidgets/gimppageselector.c:1082
+#: ../libgimpwidgets/gimppageselector.c:1091
+#: ../libgimpwidgets/gimppageselector.c:1095
 #, c-format
 msgid "%d page selected"
 msgid_plural "All %d pages selected"
 msgstr[0] "%d n usebter yettwefren"
 msgstr[1] "%d n isebtar ttwefernen"
 
-#: ../libgimpwidgets/gimppatheditor.c:181
+#: ../libgimpwidgets/gimppatheditor.c:178
 msgid "Add a new folder"
 msgstr "Rnu akaram amaynut"
 
-#: ../libgimpwidgets/gimppatheditor.c:199
+#: ../libgimpwidgets/gimppatheditor.c:196
 msgid "Move the selected folder up"
 msgstr "Smutti akaram yettwafernen d asawen"
 
-#: ../libgimpwidgets/gimppatheditor.c:217
+#: ../libgimpwidgets/gimppatheditor.c:214
 msgid "Move the selected folder down"
 msgstr "Smutti akaram yettwafernen d akessar"
 
-#: ../libgimpwidgets/gimppatheditor.c:235
+#: ../libgimpwidgets/gimppatheditor.c:232
 msgid "Remove the selected folder from the list"
 msgstr "Kkes akaram yettwafernen si tebdart"
 
-#: ../libgimpwidgets/gimppatheditor.c:261
+#: ../libgimpwidgets/gimppatheditor.c:258
 msgid "Writable"
-msgstr "Yettwaray"
+msgstr "Yettwaddaf s tira"
 
-#: ../libgimpwidgets/gimppickbutton.c:112
+#: ../libgimpwidgets/gimppickbutton.c:115
 msgid ""
 "Click the eyedropper, then click a color anywhere on your screen to select "
 "that color."
 msgstr ""
 
 #. toggle button to (de)activate the instant preview
-#: ../libgimpwidgets/gimppreview.c:293
+#: ../libgimpwidgets/gimppreview.c:282
 msgid "_Preview"
 msgstr "Ta_muɣli"
 
-#: ../libgimpwidgets/gimppreviewarea.c:125
+#: ../libgimpwidgets/gimppreviewarea.c:134
 msgid "Check Size"
 msgstr ""
 
-#: ../libgimpwidgets/gimppreviewarea.c:133
+#: ../libgimpwidgets/gimppreviewarea.c:142
 msgid "Check Style"
 msgstr ""
 
-#: ../libgimpwidgets/gimppropwidgets.c:2178
+#: ../libgimpwidgets/gimppropwidgets.c:2199
 #, c-format
 msgid "This text input field is limited to %d character."
 msgid_plural "This text input field is limited to %d characters."
 msgstr[0] ""
 msgstr[1] ""
 
-#: ../libgimpwidgets/gimpunitmenu.c:261
-msgid "More..."
-msgstr "Ugar..."
-
-#: ../libgimpwidgets/gimpunitmenu.c:487
-msgid "Unit Selection"
-msgstr "Afran n uferdis"
-
-#: ../libgimpwidgets/gimpunitmenu.c:536
-msgid "Unit"
-msgstr "Aferdis"
-
-#: ../libgimpwidgets/gimpunitmenu.c:540
-msgid "Factor"
-msgstr "Ameskar"
-
-#: ../libgimpwidgets/gimpwidgets.c:521
+#: ../libgimpwidgets/gimpwidgets.c:259
 msgid ""
 "Use this value for random number generator seed - this allows you to repeat "
 "a given \"random\" operation"
 msgstr ""
 
-#: ../libgimpwidgets/gimpwidgets.c:525
+#: ../libgimpwidgets/gimpwidgets.c:263
 msgid "_New Seed"
 msgstr ""
 
-#: ../libgimpwidgets/gimpwidgets.c:538
+#: ../libgimpwidgets/gimpwidgets.c:279
 msgid "Seed random number generator with a generated random number"
 msgstr ""
 
-#: ../libgimpwidgets/gimpwidgets.c:542
+#: ../libgimpwidgets/gimpwidgets.c:283
 msgid "_Randomize"
 msgstr ""
 
@@ -2304,7 +2272,7 @@ msgstr "_B"
 
 #: ../libgimpwidgets/gimpwidgetsenums.c:134
 msgid "Blue"
-msgstr "Anili"
+msgstr "Azegzaw"
 
 #: ../libgimpwidgets/gimpwidgetsenums.c:135
 msgctxt "color-selector-channel"
@@ -2331,12 +2299,12 @@ msgstr "_C"
 
 #: ../libgimpwidgets/gimpwidgetsenums.c:137
 msgid "LCh Chroma"
-msgstr "LCh Chroma"
+msgstr ""
 
 #: ../libgimpwidgets/gimpwidgetsenums.c:138
 msgctxt "color-selector-channel"
 msgid "_h"
-msgstr ""
+msgstr "_h"
 
 #: ../libgimpwidgets/gimpwidgetsenums.c:138
 msgid "LCh Hue"
@@ -2349,16 +2317,16 @@ msgstr "RGB"
 
 #: ../libgimpwidgets/gimpwidgetsenums.c:168
 msgid "RGB color model"
-msgstr "Tmudemt n yini RGB"
+msgstr ""
 
 #: ../libgimpwidgets/gimpwidgetsenums.c:169
 msgctxt "color-selector-model"
 msgid "LCH"
-msgstr ""
+msgstr "LCH"
 
 #: ../libgimpwidgets/gimpwidgetsenums.c:169
 msgid "CIE LCh color model"
-msgstr "Tamudemt n yini CIE LCh"
+msgstr ""
 
 #: ../libgimpwidgets/gimpwidgetsenums.c:170
 msgctxt "color-selector-model"
@@ -2391,68 +2359,68 @@ msgstr "Simẓi"
 
 #: ../modules/color-selector-cmyk.c:82
 msgid "CMYK color selector (using color profile)"
-msgstr "Amsefran n yini CMYK (s useqdec n umaɣnu n yini)"
+msgstr ""
 
 #: ../modules/color-selector-cmyk.c:116
 msgid "CMYK"
 msgstr "CMYK"
 
 #. Cyan
-#: ../modules/color-selector-cmyk.c:138
+#: ../modules/color-selector-cmyk.c:139
 msgid "_C"
 msgstr "_C"
 
 #. Magenta
-#: ../modules/color-selector-cmyk.c:140
+#: ../modules/color-selector-cmyk.c:141
 msgid "_M"
 msgstr "_M"
 
 #. Yellow
-#: ../modules/color-selector-cmyk.c:142
+#: ../modules/color-selector-cmyk.c:143
 msgid "_Y"
 msgstr "_Y"
 
 #. Key (Black)
-#: ../modules/color-selector-cmyk.c:144
+#: ../modules/color-selector-cmyk.c:145
 msgid "_K"
-msgstr ""
+msgstr "_K"
 
-#: ../modules/color-selector-cmyk.c:148
+#: ../modules/color-selector-cmyk.c:149
 msgid "Cyan"
 msgstr ""
 
-#: ../modules/color-selector-cmyk.c:149
+#: ../modules/color-selector-cmyk.c:150
 msgid "Magenta"
 msgstr ""
 
-#: ../modules/color-selector-cmyk.c:150
+#: ../modules/color-selector-cmyk.c:151
 msgid "Yellow"
 msgstr "Awraɣ"
 
-#: ../modules/color-selector-cmyk.c:151
+#: ../modules/color-selector-cmyk.c:152
 msgid "Black"
 msgstr "Aberkan"
 
-#: ../modules/color-selector-cmyk.c:374
+#: ../modules/color-selector-cmyk.c:368
 msgid "Profile: (none)"
 msgstr "Alegdis: (ulac)"
 
-#: ../modules/color-selector-cmyk.c:386
+#: ../modules/color-selector-cmyk.c:380
 #, c-format
 msgid "Profile: %s"
 msgstr "Alegdis: %s"
 
 #: ../modules/color-selector-water.c:96
 msgid "Watercolor style color selector"
-msgstr "Amsefran n yini n wanaw n yini n waman"
+msgstr ""
 
 #: ../modules/color-selector-water.c:130
 msgid "Watercolor"
-msgstr "Ini n waman"
+msgstr ""
 
-#: ../modules/color-selector-water.c:200
+#: ../modules/color-selector-water.c:198
 msgid "Pressure"
-msgstr "Tussda"
+msgstr ""
 
 #: ../modules/color-selector-wheel.c:72
 msgid "HSV color wheel"
@@ -2642,7 +2610,7 @@ msgstr "Taqeffalt talemmast"
 
 #: ../modules/controller-linux-input.c:72
 msgid "Button Side"
-msgstr "Taqeffalt n yidis"
+msgstr ""
 
 #: ../modules/controller-linux-input.c:73
 msgid "Button Extra"
@@ -2650,11 +2618,11 @@ msgstr ""
 
 #: ../modules/controller-linux-input.c:74
 msgid "Button Forward"
-msgstr "Taqeffalt ɣer sdat"
+msgstr ""
 
 #: ../modules/controller-linux-input.c:75
 msgid "Button Back"
-msgstr "Taqeffalt ɣer deffir"
+msgstr ""
 
 #: ../modules/controller-linux-input.c:76
 msgid "Button Task"
@@ -2722,7 +2690,7 @@ msgstr ""
 
 #: ../modules/controller-linux-input.c:230
 msgid "Linux Input"
-msgstr "Anekcum n Linux"
+msgstr ""
 
 #: ../modules/controller-linux-input.c:513
 msgid "Linux Input Events"
@@ -2774,99 +2742,111 @@ msgstr "MIDI"
 #: ../modules/controller-midi.c:355
 #, c-format
 msgid "Note %02x on"
-msgstr "Tangalt 0x%02x termed"
+msgstr ""
 
 #: ../modules/controller-midi.c:358
 #, c-format
 msgid "Note %02x off"
-msgstr "Tangalt 0x%02x tensa"
+msgstr ""
 
 #: ../modules/controller-midi.c:361
 #, c-format
 msgid "Controller %03d"
-msgstr "Asenqad %03d"
+msgstr ""
 
 #: ../modules/controller-midi.c:408
 msgid "MIDI Events"
-msgstr "Tidyanin MIDI"
-
-#: ../modules/controller-midi.c:426
-msgid "GIMP"
-msgstr "GIMP"
+msgstr ""
 
 #: ../modules/controller-midi.c:428
 msgid "GIMP MIDI Input Controller"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:120
+#: ../modules/display-filter-aces-rrt.c:84
+msgid ""
+"ACES RRT (RRT = Reference Rendering Transform). An HDR to SDR proof color "
+"display filter, using a luminance-only approximation of the ACES RRT, a pre-"
+"defined filmic look to be used before ODT (display or output space ICC "
+"profile)"
+msgstr ""
+
+#: ../modules/display-filter-aces-rrt.c:121
+msgid "Pre-transform change in stops"
+msgstr ""
+
+#: ../modules/display-filter-aces-rrt.c:126
+msgid "Aces RRT"
+msgstr ""
+
+#: ../modules/display-filter-clip-warning.c:121
 msgid "Clip warning color display filter"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:157
+#: ../modules/display-filter-clip-warning.c:158
 msgid "Show shadows"
 msgstr "Sken tili"
 
-#: ../modules/display-filter-clip-warning.c:158
+#: ../modules/display-filter-clip-warning.c:159
 msgid "Show warning for pixels with a negative component"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:164
+#: ../modules/display-filter-clip-warning.c:165
 msgid "Shadows color"
 msgstr "Ini n tili"
 
-#: ../modules/display-filter-clip-warning.c:165
+#: ../modules/display-filter-clip-warning.c:166
 msgid "Shadows warning color"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:177
-msgid "Show highlights"
-msgstr "Sken asebrureq"
-
 #: ../modules/display-filter-clip-warning.c:178
+msgid "Show highlights"
+msgstr ""
+
+#: ../modules/display-filter-clip-warning.c:179
 msgid "Show warning for pixels with a component greater than one"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:184
+#: ../modules/display-filter-clip-warning.c:185
 msgid "Highlights color"
 msgstr "Ini n usebrureq"
 
-#: ../modules/display-filter-clip-warning.c:185
+#: ../modules/display-filter-clip-warning.c:186
 msgid "Highlights warning color"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:197
+#: ../modules/display-filter-clip-warning.c:198
 msgid "Show bogus"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:198
+#: ../modules/display-filter-clip-warning.c:199
 msgid "Show warning for pixels with an infinite or NaN component"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:204
+#: ../modules/display-filter-clip-warning.c:205
 msgid "Bogus color"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:205
+#: ../modules/display-filter-clip-warning.c:206
 msgid "Bogus warning color"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:217
+#: ../modules/display-filter-clip-warning.c:218
 msgid "Include alpha component"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:218
+#: ../modules/display-filter-clip-warning.c:219
 msgid "Include alpha component in the warning"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:224
+#: ../modules/display-filter-clip-warning.c:225
 msgid "Include transparent pixels"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:225
+#: ../modules/display-filter-clip-warning.c:226
 msgid "Include fully transparent pixels in the warning"
 msgstr ""
 
-#: ../modules/display-filter-clip-warning.c:229
+#: ../modules/display-filter-clip-warning.c:230
 msgid "Clip Warning"
 msgstr ""
 
@@ -2904,7 +2884,7 @@ msgstr ""
 
 #: ../modules/display-filter-gamma.c:123 ../modules/display-filter-gamma.c:128
 msgid "Gamma"
-msgstr "Gamma"
+msgstr "Gama"
 
 #: ../modules/display-filter-high-contrast.c:86
 msgid "High Contrast color display filter"
@@ -2917,3 +2897,18 @@ msgstr ""
 #: ../modules/display-filter-high-contrast.c:128
 msgid "Contrast"
 msgstr "Amyeẓli"
+
+#~ msgid "Rotate %s?"
+#~ msgstr "Zzi %s?"
+
+#~ msgid "_Rotate"
+#~ msgstr "_Zzi"
+
+#~ msgid "Would you like to rotate the image?"
+#~ msgstr "Tebɣiḍ ad tzziḍ tugna ?"
+
+#~ msgid "_Don't ask me again"
+#~ msgstr "_Ur yi-d-steqssay ara tikkelt-nniḍen"
+
+#~ msgid "GIMP 2.10"
+#~ msgstr "GIMP 2.10"

@@ -24,9 +24,10 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "gimpwidgetstypes.h"
 
-#include "gimp3migration.h"
 #include "gimpbusybox.h"
 #include "gimpwidgetsutils.h"
 
@@ -48,8 +49,10 @@ enum
 };
 
 
-struct _GimpBusyBoxPrivate
+struct _GimpBusyBox
 {
+  GtkBox    parent_instance;
+
   GtkLabel *label;
 };
 
@@ -66,7 +69,7 @@ static void   gimp_busy_box_get_property (GObject      *object,
                                           GParamSpec   *pspec);
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpBusyBox, gimp_busy_box, GTK_TYPE_ALIGNMENT)
+G_DEFINE_TYPE (GimpBusyBox, gimp_busy_box, GTK_TYPE_BOX)
 
 #define parent_class gimp_busy_box_parent_class
 
@@ -101,33 +104,26 @@ gimp_busy_box_class_init (GimpBusyBoxClass *klass)
 static void
 gimp_busy_box_init (GimpBusyBox *box)
 {
-  GtkWidget *hbox;
   GtkWidget *spinner;
   GtkWidget *label;
 
-  box->priv = gimp_busy_box_get_instance_private (box);
-
-  gtk_alignment_set (GTK_ALIGNMENT (box), 0.5, 0.5, 0.0, 0.0);
-
-  /* the main hbox */
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
-  gtk_container_add (GTK_CONTAINER (box), hbox);
-  gtk_widget_show (hbox);
+  gtk_widget_set_halign (GTK_WIDGET (box), GTK_ALIGN_CENTER);
+  gtk_widget_set_valign (GTK_WIDGET (box), GTK_ALIGN_CENTER);
+  gtk_box_set_spacing (GTK_BOX (box), 8);
 
   /* the spinner */
   spinner = gtk_spinner_new ();
-  gtk_widget_set_size_request (spinner, 16, 16);
   gtk_spinner_start (GTK_SPINNER (spinner));
-  gtk_box_pack_start (GTK_BOX (hbox), spinner, FALSE, FALSE, 0);
+  gtk_box_pack_start (GTK_BOX (box), spinner, FALSE, FALSE, 0);
   gtk_widget_show (spinner);
 
   /* the label */
   label = gtk_label_new (NULL);
-  box->priv->label = GTK_LABEL (label);
+  box->label = GTK_LABEL (label);
   gimp_label_set_attributes (GTK_LABEL (label),
                              PANGO_ATTR_STYLE, PANGO_STYLE_ITALIC,
                              -1);
-  gtk_box_pack_start (GTK_BOX (hbox), label, FALSE, FALSE, 0);
+  gtk_box_pack_start (GTK_BOX (box), label, FALSE, FALSE, 0);
   gtk_widget_show (label);
 }
 
@@ -142,7 +138,7 @@ gimp_busy_box_set_property (GObject      *object,
   switch (property_id)
     {
     case PROP_MESSAGE:
-      gtk_label_set_text (box->priv->label, g_value_get_string (value));
+      gtk_label_set_text (box->label, g_value_get_string (value));
       break;
 
     default:
@@ -162,7 +158,7 @@ gimp_busy_box_get_property (GObject    *object,
   switch (property_id)
     {
     case PROP_MESSAGE:
-      g_value_set_string (value, gtk_label_get_text (box->priv->label));
+      g_value_set_string (value, gtk_label_get_text (box->label));
       break;
 
     default:
@@ -232,5 +228,5 @@ gimp_busy_box_get_message (GimpBusyBox *box)
 {
   g_return_val_if_fail (GIMP_IS_BUSY_BOX (box), NULL);
 
-  return gtk_label_get_text (box->priv->label);
+  return gtk_label_get_text (box->label);
 }

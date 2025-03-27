@@ -4,7 +4,8 @@ build/windows/installer/lang/setup.isl.in
 data/tags
 data/tips
 desktop
-desktop/gimp.desktop.in
+extensions/goat-exercises/goat-exercise-vala.c
+extensions/goat-exercises/org.gimp.extension.goat-exercises.metainfo.xml.in
 libgimp
 libgimpbase
 libgimpcolor
@@ -13,12 +14,14 @@ libgimpmath
 libgimpmodule
 libgimpthumb
 libgimpwidgets
+menus
 modules
+plug-ins/goat-exercises/goat-exercise-vala.c
 plug-ins/imagemap/imap_cern_parse.c
 plug-ins/imagemap/imap_csim_parse.c
 plug-ins/imagemap/imap_ncsa_parse.c
 plug-ins/imagemap/y.tab.c
 plug-ins/metadata/interface.c
-plug-ins/pygimp
+plug-ins/python
 plug-ins/script-fu
 tools

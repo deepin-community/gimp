@@ -36,6 +36,8 @@ struct _Gimp
 {
   GimpObject              parent_instance;
 
+  GApplication           *app;
+
   GimpCoreConfig         *config;
   GimpCoreConfig         *edit_config; /* don't use this one, it's just
                                         * for the preferences dialog
@@ -61,12 +63,12 @@ struct _Gimp
 
   gboolean                restored;    /* becomes TRUE in gimp_restore() */
   gboolean                initialized; /* Fully initialized (only set once at start). */
+  gboolean                query_all;   /* Force query all plug-ins. */
 
   gint                    busy;
   guint                   busy_idle_id;
 
   GList                  *user_units;
-  gint                    n_user_units;
 
   GimpParasiteList       *parasites;
 
@@ -76,18 +78,20 @@ struct _Gimp
   GimpModuleDB           *module_db;
   gboolean                write_modulerc;
 
+  GimpExtensionManager   *extension_manager;
   GimpPlugInManager      *plug_in_manager;
 
   GList                  *filter_history;
 
   GimpContainer          *images;
-  guint32                 next_guide_ID;
-  guint32                 next_sample_point_ID;
+  guint32                 next_guide_id;
+  guint32                 next_sample_point_id;
   GimpIdTable            *image_table;
   GimpIdTable            *item_table;
+  GimpIdTable            *drawable_filter_table;
 
   GimpContainer          *displays;
-  gint                    next_display_ID;
+  gint                    next_display_id;
 
   GList                  *image_windows;
 

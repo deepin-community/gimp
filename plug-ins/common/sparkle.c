@@ -42,8 +42,6 @@
 #define PLUG_IN_BINARY "sparkle"
 #define PLUG_IN_ROLE   "gimp-sparkle"
 
-#define SCALE_WIDTH    175
-#define ENTRY_WIDTH      7
 #define MAX_CHANNELS     4
 #define PSV              2  /* point spread value */
 
@@ -52,520 +50,401 @@
 #define BACKGROUND       2
 
 
-typedef struct
+typedef struct _Sparkle      Sparkle;
+typedef struct _SparkleClass SparkleClass;
+
+struct _Sparkle
 {
-  gdouble   lum_threshold;
-  gdouble   flare_inten;
-  gdouble   spike_len;
-  gdouble   spike_pts;
-  gdouble   spike_angle;
-  gdouble   density;
-  gdouble   transparency;
-  gdouble   random_hue;
-  gdouble   random_saturation;
-  gboolean  preserve_luminosity;
-  gboolean  inverse;
-  gboolean  border;
-  gint      colortype;
-} SparkleVals;
-
-
-/* Declare local functions.
- */
-
-static void      query  (void);
-static void      run    (const gchar      *name,
-                         gint              nparams,
-                         const GimpParam  *param,
-                         gint             *nreturn_vals,
-                         GimpParam       **return_vals);
-
-static gboolean  sparkle_dialog        (gint32        drawable_ID);
-
-static gint      compute_luminosity    (const guchar *pixel,
-                                        gboolean      gray,
-                                        gboolean      has_alpha);
-static gint      compute_lum_threshold (gint32        drawable_ID,
-                                        gdouble       percentile);
-static void      sparkle               (gint32        drawable_ID,
-                                        GimpPreview  *preview);
-static void      sparkle_preview       (gpointer      drawable_ID,
-                                        GimpPreview  *preview);
-static void      fspike                (GeglBuffer   *src_buffer,
-                                        GeglBuffer   *dest_buffer,
-                                        const Babl   *format,
-                                        gint          bytes,
-                                        gint          x1,
-                                        gint          y1,
-                                        gint          x2,
-                                        gint          y2,
-                                        gint          xr,
-                                        gint          yr,
-                                        gdouble       inten,
-                                        gdouble       length,
-                                        gdouble       angle,
-                                        GRand        *gr,
-                                        guchar       *dest_buf);
-static void       rpnt                 (GeglBuffer   *dest_buffer,
-                                        const Babl   *format,
-                                        gint          x1,
-                                        gint          y1,
-                                        gint          x2,
-                                        gint          y2,
-                                        gdouble       xr,
-                                        gdouble       yr,
-                                        gint          bytes,
-                                        gdouble       inten,
-                                        guchar        color[MAX_CHANNELS],
-                                        guchar       *dest_buf);
-
-const GimpPlugInInfo PLUG_IN_INFO =
-{
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
+  GimpPlugIn parent_instance;
 };
 
-static SparkleVals svals =
+struct _SparkleClass
 {
-  0.001,   /* luminosity threshold */
-  0.5,     /* flare intensity      */
-  20.0,    /* spike length         */
-  4.0,     /* spike points         */
-  15.0,    /* spike angle          */
-  1.0,     /* spike density        */
-  0.0,     /* transparency         */
-  0.0,     /* random hue           */
-  0.0,     /* random saturation    */
-  FALSE,   /* preserve_luminosity  */
-  FALSE,   /* inverse              */
-  FALSE,   /* border               */
-  NATURAL  /* colortype            */
+  GimpPlugInClass parent_class;
 };
+
+
+#define SPARKLE_TYPE  (sparkle_get_type ())
+#define SPARKLE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SPARKLE_TYPE, Sparkle))
+
+GType                   sparkle_get_type         (void) G_GNUC_CONST;
+
+static GList          * sparkle_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * sparkle_create_procedure (GimpPlugIn           *plug_in,
+                                                  const gchar          *name);
+
+static GimpValueArray * sparkle_run              (GimpProcedure        *procedure,
+                                                  GimpRunMode           run_mode,
+                                                  GimpImage            *image,
+                                                  GimpDrawable        **drawables,
+                                                  GimpProcedureConfig  *config,
+                                                  gpointer              run_data);
+
+static gboolean         sparkle_dialog           (GimpProcedure        *procedure,
+                                                  GObject              *config,
+                                                  GimpDrawable         *drawable);
+
+static gint             compute_luminosity       (const guchar         *pixel,
+                                                  gboolean              gray,
+                                                  gboolean              has_alpha,
+                                                  gint                  inverse);
+static gint             compute_lum_threshold    (GimpDrawable         *drawable,
+                                                  gdouble               percentile,
+                                                  gint                  inverse);
+static void             sparkle                  (GObject              *config,
+                                                  GimpDrawable         *drawable,
+                                                  GimpPreview          *preview);
+static void             sparkle_preview          (GtkWidget            *widget,
+                                                  GObject              *config);
+static void             fspike                   (GObject              *config,
+                                                  GeglBuffer           *src_buffer,
+                                                  GeglBuffer           *dest_buffer,
+                                                  const Babl           *format,
+                                                  gint                  bytes,
+                                                  gint                  x1,
+                                                  gint                  y1,
+                                                  gint                  x2,
+                                                  gint                  y2,
+                                                  gint                  xr,
+                                                  gint                  yr,
+                                                  gdouble               inten,
+                                                  gdouble               length,
+                                                  gdouble               angle,
+                                                  GRand                *gr,
+                                                  guchar               *dest_buf);
+static void             rpnt                     (GObject              *config,
+                                                  GeglBuffer           *dest_buffer,
+                                                  const Babl           *format,
+                                                  gint                  x1,
+                                                  gint                  y1,
+                                                  gint                  x2,
+                                                  gint                  y2,
+                                                  gdouble               xr,
+                                                  gdouble               yr,
+                                                  gint                  bytes,
+                                                  gdouble               inten,
+                                                  guchar                color[MAX_CHANNELS],
+                                                  guchar               *dest_buf);
+
+
+G_DEFINE_TYPE (Sparkle, sparkle, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (SPARKLE_TYPE)
+DEFINE_STD_SET_I18N
+
 
 static gint num_sparkles;
 
 
-MAIN ()
-
 static void
-query (void)
+sparkle_class_init (SparkleClass *klass)
 {
-  static const GimpParamDef args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode",      "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",         "Input image (unused)" },
-    { GIMP_PDB_DRAWABLE, "drawable",      "Input drawable" },
-    { GIMP_PDB_FLOAT,    "lum-threshold", "Luminosity threshold (0.0 - 1.0)" },
-    { GIMP_PDB_FLOAT,    "flare-inten",   "Flare intensity (0.0 - 1.0)" },
-    { GIMP_PDB_INT32,    "spike-len",     "Spike length (in pixels)" },
-    { GIMP_PDB_INT32,    "spike-pts",     "# of spike points" },
-    { GIMP_PDB_INT32,    "spike-angle",   "Spike angle (0-360 degrees, -1: random)" },
-    { GIMP_PDB_FLOAT,    "density",       "Spike density (0.0 - 1.0)" },
-    { GIMP_PDB_FLOAT,    "transparency",  "Transparency (0.0 - 1.0)" },
-    { GIMP_PDB_FLOAT,    "random-hue",    "Random hue (0.0 - 1.0)" },
-    { GIMP_PDB_FLOAT,    "random-saturation",   "Random saturation (0.0 - 1.0)" },
-    { GIMP_PDB_INT32,    "preserve-luminosity", "Preserve luminosity (TRUE/FALSE)" },
-    { GIMP_PDB_INT32,    "inverse",       "Inverse (TRUE/FALSE)" },
-    { GIMP_PDB_INT32,    "border",        "Add border (TRUE/FALSE)" },
-    { GIMP_PDB_INT32,    "color-type",    "Color of sparkles: { NATURAL (0), FOREGROUND (1), BACKGROUND (2) }" }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  gimp_install_procedure (PLUG_IN_PROC,
-                          N_("Turn bright spots into starry sparkles"),
-                          "Uses a percentage based luminoisty threhsold to find "
-                          "candidate pixels for adding some sparkles (spikes). ",
-                          "John Beale, & (ported to GIMP v0.54) Michael "
-                          "J. Hammel & ted to GIMP v1.0) & Seth Burgess & "
-                          "Spencer Kimball",
-                          "John Beale",
-                          "Version 1.27, September 2003",
-                          N_("_Sparkle..."),
-                          "RGB*, GRAY*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args), 0,
-                          args, NULL);
-
-  gimp_plugin_menu_register (PLUG_IN_PROC,
-                             "<Image>/Filters/Light and Shadow/Light");
+  plug_in_class->query_procedures = sparkle_query_procedures;
+  plug_in_class->create_procedure = sparkle_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+sparkle_init (Sparkle *sparkle)
 {
-  static GimpParam   values[1];
-  GimpRunMode        run_mode;
-  gint32             drawable_ID;
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  gint               x, y, w, h;
+}
 
-  INIT_I18N ();
+static GList *
+sparkle_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (PLUG_IN_PROC));
+}
+
+static GimpProcedure *
+sparkle_create_procedure (GimpPlugIn  *plug_in,
+                          const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, PLUG_IN_PROC))
+    {
+      procedure = gimp_image_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            sparkle_run, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "RGB*, GRAY*");
+      gimp_procedure_set_sensitivity_mask (procedure,
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLE);
+
+      gimp_procedure_set_menu_label (procedure, _("_Sparkle..."));
+      gimp_procedure_add_menu_path (procedure,
+                                    "<Image>/Filters/Light and Shadow/[Light]");
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Turn bright spots into "
+                                          "starry sparkles"),
+                                        _("Uses a percentage based luminosity "
+                                          "threshold to find candidate pixels "
+                                          "for adding some sparkles (spikes)."),
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "John Beale, & (ported to GIMP v0.54) "
+                                      "Michael J. Hammel & ted to GIMP v1.0) "
+                                      "& Seth Burgess & Spencer Kimball",
+                                      "John Beale",
+                                      "Version 1.27, September 2003");
+
+      gimp_procedure_add_double_argument (procedure, "lum-threshold",
+                                          _("Lu_minosity threshold"),
+                                          _("Adjust the luminosity threshold"),
+                                          0.0, 0.1, 0.01,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "flare-inten",
+                                          _("_Flare intensity"),
+                                          _("Adjust the flare intensity"),
+                                          0.0, 1.0, 0.5,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "spike-len",
+                                       _("Spi_ke length"),
+                                       _("Adjust the spike length (in pixels)"),
+                                       1, 100, 20,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "spike-points",
+                                       _("Spike _points"),
+                                       _("Adjust the number of spikes"),
+                                       1, 16, 4,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "spike-angle",
+                                       _("Spike angle (-_1: random)"),
+                                       _("Adjust the spike angle "
+                                         "(-1 causes a random angle to be chosen)"),
+                                       -1, 360, 15,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "density",
+                                          _("Spike _density"),
+                                          _("Adjust the spike density"),
+                                          0.0, 1.0, 1.0,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "transparency",
+                                          _("_Transparency"),
+                                          _("Adjust the opacity of the spikes"),
+                                          0.0, 1.0, 0.0,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "random-hue",
+                                          _("Random _hue"),
+                                          _("Adjust how much the hue should be "
+                                            "changed randomly"),
+                                          0.0, 1.0, 0.0,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "random-saturation",
+                                          _("R_andom saturation"),
+                                          _("Adjust how much the saturation should be "
+                                            "changed randomly"),
+                                          0.0, 1.0, 0.0,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_boolean_argument (procedure, "preserve-luminosity",
+                                           _("Preserve l_uminosity"),
+                                           _("Should the luminosity be preserved?"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_boolean_argument (procedure, "inverse",
+                                           _("In_verse"),
+                                           _("Should the effect be inversed?"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_boolean_argument (procedure, "border",
+                                           _("Add _border"),
+                                           _("Draw a border of spikes around the image"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_choice_argument (procedure, "color-type",
+                                          _("_Color type"),
+                                          _("Color of sparkles"),
+                                          gimp_choice_new_with_values ("natural-color",    NATURAL,    _("Natural color"),    NULL,
+                                                                       "foreground-color", FOREGROUND, _("Foreground color"), NULL,
+                                                                       "background-color", BACKGROUND, _("Background color"), NULL,
+                                                                       NULL),
+                                          "natural-color",
+                                          G_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+sparkle_run (GimpProcedure        *procedure,
+             GimpRunMode           run_mode,
+             GimpImage            *image,
+             GimpDrawable        **drawables,
+             GimpProcedureConfig  *config,
+             gpointer              run_data)
+{
+  GimpDrawable *drawable;
+  gint          x, y, w, h;
+
   gegl_init (NULL, NULL);
 
-  *nreturn_vals = 1;
-  *return_vals  = values;
-
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
-
-  run_mode    = param[0].data.d_int32;
-  drawable_ID = param[2].data.d_drawable;
-
-  if (! gimp_drawable_mask_intersect (drawable_ID, &x, &y, &w, &h))
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
-      g_message (_("Region selected for filter is empty"));
-      return;
-    }
+      GError *error = NULL;
 
-  switch (run_mode)
-    {
-    case GIMP_RUN_INTERACTIVE:
-      /*  Possibly retrieve data  */
-      gimp_get_data (PLUG_IN_PROC, &svals);
+      g_set_error (&error, GIMP_PLUG_IN_ERROR, 0,
+                   _("Procedure '%s' only works with one drawable."),
+                   PLUG_IN_PROC);
 
-      /*  First acquire information with a dialog  */
-      if (! sparkle_dialog (drawable_ID))
-        return;
-      break;
-
-    case GIMP_RUN_NONINTERACTIVE:
-      /*  Make sure all the arguments are there!  */
-      if (nparams != 16)
-        {
-          status = GIMP_PDB_CALLING_ERROR;
-        }
-      else
-        {
-          svals.lum_threshold = param[3].data.d_float;
-          svals.flare_inten = param[4].data.d_float;
-          svals.spike_len = param[5].data.d_int32;
-          svals.spike_pts = param[6].data.d_int32;
-          svals.spike_angle = param[7].data.d_int32;
-          svals.density = param[8].data.d_float;
-          svals.transparency = param[9].data.d_float;
-          svals.random_hue = param[10].data.d_float;
-          svals.random_saturation = param[11].data.d_float;
-          svals.preserve_luminosity = (param[12].data.d_int32) ? TRUE : FALSE;
-          svals.inverse = (param[13].data.d_int32) ? TRUE : FALSE;
-          svals.border = (param[14].data.d_int32) ? TRUE : FALSE;
-          svals.colortype = param[15].data.d_int32;
-
-          if (svals.lum_threshold < 0.0 || svals.lum_threshold > 1.0)
-            status = GIMP_PDB_CALLING_ERROR;
-          else if (svals.flare_inten < 0.0 || svals.flare_inten > 1.0)
-            status = GIMP_PDB_CALLING_ERROR;
-          else if (svals.spike_len < 0)
-            status = GIMP_PDB_CALLING_ERROR;
-          else if (svals.spike_pts < 0)
-            status = GIMP_PDB_CALLING_ERROR;
-          else if (svals.spike_angle < -1 || svals.spike_angle > 360)
-            status = GIMP_PDB_CALLING_ERROR;
-          else if (svals.density < 0.0 || svals.density > 1.0)
-            status = GIMP_PDB_CALLING_ERROR;
-          else if (svals.transparency < 0.0 || svals.transparency > 1.0)
-            status = GIMP_PDB_CALLING_ERROR;
-          else if (svals.random_hue < 0.0 || svals.random_hue > 1.0)
-            status = GIMP_PDB_CALLING_ERROR;
-          else if (svals.random_saturation < 0.0 ||
-               svals.random_saturation > 1.0)
-            status = GIMP_PDB_CALLING_ERROR;
-          else if (svals.colortype < NATURAL || svals.colortype > BACKGROUND)
-            status = GIMP_PDB_CALLING_ERROR;
-        }
-      break;
-
-    case GIMP_RUN_WITH_LAST_VALS:
-      /*  Possibly retrieve data  */
-      gimp_get_data (PLUG_IN_PROC, &svals);
-      break;
-
-    default:
-      break;
-    }
-
-  /*  Make sure that the drawable is gray or RGB color  */
-  if (gimp_drawable_is_rgb (drawable_ID) ||
-      gimp_drawable_is_gray (drawable_ID))
-    {
-      gimp_progress_init (_("Sparkling"));
-
-      sparkle (drawable_ID, NULL);
-
-      if (run_mode != GIMP_RUN_NONINTERACTIVE)
-        gimp_displays_flush ();
-
-      /*  Store mvals data  */
-      if (run_mode == GIMP_RUN_INTERACTIVE)
-        gimp_set_data (PLUG_IN_PROC, &svals, sizeof (SparkleVals));
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_CALLING_ERROR,
+                                               error);
     }
   else
     {
-      /* gimp_message ("sparkle: cannot operate on indexed color images"); */
-      status = GIMP_PDB_EXECUTION_ERROR;
+      drawable = drawables[0];
     }
 
-  values[0].data.d_status = status;
+  if (! gimp_drawable_mask_intersect (drawable, &x, &y, &w, &h))
+    {
+      g_message (_("Region selected for filter is empty"));
+
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_SUCCESS,
+                                               NULL);
+    }
+
+  if (run_mode == GIMP_RUN_INTERACTIVE && ! sparkle_dialog (procedure, G_OBJECT (config), drawable))
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_CANCEL,
+                                             NULL);
+
+  if (gimp_drawable_is_rgb (drawable) ||
+      gimp_drawable_is_gray (drawable))
+    {
+      gimp_progress_init (_("Sparkling"));
+
+      sparkle (G_OBJECT (config), drawable, NULL);
+
+      if (run_mode != GIMP_RUN_NONINTERACTIVE)
+        gimp_displays_flush ();
+    }
+  else
+    {
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_EXECUTION_ERROR,
+                                               NULL);
+    }
+
+  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }
 
 static gboolean
-sparkle_dialog (gint32 drawable_ID)
+sparkle_dialog (GimpProcedure *procedure,
+                GObject       *config,
+                GimpDrawable  *drawable)
 {
   GtkWidget *dialog;
-  GtkWidget *main_vbox;
   GtkWidget *preview;
-  GtkWidget *vbox;
   GtkWidget *hbox;
-  GtkWidget *table;
-  GtkWidget *toggle;
-  GtkWidget *r1, *r2, *r3;
-  GtkObject *scale_data;
+  GtkWidget *scale;
   gboolean   run;
 
-  gimp_ui_init (PLUG_IN_BINARY, FALSE);
+  gimp_ui_init (PLUG_IN_BINARY);
 
-  dialog = gimp_dialog_new (_("Sparkle"), PLUG_IN_ROLE,
-                            NULL, 0,
-                            gimp_standard_help_func, PLUG_IN_PROC,
+  dialog = gimp_procedure_dialog_new (procedure,
+                                      GIMP_PROCEDURE_CONFIG (config),
+                                      _("Sparkle"));
 
-                            _("_Cancel"), GTK_RESPONSE_CANCEL,
-                            _("_OK"),     GTK_RESPONSE_OK,
+  gtk_widget_set_size_request (dialog, 430, -1);
+  gtk_container_set_border_width (
+    GTK_CONTAINER (gtk_dialog_get_content_area (GTK_DIALOG (dialog))), 12);
 
-                            NULL);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "lum-threshold", 1.0);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "flare-inten", 1.0);
 
-  gimp_window_set_transient (GTK_WINDOW (dialog));
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "spike-len", 1.0);
 
-  main_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-  gtk_container_set_border_width (GTK_CONTAINER (main_vbox), 12);
-  gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
-                      main_vbox, TRUE, TRUE, 0);
-  gtk_widget_show (main_vbox);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "spike-points", 1.0);
 
-  preview = gimp_drawable_preview_new_from_drawable_id (drawable_ID);
-  gtk_box_pack_start (GTK_BOX (main_vbox), preview, TRUE, TRUE, 0);
-  gtk_widget_show (preview);
-  g_signal_connect_swapped (preview, "invalidated",
-                            G_CALLBACK (sparkle_preview),
-                            GINT_TO_POINTER (drawable_ID));
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "spike-angle", 1.0);
 
-  table = gtk_table_new (9, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_box_pack_start (GTK_BOX (main_vbox), table, FALSE, FALSE, 0);
-  gtk_widget_show (table);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "density", 1.0);
 
-  scale_data =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 0,
-              _("Luminosity _threshold:"), SCALE_WIDTH, ENTRY_WIDTH,
-              svals.lum_threshold, 0.0, 0.1, 0.001, 0.01, 3,
-              TRUE, 0, 0,
-              _("Adjust the luminosity threshold"), NULL);
-  g_signal_connect (scale_data, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
-                    &svals.lum_threshold);
-  g_signal_connect_swapped (scale_data, "value-changed",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "density", 1.0);;
 
-  scale_data =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 1,
-              _("F_lare intensity:"), SCALE_WIDTH, ENTRY_WIDTH,
-              svals.flare_inten, 0.0, 1.0, 0.01, 0.1, 2,
-              TRUE, 0, 0,
-              _("Adjust the flare intensity"), NULL);
-  g_signal_connect (scale_data, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
-                    &svals.flare_inten);
-  g_signal_connect_swapped (scale_data, "value-changed",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "transparency", 1.0);
 
-  scale_data =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 2,
-              _("_Spike length:"), SCALE_WIDTH, ENTRY_WIDTH,
-              svals.spike_len, 1, 100, 1, 10, 0,
-              TRUE, 0, 0,
-              _("Adjust the spike length"), NULL);
-  g_signal_connect (scale_data, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
-                    &svals.spike_len);
-  g_signal_connect_swapped (scale_data, "value-changed",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "random-hue", 1.0);
 
-  scale_data =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 3,
-              _("Sp_ike points:"), SCALE_WIDTH, ENTRY_WIDTH,
-              svals.spike_pts, 0, 16, 1, 4, 0,
-              TRUE, 0, 0,
-              _("Adjust the number of spikes"), NULL);
-  g_signal_connect (scale_data, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
-                    &svals.spike_pts);
-  g_signal_connect_swapped (scale_data, "value-changed",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
+  scale = gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                                 "random-saturation", 1.0);
+  gtk_widget_set_margin_bottom (scale, 12);
 
-  scale_data =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 4,
-              _("Spi_ke angle (-1: random):"), SCALE_WIDTH, ENTRY_WIDTH,
-              svals.spike_angle, -1, 360, 1, 15, 0,
-              TRUE, 0, 0,
-              _("Adjust the spike angle "
-                "(-1 causes a random angle to be chosen)"), NULL);
-  g_signal_connect (scale_data, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
-                    &svals.spike_angle);
-  g_signal_connect_swapped (scale_data, "value-changed",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
+  gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                  "sparkle-bool-vbox",
+                                  "preserve-luminosity", "inverse",
+                                  "border", NULL);
 
-  scale_data =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 5,
-              _("Spik_e density:"), SCALE_WIDTH, ENTRY_WIDTH,
-              svals.density, 0.0, 1.0, 0.01, 0.1, 2,
-              TRUE, 0, 0,
-              _("Adjust the spike density"), NULL);
-  g_signal_connect (scale_data, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
-                    &svals.density);
-  g_signal_connect_swapped (scale_data, "value-changed",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
-
-  scale_data =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 6,
-              _("Tr_ansparency:"), SCALE_WIDTH, ENTRY_WIDTH,
-              svals.transparency, 0.0, 1.0, 0.01, 0.1, 2,
-              TRUE, 0, 0,
-              _("Adjust the opacity of the spikes"), NULL);
-  g_signal_connect (scale_data, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
-                    &svals.transparency);
-  g_signal_connect_swapped (scale_data, "value-changed",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
-
-  scale_data =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 7,
-              _("_Random hue:"), SCALE_WIDTH, ENTRY_WIDTH,
-              svals.random_hue, 0.0, 1.0, 0.01, 0.1, 2,
-              TRUE, 0, 0,
-              _("Adjust how much the hue should be changed randomly"), NULL);
-  g_signal_connect (scale_data, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
-                    &svals.random_hue);
-  g_signal_connect_swapped (scale_data, "value-changed",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
-
-  scale_data =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 8,
-              _("Rando_m saturation:"), SCALE_WIDTH, ENTRY_WIDTH,
-              svals.random_saturation, 0.0, 1.0, 0.01, 0.1, 2,
-              TRUE, 0, 0,
-              _("Adjust how much the saturation should be changed randomly"),
-              NULL);
-  g_signal_connect (scale_data, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
-                    &svals.random_saturation);
-  g_signal_connect_swapped (scale_data, "value-changed",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
-
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_box_pack_start (GTK_BOX (main_vbox), hbox, FALSE, FALSE, 0);
-  gtk_widget_show (hbox);
-
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-  gtk_box_pack_start (GTK_BOX (hbox), vbox, TRUE, TRUE, 0);
-  gtk_widget_show (vbox);
-
-  toggle = gtk_check_button_new_with_mnemonic (_("_Preserve luminosity"));
-  gtk_box_pack_start (GTK_BOX (vbox), toggle, FALSE, FALSE, 0);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle),
-                svals.preserve_luminosity);
-  gtk_widget_show (toggle);
-
-  gimp_help_set_help_data (toggle,
-                           _("Should the luminosity be preserved?"), NULL);
-
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (gimp_toggle_button_update),
-                    &svals.preserve_luminosity);
-  g_signal_connect_swapped (toggle, "toggled",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
-
-  toggle = gtk_check_button_new_with_mnemonic (_("In_verse"));
-  gtk_box_pack_start (GTK_BOX (vbox), toggle, FALSE, FALSE, 0);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle), svals.inverse);
-  gtk_widget_show (toggle);
-
-  gimp_help_set_help_data (toggle,
-                           _("Should the effect be inversed?"), NULL);
-
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (gimp_toggle_button_update),
-                    &svals.inverse);
-  g_signal_connect_swapped (toggle, "toggled",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
-
-  toggle = gtk_check_button_new_with_mnemonic (_("A_dd border"));
-  gtk_box_pack_start (GTK_BOX (vbox), toggle, FALSE, FALSE, 0);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle), svals.border);
-  gtk_widget_show (toggle);
-
-  gimp_help_set_help_data (toggle,
-                           _("Draw a border of spikes around the image"), NULL);
-
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (gimp_toggle_button_update),
-                    &svals.border);
-  g_signal_connect_swapped (toggle, "toggled",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "sparkle-bool-label",
+                                   _("Additional Options"),
+                                   FALSE, FALSE);
+  gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "sparkle-bool-frame", "sparkle-bool-label",
+                                    FALSE, "sparkle-bool-vbox");
 
   /*  colortype  */
-  vbox = gimp_int_radio_group_new (FALSE, NULL,
-                                   G_CALLBACK (gimp_radio_button_update),
-                                   &svals.colortype, svals.colortype,
+  gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "color-type", GIMP_TYPE_INT_RADIO_FRAME);
 
-                                   _("_Natural color"),    NATURAL,    &r1,
-                                   _("_Foreground color"), FOREGROUND, &r2,
-                                   _("_Background color"), BACKGROUND, &r3,
+  hbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "sparkle-row", "sparkle-bool-frame",
+                                        "color-type", NULL);
+  gtk_orientable_set_orientation (GTK_ORIENTABLE (hbox),
+                                  GTK_ORIENTATION_HORIZONTAL);
+  gtk_box_set_spacing (GTK_BOX (hbox), 12);
+  gtk_box_set_homogeneous (GTK_BOX (hbox), TRUE);
+  gtk_widget_set_margin_bottom (hbox, 12);
 
-                                   NULL);
+  preview = gimp_procedure_dialog_get_drawable_preview (GIMP_PROCEDURE_DIALOG (dialog),
+                                                        "preview", drawable);
+  g_object_set_data (config, "drawable", drawable);
 
-  gtk_box_pack_start (GTK_BOX (hbox), vbox, TRUE, TRUE, 0);
-  gtk_widget_show (vbox);
+  g_signal_connect (preview, "invalidated",
+                    G_CALLBACK (sparkle_preview),
+                    config);
 
-  gimp_help_set_help_data (r1, _("Use the color of the image"), NULL);
-  gimp_help_set_help_data (r2, _("Use the foreground color"), NULL);
-  gimp_help_set_help_data (r3, _("Use the background color"), NULL);
-  g_signal_connect_swapped (r1, "toggled",
+  g_signal_connect_swapped (config, "notify",
                             G_CALLBACK (gimp_preview_invalidate),
                             preview);
-  g_signal_connect_swapped (r2, "toggled",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
-  g_signal_connect_swapped (r3, "toggled",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
+
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
+                              "preview",
+                              "lum-threshold", "flare-inten", "spike-len",
+                              "spike-points", "spike-angle", "density",
+                              "transparency", "random-hue",
+                              "random-saturation", "sparkle-row",
+                              NULL);
 
   gtk_widget_show (dialog);
 
-  run = (gimp_dialog_run (GIMP_DIALOG (dialog)) == GTK_RESPONSE_OK);
+  run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
   gtk_widget_destroy (dialog);
 
@@ -575,11 +454,12 @@ sparkle_dialog (gint32 drawable_ID)
 static gint
 compute_luminosity (const guchar *pixel,
                     gboolean      gray,
-                    gboolean      has_alpha)
+                    gboolean      has_alpha,
+                    gint          inverse)
 {
   gint pixel0, pixel1, pixel2;
 
-  if (svals.inverse)
+  if (inverse)
     {
       pixel0 = 255 - pixel[0];
       pixel1 = 255 - pixel[1];
@@ -616,8 +496,9 @@ compute_luminosity (const guchar *pixel,
 }
 
 static gint
-compute_lum_threshold (gint32  drawable_ID,
-                       gdouble percentile)
+compute_lum_threshold (GimpDrawable *drawable,
+                       gdouble       percentile,
+                       gint          inverse)
 {
   GeglBuffer         *src_buffer;
   GeglBufferIterator *iter;
@@ -634,12 +515,12 @@ compute_lum_threshold (gint32  drawable_ID,
   /*  zero out the luminosity values array  */
   memset (values, 0, sizeof (gint) * 256);
 
-  if (! gimp_drawable_mask_intersect (drawable_ID,
+  if (! gimp_drawable_mask_intersect (drawable,
                                       &x1, &y1, &width, &height))
     return 0;
 
-  gray = gimp_drawable_is_gray (drawable_ID);
-  has_alpha = gimp_drawable_has_alpha (drawable_ID);
+  gray = gimp_drawable_is_gray (drawable);
+  has_alpha = gimp_drawable_has_alpha (drawable);
 
   if (gray)
     {
@@ -658,7 +539,7 @@ compute_lum_threshold (gint32  drawable_ID,
 
   bpp = babl_format_get_bytes_per_pixel (format);
 
-  src_buffer = gimp_drawable_get_buffer (drawable_ID);
+  src_buffer = gimp_drawable_get_buffer (drawable);
 
   iter = gegl_buffer_iterator_new (src_buffer,
                                    GEGL_RECTANGLE (x1, y1, width, height), 0,
@@ -672,7 +553,7 @@ compute_lum_threshold (gint32  drawable_ID,
 
       while (length--)
         {
-          values [compute_luminosity (src, gray, has_alpha)]++;
+          values [compute_luminosity (src, gray, has_alpha, inverse)]++;
           src += bpp;
         }
     }
@@ -696,8 +577,9 @@ compute_lum_threshold (gint32  drawable_ID,
 }
 
 static void
-sparkle (gint32       drawable_ID,
-         GimpPreview *preview)
+sparkle (GObject      *config,
+         GimpDrawable *drawable,
+         GimpPreview  *preview)
 {
   GeglBuffer         *src_buffer;
   GeglBuffer         *dest_buffer;
@@ -715,9 +597,28 @@ sparkle (gint32       drawable_ID,
   gint                bytes;
   GRand              *gr;
   guchar             *dest_buf = NULL;
+  gdouble             lum_threshold;
+  gdouble             flare_inten;
+  gint                spike_len;
+  gint                spike_pts;
+  gint                spike_angle_config;
+  gdouble             density;
+  gint                inverse;
+  gint                border;
 
-  gray = gimp_drawable_is_gray (drawable_ID);
-  has_alpha = gimp_drawable_has_alpha (drawable_ID);
+  g_object_get (config,
+                "lum-threshold", &lum_threshold,
+                "flare-inten",   &flare_inten,
+                "spike-len",     &spike_len,
+                "spike-points",  &spike_pts,
+                "spike-angle",   &spike_angle_config,
+                "density",       &density,
+                "inverse",       &inverse,
+                "border",        &border,
+                NULL);
+
+  gray = gimp_drawable_is_gray (drawable);
+  has_alpha = gimp_drawable_has_alpha (drawable);
 
   if (gray)
     {
@@ -749,7 +650,7 @@ sparkle (gint32       drawable_ID,
     }
   else
     {
-      if (! gimp_drawable_mask_intersect (drawable_ID,
+      if (! gimp_drawable_mask_intersect (drawable,
                                           &x1, &y1, &width, &height))
         return;
 
@@ -760,12 +661,12 @@ sparkle (gint32       drawable_ID,
   if (width < 1 || height < 1)
     return;
 
-  d_width  = gimp_drawable_width  (drawable_ID);
-  d_height = gimp_drawable_height (drawable_ID);
+  d_width  = gimp_drawable_get_width  (drawable);
+  d_height = gimp_drawable_get_height (drawable);
 
   gr = g_rand_new ();
 
-  if (svals.border)
+  if (border)
     {
       num_sparkles = 2 * (width + height);
       threshold = 255;
@@ -773,7 +674,7 @@ sparkle (gint32       drawable_ID,
   else
     {
       /*  compute the luminosity which exceeds the luminosity threshold  */
-      threshold = compute_lum_threshold (drawable_ID, svals.lum_threshold);
+      threshold = compute_lum_threshold (drawable, lum_threshold, inverse);
     }
 
   /* initialize the progress dialog */
@@ -781,8 +682,8 @@ sparkle (gint32       drawable_ID,
   max_progress = num_sparkles;
 
   /* copy what is already there */
-  src_buffer  = gimp_drawable_get_buffer (drawable_ID);
-  dest_buffer = gimp_drawable_get_shadow_buffer (drawable_ID);
+  src_buffer  = gimp_drawable_get_buffer (drawable);
+  dest_buffer = gimp_drawable_get_shadow_buffer (drawable);
 
   iter = gegl_buffer_iterator_new (src_buffer,
                                    GEGL_RECTANGLE (x1, y1, width, height), 0,
@@ -863,7 +764,7 @@ sparkle (gint32       drawable_ID,
 
           for (x = 0; x < roi.width; x++)
             {
-              if (svals.border)
+              if (border)
                 {
                   if (x + roi.x == 0 ||
                       y + roi.y == 0 ||
@@ -879,39 +780,39 @@ sparkle (gint32       drawable_ID,
                 }
               else
                 {
-                  lum = compute_luminosity (s, gray, has_alpha);
+                  lum = compute_luminosity (s, gray, has_alpha, inverse);
                 }
 
               if (lum >= threshold)
                 {
                   nfrac = fabs ((gdouble) (lum + 1 - threshold) /
                                 (gdouble) (256 - threshold));
-                  length = ((gdouble) svals.spike_len *
+                  length = ((gdouble) spike_len *
                             (gdouble) pow (nfrac, 0.8));
-                  inten = svals.flare_inten * nfrac;
+                  inten = flare_inten * nfrac;
 
                   /* fspike im x,y intens rlength angle */
-                  if (svals.spike_pts > 0)
+                  if (spike_pts > 0)
                     {
                       /* major spikes */
-                      if (svals.spike_angle == -1)
+                      if (spike_angle_config == -1)
                         spike_angle = g_rand_double_range (gr, 0, 360.0);
                       else
-                        spike_angle = svals.spike_angle;
+                        spike_angle = spike_angle_config;
 
-                      if (g_rand_double (gr) <= svals.density)
+                      if (g_rand_double (gr) <= density)
                         {
-                          fspike (src_buffer, dest_buffer, format, bytes,
-                                  x1, y1, x2, y2,
+                          fspike (config, src_buffer, dest_buffer, format,
+                                  bytes, x1, y1, x2, y2,
                                   x + roi.x, y + roi.y,
                                   inten, length, spike_angle, gr, dest_buf);
 
                           /* minor spikes */
-                          fspike (src_buffer, dest_buffer, format, bytes,
-                                  x1, y1, x2, y2,
+                          fspike (config, src_buffer, dest_buffer, format,
+                                  bytes, x1, y1, x2, y2,
                                   x + roi.x, y + roi.y,
                                   inten * 0.7, length * 0.7,
-                                  ((gdouble)spike_angle+180.0/svals.spike_pts),
+                                  ((gdouble) spike_angle + 180.0 / spike_pts),
                                   gr, dest_buf);
                         }
                     }
@@ -944,22 +845,26 @@ sparkle (gint32       drawable_ID,
     {
       gimp_progress_update (1.0);
 
-      gimp_drawable_merge_shadow (drawable_ID, TRUE);
-      gimp_drawable_update (drawable_ID, x1, y1, width, height);
+      gimp_drawable_merge_shadow (drawable, TRUE);
+      gimp_drawable_update (drawable, x1, y1, width, height);
     }
 
   g_rand_free (gr);
 }
 
 static void
-sparkle_preview (gpointer     drawable_ID,
-                 GimpPreview *preview)
+sparkle_preview (GtkWidget *widget,
+                 GObject   *config)
 {
-  sparkle (GPOINTER_TO_INT (drawable_ID), preview);
+  GimpPreview  *preview  = GIMP_PREVIEW (widget);
+  GimpDrawable *drawable = g_object_get_data (config, "drawable");
+
+  sparkle (config, drawable, preview);
 }
 
 static inline void
-rpnt (GeglBuffer   *dest_buffer,
+rpnt (GObject      *config,
+      GeglBuffer   *dest_buffer,
       const Babl   *format,
       gint          x1,
       gint          y1,
@@ -977,6 +882,17 @@ rpnt (GeglBuffer   *dest_buffer,
   guchar  *pixel;
   guchar   pixel_buf[4];
   gdouble  new;
+  gdouble  transparency;
+  gint     preserve_luminosity;
+  gint     inverse;
+  gint     border;
+
+  g_object_get (config,
+                "transparency",        &transparency,
+                "preserve-luminosity", &preserve_luminosity,
+                "inverse",             &inverse,
+                "border",              &border,
+                NULL);
 
   x = (int) (xr);    /* integer coord. to upper left of real point */
   y = (int) (yr);
@@ -1002,32 +918,32 @@ rpnt (GeglBuffer   *dest_buffer,
 
       for (b = 0; b < bytes; b++)
         {
-          if (svals.inverse)
+          if (inverse)
             new = 255 - pixel[b];
           else
             new = pixel[b];
 
-          if (svals.preserve_luminosity)
+          if (preserve_luminosity)
             {
               if (new < color[b])
                 {
-                  new *= (1.0 - val * (1.0 - svals.transparency));
+                  new *= (1.0 - val * (1.0 - transparency));
                 }
               else
                 {
-                  new -= val * color[b] * (1.0 - svals.transparency);
+                  new -= val * color[b] * (1.0 - transparency);
                   if (new < 0.0)
                     new = 0.0;
                 }
             }
 
-          new *= 1.0 - val * svals.transparency;
+          new *= 1.0 - val * transparency;
           new += val * color[b];
 
           if (new > 255)
             new = 255;
 
-          if (svals.inverse)
+          if (inverse)
             pixel[b] = 255 - new;
           else
             pixel[b] = new;
@@ -1041,7 +957,8 @@ rpnt (GeglBuffer   *dest_buffer,
 }
 
 static void
-fspike (GeglBuffer   *src_buffer,
+fspike (GObject      *config,
+        GeglBuffer   *src_buffer,
         GeglBuffer   *dest_buffer,
         const Babl   *format,
         gint          bytes,
@@ -1063,41 +980,55 @@ fspike (GeglBuffer   *src_buffer,
   gdouble        in;
   gdouble        theta;
   gdouble        sfac;
-  gint           r, g, b;
   gint           i;
   gboolean       ok;
-  GimpRGB        gimp_color;
+  GeglColor     *gegl_color;
   guchar         pixel[MAX_CHANNELS];
   guchar         chosen_color[MAX_CHANNELS];
   guchar         color[MAX_CHANNELS];
+  gint           spike_pts;
+  gdouble        random_hue;
+  gdouble        random_saturation;
+  gint           inverse;
+  gint           colortype;
+
+  g_object_get (config,
+                "spike-points",      &spike_pts,
+                "random-hue",        &random_hue,
+                "random-saturation", &random_saturation,
+                "inverse",           &inverse,
+                NULL);
+  colortype = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                   "color-type");
 
   theta = angle;
 
-  switch (svals.colortype)
+  switch (colortype)
     {
     case NATURAL:
       break;
 
     case FOREGROUND:
-      gimp_context_get_foreground (&gimp_color);
-      gimp_rgb_get_uchar (&gimp_color, &chosen_color[0], &chosen_color[1],
-                          &chosen_color[2]);
+      gegl_color = gimp_context_get_foreground ();
+      gegl_color_get_pixel (gegl_color, babl_format_with_space ("R'G'B' u8", NULL), chosen_color);
+      g_clear_object (&gegl_color);
       break;
 
     case BACKGROUND:
-      gimp_context_get_background (&gimp_color);
-      gimp_rgb_get_uchar (&gimp_color, &chosen_color[0], &chosen_color[1],
-                          &chosen_color[2]);
+      gegl_color = gimp_context_get_background ();
+      gegl_color_get_pixel (gegl_color, babl_format_with_space ("R'G'B' u8", NULL), chosen_color);
+      g_clear_object (&gegl_color);
       break;
     }
 
+  gegl_color = gegl_color_new ("black");
   /* draw the major spikes */
-  for (i = 0; i < svals.spike_pts; i++)
+  for (i = 0; i < spike_pts; i++)
     {
       gegl_buffer_sample (dest_buffer, xr, yr, NULL, pixel, format,
                           GEGL_SAMPLER_NEAREST, GEGL_ABYSS_NONE);
 
-      if (svals.colortype == NATURAL)
+      if (colortype == NATURAL)
         {
           color[0] = pixel[0];
           color[1] = pixel[1];
@@ -1112,39 +1043,41 @@ fspike (GeglBuffer   *src_buffer,
 
       color[3] = pixel[3];
 
-      if (svals.inverse)
+      if (inverse)
         {
           color[0] = 255 - color[0];
           color[1] = 255 - color[1];
           color[2] = 255 - color[2];
         }
 
-      if (svals.random_hue > 0.0 || svals.random_saturation > 0.0)
+      if (random_hue > 0.0 || random_saturation > 0.0)
         {
-          r = 255 - color[0];
-          g = 255 - color[1];
-          b = 255 - color[2];
+          gfloat rgb[3];
+          gfloat hsv[3];
 
-          gimp_rgb_to_hsv_int (&r, &g, &b);
+          for (gint j = 0; j < 3; j++)
+            rgb[j] = (gdouble) (255 - color[j]) / 255.0;
 
-          r += svals.random_hue * g_rand_double_range (gr, -0.5, 0.5) * 255;
+          gegl_color_set_pixel (gegl_color, babl_format ("R'G'B' float"), rgb);
+          gegl_color_set_pixel (gegl_color, babl_format ("HSV float"), hsv);
 
-          if (r >= 255)
-            r -= 255;
-          else if (r < 0)
-            r += 255;
+          hsv[0] += random_hue * g_rand_double_range (gr, -0.5, 0.5);
 
-          b += (svals.random_saturation *
-                g_rand_double_range (gr, -1.0, 1.0)) * 255;
+          if (hsv[0] >= 1.0)
+            hsv[0] -= 1.0;
+          else if (hsv[0] < 0.0)
+            hsv[0] += 1.0;
 
-          if (b > 255)
-            b = 255;
+          hsv[2] += (random_saturation *
+                    g_rand_double_range (gr, -1.0, 1.0));
 
-          gimp_hsv_to_rgb_int (&r, &g, &b);
+          hsv[2] = CLAMP (hsv[2], 0.0, 1.0);
 
-          color[0] = 255 - r;
-          color[1] = 255 - g;
-          color[2] = 255 - b;
+          gegl_color_set_pixel (gegl_color, babl_format ("HSV float"), hsv);
+          gegl_color_get_pixel (gegl_color, babl_format ("R'G'B' float"), rgb);
+
+          for (gint j = 0; j < 3; j++)
+            color[j] = 255 - ROUND (rgb[j] * 255.0);
         }
 
       dx = 0.2 * cos (theta * G_PI / 180.0);
@@ -1162,19 +1095,19 @@ fspike (GeglBuffer   *src_buffer,
           if (in > 0.01)
             ok = TRUE;
 
-          rpnt (dest_buffer, format, x1, y1, x2, y2,
+          rpnt (config, dest_buffer, format, x1, y1, x2, y2,
                 xrt, yrt,
                 bytes, in, color, dest_buf);
 
-          rpnt (dest_buffer, format, x1, y1, x2, y2,
+          rpnt (config, dest_buffer, format, x1, y1, x2, y2,
                 xrt + 1.0, yrt,
                 bytes, in, color, dest_buf);
 
-          rpnt (dest_buffer, format, x1, y1, x2, y2,
+          rpnt (config, dest_buffer, format, x1, y1, x2, y2,
                 xrt + 1.0, yrt + 1.0,
                 bytes, in, color, dest_buf);
 
-          rpnt (dest_buffer, format, x1, y1, x2, y2,
+          rpnt (config, dest_buffer, format, x1, y1, x2, y2,
                 xrt, yrt + 1.0,
                 bytes, in, color, dest_buf);
 
@@ -1184,6 +1117,7 @@ fspike (GeglBuffer   *src_buffer,
 
         } while (ok);
 
-      theta += 360.0 / svals.spike_pts;
+      theta += 360.0 / spike_pts;
     }
+  g_object_unref (gegl_color);
 }

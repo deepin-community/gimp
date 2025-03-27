@@ -29,11 +29,10 @@
 #include "dialogs-types.h"
 
 #include "config/gimpcoreconfig.h"
+#include "config/gimpguiconfig.h"
 
-#include "core/gimp.h"
-#include "core/gimpcontext.h"
-
-#include "pdb/gimppdb.h"
+#include "widgets/gimphelp-ids.h"
+#include "widgets/gimpwidgets-utils.h"
 
 #include "about.h"
 #include "git-version.h"
@@ -55,27 +54,32 @@
 
 typedef struct
 {
-  GtkWidget   *dialog;
+  GtkWidget      *dialog;
+
+  Gimp           *gimp;
 
   GtkWidget      *update_frame;
   GimpCoreConfig *config;
 
-  GtkWidget   *anim_area;
-  PangoLayout *layout;
+  GtkWidget      *anim_area;
+  PangoLayout    *layout;
+  gboolean        use_animation;
 
-  gint         n_authors;
-  gint         shuffle[G_N_ELEMENTS (authors) - 1];  /* NULL terminated */
+  gint            n_authors;
+  gint            shuffle[G_N_ELEMENTS (authors) - 1];  /* NULL terminated */
 
-  guint        timer;
+  guint           timer;
 
-  gint         index;
-  gint         animstep;
-  gint         textrange[2];
-  gint         state;
-  gboolean     visible;
+  gint            index;
+  gint            animstep;
+  gint            state;
+  gboolean        visible;
 } GimpAboutDialog;
 
-
+#ifdef G_OS_WIN32
+static void        about_dialog_realize       (GtkWidget       *widget,
+                                               GimpAboutDialog *dialog);
+#endif
 static void        about_dialog_map           (GtkWidget       *widget,
                                                GimpAboutDialog *dialog);
 static void        about_dialog_unmap         (GtkWidget       *widget,
@@ -83,11 +87,11 @@ static void        about_dialog_unmap         (GtkWidget       *widget,
 static GdkPixbuf * about_dialog_load_logo     (void);
 static void        about_dialog_add_animation (GtkWidget       *vbox,
                                                GimpAboutDialog *dialog);
-static gboolean    about_dialog_anim_expose   (GtkWidget       *widget,
-                                               GdkEventExpose  *event,
-                                               GimpAboutDialog *dialog);
 static void        about_dialog_add_update    (GimpAboutDialog *dialog,
                                                GimpCoreConfig  *config);
+static gboolean    about_dialog_anim_draw     (GtkWidget       *widget,
+                                               cairo_t         *cr,
+                                               GimpAboutDialog *dialog);
 static void        about_dialog_reshuffle     (GimpAboutDialog *dialog);
 static gboolean    about_dialog_timer         (gpointer         data);
 
@@ -105,11 +109,10 @@ static void        about_dialog_download_clicked
                                                const gchar *link);
 
 GtkWidget *
-about_dialog_create (GimpCoreConfig *config)
+about_dialog_create (Gimp           *gimp,
+                     GimpCoreConfig *config)
 {
   static GimpAboutDialog dialog;
-
-  g_return_val_if_fail (GIMP_IS_CORE_CONFIG (config), NULL);
 
   if (! dialog.dialog)
     {
@@ -120,8 +123,19 @@ about_dialog_create (GimpCoreConfig *config)
       gchar     *copyright;
       gchar     *version;
 
+      dialog.gimp      = gimp;
       dialog.n_authors = G_N_ELEMENTS (authors) - 1;
       dialog.config    = config;
+
+      /* For some people, animated contents may be distracting, or even
+       * disturbing. "Vestibular motion disorders" are an example of
+       * such discomfort. This is why most platforms have a "reduce
+       * animations" option in accessibility settings.
+       * When it's set, we just won't display the fancy animated authors
+       * list. This is redundant anyway as the full list is available in
+       * the Credits tab.
+       */
+      dialog.use_animation = gimp_widget_animation_enabled ();
 
       pixbuf = about_dialog_load_logo ();
 
@@ -163,14 +177,16 @@ about_dialog_create (GimpCoreConfig *config)
       g_free (copyright);
       g_free (version);
 
-      dialog.dialog = widget;
-
-      g_object_add_weak_pointer (G_OBJECT (widget), (gpointer) &dialog.dialog);
+      g_set_weak_pointer (&dialog.dialog, widget);
 
       g_signal_connect (widget, "response",
                         G_CALLBACK (gtk_widget_destroy),
                         NULL);
-
+#ifdef G_OS_WIN32
+      g_signal_connect (widget, "realize",
+                        G_CALLBACK (about_dialog_realize),
+                        &dialog);
+#endif
       g_signal_connect (widget, "map",
                         G_CALLBACK (about_dialog_map),
                         &dialog);
@@ -184,11 +200,15 @@ about_dialog_create (GimpCoreConfig *config)
 
       if (GTK_IS_BOX (children->data))
         {
-          about_dialog_add_animation (children->data, &dialog);
+          if (dialog.use_animation)
+            about_dialog_add_animation (children->data, &dialog);
 #ifdef GIMP_UNSTABLE
           about_dialog_add_unstable_message (children->data);
 #endif /* GIMP_UNSTABLE */
-          about_dialog_add_update (&dialog, config);
+#ifdef CHECK_UPDATE
+          if (gimp_version_check_update ())
+            about_dialog_add_update (&dialog, config);
+#endif
         }
       else
         g_warning ("%s: ooops, no box in this container?", G_STRLOC);
@@ -196,10 +216,30 @@ about_dialog_create (GimpCoreConfig *config)
       g_list_free (children);
     }
 
-  gtk_window_present (GTK_WINDOW (dialog.dialog));
+  if (GIMP_GUI_CONFIG (config)->show_help_button)
+    {
+      gimp_help_connect (dialog.dialog, NULL, gimp_standard_help_func,
+                         GIMP_HELP_ABOUT_DIALOG, NULL, NULL);
+
+      gtk_dialog_add_buttons (GTK_DIALOG (dialog.dialog),
+                              _("_Help"), GTK_RESPONSE_HELP,
+                              NULL);
+    }
+
+  gtk_style_context_add_class (gtk_widget_get_style_context (dialog.dialog),
+                               "gimp-about-dialog");
 
   return dialog.dialog;
 }
+
+#ifdef G_OS_WIN32
+static void
+about_dialog_realize (GtkWidget *widget,
+                      GimpAboutDialog *dialog)
+{
+  gimp_window_set_title_bar_theme (dialog->gimp, widget);
+}
+#endif
 
 static void
 about_dialog_map (GtkWidget       *widget,
@@ -277,8 +317,8 @@ about_dialog_add_animation (GtkWidget       *vbox,
 
   gtk_widget_set_size_request (dialog->anim_area, -1, 2 * height);
 
-  g_signal_connect (dialog->anim_area, "expose-event",
-                    G_CALLBACK (about_dialog_anim_expose),
+  g_signal_connect (dialog->anim_area, "draw",
+                    G_CALLBACK (about_dialog_anim_draw),
                     dialog);
 }
 
@@ -314,11 +354,6 @@ about_dialog_add_update (GimpAboutDialog *dialog,
   vbox = children->data;
   g_list_free (children);
 
-  /* The preferred localized date representation without the time. */
-  datetime = g_date_time_new_from_unix_local (config->last_release_timestamp);
-  date = g_date_time_format (datetime, "%x");
-  g_date_time_unref (datetime);
-
   /* The update frame. */
   frame = gtk_frame_new (NULL);
   gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 2);
@@ -347,7 +382,8 @@ about_dialog_add_update (GimpAboutDialog *dialog,
   if (config->last_known_release != NULL)
     {
       /* There is a newer version. */
-      gchar *comment = NULL;
+      const gchar *download_url = NULL;
+      gchar       *comment      = NULL;
 
       /* We want the frame to stand out. */
       label = gtk_label_new (NULL);
@@ -365,9 +401,19 @@ about_dialog_add_update (GimpAboutDialog *dialog,
       gtk_image_set_from_icon_name (GTK_IMAGE (button_image),
                                     "software-update-available",
                                     GTK_ICON_SIZE_DIALOG);
+#ifdef GIMP_UNSTABLE
+      download_url = "https://www.gimp.org/downloads/devel/";
+#else
+      download_url = "https://www.gimp.org/downloads/";
+#endif
       g_signal_connect (button, "clicked",
                         (GCallback) about_dialog_download_clicked,
-                        "https://www.gimp.org/downloads/");
+                        (gpointer) download_url);
+
+      /* The preferred localized date representation without the time. */
+      datetime = g_date_time_new_from_unix_local (config->last_release_timestamp);
+      date = g_date_time_format (datetime, "%x");
+      g_date_time_unref (datetime);
 
       if (config->last_revision > 0)
         {
@@ -413,6 +459,8 @@ about_dialog_add_update (GimpAboutDialog *dialog,
                                     "view-refresh",
                                     GTK_ICON_SIZE_MENU);
       gtk_label_set_text (GTK_LABEL (button_label), _("Check for updates"));
+      gtk_style_context_add_class (gtk_widget_get_style_context (button),
+                                   "text-button");
       g_signal_connect_swapped (button, "clicked",
                                 (GCallback) gimp_update_check, config);
 
@@ -422,6 +470,8 @@ about_dialog_add_update (GimpAboutDialog *dialog,
 
   /* Last check date box. */
   box2 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
+  if (config->last_known_release != NULL)
+    gtk_widget_set_margin_top (box2, 20);
   gtk_container_add (GTK_CONTAINER (box), box2);
   gtk_widget_show (box2);
 
@@ -430,15 +480,12 @@ about_dialog_add_update (GimpAboutDialog *dialog,
    */
   if (config->last_known_release != NULL)
     {
-      button = gtk_button_new ();
-      button_image = gtk_image_new_from_icon_name ("view-refresh", GTK_ICON_SIZE_MENU);
-      gtk_container_add (GTK_CONTAINER (button), button_image);
+      button = gtk_button_new_from_icon_name ("view-refresh", GTK_ICON_SIZE_MENU);
       gtk_widget_set_tooltip_text (button, _("Check for updates"));
       gtk_box_pack_start (GTK_BOX (box2), button, FALSE, FALSE, 0);
       g_signal_connect_swapped (button, "clicked",
                                 (GCallback) gimp_update_check, config);
       gtk_widget_show (button);
-      gtk_widget_show (button_image);
     }
 
   if (config->check_update_timestamp > 0)
@@ -472,8 +519,7 @@ about_dialog_add_update (GimpAboutDialog *dialog,
   gtk_widget_show (box);
   gtk_widget_show (frame);
 
-  dialog->update_frame = frame;
-  g_object_add_weak_pointer (G_OBJECT (frame), (gpointer) &dialog->update_frame);
+  g_set_weak_pointer (&dialog->update_frame, frame);
 
   /* Reconstruct the dialog when release info changes. */
   g_signal_connect (config, "notify::last-known-release",
@@ -508,22 +554,36 @@ about_dialog_reshuffle (GimpAboutDialog *dialog)
 }
 
 static gboolean
-about_dialog_anim_expose (GtkWidget       *widget,
-                          GdkEventExpose  *event,
-                          GimpAboutDialog *dialog)
+about_dialog_anim_draw (GtkWidget       *widget,
+                        cairo_t         *cr,
+                        GimpAboutDialog *dialog)
 {
-  GtkStyle      *style = gtk_widget_get_style (widget);
-  cairo_t       *cr;
-  GtkAllocation  allocation;
-  gint           x, y;
-  gint           width, height;
+  GtkStyleContext *style = gtk_widget_get_style_context (widget);
+  GtkAllocation    allocation;
+  GdkRGBA          color;
+  gdouble          alpha = 0.0;
+  gint             x, y;
+  gint             width, height;
 
   if (! dialog->visible)
     return FALSE;
 
-  cr = gdk_cairo_create (event->window);
+  if (dialog->animstep < 16)
+    {
+      alpha = (gfloat) dialog->animstep / 15.0;
+    }
+  else if (dialog->animstep < 18)
+    {
+      alpha = 1.0;
+    }
+  else if (dialog->animstep < 33)
+    {
+      alpha = 1.0 - ((gfloat) (dialog->animstep - 17)) / 15.0;
+    }
 
-  gdk_cairo_set_source_color (cr, &style->text[GTK_STATE_NORMAL]);
+  gtk_style_context_get_color (style, gtk_style_context_get_state (style),
+                               &color);
+  gdk_cairo_set_source_rgba (cr, &color);
 
   gtk_widget_get_allocation (widget, &allocation);
   pango_layout_get_pixel_size (dialog->layout, &width, &height);
@@ -531,27 +591,14 @@ about_dialog_anim_expose (GtkWidget       *widget,
   x = (allocation.width  - width)  / 2;
   y = (allocation.height - height) / 2;
 
-  if (dialog->textrange[1] > 0)
-    {
-      GdkRegion *covered_region;
-
-      covered_region = gdk_pango_layout_get_clip_region (dialog->layout,
-                                                         x, y,
-                                                         dialog->textrange, 1);
-
-      gdk_region_intersect (covered_region, event->region);
-
-      gdk_cairo_region (cr, covered_region);
-      cairo_clip (cr);
-
-      gdk_region_destroy (covered_region);
-    }
-
   cairo_move_to (cr, x, y);
+
+  cairo_push_group (cr);
 
   pango_cairo_show_layout (cr, dialog->layout);
 
-  cairo_destroy (cr);
+  cairo_pop_group_to_source (cr);
+  cairo_paint_with_alpha (cr, alpha);
 
   return FALSE;
 }
@@ -579,68 +626,37 @@ insert_spacers (const gchar *string)
   return g_string_free (str, FALSE);
 }
 
-static inline void
-mix_colors (const GdkColor *start,
-            const GdkColor *end,
-            GdkColor       *target,
-            gdouble         pos)
-{
-  target->red   = start->red   * (1.0 - pos) + end->red   * pos;
-  target->green = start->green * (1.0 - pos) + end->green * pos;
-  target->blue  = start->blue  * (1.0 - pos) + end->blue  * pos;
-}
-
 static void
 decorate_text (GimpAboutDialog *dialog,
                gint             anim_type,
                gdouble          time)
 {
-  GtkStyle       *style = gtk_widget_get_style (dialog->anim_area);
   const gchar    *text;
   const gchar    *ptr;
   gint            letter_count = 0;
-  gint            text_length  = 0;
-  gint            text_bytelen = 0;
   gint            cluster_start, cluster_end;
   gunichar        unichr;
   PangoAttrList  *attrlist = NULL;
   PangoAttribute *attr;
   PangoRectangle  irect = {0, 0, 0, 0};
   PangoRectangle  lrect = {0, 0, 0, 0};
-  GdkColor        mix;
-
-  mix_colors (style->bg + GTK_STATE_NORMAL,
-              style->fg + GTK_STATE_NORMAL, &mix, time);
 
   text = pango_layout_get_text (dialog->layout);
+
   g_return_if_fail (text != NULL);
 
-  text_length = g_utf8_strlen (text, -1);
-  text_bytelen = strlen (text);
-
   attrlist = pango_attr_list_new ();
-
-  dialog->textrange[0] = 0;
-  dialog->textrange[1] = text_bytelen;
 
   switch (anim_type)
     {
     case 0: /* Fade in */
-      attr = pango_attr_foreground_new (mix.red, mix.green, mix.blue);
-      attr->start_index = 0;
-      attr->end_index = text_bytelen;
-      pango_attr_list_insert (attrlist, attr);
       break;
 
     case 1: /* Fade in, spread */
-      attr = pango_attr_foreground_new (mix.red, mix.green, mix.blue);
-      attr->start_index = 0;
-      attr->end_index = text_bytelen;
-      pango_attr_list_change (attrlist, attr);
-
       ptr = text;
 
       cluster_start = 0;
+
       while ((unichr = g_utf8_get_char (ptr)))
         {
           ptr = g_utf8_next_char (ptr);
@@ -659,11 +675,6 @@ decorate_text (GimpAboutDialog *dialog,
       break;
 
     case 2: /* Fade in, sinewave */
-      attr = pango_attr_foreground_new (mix.red, mix.green, mix.blue);
-      attr->start_index = 0;
-      attr->end_index = text_bytelen;
-      pango_attr_list_change (attrlist, attr);
-
       ptr = text;
 
       cluster_start = 0;
@@ -688,46 +699,6 @@ decorate_text (GimpAboutDialog *dialog,
         }
       break;
 
-    case 3: /* letterwise Fade in */
-      ptr = text;
-
-      letter_count  = 0;
-      cluster_start = 0;
-
-      while ((unichr = g_utf8_get_char (ptr)))
-        {
-          gint    border = (text_length + 15) * time - 15;
-          gdouble pos;
-
-          if (letter_count < border)
-            pos = 0;
-          else if (letter_count > border + 15)
-            pos = 1;
-          else
-            pos = ((gdouble) (letter_count - border)) / 15;
-
-          mix_colors (style->fg + GTK_STATE_NORMAL,
-                      style->bg + GTK_STATE_NORMAL,
-                      &mix, pos);
-
-          ptr = g_utf8_next_char (ptr);
-
-          cluster_end = ptr - text;
-
-          attr = pango_attr_foreground_new (mix.red, mix.green, mix.blue);
-          attr->start_index = cluster_start;
-          attr->end_index = cluster_end;
-          pango_attr_list_change (attrlist, attr);
-
-          if (pos < 1.0)
-            dialog->textrange[1] = cluster_end;
-
-          letter_count++;
-          cluster_start = cluster_end;
-        }
-
-      break;
-
     default:
       g_printerr ("Unknown animation type %d\n", anim_type);
     }
@@ -739,8 +710,8 @@ decorate_text (GimpAboutDialog *dialog,
 static gboolean
 about_dialog_timer (gpointer data)
 {
-  GimpAboutDialog *dialog  = data;
-  gint             timeout = 0;
+  GimpAboutDialog *dialog        = data;
+  gint             timeout       = 0;
 
   if (dialog->animstep == 0)
     {
@@ -753,7 +724,7 @@ about_dialog_timer (gpointer data)
         case 0:
           dialog->timer = g_timeout_add (30, about_dialog_timer, dialog);
           dialog->state += 1;
-          return FALSE;
+          return G_SOURCE_REMOVE;
 
         case 1:
           text = insert_spacers (_("GIMP is brought to you by"));
@@ -795,8 +766,7 @@ about_dialog_timer (gpointer data)
     }
   else if (dialog->animstep < 33)
     {
-      decorate_text (dialog, 1,
-                     1.0 - ((gfloat) (dialog->animstep - 17)) / 15.0);
+      decorate_text (dialog, 1, 1.0 - ((gfloat) (dialog->animstep - 17)) / 15.0);
     }
   else if (dialog->animstep == 33)
     {
@@ -817,11 +787,11 @@ about_dialog_timer (gpointer data)
   if (timeout > 0)
     {
       dialog->timer = g_timeout_add (timeout, about_dialog_timer, dialog);
-      return FALSE;
+      return G_SOURCE_REMOVE;
     }
 
   /* else keep the current timeout */
-  return TRUE;
+  return G_SOURCE_CONTINUE;
 }
 
 #ifdef GIMP_UNSTABLE
@@ -872,8 +842,5 @@ about_dialog_download_clicked (GtkButton   *button,
   window = gtk_widget_get_ancestor (GTK_WIDGET (button), GTK_TYPE_WINDOW);
 
   if (window)
-    gtk_show_uri (gdk_screen_get_default (),
-                  link,
-                  gtk_get_current_event_time(),
-                  NULL);
+    gtk_show_uri_on_window (GTK_WINDOW (window), link, GDK_CURRENT_TIME, NULL);
 }

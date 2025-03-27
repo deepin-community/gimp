@@ -29,42 +29,11 @@
 G_BEGIN_DECLS
 
 
-#define GIMP_TYPE_COLOR_PROFILE_STORE            (gimp_color_profile_store_get_type ())
-#define GIMP_COLOR_PROFILE_STORE(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_COLOR_PROFILE_STORE, GimpColorProfileStore))
-#define GIMP_COLOR_PROFILE_STORE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_COLOR_PROFILE_STORE, GimpColorProfileStoreClass))
-#define GIMP_IS_COLOR_PROFILE_STORE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_COLOR_PROFILE_STORE))
-#define GIMP_IS_COLOR_PROFILE_STORE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_COLOR_PROFILE_STORE))
-#define GIMP_COLOR_PROFILE_STORE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_COLOR_PROFILE_STORE, GimpColorProfileStoreClass))
+#define GIMP_TYPE_COLOR_PROFILE_STORE (gimp_color_profile_store_get_type ())
+G_DECLARE_FINAL_TYPE (GimpColorProfileStore, gimp_color_profile_store, GIMP, COLOR_PROFILE_STORE, GtkListStore)
 
 
-typedef struct _GimpColorProfileStoreClass  GimpColorProfileStoreClass;
-
-struct _GimpColorProfileStore
-{
-  GtkListStore  parent_instance;
-
-  gchar        *history;
-};
-
-struct _GimpColorProfileStoreClass
-{
-  GtkListStoreClass  parent_class;
-
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-};
-
-
-GType          gimp_color_profile_store_get_type (void) G_GNUC_CONST;
-
-GtkListStore * gimp_color_profile_store_new      (const gchar           *history);
-
-GIMP_DEPRECATED_FOR(gimp_color_profile_store_add_file)
-void           gimp_color_profile_store_add      (GimpColorProfileStore *store,
-                                                  const gchar           *filename,
-                                                  const gchar           *label);
+GtkListStore * gimp_color_profile_store_new      (GFile                 *history);
 
 void           gimp_color_profile_store_add_file (GimpColorProfileStore *store,
                                                   GFile                 *file,

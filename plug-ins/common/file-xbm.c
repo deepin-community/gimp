@@ -33,9 +33,6 @@
  *     that fail.
  */
 
-/* Set this for debugging. */
-/* #define VERBOSE 2 */
-
 #include "config.h"
 
 #include <errno.h>
@@ -50,174 +47,277 @@
 
 
 #define LOAD_PROC      "file-xbm-load"
-#define SAVE_PROC      "file-xbm-save"
+#define EXPORT_PROC    "file-xbm-export"
 #define PLUG_IN_BINARY "file-xbm"
-#define PLUG_IN_ROLE   "gimp-file-xbm"
+
+#define MAX_COMMENT  72
+#define MAX_MASK_EXT 32
+#define MAX_PREFIX   64
 
 
-/* Wear your GIMP with pride! */
-#define DEFAULT_USE_COMMENT TRUE
-#define MAX_COMMENT         72
-#define MAX_MASK_EXT        32
+typedef struct _Xbm      Xbm;
+typedef struct _XbmClass XbmClass;
 
-/* C identifier prefix. */
-#define DEFAULT_PREFIX "bitmap"
-#define MAX_PREFIX     64
-
-/* Whether or not to export as X10 bitmap. */
-#define DEFAULT_X10_FORMAT FALSE
-
-typedef struct _XBMSaveVals
+struct _Xbm
 {
-  gchar    comment[MAX_COMMENT + 1];
-  gint     x10_format;
-  gint     use_hot;
-  gint     x_hot;
-  gint     y_hot;
-  gchar    prefix[MAX_PREFIX + 1];
-  gboolean write_mask;
-  gchar    mask_ext[MAX_MASK_EXT + 1];
-} XBMSaveVals;
+  GimpPlugIn      parent_instance;
+};
 
-static XBMSaveVals xsvals =
+struct _XbmClass
 {
-  "###",                /* comment */
-  DEFAULT_X10_FORMAT,   /* x10_format */
-  FALSE,
-  0,                    /* x_hot */
-  0,                    /* y_hot */
-  DEFAULT_PREFIX,       /* prefix */
-  FALSE,                /* write_mask */
-  "-mask"
+  GimpPlugInClass parent_class;
 };
 
 
-/* Declare some local functions.
- */
-static void      query                   (void);
-static void      run                     (const gchar      *name,
-                                          gint              nparams,
-                                          const GimpParam  *param,
-                                          gint             *nreturn_vals,
-                                          GimpParam       **return_vals);
+#define XBM_TYPE  (xbm_get_type ())
+#define XBM(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), XBM_TYPE, Xbm))
 
-static gint32    load_image              (const gchar      *filename,
-                                          GError          **error);
-static gint      save_image              (GFile            *file,
-                                          const gchar      *prefix,
-                                          const gchar      *comment,
-                                          gboolean          save_mask,
-                                          gint32            image_ID,
-                                          gint32            drawable_ID,
-                                          GError          **error);
-static gboolean  save_dialog             (gint32            drawable_ID);
+GType                   xbm_get_type         (void) G_GNUC_CONST;
 
-static gboolean  print                   (GOutputStream    *output,
-                                          GError          **error,
-                                          const gchar      *format,
-                                          ...) G_GNUC_PRINTF (3, 4);
+static GList          * xbm_query_procedures (GimpPlugIn            *plug_in);
+static GimpProcedure  * xbm_create_procedure (GimpPlugIn            *plug_in,
+                                              const gchar           *name);
 
-#if 0
-/* DISABLED - see http://bugzilla.gnome.org/show_bug.cgi?id=82763 */
-static void      comment_entry_callback  (GtkWidget        *widget,
-                                          gpointer          data);
-#endif
-static void      prefix_entry_callback   (GtkWidget        *widget,
-                                          gpointer          data);
-static void      mask_ext_entry_callback (GtkWidget        *widget,
-                                          gpointer          data);
+static GimpValueArray * xbm_load             (GimpProcedure         *procedure,
+                                              GimpRunMode            run_mode,
+                                              GFile                 *file,
+                                              GimpMetadata          *metadata,
+                                              GimpMetadataLoadFlags *flags,
+                                              GimpProcedureConfig   *config,
+                                              gpointer               run_data);
+static GimpValueArray * xbm_export           (GimpProcedure         *procedure,
+                                              GimpRunMode            run_mode,
+                                              GimpImage             *image,
+                                              GFile                 *file,
+                                              GimpExportOptions     *options,
+                                              GimpMetadata          *metadata,
+                                              GimpProcedureConfig   *config,
+                                              gpointer               run_data);
+
+static GimpImage      * load_image           (GFile                 *file,
+                                              GError               **error);
+static gboolean         export_image         (GFile                 *file,
+                                              const gchar           *prefix,
+                                              gboolean               save_mask,
+                                              GimpImage             *image,
+                                              GimpDrawable          *drawable,
+                                              GObject               *config,
+                                              GError               **error);
+static gboolean         save_dialog          (GimpImage             *image,
+                                              GimpDrawable          *drawable,
+                                              GimpProcedure         *procedure,
+                                              GObject               *config);
+
+static gboolean         print                (GOutputStream         *output,
+                                              GError               **error,
+                                              const gchar           *format,
+                                              ...) G_GNUC_PRINTF (3, 4);
 
 
-const GimpPlugInInfo PLUG_IN_INFO =
-{
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
-};
+G_DEFINE_TYPE (Xbm, xbm, GIMP_TYPE_PLUG_IN)
 
-MAIN ()
-
-#ifdef VERBOSE
-static int verbose = VERBOSE;
-#endif
+GIMP_MAIN (XBM_TYPE)
+DEFINE_STD_SET_I18N
 
 
 static void
-query (void)
+xbm_class_init (XbmClass *klass)
 {
-  static const GimpParamDef load_args[] =
-  {
-    { GIMP_PDB_INT32,  "run-mode",     "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_STRING, "filename",     "The name of the file to load" },
-    { GIMP_PDB_STRING, "raw-filename", "The name entered"             }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  static const GimpParamDef load_return_vals[] =
-  {
-    { GIMP_PDB_IMAGE,  "image",        "Output image" }
-  };
+  plug_in_class->query_procedures = xbm_query_procedures;
+  plug_in_class->create_procedure = xbm_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
+}
 
-  static const GimpParamDef save_args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode",       "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",          "Input image" },
-    { GIMP_PDB_DRAWABLE, "drawable",       "Drawable to export" },
-    { GIMP_PDB_STRING,   "filename",       "The name of the file to export" },
-    { GIMP_PDB_STRING,   "raw-filename",   "The name entered" },
-    { GIMP_PDB_STRING,   "comment",        "Image description (maximum 72 bytes)" },
-    { GIMP_PDB_INT32,    "x10",            "Export in X10 format" },
-    { GIMP_PDB_INT32,    "x-hot",          "X coordinate of hotspot" },
-    { GIMP_PDB_INT32,    "y-hot",          "Y coordinate of hotspot" },
-    { GIMP_PDB_STRING,   "prefix",         "Identifier prefix [determined from filename]"},
-    { GIMP_PDB_INT32,    "write-mask",     "(0 = ignore, 1 = save as extra file)" },
-    { GIMP_PDB_STRING,   "mask-extension", "Extension of the mask file" }
-  } ;
+static void
+xbm_init (Xbm *xbm)
+{
+}
 
-  gimp_install_procedure (LOAD_PROC,
-                          "Load a file in X10 or X11 bitmap (XBM) file format",
-                          "Load a file in X10 or X11 bitmap (XBM) file format.  XBM is a lossless format for flat black-and-white (two color indexed) images.",
-                          "Gordon Matzigkeit",
-                          "Gordon Matzigkeit",
-                          "1998",
-                          N_("X BitMap image"),
-                          NULL,
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (load_args),
-                          G_N_ELEMENTS (load_return_vals),
-                          load_args, load_return_vals);
+static GList *
+xbm_query_procedures (GimpPlugIn *plug_in)
+{
+  GList *list = NULL;
 
-  gimp_register_file_handler_mime (LOAD_PROC, "image/x-xbitmap");
-  gimp_register_load_handler (LOAD_PROC,
-                              "xbm,icon,bitmap",
-                              "");
+  list = g_list_append (list, g_strdup (LOAD_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
 
-  gimp_install_procedure (SAVE_PROC,
-                          "Export a file in X10 or X11 bitmap (XBM) file format",
-                          "Export a file in X10 or X11 bitmap (XBM) file format.  XBM is a lossless format for flat black-and-white (two color indexed) images.",
-                          "Gordon Matzigkeit",
-                          "Gordon Matzigkeit",
-                          "1998",
-                          N_("X BitMap image"),
-                          "INDEXED",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (save_args), 0,
-                          save_args, NULL);
+  return list;
+}
 
-  gimp_register_file_handler_mime (SAVE_PROC, "image/x-xbitmap");
-  gimp_register_file_handler_uri (SAVE_PROC);
-  gimp_register_save_handler (SAVE_PROC, "xbm,icon,bitmap", "");
+static GimpProcedure *
+xbm_create_procedure (GimpPlugIn  *plug_in,
+                      const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, LOAD_PROC))
+    {
+      procedure = gimp_load_procedure_new (plug_in, name,
+                                           GIMP_PDB_PROC_TYPE_PLUGIN,
+                                           xbm_load, NULL, NULL);
+
+      gimp_procedure_set_menu_label (procedure, _("X BitMap image"));
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Load a file in X10 or X11 bitmap "
+                                          "(XBM) file format"),
+                                        _("Load a file in X10 or X11 bitmap "
+                                          "(XBM) file format. XBM is a lossless "
+                                          "format for flat black-and-white "
+                                          "(two color indexed) images."),
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Gordon Matzigkeit",
+                                      "Gordon Matzigkeit",
+                                      "1998");
+
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "image/x-xbitmap");
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "xbm,icon,bitmap");
+    }
+  else if (! strcmp (name, EXPORT_PROC))
+    {
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, xbm_export, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "INDEXED");
+
+      gimp_procedure_set_menu_label (procedure, _("X BitMap image"));
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Export a file in X10 or X11 bitmap "
+                                          "(XBM) file format"),
+                                        _("X10 or X11 bitmap "
+                                          "(XBM) file format. XBM is a lossless "
+                                          "format for flat black-and-white "
+                                          "(two color indexed) images."),
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Gordon Matzigkeit",
+                                      "Gordon Matzigkeit",
+                                      "1998");
+
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           _("XBM"));
+      gimp_file_procedure_set_handles_remote (GIMP_FILE_PROCEDURE (procedure),
+                                              TRUE);
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "image/x-xbitmap");
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "xbm,icon,bitmap");
+
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_BITMAP |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA,
+                                              NULL, NULL, NULL);
+
+      gimp_procedure_add_boolean_argument (procedure, "include-comment",
+                                           _("_Write comment"),
+                                           _("Write a comment at the beginning of the file."),
+                                           FALSE, /* *NOT* gimp_export_comment() */
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_string_argument (procedure, "gimp-comment",
+                                          _("Co_mment"),
+                                          _("Image description (maximum 72 bytes)"),
+                                          gimp_get_default_comment (),
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_set_argument_sync (procedure, "gimp-comment",
+                                        GIMP_ARGUMENT_SYNC_PARASITE);
+
+      gimp_procedure_add_boolean_argument (procedure, "x10-format",
+                                           _("_X10 format bitmap"),
+                                           _("Export in X10 format"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_boolean_argument (procedure, "use-hot-spot",
+                                           _("Write hot spot _values"),
+                                           _("Write hotspot information"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "hot-spot-x",
+                                       _("Hot s_pot X"),
+                                       _("X coordinate of hotspot"),
+                                       0, GIMP_MAX_IMAGE_SIZE, 0,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "hot-spot-y",
+                                       _("Hot spot _Y"),
+                                       _("Y coordinate of hotspot"),
+                                       0, GIMP_MAX_IMAGE_SIZE, 0,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_string_argument (procedure, "prefix",
+                                          _("I_dentifier prefix"),
+                                          _("Identifier prefix [determined from filename]"),
+                                          "bitmap",
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_boolean_argument (procedure, "write-mask",
+                                           _("Write extra mask _file"),
+                                           _("Write extra mask file"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_string_argument (procedure, "mask-suffix",
+                                          _("Mas_k file extensions"),
+                                          _("Suffix of the mask file"),
+                                          "-mask",
+                                          G_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+xbm_load (GimpProcedure         *procedure,
+          GimpRunMode            run_mode,
+          GFile                 *file,
+          GimpMetadata          *metadata,
+          GimpMetadataLoadFlags *flags,
+          GimpProcedureConfig   *config,
+          gpointer               run_data)
+{
+  GimpValueArray    *return_vals;
+  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
+  GimpImage         *image;
+  GError            *error = NULL;
+
+  gegl_init (NULL, NULL);
+
+  image = load_image (file, &error);
+
+  if (! image)
+    return gimp_procedure_new_return_values (procedure, status, error);
+
+  return_vals = gimp_procedure_new_return_values (procedure,
+                                                  GIMP_PDB_SUCCESS,
+                                                  NULL);
+
+  GIMP_VALUES_SET_IMAGE (return_vals, 1, image);
+
+  return return_vals;
 }
 
 static gchar *
-init_prefix (const gchar *filename)
+init_prefix (GFile   *file,
+             GObject *config)
 {
   gchar *p, *prefix;
-  gint len;
+  gint   len;
 
-  prefix = g_path_get_basename (filename);
+  prefix = g_file_get_basename (file);
 
-  memset (xsvals.prefix, 0, sizeof (xsvals.prefix));
+  g_object_set (config,
+                "prefix", NULL,
+                NULL);
 
   if (prefix)
     {
@@ -228,272 +328,150 @@ init_prefix (const gchar *filename)
       else
         len = MAX_PREFIX;
 
-      strncpy (xsvals.prefix, prefix, len);
-      g_free (prefix);
+      prefix[len] = '\0';
+
+      g_object_set (config,
+                    "prefix", prefix,
+                    NULL);
     }
 
-  return xsvals.prefix;
+  return prefix;
 }
 
-static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+static GimpValueArray *
+xbm_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
 {
-  static GimpParam   values[2];
-  GimpRunMode        run_mode;
-  GimpPDBStatusType  status        = GIMP_PDB_SUCCESS;
-  gint32             image_ID;
-  gint32             drawable_ID;
-  GimpParasite      *parasite      = NULL;
-  gchar             *mask_basename = NULL;
-  GError            *error         = NULL;
-  GimpExportReturn   export        = GIMP_EXPORT_CANCEL;
+  GimpPDBStatusType    status        = GIMP_PDB_SUCCESS;
+  GimpExportReturn     export        = GIMP_EXPORT_IGNORE;
+  GList              *drawables;
+  gchar               *mask_basename = NULL;
+  GError              *error         = NULL;
 
-  INIT_I18N ();
   gegl_init (NULL, NULL);
 
-  strncpy (xsvals.comment, "Created with GIMP", MAX_COMMENT);
-
-  run_mode = param[0].data.d_int32;
-
-  *nreturn_vals = 1;
-  *return_vals  = values;
-
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
-
-#ifdef VERBOSE
-  if (verbose)
-    printf ("XBM: RUN %s\n", name);
-#endif
-
-  if (strcmp (name, LOAD_PROC) == 0)
+  if (run_mode == GIMP_RUN_INTERACTIVE ||
+      run_mode == GIMP_RUN_WITH_LAST_VALS)
     {
-      image_ID = load_image (param[1].data.d_string, &error);
+      /* Always override the prefix with the filename. */
+      mask_basename = g_strdup (init_prefix (file, G_OBJECT (config)));
+    }
 
-      if (image_ID != -1)
+  export    = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
+
+  if (run_mode == GIMP_RUN_INTERACTIVE)
+    {
+      GimpParasite *parasite;
+
+      gimp_ui_init (PLUG_IN_BINARY);
+      parasite = gimp_image_get_parasite (image, "hot-spot");
+
+      if (parasite)
         {
-          *nreturn_vals = 2;
-          values[1].type         = GIMP_PDB_IMAGE;
-          values[1].data.d_image = image_ID;
+          gchar   *parasite_data;
+          guint32  parasite_size;
+          gint     x, y;
+
+          parasite_data = (gchar *) gimp_parasite_get_data (parasite, &parasite_size);
+          parasite_data = g_strndup (parasite_data, parasite_size);
+
+          if (sscanf (parasite_data, "%i %i", &x, &y) == 2)
+            {
+              g_object_set (config,
+                            "use-hot-spot", TRUE,
+                            "hot-spot-x",   x,
+                            "hot-spot-y",   y,
+                            NULL);
+            }
+
+          gimp_parasite_free (parasite);
+          g_free (parasite_data);
         }
-      else
+
+      if (! save_dialog (image, drawables->data, procedure, G_OBJECT (config)))
+        status = GIMP_PDB_CANCEL;
+    }
+
+  if (status == GIMP_PDB_SUCCESS)
+    {
+      GFile    *mask_file;
+      GFile    *dir;
+      gchar    *mask_prefix;
+      gchar    *mask_ext;
+      gchar    *prefix;
+      gchar    *temp;
+      gboolean  write_mask;
+
+      g_object_get (config,
+                    "prefix",      &prefix,
+                    "mask-suffix", &mask_ext,
+                    "write-mask",  &write_mask,
+                    NULL);
+
+      dir = g_file_get_parent (file);
+      temp = g_strdup_printf ("%s%s.xbm", mask_basename, mask_ext);
+
+      mask_file = g_file_get_child (dir, temp);
+
+      g_free (temp);
+      g_object_unref (dir);
+
+      /* Change any non-alphanumeric prefix characters to underscores. */
+      for (temp = prefix; *temp; temp++)
+        if (! g_ascii_isalnum (*temp))
+          *temp = '_';
+
+      g_object_set (config,
+                    "prefix", prefix,
+                    NULL);
+
+      mask_prefix = g_strdup_printf ("%s%s", prefix, mask_ext);
+
+      for (temp = mask_prefix; *temp; temp++)
+        if (! g_ascii_isalnum (*temp))
+          *temp = '_';
+
+      if (! export_image (file,
+                          prefix,
+                          FALSE,
+                          image, drawables->data,
+                          G_OBJECT (config),
+                          &error)
+
+          ||
+
+          (write_mask &&
+           ! export_image (mask_file,
+                           mask_prefix,
+                           TRUE,
+                           image, drawables->data,
+                           G_OBJECT (config),
+                           &error)))
         {
           status = GIMP_PDB_EXECUTION_ERROR;
         }
-    }
-  else if (strcmp (name, SAVE_PROC) == 0)
-    {
-      image_ID    = param[1].data.d_int32;
-      drawable_ID = param[2].data.d_int32;
 
-      switch (run_mode)
-        {
-        case GIMP_RUN_INTERACTIVE:
-        case GIMP_RUN_WITH_LAST_VALS:
-          gimp_ui_init (PLUG_IN_BINARY, FALSE);
+      g_free (prefix);
+      g_free (mask_prefix);
+      g_free (mask_ext);
+      g_free (mask_basename);
 
-          export = gimp_export_image (&image_ID, &drawable_ID, "XBM",
-                                      GIMP_EXPORT_CAN_HANDLE_BITMAP |
-                                      GIMP_EXPORT_CAN_HANDLE_ALPHA);
-
-          if (export == GIMP_EXPORT_CANCEL)
-            {
-              values[0].data.d_status = GIMP_PDB_CANCEL;
-              return;
-            }
-          break;
-
-        default:
-          break;
-        }
-
-      switch (run_mode)
-        {
-        case GIMP_RUN_INTERACTIVE:
-        case GIMP_RUN_WITH_LAST_VALS:
-          /*  Possibly retrieve data  */
-          gimp_get_data (SAVE_PROC, &xsvals);
-
-          /* Always override the prefix with the filename. */
-          mask_basename = g_strdup (init_prefix (param[3].data.d_string));
-          break;
-
-        case GIMP_RUN_NONINTERACTIVE:
-          /*  Make sure all the required arguments are there!  */
-          if (nparams < 5)
-            {
-              status = GIMP_PDB_CALLING_ERROR;
-            }
-          else
-            {
-              gint i = 5;
-
-              if (nparams > i)
-                {
-                  memset (xsvals.comment, 0, sizeof (xsvals.comment));
-                  strncpy (xsvals.comment, param[i].data.d_string,
-                           MAX_COMMENT);
-                }
-
-              i ++;
-              if (nparams > i)
-                xsvals.x10_format = (param[i].data.d_int32) ? TRUE : FALSE;
-
-              i += 2;
-              if (nparams > i)
-                {
-                  /* They've asked for a hotspot. */
-                  xsvals.use_hot = TRUE;
-                  xsvals.x_hot = param[i - 1].data.d_int32;
-                  xsvals.y_hot = param[i].data.d_int32;
-                }
-
-              mask_basename = g_strdup (init_prefix (param[3].data.d_string));
-
-              i ++;
-              if (nparams > i)
-                {
-                  memset (xsvals.prefix, 0, sizeof (xsvals.prefix));
-                  strncpy (xsvals.prefix, param[i].data.d_string,
-                           MAX_PREFIX);
-                }
-
-              i += 2;
-              if (nparams > i)
-                {
-                  xsvals.write_mask = param[i - 1].data.d_int32;
-                  memset (xsvals.mask_ext, 0, sizeof (xsvals.mask_ext));
-                  strncpy (xsvals.mask_ext, param[i].data.d_string,
-                           MAX_MASK_EXT);
-                }
-
-              i ++;
-              /* Too many arguments. */
-              if (nparams > i)
-                status = GIMP_PDB_CALLING_ERROR;
-            }
-          break;
-
-        default:
-          break;
-        }
-
-      if (run_mode == GIMP_RUN_INTERACTIVE)
-        {
-          /* Get the parasites */
-          parasite = gimp_image_get_parasite (image_ID, "gimp-comment");
-
-          if (parasite)
-            {
-              gint size = gimp_parasite_data_size (parasite);
-
-              strncpy (xsvals.comment,
-                       gimp_parasite_data (parasite), MIN (size, MAX_COMMENT));
-              xsvals.comment[MIN (size, MAX_COMMENT) + 1] = 0;
-
-              gimp_parasite_free (parasite);
-            }
-
-          parasite = gimp_image_get_parasite (image_ID, "hot-spot");
-
-          if (parasite)
-            {
-              gint x, y;
-
-              if (sscanf (gimp_parasite_data (parasite), "%i %i", &x, &y) == 2)
-               {
-                 xsvals.use_hot = TRUE;
-                 xsvals.x_hot = x;
-                 xsvals.y_hot = y;
-               }
-             gimp_parasite_free (parasite);
-           }
-
-          /*  Acquire information with a dialog  */
-          if (! save_dialog (drawable_ID))
-            status = GIMP_PDB_CANCEL;
-        }
-
-      if (status == GIMP_PDB_SUCCESS)
-        {
-          GFile *file = g_file_new_for_uri (param[3].data.d_string);
-          GFile *mask_file;
-          GFile *dir;
-          gchar *mask_prefix;
-          gchar *temp;
-
-          dir = g_file_get_parent (file);
-          temp = g_strdup_printf ("%s%s.xbm", mask_basename, xsvals.mask_ext);
-
-          mask_file = g_file_get_child (dir, temp);
-
-          g_free (temp);
-          g_object_unref (dir);
-
-          /* Change any non-alphanumeric prefix characters to underscores. */
-          for (temp = xsvals.prefix; *temp; temp++)
-            if (! g_ascii_isalnum (*temp))
-              *temp = '_';
-
-          mask_prefix = g_strdup_printf ("%s%s",
-                                         xsvals.prefix, xsvals.mask_ext);
-
-          for (temp = mask_prefix; *temp; temp++)
-            if (! g_ascii_isalnum (*temp))
-              *temp = '_';
-
-          if (save_image (file,
-                          xsvals.prefix,
-                          xsvals.comment,
-                          FALSE,
-                          image_ID, drawable_ID,
-                          &error)
-
-              && (! xsvals.write_mask ||
-                  save_image (mask_file,
-                              mask_prefix,
-                              xsvals.comment,
-                              TRUE,
-                              image_ID, drawable_ID,
-                              &error)))
-            {
-              /*  Store xsvals data  */
-              gimp_set_data (SAVE_PROC, &xsvals, sizeof (xsvals));
-            }
-          else
-            {
-              status = GIMP_PDB_EXECUTION_ERROR;
-            }
-
-          g_free (mask_prefix);
-          g_free (mask_basename);
-
-          g_object_unref (file);
-          g_object_unref (mask_file);
-        }
-
-      if (export == GIMP_EXPORT_EXPORT)
-        gimp_image_delete (image_ID);
-    }
-  else
-    {
-      status = GIMP_PDB_CALLING_ERROR;
+      g_object_unref (mask_file);
     }
 
-  if (status != GIMP_PDB_SUCCESS && error)
-    {
-      *nreturn_vals = 2;
-      values[1].type          = GIMP_PDB_STRING;
-      values[1].data.d_string = error->message;
-    }
+  if (export == GIMP_EXPORT_EXPORT)
+    gimp_image_delete (image);
 
-  values[0].data.d_status = status;
+  g_list_free (drawables);
+  return gimp_procedure_new_return_values (procedure, status, error);
 }
-
 
 /* Return the value of a digit. */
 static gint
@@ -712,24 +690,23 @@ get_int (FILE *fp)
   return val;
 }
 
-
-static gint32
-load_image (const gchar  *filename,
-            GError      **error)
+static GimpImage *
+load_image (GFile   *file,
+            GError **error)
 {
-  FILE         *fp;
-  GeglBuffer   *buffer;
-  gint32        image_ID;
-  gint32        layer_ID;
-  guchar       *data;
-  gint          intbits;
-  gint          width  = 0;
-  gint          height = 0;
-  gint          x_hot  = 0;
-  gint          y_hot  = 0;
-  gint          c, i, j, k;
-  gint          tileheight, rowoffset;
-  gchar        *comment;
+  FILE       *fp;
+  GeglBuffer *buffer;
+  GimpImage  *image;
+  GimpLayer  *layer;
+  guchar     *data;
+  gint        intbits;
+  gint        width  = 0;
+  gint        height = 0;
+  gint        x_hot  = 0;
+  gint        y_hot  = 0;
+  gint        c, i, j, k;
+  gint        tileheight, rowoffset;
+  gchar      *comment;
 
   const guchar cmap[] =
   {
@@ -738,15 +715,16 @@ load_image (const gchar  *filename,
   };
 
   gimp_progress_init_printf (_("Opening '%s'"),
-                             gimp_filename_to_utf8 (filename));
+                             gimp_file_get_utf8_name (file));
 
-  fp = g_fopen (filename, "rb");
+  fp = g_fopen (g_file_peek_path (file), "rb");
+
   if (! fp)
     {
       g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
                    _("Could not open '%s' for reading: %s"),
-                   gimp_filename_to_utf8 (filename), g_strerror (errno));
-      return -1;
+                   gimp_file_get_utf8_name (file), g_strerror (errno));
+      return NULL;
     }
 
   comment = fgetcomment (fp);
@@ -825,53 +803,52 @@ load_image (const gchar  *filename,
   if (c == EOF)
     {
       g_message (_("'%s':\nCould not read header (ftell == %ld)"),
-                 gimp_filename_to_utf8 (filename), ftell (fp));
+                 gimp_file_get_utf8_name (file), ftell (fp));
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
   if (width <= 0)
     {
       g_message (_("'%s':\nNo image width specified"),
-                 gimp_filename_to_utf8 (filename));
+                 gimp_file_get_utf8_name (file));
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
   if (width > GIMP_MAX_IMAGE_SIZE)
     {
       g_message (_("'%s':\nImage width is larger than GIMP can handle"),
-                 gimp_filename_to_utf8 (filename));
+                 gimp_file_get_utf8_name (file));
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
   if (height <= 0)
     {
       g_message (_("'%s':\nNo image height specified"),
-                 gimp_filename_to_utf8 (filename));
+                 gimp_file_get_utf8_name (file));
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
   if (height > GIMP_MAX_IMAGE_SIZE)
     {
       g_message (_("'%s':\nImage height is larger than GIMP can handle"),
-                 gimp_filename_to_utf8 (filename));
+                 gimp_file_get_utf8_name (file));
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
   if (intbits == 0)
     {
       g_message (_("'%s':\nNo image data type specified"),
-                 gimp_filename_to_utf8 (filename));
+                 gimp_file_get_utf8_name (file));
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
-  image_ID = gimp_image_new (width, height, GIMP_INDEXED);
-  gimp_image_set_filename (image_ID, filename);
+  image = gimp_image_new (width, height, GIMP_INDEXED);
 
   if (comment)
     {
@@ -880,7 +857,7 @@ load_image (const gchar  *filename,
       parasite = gimp_parasite_new ("gimp-comment",
                                     GIMP_PARASITE_PERSISTENT,
                                     strlen (comment) + 1, (gpointer) comment);
-      gimp_image_attach_parasite (image_ID, parasite);
+      gimp_image_attach_parasite (image, parasite);
       gimp_parasite_free (parasite);
 
       g_free (comment);
@@ -899,22 +876,22 @@ load_image (const gchar  *filename,
                                     GIMP_PARASITE_PERSISTENT,
                                     strlen (str) + 1, (gpointer) str);
       g_free (str);
-      gimp_image_attach_parasite (image_ID, parasite);
+      gimp_image_attach_parasite (image, parasite);
       gimp_parasite_free (parasite);
     }
 
   /* Set a black-and-white colormap. */
-  gimp_image_set_colormap (image_ID, cmap, 2);
+  gimp_palette_set_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), (guint8 *) cmap, 2 * 3);
 
-  layer_ID = gimp_layer_new (image_ID,
-                             _("Background"),
-                             width, height,
-                             GIMP_INDEXED_IMAGE,
-                             100,
-                             gimp_image_get_default_new_layer_mode (image_ID));
-  gimp_image_insert_layer (image_ID, layer_ID, -1, 0);
+  layer = gimp_layer_new (image,
+                          _("Background"),
+                          width, height,
+                          GIMP_INDEXED_IMAGE,
+                          100,
+                          gimp_image_get_default_new_layer_mode (image));
+  gimp_image_insert_layer (image, layer, NULL, 0);
 
-  buffer = gimp_drawable_get_buffer (layer_ID);
+  buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
 
   /* Allocate the data. */
   tileheight = gimp_tile_height ();
@@ -923,12 +900,6 @@ load_image (const gchar  *filename,
   for (i = 0; i < height; i += tileheight)
     {
       tileheight = MIN (tileheight, height - i);
-
-#ifdef VERBOSE
-      if (verbose > 1)
-        printf ("XBM: reading %dx(%d+%d) pixel region\n", width, i,
-                tileheight);
-#endif
 
       /* Parse the data from the file */
       for (j = 0; j < tileheight; j ++)
@@ -965,17 +936,17 @@ load_image (const gchar  *filename,
 
   gimp_progress_update (1.0);
 
-  return image_ID;
+  return image;
 }
 
 static gboolean
-save_image (GFile        *file,
-            const gchar  *prefix,
-            const gchar  *comment,
-            gboolean      save_mask,
-            gint32        image_ID,
-            gint32        drawable_ID,
-            GError      **error)
+export_image (GFile         *file,
+              const gchar   *prefix,
+              gboolean       save_mask,
+              GimpImage     *image,
+              GimpDrawable  *drawable,
+              GObject       *config,
+              GError       **error)
 {
   GOutputStream *output;
   GeglBuffer    *buffer;
@@ -988,6 +959,21 @@ save_image (GFile        *file,
   guchar        *data = NULL;
   guchar        *cmap;
   const gchar   *intfmt;
+  gboolean       config_save_comment;
+  gchar         *config_comment;
+  gint           config_x10_format;
+  gint           config_use_hot;
+  gint           config_x_hot;
+  gint           config_y_hot;
+
+  g_object_get (config,
+                "include-comment", &config_save_comment,
+                "gimp-comment",    &config_comment,
+                "x10-format",      &config_x10_format,
+                "use-hot-spot",    &config_use_hot,
+                "hot-spot-x",      &config_x_hot,
+                "hot-spot-y",      &config_y_hot,
+                NULL);
 
 #if 0
   if (save_mask)
@@ -996,9 +982,9 @@ save_image (GFile        *file,
     g_printerr ("%s: save_image '%s'\n", G_STRFUNC, prefix);
 #endif
 
-  cmap = gimp_image_get_colormap (image_ID, &colors);
+  cmap = gimp_palette_get_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), &colors, NULL);
 
-  if (! gimp_drawable_is_indexed (drawable_ID) || colors > 2)
+  if (! gimp_drawable_is_indexed (drawable) || colors > 2)
     {
       /* The image is not black-and-white. */
       g_message (_("The image which you are trying to export as "
@@ -1009,7 +995,7 @@ save_image (GFile        *file,
       return FALSE;
     }
 
-  has_alpha = gimp_drawable_has_alpha (drawable_ID);
+  has_alpha = gimp_drawable_has_alpha (drawable);
 
   if (! has_alpha && save_mask)
     {
@@ -1018,10 +1004,10 @@ save_image (GFile        *file,
       return FALSE;
     }
 
-  buffer = gimp_drawable_get_buffer (drawable_ID);
+  buffer = gimp_drawable_get_buffer (drawable);
   width  = gegl_buffer_get_width  (buffer);
   height = gegl_buffer_get_height (buffer);
-  bpp    = gimp_drawable_bpp (drawable_ID);
+  bpp    = gimp_drawable_get_bpp (drawable);
 
   /* Figure out which color is black, and which is white. */
   dark = 0;
@@ -1058,15 +1044,11 @@ save_image (GFile        *file,
     }
 
   /* Maybe write the image comment. */
-#if 0
-  /* DISABLED - see http://bugzilla.gnome.org/show_bug.cgi?id=82763 */
-  /* a future version should write the comment at the end of the file */
-  if (*comment)
+  if (config_save_comment && config_comment && *config_comment)
     {
-      if (! print (output, error, "/* %s */\n", comment))
+      if (! print (output, error, "/* %s */\n", config_comment))
         goto fail;
     }
-#endif
 
   /* Write out the image height and width. */
   if (! print (output, error, "#define %s_width %d\n",  prefix, width) ||
@@ -1074,17 +1056,17 @@ save_image (GFile        *file,
     goto fail;
 
   /* Write out the hotspot, if any. */
-  if (xsvals.use_hot)
+  if (config_use_hot)
     {
       if (! print (output, error,
-                   "#define %s_x_hot %d\n", prefix, xsvals.x_hot) ||
+                   "#define %s_x_hot %d\n", prefix, config_x_hot) ||
           ! print (output, error,
-                   "#define %s_y_hot %d\n", prefix, xsvals.y_hot))
+                   "#define %s_y_hot %d\n", prefix, config_y_hot))
         goto fail;
     }
 
   /* Now write the actual data. */
-  if (xsvals.x10_format)
+  if (config_x10_format)
     {
       /* We can fit 9 hex shorts on a single line. */
       lineints = 9;
@@ -1101,7 +1083,7 @@ save_image (GFile        *file,
 
   if (! print (output, error,
                "static %s %s_bits[] = {\n  ",
-               xsvals.x10_format ? "unsigned short" : "unsigned char", prefix))
+               config_x10_format ? "unsigned short" : "unsigned char", prefix))
     goto fail;
 
   /* Allocate a new set of pixels. */
@@ -1119,12 +1101,6 @@ save_image (GFile        *file,
       gegl_buffer_get (buffer, GEGL_RECTANGLE (0, i, width, tileheight), 1.0,
                        NULL, data,
                        GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
-
-#ifdef VERBOSE
-      if (verbose > 1)
-        printf ("XBM: writing %dx(%d+%d) pixel region\n",
-                width, i, tileheight);
-#endif
 
       for (j = 0; j < tileheight; j ++)
         {
@@ -1235,161 +1211,66 @@ save_image (GFile        *file,
 }
 
 static gboolean
-save_dialog (gint32 drawable_ID)
+save_dialog (GimpImage     *image,
+             GimpDrawable  *drawable,
+             GimpProcedure *procedure,
+             GObject       *config)
 {
-  GtkWidget     *dialog;
-  GtkWidget     *frame;
-  GtkWidget     *vbox;
-  GtkWidget     *toggle;
-  GtkWidget     *table;
-  GtkWidget     *entry;
-  GtkWidget     *spinbutton;
-  GtkAdjustment *adj;
-  gboolean       run;
+  GtkWidget *dialog;
+  GtkWidget *vbox;
+  GtkWidget *frame;
+  GtkWidget *hint;
+  gboolean   run;
 
-  dialog = gimp_export_dialog_new (_("XBM"), PLUG_IN_BINARY, SAVE_PROC);
-
-  /* parameter settings */
-  frame = gimp_frame_new (_("XBM Options"));
-  gtk_container_set_border_width (GTK_CONTAINER (frame), 12);
-  gtk_box_pack_start (GTK_BOX (gimp_export_dialog_get_content_area (dialog)),
-                      frame, TRUE, TRUE, 0);
-  gtk_widget_show (frame);
-
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-  gtk_container_add (GTK_CONTAINER (frame), vbox);
-
-  /*  X10 format  */
-  toggle = gtk_check_button_new_with_mnemonic (_("_X10 format bitmap"));
-  gtk_box_pack_start (GTK_BOX (vbox), toggle, FALSE, FALSE, 0);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle), xsvals.x10_format);
-  gtk_widget_show (toggle);
-
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (gimp_toggle_button_update),
-                    &xsvals.x10_format);
-
-  table = gtk_table_new (2, 2, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_box_pack_start (GTK_BOX (vbox), table, FALSE, FALSE, 0);
-  gtk_widget_show (table);
-
-  /* prefix */
-  entry = gtk_entry_new ();
-  gtk_entry_set_max_length (GTK_ENTRY (entry), MAX_PREFIX);
-  gtk_entry_set_text (GTK_ENTRY (entry), xsvals.prefix);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 0,
-                             _("_Identifier prefix:"), 0.0, 0.5,
-                             entry, 1, TRUE);
-  g_signal_connect (entry, "changed",
-                    G_CALLBACK (prefix_entry_callback),
-                    NULL);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
   /* comment string. */
-#if 0
-  /* DISABLED - see http://bugzilla.gnome.org/show_bug.cgi?id=82763 */
-  entry = gtk_entry_new ();
-  gtk_entry_set_max_length (GTK_ENTRY (entry), MAX_COMMENT);
-  gtk_widget_set_size_request (entry, 240, -1);
-  gtk_entry_set_text (GTK_ENTRY (entry), xsvals.comment);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 1,
-                             _("Comment:"), 0.0, 0.5,
-                             entry, 1, TRUE);
-  g_signal_connect (entry, "changed",
-                    G_CALLBACK (comment_entry_callback),
-                    NULL);
-#endif
+
+
+  hint = g_object_new (GIMP_TYPE_HINT_BOX,
+                       "icon-name", GIMP_ICON_DIALOG_WARNING,
+                       "hint",      _("Writing a comment will make the XBM "
+                                      "file unreadable by some applications.\n"
+                                      "The comment will not affect embedding "
+                                      "the XBM in C source code."),
+                       NULL);
+
+  vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "comment-vbox", "gimp-comment", NULL);
+
+  gtk_box_pack_start (GTK_BOX (vbox), hint, FALSE, FALSE, 0);
+  gtk_widget_set_visible (hint, TRUE);
+  gtk_box_reorder_child (GTK_BOX (vbox), hint, 0);
+  gtk_widget_set_margin_end (hint, 24);
+
+  frame = gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                            "comment-frame", "include-comment",
+                                            FALSE, "comment-vbox");
 
   /* hotspot toggle */
-  toggle = gtk_check_button_new_with_mnemonic (_("_Write hot spot values"));
-  gtk_box_pack_start (GTK_BOX (vbox), toggle, FALSE, FALSE, 0);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle), xsvals.use_hot);
-  gtk_widget_show (toggle);
+  gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                  "hot-spot-vbox", "hot-spot-x", "hot-spot-y",
+                                  NULL);
 
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (gimp_toggle_button_update),
-                    &xsvals.use_hot);
-
-  table = gtk_table_new (2, 2, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_box_pack_start (GTK_BOX (vbox), table, FALSE, FALSE, 0);
-  gtk_widget_show (table);
-
-  g_object_bind_property (toggle, "active",
-                          table,  "sensitive",
-                          G_BINDING_SYNC_CREATE);
-
-  adj = (GtkAdjustment *)
-    gtk_adjustment_new (xsvals.x_hot, 0,
-                        gimp_drawable_width (drawable_ID) - 1,
-                        1, 10, 0);
-  spinbutton = gimp_spin_button_new (adj, 1.0, 0);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 0,
-                             _("Hot spot _X:"), 0.0, 0.5,
-                             spinbutton, 1, TRUE);
-
-  g_signal_connect (adj, "value-changed",
-                    G_CALLBACK (gimp_int_adjustment_update),
-                    &xsvals.x_hot);
-
-  adj = (GtkAdjustment *)
-    gtk_adjustment_new (xsvals.y_hot, 0,
-                        gimp_drawable_height (drawable_ID) - 1,
-                        1, 10, 0);
-  spinbutton = gimp_spin_button_new (adj, 1.0, 0);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 1,
-                             _("Hot spot _Y:"), 0.0, 0.5,
-                             spinbutton, 1, TRUE);
-
-  g_signal_connect (adj, "value-changed",
-                    G_CALLBACK (gimp_int_adjustment_update),
-                    &xsvals.y_hot);
+  frame = gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                            "hot-spot-frame", "use-hot-spot",
+                                            FALSE, "hot-spot-vbox");
 
   /* mask file */
-  frame = gimp_frame_new (_("Mask File"));
-  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
+  frame = gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                            "mask-frame", "write-mask",
+                                            FALSE, "mask-suffix");
+  gtk_widget_set_sensitive (frame, gimp_drawable_has_alpha (drawable));
 
-  table = gtk_table_new (2, 2, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_container_add (GTK_CONTAINER (frame), table);
-  gtk_widget_show (table);
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
+                              "x10-format", "prefix", "comment-frame",
+                              "hot-spot-frame", "mask-frame", NULL);
 
-  toggle = gtk_check_button_new_with_mnemonic (_("W_rite extra mask file"));
-  gtk_table_attach_defaults (GTK_TABLE (table), toggle, 0, 2, 0, 1);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle), xsvals.write_mask);
-  gtk_widget_show (toggle);
-
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (gimp_toggle_button_update),
-                    &xsvals.write_mask);
-
-  entry = gtk_entry_new ();
-  gtk_entry_set_max_length (GTK_ENTRY (entry), MAX_MASK_EXT);
-  gtk_entry_set_text (GTK_ENTRY (entry), xsvals.mask_ext);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 1,
-                             _("_Mask file extension:"), 0.0, 0.5,
-                             entry, 1, TRUE);
-  g_signal_connect (entry, "changed",
-                    G_CALLBACK (mask_ext_entry_callback),
-                    NULL);
-
-  g_object_bind_property (toggle, "active",
-                          entry,  "sensitive",
-                          G_BINDING_SYNC_CREATE);
-
-  gtk_widget_set_sensitive (frame, gimp_drawable_has_alpha (drawable_ID));
-
-  /* Done. */
-  gtk_widget_show (vbox);
   gtk_widget_show (dialog);
 
-  run = (gimp_dialog_run (GIMP_DIALOG (dialog)) == GTK_RESPONSE_OK);
+  run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
   gtk_widget_destroy (dialog);
 
@@ -1411,35 +1292,4 @@ print (GOutputStream  *output,
   va_end (args);
 
   return success;
-}
-
-/* Update the comment string. */
-#if 0
-/* DISABLED - see http://bugzilla.gnome.org/show_bug.cgi?id=82763 */
-static void
-comment_entry_callback (GtkWidget *widget,
-                        gpointer   data)
-{
-  memset (xsvals.comment, 0, sizeof (xsvals.comment));
-  strncpy (xsvals.comment,
-           gtk_entry_get_text (GTK_ENTRY (widget)), MAX_COMMENT);
-}
-#endif
-
-static void
-prefix_entry_callback (GtkWidget *widget,
-                       gpointer   data)
-{
-  memset (xsvals.prefix, 0, sizeof (xsvals.prefix));
-  strncpy (xsvals.prefix,
-           gtk_entry_get_text (GTK_ENTRY (widget)), MAX_PREFIX);
-}
-
-static void
-mask_ext_entry_callback (GtkWidget *widget,
-                       gpointer   data)
-{
-  memset (xsvals.mask_ext, 0, sizeof (xsvals.mask_ext));
-  strncpy (xsvals.mask_ext,
-           gtk_entry_get_text (GTK_ENTRY (widget)), MAX_MASK_EXT);
 }

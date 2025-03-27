@@ -20,6 +20,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 
 #include "text-types.h"
@@ -274,7 +275,7 @@ gimp_text_undo_pop (GimpUndo            *undo,
                                     gimp_babl_format_get_base_type (text_undo->format),
                                     gimp_babl_format_get_precision (text_undo->format),
                                     babl_format_has_alpha (text_undo->format),
-                                    NULL,
+                                    NULL, NULL,
                                     GEGL_DITHER_NONE, GEGL_DITHER_NONE,
                                     FALSE, NULL);
         text_undo->format = format;

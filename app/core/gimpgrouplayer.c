@@ -33,7 +33,9 @@
 #include "gegl/gimp-babl.h"
 #include "gegl/gimp-gegl-loops.h"
 
+#include "gimpchannel.h"
 #include "gimpdrawable-filters.h"
+#include "gimpdrawablefilter.h"
 #include "gimpgrouplayer.h"
 #include "gimpgrouplayerundo.h"
 #include "gimpimage.h"
@@ -102,7 +104,9 @@ static gboolean        gimp_group_layer_get_expanded (GimpViewable    *viewable)
 static void            gimp_group_layer_set_expanded (GimpViewable    *viewable,
                                                       gboolean         expanded);
 
-static gboolean  gimp_group_layer_is_position_locked (GimpItem        *item);
+static gboolean  gimp_group_layer_is_position_locked (GimpItem        *item,
+                                                      GimpItem       **locked_item,
+                                                      gboolean         check_children);
 static GimpItem      * gimp_group_layer_duplicate    (GimpItem        *item,
                                                       GType            new_type);
 static void            gimp_group_layer_convert      (GimpItem        *item,
@@ -160,12 +164,15 @@ static void            gimp_group_layer_transform    (GimpLayer       *layer,
 static void            gimp_group_layer_convert_type (GimpLayer         *layer,
                                                       GimpImage         *dest_image,
                                                       const Babl        *new_format,
+                                                      GimpColorProfile  *src_profile,
                                                       GimpColorProfile  *dest_profile,
                                                       GeglDitherMethod   layer_dither_type,
                                                       GeglDitherMethod   mask_dither_type,
                                                       gboolean           push_undo,
                                                       GimpProgress      *progress);
 static GeglNode   * gimp_group_layer_get_source_node (GimpDrawable      *drawable);
+
+static void         gimp_group_layer_filters_changed (GimpDrawable      *drawable);
 
 static void         gimp_group_layer_opacity_changed (GimpLayer         *layer);
 static void  gimp_group_layer_effective_mode_changed (GimpLayer         *layer);
@@ -296,6 +303,7 @@ gimp_group_layer_class_init (GimpGroupLayerClass *klass)
   drawable_class->estimate_memsize       = gimp_group_layer_estimate_memsize;
   drawable_class->update_all             = gimp_group_layer_update_all;
   drawable_class->get_source_node        = gimp_group_layer_get_source_node;
+  drawable_class->filters_changed        = gimp_group_layer_filters_changed;
 
   layer_class->opacity_changed           = gimp_group_layer_opacity_changed;
   layer_class->effective_mode_changed    = gimp_group_layer_effective_mode_changed;
@@ -516,22 +524,47 @@ gimp_group_layer_set_expanded (GimpViewable *viewable,
 }
 
 static gboolean
-gimp_group_layer_is_position_locked (GimpItem *item)
+gimp_group_layer_is_position_locked (GimpItem  *item,
+                                     GimpItem **locked_item,
+                                     gboolean   check_children)
 {
-  GimpGroupLayerPrivate *private = GET_PRIVATE (item);
-  GList                 *list;
-
-  for (list = gimp_item_stack_get_item_iter (GIMP_ITEM_STACK (private->children));
-       list;
-       list = g_list_next (list))
+  /* Lock position is particular because a locked child locks the group
+   * too.
+   */
+  if (check_children)
     {
-      GimpItem *child = list->data;
+      GimpGroupLayerPrivate *private = GET_PRIVATE (item);
+      GList                 *list;
 
-      if (gimp_item_is_position_locked (child))
-        return TRUE;
+      for (list = gimp_item_stack_get_item_iter (GIMP_ITEM_STACK (private->children));
+           list;
+           list = g_list_next (list))
+        {
+          GimpItem *child = list->data;
+
+          if (gimp_item_get_lock_position (child))
+            {
+              if (locked_item)
+                *locked_item = child;
+
+              return TRUE;
+            }
+          else if (GIMP_IS_GROUP_LAYER (child) &&
+                   gimp_group_layer_is_position_locked (child,
+                                                        locked_item,
+                                                        TRUE))
+            {
+              return TRUE;
+            }
+        }
     }
 
-  return GIMP_ITEM_CLASS (parent_class)->is_position_locked (item);
+  /* And a locked parent locks the group too! Which is handled by parent
+   * implementation of the method.
+   */
+  return GIMP_ITEM_CLASS (parent_class)->is_position_locked (item,
+                                                             locked_item,
+                                                             FALSE);
 }
 
 static GimpItem *
@@ -561,6 +594,7 @@ gimp_group_layer_duplicate (GimpItem *item,
           GimpItem      *child = list->data;
           GimpItem      *new_child;
           GimpLayerMask *mask;
+          GimpContainer *filters;
 
           new_child = gimp_item_duplicate (child, G_TYPE_FROM_INSTANCE (child));
 
@@ -585,6 +619,36 @@ gimp_group_layer_duplicate (GimpItem *item,
           gimp_container_insert (new_private->children,
                                  GIMP_OBJECT (new_child),
                                  position++);
+
+          /* Copy any attached layer effects */
+          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (child));
+          if (gimp_container_get_n_children (filters) > 0)
+            {
+              GList *filter_list;
+
+              for (filter_list = GIMP_LIST (filters)->queue->tail; filter_list;
+                   filter_list = g_list_previous (filter_list))
+                {
+                  if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                    {
+                      GimpDrawableFilter *old_filter = filter_list->data;
+                      GimpDrawableFilter *filter;
+
+                      filter =
+                        gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_child),
+                                                        old_filter);
+
+                      if (filter != NULL)
+                        {
+                          gimp_drawable_filter_apply (filter, NULL);
+                          gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+
+                          gimp_drawable_filter_layer_mask_freeze (filter);
+                          g_object_unref (filter);
+                        }
+                    }
+                }
+            }
         }
 
       /*  force the projection to reallocate itself  */
@@ -1032,10 +1096,12 @@ get_projection_format (GimpProjectable   *projectable,
     {
     case GIMP_RGB:
     case GIMP_INDEXED:
-      return gimp_image_get_format (image, GIMP_RGB, precision, TRUE);
+      return gimp_image_get_format (image, GIMP_RGB, precision, TRUE,
+                                    gimp_image_get_layer_space (image));
 
     case GIMP_GRAY:
-      return gimp_image_get_format (image, GIMP_GRAY, precision, TRUE);
+      return gimp_image_get_format (image, GIMP_GRAY, precision, TRUE,
+                                    gimp_image_get_layer_space (image));
     }
 
   g_return_val_if_reached (NULL);
@@ -1045,6 +1111,7 @@ static void
 gimp_group_layer_convert_type (GimpLayer        *layer,
                                GimpImage        *dest_image,
                                const Babl       *new_format,
+                               GimpColorProfile *src_profile,
                                GimpColorProfile *dest_profile,
                                GeglDitherMethod  layer_dither_type,
                                GeglDitherMethod  mask_dither_type,
@@ -1105,8 +1172,7 @@ gimp_group_layer_get_source_node (GimpDrawable *drawable)
 
   if (gegl_node_has_pad (private->parent_source_node, "input"))
     {
-      gegl_node_connect_to (input,                       "output",
-                            private->parent_source_node, "input");
+      gegl_node_link (input, private->parent_source_node);
     }
 
   /* make sure we have a graph */
@@ -1117,6 +1183,15 @@ gimp_group_layer_get_source_node (GimpDrawable *drawable)
   gimp_group_layer_update_source_node (GIMP_GROUP_LAYER (drawable));
 
   return g_object_ref (private->source_node);
+}
+
+static void
+gimp_group_layer_filters_changed (GimpDrawable *drawable)
+{
+  gimp_layer_update_effective_mode (GIMP_LAYER (drawable));
+
+  if (GIMP_DRAWABLE_CLASS (parent_class)->filters_changed)
+    GIMP_DRAWABLE_CLASS (parent_class)->filters_changed (drawable);
 }
 
 static void
@@ -1212,6 +1287,7 @@ gimp_group_layer_get_effective_mode (GimpLayer              *layer,
    * cheaper.
    */
   if (gimp_layer_get_mode (layer) == GIMP_LAYER_MODE_PASS_THROUGH &&
+      ! gimp_drawable_has_visible_filters (GIMP_DRAWABLE (layer)) &&
       ! no_pass_through_strength_reduction)
     {
       /* we perform the strength-reduction if:
@@ -1401,8 +1477,7 @@ gimp_group_layer_get_graph (GimpProjectable *projectable)
 
   gegl_node_add_child (private->graph, layers_node);
 
-  gegl_node_connect_to (input,       "output",
-                        layers_node, "input");
+  gegl_node_link (input, layers_node);
 
   gimp_item_get_offset (GIMP_ITEM (group), &off_x, &off_y);
 
@@ -1412,13 +1487,11 @@ gimp_group_layer_get_graph (GimpProjectable *projectable)
                                               "y",         (gdouble) -off_y,
                                               NULL);
 
-  gegl_node_connect_to (layers_node,          "output",
-                        private->offset_node, "input");
+  gegl_node_link (layers_node, private->offset_node);
 
   output = gegl_node_get_output_proxy (private->graph, "output");
 
-  gegl_node_connect_to (private->offset_node, "output",
-                        output,               "input");
+  gegl_node_link (private->offset_node, output);
 
   return private->graph;
 }
@@ -1449,8 +1522,7 @@ gimp_group_layer_end_render (GimpProjectable *projectable)
 
       input = gegl_node_get_input_proxy (private->source_node, "input");
 
-      gegl_node_connect_to (input,          "output",
-                            private->graph, "input");
+      gegl_node_link (input, private->graph);
     }
 }
 
@@ -1930,6 +2002,7 @@ gimp_group_layer_update_size (GimpGroupLayer *group)
   gboolean               size_changed;
   gboolean               resize_mask;
   GList                 *list;
+  GimpContainer         *filters;
 
   old_bounds.x      = gimp_item_get_offset_x (item);
   old_bounds.y      = gimp_item_get_offset_y (item);
@@ -2064,6 +2137,29 @@ gimp_group_layer_update_size (GimpGroupLayer *group)
   if (resize_mask && ! private->transforming)
     gimp_group_layer_update_mask_size (group);
 
+  /* Update the crop of any filters */
+  if (size_changed)
+    {
+      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (group));
+      for (list = GIMP_LIST (filters)->queue->tail;
+           list; list = g_list_previous (list))
+        {
+          if (GIMP_IS_DRAWABLE_FILTER (list->data))
+            {
+              GimpDrawableFilter *filter = list->data;
+              GimpChannel        *filter_mask;
+
+              filter_mask = GIMP_CHANNEL (gimp_drawable_filter_get_mask (filter));
+
+              /* Don't resize partial layer effects */
+              if (gimp_channel_is_empty (filter_mask))
+                gimp_drawable_filter_refresh_crop (filter, &bounding_box);
+            }
+        }
+      if (list)
+        g_list_free (list);
+    }
+
   /* if we show the mask, invalidate the new mask area */
   if (resize_mask && gimp_layer_get_show_mask (layer))
     {
@@ -2172,17 +2268,14 @@ gimp_group_layer_update_source_node (GimpGroupLayer *group)
 
   if (private->pass_through)
     {
-      gegl_node_connect_to (input,          "output",
-                            private->graph, "input");
-      gegl_node_connect_to (private->graph, "output",
-                            output,         "input");
+      gegl_node_link (input, private->graph);
+      gegl_node_link (private->graph, output);
     }
   else
     {
       gegl_node_disconnect (private->graph, "input");
 
-      gegl_node_connect_to (private->parent_source_node, "output",
-                            output,                      "input");
+      gegl_node_link (private->parent_source_node, output);
     }
 }
 
@@ -2205,8 +2298,7 @@ gimp_group_layer_update_mode_node (GimpGroupLayer *group)
     }
   else
     {
-      gegl_node_connect_to (input,     "output",
-                            mode_node, "input");
+      gegl_node_link (input, mode_node);
     }
 }
 
@@ -2280,7 +2372,7 @@ gimp_group_layer_proj_update (GimpProjection *proj,
        * negatively impacts the performance of the warp tool, which does perform
        * accurate drawable updates while using a filter.
        */
-      if (gimp_drawable_has_filters (GIMP_DRAWABLE (group)))
+      if (gimp_drawable_has_visible_filters (GIMP_DRAWABLE (group)))
         {
           width  = -1;
           height = -1;

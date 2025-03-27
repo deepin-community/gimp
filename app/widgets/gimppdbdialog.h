@@ -69,12 +69,15 @@ struct _GimpPdbDialogClass
                                      GimpObject     *object,
                                      gboolean        closing,
                                      GError        **error);
+  GimpObject     * (* get_object)   (GimpPdbDialog  *dialog);
+  void             (* set_object)   (GimpPdbDialog  *dialog,
+                                     GimpObject     *object);
 };
 
 
 GType           gimp_pdb_dialog_get_type        (void) G_GNUC_CONST;
 
-void            gimp_pdb_dialog_run_callback    (GimpPdbDialog      *dialog,
+void            gimp_pdb_dialog_run_callback    (GimpPdbDialog     **dialog,
                                                  gboolean            closing);
 
 GimpPdbDialog * gimp_pdb_dialog_get_by_callback (GimpPdbDialogClass *klass,

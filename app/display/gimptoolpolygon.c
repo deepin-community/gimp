@@ -37,7 +37,6 @@
 #include "display-types.h"
 
 #include "core/gimp-utils.h"
-#include "core/gimpmarshal.h"
 
 #include "widgets/gimpwidgets-utils.h"
 
@@ -237,8 +236,7 @@ gimp_tool_polygon_class_init (GimpToolPolygonClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpToolPolygonClass, change_complete),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 }
 

@@ -72,7 +72,8 @@ static void     gimp_critical_dialog_response     (GtkDialog    *dialog,
                                                    gint          response_id);
 
 static void     gimp_critical_dialog_copy_info    (GimpCriticalDialog *dialog);
-static gboolean browser_open_url                  (const gchar  *url,
+static gboolean browser_open_url                  (GtkWindow    *window,
+                                                   const gchar  *url,
                                                    GError      **error);
 
 
@@ -116,7 +117,7 @@ gimp_critical_dialog_init (GimpCriticalDialog *dialog)
   gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_CLOSE);
   gtk_window_set_resizable (GTK_WINDOW (dialog), TRUE);
 
-  dialog->main_vbox = gtk_vbox_new (FALSE, 6);
+  dialog->main_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
   gtk_container_set_border_width (GTK_CONTAINER (dialog->main_vbox), 6);
   gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
                       dialog->main_vbox, TRUE, TRUE, 0);
@@ -124,7 +125,7 @@ gimp_critical_dialog_init (GimpCriticalDialog *dialog)
 
   /* The error label. */
   dialog->top_label = gtk_label_new (NULL);
-  gtk_misc_set_alignment (GTK_MISC (dialog->top_label), 0.0, 0.5);
+  gtk_widget_set_halign (dialog->top_label, GTK_ALIGN_START);
   gtk_label_set_ellipsize (GTK_LABEL (dialog->top_label), PANGO_ELLIPSIZE_END);
   gtk_label_set_selectable (GTK_LABEL (dialog->top_label), TRUE);
   gtk_box_pack_start (GTK_BOX (dialog->main_vbox), dialog->top_label,
@@ -140,14 +141,14 @@ gimp_critical_dialog_init (GimpCriticalDialog *dialog)
 
   dialog->center_label = gtk_label_new (NULL);
 
-  gtk_misc_set_alignment (GTK_MISC (dialog->center_label), 0.0, 0.5);
+  gtk_widget_set_halign (dialog->center_label, GTK_ALIGN_START);
   gtk_label_set_selectable (GTK_LABEL (dialog->center_label), TRUE);
   gtk_box_pack_start (GTK_BOX (dialog->main_vbox), dialog->center_label,
                       FALSE, FALSE, 0);
   gtk_widget_show (dialog->center_label);
 
   dialog->bottom_label = gtk_label_new (NULL);
-  gtk_misc_set_alignment (GTK_MISC (dialog->bottom_label), 0.0, 0.5);
+  gtk_widget_set_halign (dialog->bottom_label, GTK_ALIGN_START);
   gtk_box_pack_start (GTK_BOX (dialog->main_vbox), dialog->bottom_label, FALSE, FALSE, 0);
 
   attrs = pango_attr_list_new ();
@@ -186,7 +187,7 @@ gimp_critical_dialog_constructed (GObject *object)
       gtk_box_pack_start (GTK_BOX (dialog->main_vbox), expander, TRUE, TRUE, 0);
       gtk_widget_show (expander);
 
-      vbox = gtk_vbox_new (FALSE, 4);
+      vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
       gtk_container_add (GTK_CONTAINER (expander), vbox);
       gtk_widget_show (vbox);
 
@@ -342,7 +343,8 @@ gimp_critical_dialog_copy_info (GimpCriticalDialog *dialog)
  * cross-platform way need to be a plug-in?
  */
 static gboolean
-browser_open_url (const gchar  *url,
+browser_open_url (GtkWindow    *window,
+                  const gchar  *url,
                   GError      **error)
 {
 #ifdef G_OS_WIN32
@@ -350,11 +352,11 @@ browser_open_url (const gchar  *url,
   HINSTANCE hinst = ShellExecute (GetDesktopWindow(),
                                   "open", url, NULL, NULL, SW_SHOW);
 
-  if ((gint) hinst <= 32)
+  if ((intptr_t) hinst <= 32)
     {
       const gchar *err;
 
-      switch ((gint) hinst)
+      switch ((intptr_t) hinst)
         {
           case 0 :
             err = _("The operating system is out of memory or resources.");
@@ -411,21 +413,20 @@ browser_open_url (const gchar  *url,
   NSURL    *ns_url;
   gboolean  retval;
 
-  NSAutoreleasePool *arp = [NSAutoreleasePool new];
+  @autoreleasepool
     {
       ns_url = [NSURL URLWithString: [NSString stringWithUTF8String: url]];
       retval = [[NSWorkspace sharedWorkspace] openURL: ns_url];
     }
-  [arp release];
 
   return retval;
 
 #else
 
-  return gtk_show_uri (gdk_screen_get_default (),
-                       url,
-                       gtk_get_current_event_time(),
-                       error);
+  return gtk_show_uri_on_window (window,
+                                 url,
+                                 GDK_CURRENT_TIME,
+                                 error);
 
 #endif
 }
@@ -444,7 +445,11 @@ gimp_critical_dialog_response (GtkDialog *dialog,
       break;
 
     case GIMP_CRITICAL_RESPONSE_DOWNLOAD:
+#ifdef GIMP_UNSTABLE
+      url = "https://www.gimp.org/downloads/devel/";
+#else
       url = "https://www.gimp.org/downloads/";
+#endif
     case GIMP_CRITICAL_RESPONSE_URL:
       if (url == NULL)
         {
@@ -466,7 +471,7 @@ gimp_critical_dialog_response (GtkDialog *dialog,
           g_free (temp);
         }
 
-      browser_open_url (url, NULL);
+      browser_open_url (GTK_WINDOW (dialog), url, NULL);
       break;
 
     case GIMP_CRITICAL_RESPONSE_RESTART:

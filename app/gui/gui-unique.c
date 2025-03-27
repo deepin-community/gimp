@@ -26,7 +26,6 @@
 
 #ifdef GDK_WINDOWING_QUARTZ
 #import <AppKit/AppKit.h>
-#include <gtkosxapplication.h>
 #endif
 
 #include "gui/gui-types.h"
@@ -140,7 +139,7 @@ gui_unique_win32_idle_open (IdleOpenData *data)
   if (data->file)
     {
       file_open_from_command_line (unique_gimp, data->file,
-                                   data->as_new, NULL, 0);
+                                   data->as_new, NULL);
     }
   else
     {
@@ -221,7 +220,7 @@ gui_unique_win32_init (Gimp *gimp)
   /* register window class for proxy window */
   memset (&wc, 0, sizeof (wc));
 
-  wc.hInstance     = GetModuleHandle (NULL);
+  wc.hInstance     = GetModuleHandleW (NULL);
   wc.lpfnWndProc   = gui_unique_win32_message_handler;
   wc.lpszClassName = GIMP_UNIQUE_WIN32_WINDOW_CLASS;
 
@@ -256,61 +255,60 @@ gui_unique_quartz_idle_open (GFile *file)
 
   if (file)
     {
-      file_open_from_command_line (unique_gimp, file, FALSE, NULL, 0);
+      file_open_from_command_line (unique_gimp, file, FALSE, NULL);
     }
 
   return FALSE;
-}
-
-static gboolean
-gui_unique_quartz_nsopen_file_callback (GtkosxApplication *osx_app,
-                                        gchar             *path,
-                                        gpointer           user_data)
-{
-  GSource  *source;
-  GClosure *closure;
-
-  closure = g_cclosure_new (G_CALLBACK (gui_unique_quartz_idle_open),
-                            g_file_new_for_path (path),
-                            (GClosureNotify) g_object_unref);
-
-  g_object_watch_closure (G_OBJECT (unique_gimp), closure);
-
-  source = g_idle_source_new ();
-
-  g_source_set_priority (source, G_PRIORITY_LOW);
-  g_source_set_closure (source, closure);
-  g_source_attach (source, NULL);
-  g_source_unref (source);
-
-  return TRUE;
 }
 
 @implementation GimpAppleEventHandler
 - (void) handleEvent: (NSAppleEventDescriptor *) inEvent
         andReplyWith: (NSAppleEventDescriptor *) replyEvent
 {
-  NSAutoreleasePool *urlpool;
-  NSInteger          count;
-  NSInteger          i;
+  NSAutoreleasePool      *urlpool;
+  NSInteger               count;
+  NSInteger               i;
+  NSAppleEventDescriptor *filesList;
 
   urlpool = [[NSAutoreleasePool alloc] init];
 
-  count = [inEvent numberOfItems];
+  filesList = [inEvent paramDescriptorForKeyword:keyDirectObject];
+  g_return_if_fail (filesList);
+
+  count = [filesList numberOfItems];
 
   for (i = 1; i <= count; i++)
     {
-      NSURL       *url;
-      const gchar *path;
-      GSource     *source;
-      GClosure    *closure;
+      const gchar            *path;
+      GSource                *source;
+      GClosure               *closure;
+      NSAppleEventDescriptor *fileDescriptor;
+      NSString               *filePath;
+      NSURL                  *fileURL;
 
-      url = [NSURL URLWithString: [[inEvent descriptorAtIndex: i] stringValue]];
-      path = [[url path] UTF8String];
+      fileDescriptor = [filesList descriptorAtIndex:i];
+      filePath = [[fileDescriptor stringValue] stringByResolvingSymlinksInPath];
+      if (filePath)
+        {
+          fileURL = [NSURL URLWithString:filePath];
+          if ([fileURL isFileURL])
+            {
+              path = [[fileURL path] UTF8String];
+            }
+          else
+            {
+              g_printerr ("Descriptor is not a valid file URL: %s\n", [filePath UTF8String]);
+              continue;
+            }
+        }
+      else
+        {
+          g_printerr ("Could not resolve file path for descriptor\n");
+          continue;
+        }
 
       closure = g_cclosure_new (G_CALLBACK (gui_unique_quartz_idle_open),
-                                g_file_new_for_path (path),
-                                (GClosureNotify) g_object_unref);
+                                g_file_new_for_path (path), (GClosureNotify) g_object_unref);
 
       g_object_watch_closure (G_OBJECT (unique_gimp), closure);
 
@@ -328,18 +326,10 @@ gui_unique_quartz_nsopen_file_callback (GtkosxApplication *osx_app,
 static void
 gui_unique_quartz_init (Gimp *gimp)
 {
-  GtkosxApplication *osx_app;
-
   g_return_if_fail (GIMP_IS_GIMP (gimp));
   g_return_if_fail (unique_gimp == NULL);
 
-  osx_app = gtkosx_application_get ();
-
   unique_gimp = gimp;
-
-  g_signal_connect (osx_app, "NSApplicationOpenFile",
-                    G_CALLBACK (gui_unique_quartz_nsopen_file_callback),
-                    gimp);
 
   /* Using the event handler is a hack, it is necessary because
    * gtkosx_application will drop the file open events if any

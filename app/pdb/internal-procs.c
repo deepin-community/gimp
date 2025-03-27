@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <glib-object.h>
 
 #include "pdb-types.h"
@@ -28,7 +30,7 @@
 #include "internal-procs.h"
 
 
-/* 852 procedures registered total */
+/* 718 procedures registered total */
 
 void
 internal_procs_init (GimpPDB *pdb)
@@ -40,18 +42,19 @@ internal_procs_init (GimpPDB *pdb)
   register_brushes_procs (pdb);
   register_buffer_procs (pdb);
   register_channel_procs (pdb);
-  register_color_procs (pdb);
   register_context_procs (pdb);
   register_debug_procs (pdb);
   register_display_procs (pdb);
   register_drawable_procs (pdb);
   register_drawable_color_procs (pdb);
   register_drawable_edit_procs (pdb);
-  register_drawable_transform_procs (pdb);
+  register_drawable_filter_procs (pdb);
+  register_drawable_select_procs (pdb);
   register_dynamics_procs (pdb);
   register_edit_procs (pdb);
-  register_fileops_procs (pdb);
+  register_file_procs (pdb);
   register_floating_sel_procs (pdb);
+  register_font_procs (pdb);
   register_font_select_procs (pdb);
   register_fonts_procs (pdb);
   register_gimp_procs (pdb);
@@ -59,8 +62,10 @@ internal_procs_init (GimpPDB *pdb)
   register_gradient_procs (pdb);
   register_gradient_select_procs (pdb);
   register_gradients_procs (pdb);
+  register_group_layer_procs (pdb);
   register_help_procs (pdb);
   register_image_procs (pdb);
+  register_image_autocrop_procs (pdb);
   register_image_color_profile_procs (pdb);
   register_image_convert_procs (pdb);
   register_image_grid_procs (pdb);
@@ -77,19 +82,16 @@ internal_procs_init (GimpPDB *pdb)
   register_palette_procs (pdb);
   register_palette_select_procs (pdb);
   register_palettes_procs (pdb);
-  register_paths_procs (pdb);
+  register_path_procs (pdb);
   register_pattern_procs (pdb);
   register_pattern_select_procs (pdb);
   register_patterns_procs (pdb);
+  register_pdb_procs (pdb);
   register_plug_in_procs (pdb);
-  register_plug_in_compat_procs (pdb);
-  register_procedural_db_procs (pdb);
   register_progress_procs (pdb);
+  register_resource_procs (pdb);
   register_selection_procs (pdb);
-  register_selection_tools_procs (pdb);
   register_text_layer_procs (pdb);
   register_text_tool_procs (pdb);
-  register_transform_tools_procs (pdb);
   register_unit_procs (pdb);
-  register_vectors_procs (pdb);
 }

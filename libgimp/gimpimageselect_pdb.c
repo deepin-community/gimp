@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -36,9 +38,9 @@
 
 /**
  * gimp_image_select_color:
- * @image_ID: The affected image.
+ * @image: The affected image.
  * @operation: The selection operation.
- * @drawable_ID: The affected drawable.
+ * @drawable: The affected drawable.
  * @color: The color to select.
  *
  * Create a selection by selecting all pixels (in the specified
@@ -66,35 +68,39 @@
  * Since: 2.8
  **/
 gboolean
-gimp_image_select_color (gint32          image_ID,
+gimp_image_select_color (GimpImage      *image,
                          GimpChannelOps  operation,
-                         gint32          drawable_ID,
-                         const GimpRGB  *color)
+                         GimpDrawable   *drawable,
+                         GeglColor      *color)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-select-color",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, operation,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_COLOR, color,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL_OPS, operation,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GEGL_TYPE_COLOR, color,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-select-color",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_select_contiguous_color:
- * @image_ID: The affected image.
+ * @image: The affected image.
  * @operation: The selection operation.
- * @drawable_ID: The affected drawable.
+ * @drawable: The affected drawable.
  * @x: x coordinate of initial seed fill point: (image coordinates).
  * @y: y coordinate of initial seed fill point: (image coordinates).
  *
@@ -132,35 +138,39 @@ gimp_image_select_color (gint32          image_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_image_select_contiguous_color (gint32         image_ID,
-                                    GimpChannelOps operation,
-                                    gint32         drawable_ID,
-                                    gdouble        x,
-                                    gdouble        y)
+gimp_image_select_contiguous_color (GimpImage      *image,
+                                    GimpChannelOps  operation,
+                                    GimpDrawable   *drawable,
+                                    gdouble         x,
+                                    gdouble         y)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-select-contiguous-color",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, operation,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_FLOAT, x,
-                                    GIMP_PDB_FLOAT, y,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL_OPS, operation,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_DOUBLE, x,
+                                          G_TYPE_DOUBLE, y,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-select-contiguous-color",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_select_rectangle:
- * @image_ID: The image.
+ * @image: The image.
  * @operation: The selection operation.
  * @x: x coordinate of upper-left corner of rectangle.
  * @y: y coordinate of upper-left corner of rectangle.
@@ -181,37 +191,41 @@ gimp_image_select_contiguous_color (gint32         image_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_image_select_rectangle (gint32         image_ID,
-                             GimpChannelOps operation,
-                             gdouble        x,
-                             gdouble        y,
-                             gdouble        width,
-                             gdouble        height)
+gimp_image_select_rectangle (GimpImage      *image,
+                             GimpChannelOps  operation,
+                             gdouble         x,
+                             gdouble         y,
+                             gdouble         width,
+                             gdouble         height)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-select-rectangle",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, operation,
-                                    GIMP_PDB_FLOAT, x,
-                                    GIMP_PDB_FLOAT, y,
-                                    GIMP_PDB_FLOAT, width,
-                                    GIMP_PDB_FLOAT, height,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL_OPS, operation,
+                                          G_TYPE_DOUBLE, x,
+                                          G_TYPE_DOUBLE, y,
+                                          G_TYPE_DOUBLE, width,
+                                          G_TYPE_DOUBLE, height,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-select-rectangle",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_select_round_rectangle:
- * @image_ID: The image.
+ * @image: The image.
  * @operation: The selection operation.
  * @x: x coordinate of upper-left corner of rectangle.
  * @y: y coordinate of upper-left corner of rectangle.
@@ -237,41 +251,45 @@ gimp_image_select_rectangle (gint32         image_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_image_select_round_rectangle (gint32         image_ID,
-                                   GimpChannelOps operation,
-                                   gdouble        x,
-                                   gdouble        y,
-                                   gdouble        width,
-                                   gdouble        height,
-                                   gdouble        corner_radius_x,
-                                   gdouble        corner_radius_y)
+gimp_image_select_round_rectangle (GimpImage      *image,
+                                   GimpChannelOps  operation,
+                                   gdouble         x,
+                                   gdouble         y,
+                                   gdouble         width,
+                                   gdouble         height,
+                                   gdouble         corner_radius_x,
+                                   gdouble         corner_radius_y)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-select-round-rectangle",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, operation,
-                                    GIMP_PDB_FLOAT, x,
-                                    GIMP_PDB_FLOAT, y,
-                                    GIMP_PDB_FLOAT, width,
-                                    GIMP_PDB_FLOAT, height,
-                                    GIMP_PDB_FLOAT, corner_radius_x,
-                                    GIMP_PDB_FLOAT, corner_radius_y,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL_OPS, operation,
+                                          G_TYPE_DOUBLE, x,
+                                          G_TYPE_DOUBLE, y,
+                                          G_TYPE_DOUBLE, width,
+                                          G_TYPE_DOUBLE, height,
+                                          G_TYPE_DOUBLE, corner_radius_x,
+                                          G_TYPE_DOUBLE, corner_radius_y,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-select-round-rectangle",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_select_ellipse:
- * @image_ID: The image.
+ * @image: The image.
  * @operation: The selection operation.
  * @x: x coordinate of upper-left corner of ellipse bounding box.
  * @y: y coordinate of upper-left corner of ellipse bounding box.
@@ -293,40 +311,44 @@ gimp_image_select_round_rectangle (gint32         image_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_image_select_ellipse (gint32         image_ID,
-                           GimpChannelOps operation,
-                           gdouble        x,
-                           gdouble        y,
-                           gdouble        width,
-                           gdouble        height)
+gimp_image_select_ellipse (GimpImage      *image,
+                           GimpChannelOps  operation,
+                           gdouble         x,
+                           gdouble         y,
+                           gdouble         width,
+                           gdouble         height)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-select-ellipse",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, operation,
-                                    GIMP_PDB_FLOAT, x,
-                                    GIMP_PDB_FLOAT, y,
-                                    GIMP_PDB_FLOAT, width,
-                                    GIMP_PDB_FLOAT, height,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL_OPS, operation,
+                                          G_TYPE_DOUBLE, x,
+                                          G_TYPE_DOUBLE, y,
+                                          G_TYPE_DOUBLE, width,
+                                          G_TYPE_DOUBLE, height,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-select-ellipse",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_select_polygon:
- * @image_ID: The image.
+ * @image: The image.
  * @operation: The selection operation.
  * @num_segs: Number of points (count 1 coordinate as two points).
- * @segs: Array of points: { p1.x, p1.y, p2.x, p2.y, ..., pn.x, pn.y}.
+ * @segs: (array length=num_segs) (element-type gdouble): Array of points: { p1.x, p1.y, p2.x, p2.y, ..., pn.x, pn.y}.
  *
  * Create a polygonal selection over the specified image.
  *
@@ -348,35 +370,41 @@ gimp_image_select_ellipse (gint32         image_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_image_select_polygon (gint32          image_ID,
+gimp_image_select_polygon (GimpImage      *image,
                            GimpChannelOps  operation,
-                           gint            num_segs,
+                           gsize           num_segs,
                            const gdouble  *segs)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-select-polygon",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, operation,
-                                    GIMP_PDB_INT32, num_segs,
-                                    GIMP_PDB_FLOATARRAY, segs,
-                                    GIMP_PDB_END);
+  g_return_val_if_fail (num_segs >= 2, FALSE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL_OPS, operation,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
+                                          G_TYPE_NONE);
+  gimp_value_set_double_array (gimp_value_array_index (args, 2), segs, num_segs);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-select-polygon",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_select_item:
- * @image_ID: The image.
+ * @image: The image.
  * @operation: The desired operation with current selection.
- * @item_ID: The item to render to the selection.
+ * @item: The item to render to the selection.
  *
  * Transforms the specified item into a selection
  *
@@ -394,24 +422,28 @@ gimp_image_select_polygon (gint32          image_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_image_select_item (gint32         image_ID,
-                        GimpChannelOps operation,
-                        gint32         item_ID)
+gimp_image_select_item (GimpImage      *image,
+                        GimpChannelOps  operation,
+                        GimpItem       *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-select-item",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, operation,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL_OPS, operation,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-select-item",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

@@ -22,7 +22,7 @@
 #define __GIMP_DATA_H__
 
 
-#include "gimpviewable.h"
+#include "gimpresource.h"
 
 
 typedef enum
@@ -47,14 +47,14 @@ typedef struct _GimpDataClass   GimpDataClass;
 
 struct _GimpData
 {
-  GimpViewable     parent_instance;
+  GimpResource     parent_instance;
 
   GimpDataPrivate *priv;
 };
 
 struct _GimpDataClass
 {
-  GimpViewableClass  parent_class;
+  GimpResourceClass  parent_class;
 
   /*  signals  */
   void          (* dirty)         (GimpData  *data);
@@ -73,6 +73,9 @@ struct _GimpDataClass
 
 
 GType         gimp_data_get_type         (void) G_GNUC_CONST;
+
+gint          gimp_data_get_id           (GimpData     *data);
+GimpData    * gimp_data_get_by_id        (gint          id);
 
 gboolean      gimp_data_save             (GimpData     *data,
                                           GError      **error);
@@ -95,6 +98,11 @@ void          gimp_data_set_file         (GimpData     *data,
                                           gboolean      writable,
                                           gboolean      deletable);
 GFile       * gimp_data_get_file         (GimpData     *data);
+void          gimp_data_set_image        (GimpData     *data,
+                                          GimpImage    *image,
+                                          gboolean      writable,
+                                          gboolean      deletable);
+GimpImage   * gimp_data_get_image        (GimpData     *data);
 
 void          gimp_data_create_filename  (GimpData     *data,
                                           GFile        *dest_dir);
@@ -119,11 +127,19 @@ gboolean      gimp_data_is_duplicatable  (GimpData     *data);
 GimpData    * gimp_data_duplicate        (GimpData     *data);
 
 void          gimp_data_make_internal    (GimpData     *data,
-                                          const gchar  *identifier);
+                                          const gchar  *collection);
 gboolean      gimp_data_is_internal      (GimpData     *data);
 
 gint          gimp_data_compare          (GimpData     *data1,
                                           GimpData     *data2);
+gboolean      gimp_data_identify         (GimpData     *data,
+                                          const gchar  *name,
+                                          const gchar  *collection_id,
+                                          gboolean      is_internal);
+void          gimp_data_get_identifiers  (GimpData     *data,
+                                          gchar       **name,
+                                          gchar       **collection_id,
+                                          gboolean     *is_internal);
 
 #define GIMP_DATA_ERROR (gimp_data_error_quark ())
 

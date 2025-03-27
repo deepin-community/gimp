@@ -28,7 +28,39 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-/*  adaptive supersampling function taken from LibGCK  */
+/**
+ * GimpRenderFunc:
+ * @x:
+ * @y:
+ * @color: (out caller-allocates): The rendered pixel as RGB
+ * @data: (closure):
+ */
+typedef void (* GimpRenderFunc)   (gdouble   x,
+                                   gdouble   y,
+                                   gdouble  *color,
+                                   gpointer  data);
+/**
+ * GimpPutPixelFunc:
+ * @x:
+ * @y:
+ * @color:
+ * @data: (closure):
+ */
+typedef void (* GimpPutPixelFunc) (gint      x,
+                                   gint      y,
+                                   gdouble  *color,
+                                   gpointer  data);
+/**
+ * GimpProgressFunc:
+ * @min:
+ * @max:
+ * @current:
+ * @data: (closure):
+ */
+typedef void (* GimpProgressFunc) (gint      min,
+                                   gint      max,
+                                   gint      current,
+                                   gpointer  data);
 
 
 gulong   gimp_adaptive_supersample_area (gint              x1,

@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <gegl.h>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -36,8 +38,6 @@
 #include "core/gimppalette.h"
 #include "core/gimpparamspecs.h"
 #include "gegl/gimp-babl.h"
-#include "plug-in/gimpplugin.h"
-#include "plug-in/gimppluginmanager.h"
 
 #include "gimppdb.h"
 #include "gimppdberror.h"
@@ -59,7 +59,7 @@ image_convert_rgb_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpImage *image;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -89,7 +89,7 @@ image_convert_grayscale_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpImage *image;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -118,14 +118,14 @@ image_convert_indexed_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  gint32 dither_type;
-  gint32 palette_type;
-  gint32 num_cols;
+  gint dither_type;
+  gint palette_type;
+  gint num_cols;
   gboolean alpha_dither;
   gboolean remove_unused;
   const gchar *palette;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   dither_type = g_value_get_enum (gimp_value_array_index (args, 1));
   palette_type = g_value_get_enum (gimp_value_array_index (args, 2));
   num_cols = g_value_get_int (gimp_value_array_index (args, 3));
@@ -137,9 +137,9 @@ image_convert_indexed_invoker (GimpProcedure         *procedure,
     {
       GimpPalette *pal = NULL;
 
-      if (gimp_pdb_image_is_not_base_type (image, GIMP_INDEXED, error)        &&
-          gimp_pdb_image_is_precision (image, GIMP_PRECISION_U8_GAMMA, error) &&
-          gimp_babl_is_valid (GIMP_INDEXED, gimp_image_get_precision (image)) &&
+      if (gimp_pdb_image_is_not_base_type (image, GIMP_INDEXED, error)             &&
+          gimp_pdb_image_is_precision (image, GIMP_PRECISION_U8_NON_LINEAR, error) &&
+          gimp_babl_is_valid (GIMP_INDEXED, gimp_image_get_precision (image))      &&
           gimp_item_stack_is_flat (GIMP_ITEM_STACK (gimp_image_get_layers (image))))
         {
           switch (palette_type)
@@ -150,7 +150,8 @@ image_convert_indexed_invoker (GimpProcedure         *procedure,
               break;
 
             case GIMP_CONVERT_PALETTE_CUSTOM:
-              pal = gimp_pdb_get_palette (gimp, palette, FALSE, error);
+              pal = GIMP_PALETTE (gimp_pdb_get_resource (gimp, GIMP_TYPE_PALETTE, palette,
+                                                         GIMP_PDB_DATA_ACCESS_READ, error));
               if (! pal)
                 {
                   success = FALSE;
@@ -196,21 +197,20 @@ image_convert_set_dither_matrix_invoker (GimpProcedure         *procedure,
                                          GError               **error)
 {
   gboolean success = TRUE;
-  gint32 width;
-  gint32 height;
-  gint32 matrix_length;
-  const guint8 *matrix;
+  gint width;
+  gint height;
+  GBytes *matrix;
 
   width = g_value_get_int (gimp_value_array_index (args, 0));
   height = g_value_get_int (gimp_value_array_index (args, 1));
-  matrix_length = g_value_get_int (gimp_value_array_index (args, 2));
-  matrix = gimp_value_get_int8array (gimp_value_array_index (args, 3));
+  matrix = g_value_get_boxed (gimp_value_array_index (args, 2));
 
   if (success)
     {
-      if (width == 0 || height == 0 || matrix_length == width * height)
+      if (width == 0 || height == 0 || g_bytes_get_size (matrix) == width * height)
         {
-          gimp_image_convert_indexed_set_dither_matrix (matrix, width, height);
+          gimp_image_convert_indexed_set_dither_matrix (g_bytes_get_data (matrix, NULL),
+                                                        width, height);
         }
       else
         {
@@ -235,16 +235,13 @@ image_convert_precision_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  gint32 precision;
+  gint precision;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   precision = g_value_get_enum (gimp_value_array_index (args, 1));
 
   if (success)
     {
-      if (gimp->plug_in_manager->current_plug_in)
-        gimp_plug_in_enable_precision (gimp->plug_in_manager->current_plug_in);
-
       if (gimp_pdb_image_is_not_base_type (image, GIMP_INDEXED, error) &&
           gimp_pdb_image_is_not_precision (image, precision, error)    &&
           gimp_babl_is_valid (gimp_image_get_base_type (image), precision))
@@ -273,69 +270,69 @@ register_image_convert_procs (GimpPDB *pdb)
   /*
    * gimp-image-convert-rgb
    */
-  procedure = gimp_procedure_new (image_convert_rgb_invoker);
+  procedure = gimp_procedure_new (image_convert_rgb_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-convert-rgb");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-convert-rgb",
-                                     "Convert specified image to RGB color",
-                                     "This procedure converts the specified image to RGB color. This process requires an image in Grayscale or Indexed color mode. No image content is lost in this process aside from the colormap for an indexed image.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Convert specified image to RGB color",
+                                  "This procedure converts the specified image to RGB color. This process requires an image in Grayscale or Indexed color mode. No image content is lost in this process aside from the colormap for an indexed image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-convert-grayscale
    */
-  procedure = gimp_procedure_new (image_convert_grayscale_invoker);
+  procedure = gimp_procedure_new (image_convert_grayscale_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-convert-grayscale");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-convert-grayscale",
-                                     "Convert specified image to grayscale",
-                                     "This procedure converts the specified image to grayscale. This process requires an image in RGB or Indexed color mode.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Convert specified image to grayscale",
+                                  "This procedure converts the specified image to grayscale. This process requires an image in RGB or Indexed color mode.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-convert-indexed
    */
-  procedure = gimp_procedure_new (image_convert_indexed_invoker);
+  procedure = gimp_procedure_new (image_convert_indexed_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-convert-indexed");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-convert-indexed",
-                                     "Convert specified image to and Indexed image",
-                                     "This procedure converts the specified image to 'indexed' color. This process requires an image in RGB or Grayscale mode. The 'palette_type' specifies what kind of palette to use, A type of '0' means to use an optimal palette of 'num_cols' generated from the colors in the image. A type of '1' means to re-use the previous palette (not currently implemented). A type of '2' means to use the so-called WWW-optimized palette. Type '3' means to use only black and white colors. A type of '4' means to use a palette from the gimp palettes directories. The 'dither type' specifies what kind of dithering to use. '0' means no dithering, '1' means standard Floyd-Steinberg error diffusion, '2' means Floyd-Steinberg error diffusion with reduced bleeding, '3' means dithering based on pixel location ('Fixed' dithering).",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Convert specified image to and Indexed image",
+                                  "This procedure converts the specified image to 'indexed' color. This process requires an image in RGB or Grayscale mode. The 'palette_type' specifies what kind of palette to use, A type of '0' means to use an optimal palette of 'num_cols' generated from the colors in the image. A type of '1' means to re-use the previous palette (not currently implemented). A type of '2' means to use the so-called WWW-optimized palette. Type '3' means to use only black and white colors. A type of '4' means to use a palette from the gimp palettes directories. The 'dither type' specifies what kind of dithering to use. '0' means no dithering, '1' means standard Floyd-Steinberg error diffusion, '2' means Floyd-Steinberg error diffusion with reduced bleeding, '3' means dithering based on pixel location ('Fixed' dithering).",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("dither-type",
                                                   "dither type",
@@ -351,11 +348,11 @@ register_image_convert_procs (GimpPDB *pdb)
                                                   GIMP_CONVERT_PALETTE_GENERATE,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("num-cols",
-                                                      "num cols",
-                                                      "The number of colors to quantize to, ignored unless (palette_type == GIMP_CONVERT_PALETTE_GENERATE)",
-                                                      G_MININT32, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("num-cols",
+                                                 "num cols",
+                                                 "The number of colors to quantize to, ignored unless (palette_type == GIMP_CONVERT_PALETTE_GENERATE)",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_boolean ("alpha-dither",
                                                      "alpha dither",
@@ -381,63 +378,58 @@ register_image_convert_procs (GimpPDB *pdb)
   /*
    * gimp-image-convert-set-dither-matrix
    */
-  procedure = gimp_procedure_new (image_convert_set_dither_matrix_invoker);
+  procedure = gimp_procedure_new (image_convert_set_dither_matrix_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-convert-set-dither-matrix");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-convert-set-dither-matrix",
-                                     "Set dither matrix for conversion to indexed",
-                                     "This procedure sets the dither matrix used when converting images to INDEXED mode with positional dithering.",
-                                     "David Gowers",
-                                     "David Gowers",
-                                     "2006",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Set dither matrix for conversion to indexed",
+                                  "This procedure sets the dither matrix used when converting images to INDEXED mode with positional dithering.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "David Gowers",
+                                         "David Gowers",
+                                         "2006");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("width",
-                                                      "width",
-                                                      "Width of the matrix (0 to reset to default matrix)",
-                                                      G_MININT32, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("width",
+                                                 "width",
+                                                 "Width of the matrix (0 to reset to default matrix)",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("height",
-                                                      "height",
-                                                      "Height of the matrix (0 to reset to default matrix)",
-                                                      G_MININT32, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("height",
+                                                 "height",
+                                                 "Height of the matrix (0 to reset to default matrix)",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("matrix-length",
-                                                      "matrix length",
-                                                      "The length of 'matrix'",
-                                                      1, 1024, 1,
-                                                      GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int8_array ("matrix",
-                                                           "matrix",
-                                                           "The matrix -- all values must be >= 1",
-                                                           GIMP_PARAM_READWRITE));
+                               g_param_spec_boxed ("matrix",
+                                                   "matrix",
+                                                   "The matrix -- all values must be >= 1",
+                                                   G_TYPE_BYTES,
+                                                   GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-convert-precision
    */
-  procedure = gimp_procedure_new (image_convert_precision_invoker);
+  procedure = gimp_procedure_new (image_convert_precision_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-convert-precision");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-convert-precision",
-                                     "Convert the image to the specified precision",
-                                     "This procedure converts the image to the specified precision. Note that indexed images cannot be converted and are always in GIMP_PRECISION_U8.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2012",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Convert the image to the specified precision",
+                                  "This procedure converts the image to the specified precision. Note that indexed images cannot be converted and are always in GIMP_PRECISION_U8.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2012");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("precision",
                                                   "precision",

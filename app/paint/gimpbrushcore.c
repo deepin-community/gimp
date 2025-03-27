@@ -38,7 +38,6 @@
 #include "core/gimpdynamicsoutput.h"
 #include "core/gimperror.h"
 #include "core/gimpimage.h"
-#include "core/gimpmarshal.h"
 #include "core/gimpsymmetry.h"
 #include "core/gimptempbuf.h"
 
@@ -66,22 +65,22 @@ enum
 static void      gimp_brush_core_finalize           (GObject          *object);
 
 static gboolean  gimp_brush_core_start              (GimpPaintCore    *core,
-                                                     GimpDrawable     *drawable,
+                                                     GList            *drawables,
                                                      GimpPaintOptions *paint_options,
                                                      const GimpCoords *coords,
                                                      GError          **error);
 static gboolean  gimp_brush_core_pre_paint          (GimpPaintCore    *core,
-                                                     GimpDrawable     *drawable,
+                                                     GList            *drawables,
                                                      GimpPaintOptions *paint_options,
                                                      GimpPaintState    paint_state,
                                                      guint32           time);
 static void      gimp_brush_core_post_paint         (GimpPaintCore    *core,
-                                                     GimpDrawable     *drawable,
+                                                     GList            *drawables,
                                                      GimpPaintOptions *paint_options,
                                                      GimpPaintState    paint_state,
                                                      guint32           time);
 static void      gimp_brush_core_interpolate        (GimpPaintCore    *core,
-                                                     GimpDrawable     *drawable,
+                                                     GList            *drawables,
                                                      GimpPaintOptions *paint_options,
                                                      guint32           time);
 
@@ -129,8 +128,7 @@ gimp_brush_core_class_init (GimpBrushCoreClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpBrushCoreClass, set_brush),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_BRUSH);
 
@@ -139,8 +137,7 @@ gimp_brush_core_class_init (GimpBrushCoreClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpBrushCoreClass, set_dynamics),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_DYNAMICS);
 
@@ -252,7 +249,7 @@ gimp_brush_core_finalize (GObject *object)
 
 static gboolean
 gimp_brush_core_pre_paint (GimpPaintCore    *paint_core,
-                           GimpDrawable     *drawable,
+                           GList            *drawables,
                            GimpPaintOptions *paint_options,
                            GimpPaintState    paint_state,
                            guint32           time)
@@ -284,7 +281,7 @@ gimp_brush_core_pre_paint (GimpPaintCore    *paint_core,
       /*No drawing anything if the scale is too small*/
       if (GIMP_BRUSH_CORE_GET_CLASS (core)->handles_transforming_brush)
         {
-          GimpImage *image = gimp_item_get_image (GIMP_ITEM (drawable));
+          GimpImage *image = gimp_item_get_image (GIMP_ITEM (drawables->data));
           gdouble    fade_point;
 
           if (GIMP_BRUSH_CORE_GET_CLASS (core)->handles_dynamic_transforming_brush)
@@ -340,7 +337,7 @@ gimp_brush_core_pre_paint (GimpPaintCore    *paint_core,
 
 static void
 gimp_brush_core_post_paint (GimpPaintCore    *paint_core,
-                            GimpDrawable     *drawable,
+                            GList            *drawables,
                             GimpPaintOptions *paint_options,
                             GimpPaintState    paint_state,
                             guint32           time)
@@ -355,17 +352,30 @@ gimp_brush_core_post_paint (GimpPaintCore    *paint_core,
 
 static gboolean
 gimp_brush_core_start (GimpPaintCore     *paint_core,
-                       GimpDrawable      *drawable,
+                       GList             *drawables,
                        GimpPaintOptions  *paint_options,
                        const GimpCoords  *coords,
                        GError           **error)
 {
   GimpBrushCore *core    = GIMP_BRUSH_CORE (paint_core);
   GimpContext   *context = GIMP_CONTEXT (paint_options);
+  GimpImage     *image   = NULL;
+
+  g_return_val_if_fail (drawables != NULL, FALSE);
 
   gimp_brush_core_set_brush (core, gimp_context_get_brush (context));
 
-  gimp_brush_core_set_dynamics (core, gimp_context_get_dynamics (context));
+  if (gimp_paint_options_are_dynamics_enabled (paint_options))
+    {
+      gimp_brush_core_set_dynamics (core, gimp_context_get_dynamics (context));
+    }
+  else
+    {
+      GimpDynamics *dynamics_off = GIMP_DYNAMICS (gimp_dynamics_new (context,
+                                                                     "Dynamics Off"));
+      gimp_brush_core_set_dynamics (core, dynamics_off);
+      g_object_unref (dynamics_off);
+    }
 
   if (! core->main_brush)
     {
@@ -381,10 +391,17 @@ gimp_brush_core_start (GimpPaintCore     *paint_core,
       return FALSE;
     }
 
+  for (GList *iter = drawables; iter; iter = iter->next)
+    if (image == NULL)
+      image = gimp_item_get_image (GIMP_ITEM (iter->data));
+    else
+      g_return_val_if_fail (image == gimp_item_get_image (GIMP_ITEM (iter->data)),
+                            FALSE);
+
   if (GIMP_BRUSH_CORE_GET_CLASS (core)->handles_transforming_brush)
     {
       gimp_brush_core_eval_transform_dynamics (core,
-                                               drawable,
+                                               image,
                                                paint_options,
                                                coords);
 
@@ -396,8 +413,7 @@ gimp_brush_core_start (GimpPaintCore     *paint_core,
   core->brush = core->main_brush;
 
   core->jitter =
-    gimp_paint_options_get_jitter (paint_options,
-                                   gimp_item_get_image (GIMP_ITEM (drawable)));
+    gimp_paint_options_get_jitter (paint_options, image);
 
   return TRUE;
 }
@@ -430,12 +446,12 @@ gimp_avoid_exact_integer (gdouble *x)
 
 static void
 gimp_brush_core_interpolate (GimpPaintCore    *paint_core,
-                             GimpDrawable     *drawable,
+                             GList            *drawables,
                              GimpPaintOptions *paint_options,
                              guint32           time)
 {
   GimpBrushCore      *core  = GIMP_BRUSH_CORE (paint_core);
-  GimpImage          *image = gimp_item_get_image (GIMP_ITEM (drawable));
+  GimpImage          *image = gimp_item_get_image (GIMP_ITEM (drawables->data));
   GimpDynamicsOutput *spacing_output;
   GimpCoords          last_coords;
   GimpCoords          current_coords;
@@ -499,7 +515,7 @@ gimp_brush_core_interpolate (GimpPaintCore    *paint_core,
     {
       gimp_paint_core_set_last_coords (paint_core, &current_coords);
 
-      gimp_paint_core_paint (paint_core, drawable, paint_options,
+      gimp_paint_core_paint (paint_core, drawables, paint_options,
                              GIMP_PAINT_STATE_MOTION, time);
 
       paint_core->pixel_dist = pixel_initial + pixel_dist; /* Don't forget to update pixel distance*/
@@ -724,6 +740,9 @@ gimp_brush_core_interpolate (GimpPaintCore    *paint_core,
       current_coords.angle     = last_coords.angle;
       current_coords.reflect   = last_coords.reflect;
 
+      fade_point = gimp_paint_options_get_fade (paint_options, image,
+                                                paint_core->pixel_dist);
+
       if (core->jitter > 0.0)
         {
           GimpVector2 x_axis;
@@ -760,7 +779,7 @@ gimp_brush_core_interpolate (GimpPaintCore    *paint_core,
       paint_core->distance   = initial       + t * dist;
       paint_core->pixel_dist = pixel_initial + t * pixel_dist;
 
-      gimp_paint_core_paint (paint_core, drawable, paint_options,
+      gimp_paint_core_paint (paint_core, drawables, paint_options,
                              GIMP_PAINT_STATE_MOTION, time);
     }
 
@@ -799,6 +818,8 @@ gimp_brush_core_get_paint_buffer (GimpPaintCore    *paint_core,
   gint           x1, y1, x2, y2;
   gint           drawable_width, drawable_height;
   gint           brush_width, brush_height;
+  gint           offset_change_x, offset_change_y;
+  GimpCoords     new_coords;
 
   gimp_brush_transform_size (core->brush,
                              core->scale, core->aspect_ratio,
@@ -815,11 +836,31 @@ gimp_brush_core_get_paint_buffer (GimpPaintCore    *paint_core,
   x = (gint) floor (coords->x) - (brush_width  / 2);
   y = (gint) floor (coords->y) - (brush_height / 2);
 
+  x1 = x - 1;
+  y1 = y - 1;
+  x2 = x + brush_width  + 1;
+  y2 = y + brush_height + 1;
+
+  gimp_paint_core_expand_drawable (paint_core, drawable, paint_options,
+                                   x1, x2, y1, y2,
+                                   &offset_change_x, &offset_change_y);
+
+  if (offset_change_x || offset_change_y)
+    {
+      x += offset_change_x;
+      y += offset_change_y;
+
+      new_coords   = *coords;
+      new_coords.x = coords->x + offset_change_x;
+      new_coords.y = coords->y + offset_change_y;
+      gimp_symmetry_set_origin (paint_core->sym, drawable, &new_coords);
+    }
+
   drawable_width  = gimp_item_get_width  (GIMP_ITEM (drawable));
   drawable_height = gimp_item_get_height (GIMP_ITEM (drawable));
 
-  x1 = CLAMP (x - 1, 0, drawable_width);
-  y1 = CLAMP (y - 1, 0, drawable_height);
+  x1 = CLAMP (x - 1,                0, drawable_width);
+  y1 = CLAMP (y - 1,                0, drawable_height);
   x2 = CLAMP (x + brush_width  + 1, 0, drawable_width);
   y2 = CLAMP (y + brush_height + 1, 0, drawable_height);
 
@@ -1143,7 +1184,7 @@ gimp_brush_core_get_brush_pixmap (GimpBrushCore *core)
 
 void
 gimp_brush_core_eval_transform_dynamics (GimpBrushCore     *core,
-                                         GimpDrawable      *drawable,
+                                         GimpImage         *image,
                                          GimpPaintOptions  *paint_options,
                                          const GimpCoords  *coords)
 {
@@ -1182,16 +1223,16 @@ gimp_brush_core_eval_transform_dynamics (GimpBrushCore     *core,
       core->reflect  = coords->reflect;
     }
 
-  if (! GIMP_IS_DYNAMICS (core->dynamics))
+  if (! GIMP_IS_DYNAMICS (core->dynamics) ||
+      ! gimp_paint_options_are_dynamics_enabled (paint_options))
     return;
 
   if (GIMP_BRUSH_CORE_GET_CLASS (core)->handles_dynamic_transforming_brush)
     {
       gdouble fade_point = 1.0;
 
-      if (drawable)
+      if (image)
         {
-          GimpImage     *image      = gimp_item_get_image (GIMP_ITEM (drawable));
           GimpPaintCore *paint_core = GIMP_PAINT_CORE (core);
 
           fade_point = gimp_paint_options_get_fade (paint_options, image,

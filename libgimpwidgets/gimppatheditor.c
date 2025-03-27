@@ -35,7 +35,6 @@
 #include "gimphelpui.h"
 #include "gimpicons.h"
 #include "gimppatheditor.h"
-#include "gimp3migration.h"
 
 #include "libgimp/libgimp-intl.h"
 
@@ -77,19 +76,43 @@ enum
 };
 
 
-static void   gimp_path_editor_new_clicked        (GtkWidget           *widget,
-                                                   GimpPathEditor      *editor);
-static void   gimp_path_editor_move_clicked       (GtkWidget           *widget,
-                                                   GimpPathEditor      *editor);
-static void   gimp_path_editor_delete_clicked     (GtkWidget           *widget,
-                                                   GimpPathEditor      *editor);
-static void   gimp_path_editor_file_entry_changed (GtkWidget           *widget,
-                                                   GimpPathEditor      *editor);
-static void   gimp_path_editor_selection_changed  (GtkTreeSelection    *sel,
-                                                   GimpPathEditor      *editor);
+struct _GimpPathEditor
+{
+  GtkBox             parent_instance;
+
+  GtkWidget         *upper_hbox;
+
+  GtkWidget         *new_button;
+  GtkWidget         *up_button;
+  GtkWidget         *down_button;
+  GtkWidget         *delete_button;
+
+  GtkWidget         *file_entry;
+
+  GtkListStore      *dir_list;
+
+  GtkTreeSelection  *sel;
+  GtkTreePath       *sel_path;
+
+  GtkTreeViewColumn *writable_column;
+
+  gint               num_items;
+};
+
+
+static void   gimp_path_editor_new_clicked        (GtkWidget             *widget,
+                                                   GimpPathEditor        *editor);
+static void   gimp_path_editor_move_clicked       (GtkWidget             *widget,
+                                                   GimpPathEditor        *editor);
+static void   gimp_path_editor_delete_clicked     (GtkWidget             *widget,
+                                                   GimpPathEditor        *editor);
+static void   gimp_path_editor_file_entry_changed (GtkWidget             *widget,
+                                                   GimpPathEditor        *editor);
+static void   gimp_path_editor_selection_changed  (GtkTreeSelection      *sel,
+                                                   GimpPathEditor        *editor);
 static void   gimp_path_editor_writable_toggled   (GtkCellRendererToggle *toggle,
-                                                   gchar               *path_str,
-                                                   GimpPathEditor      *editor);
+                                                   gchar                 *path_str,
+                                                   GimpPathEditor        *editor);
 
 
 G_DEFINE_TYPE (GimpPathEditor, gimp_path_editor, GTK_TYPE_BOX)
@@ -112,9 +135,8 @@ gimp_path_editor_class_init (GimpPathEditorClass *klass)
     g_signal_new ("path-changed",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (GimpPathEditorClass, path_changed),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
+                  0,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   /**
@@ -128,13 +150,9 @@ gimp_path_editor_class_init (GimpPathEditorClass *klass)
     g_signal_new ("writable-changed",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (GimpPathEditorClass, writable_changed),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
+                  0,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
-
-  klass->path_changed     = NULL;
-  klass->writable_changed = NULL;
 }
 
 static void
@@ -286,7 +304,7 @@ gimp_path_editor_init (GimpPathEditor *editor)
 /**
  * gimp_path_editor_new:
  * @title: The title of the #GtkFileChooser dialog which can be popped up.
- * @path:  The initial search path.
+ * @path: (nullable): The initial search path.
  *
  * Creates a new #GimpPathEditor widget.
  *
@@ -305,7 +323,7 @@ gimp_path_editor_new (const gchar *title,
 
   editor = g_object_new (GIMP_TYPE_PATH_EDITOR, NULL);
 
-  editor->file_entry = gimp_file_entry_new (title, "", TRUE, TRUE);
+  editor->file_entry = _gimp_file_entry_new (title, "", TRUE, TRUE);
   gtk_widget_set_sensitive (editor->file_entry, FALSE);
   gtk_box_pack_start (GTK_BOX (editor->upper_hbox), editor->file_entry,
                       TRUE, TRUE, 0);
@@ -373,7 +391,7 @@ gimp_path_editor_get_path (GimpPathEditor *editor)
  * @path:   The new path to set.
  *
  * The elements of the initial search path must be separated with the
- * #G_SEARCHPATH_SEPARATOR character.
+ * %G_SEARCHPATH_SEPARATOR character.
  **/
 void
 gimp_path_editor_set_path (GimpPathEditor *editor,
@@ -409,9 +427,9 @@ gimp_path_editor_set_path (GimpPathEditor *editor,
 
       gtk_list_store_append (editor->dir_list, &iter);
       gtk_list_store_set (editor->dir_list, &iter,
-                          COLUMN_UTF8,      utf8,
-                          COLUMN_DIRECTORY, directory,
-                          COLUMN_WRITABLE,  FALSE,
+                          COLUMN_UTF8,       utf8,
+                          COLUMN_DIRECTORY,  directory,
+                          COLUMN_WRITABLE,   FALSE,
                           -1);
 
       g_free (utf8);
@@ -597,7 +615,7 @@ gimp_path_editor_set_dir_writable (GimpPathEditor *editor,
 }
 
 
-/*  private functions  */
+/*  editorate functions  */
 
 static void
 gimp_path_editor_new_clicked (GtkWidget      *widget,
@@ -625,9 +643,9 @@ gimp_path_editor_new_clicked (GtkWidget      *widget,
   gtk_widget_set_sensitive (editor->file_entry, TRUE);
 
   gtk_editable_set_position
-    (GTK_EDITABLE (GIMP_FILE_ENTRY (editor->file_entry)->entry), -1);
+    (GTK_EDITABLE (_gimp_file_entry_get_entry (GIMP_FILE_ENTRY (editor->file_entry))), -1);
   gtk_widget_grab_focus
-    (GTK_WIDGET (GIMP_FILE_ENTRY (editor->file_entry)->entry));
+    (_gimp_file_entry_get_entry (GIMP_FILE_ENTRY (editor->file_entry)));
 }
 
 static void
@@ -719,7 +737,7 @@ gimp_path_editor_delete_clicked (GtkWidget      *widget,
                                        gimp_path_editor_file_entry_changed,
                                        editor);
 
-      gimp_file_entry_set_filename (GIMP_FILE_ENTRY (editor->file_entry), "");
+      _gimp_file_entry_set_filename (GIMP_FILE_ENTRY (editor->file_entry), "");
 
       g_signal_handlers_unblock_by_func (editor->file_entry,
                                          gimp_path_editor_file_entry_changed,
@@ -755,7 +773,7 @@ gimp_path_editor_file_entry_changed (GtkWidget      *widget,
   gchar       *utf8;
   GtkTreeIter  iter;
 
-  dir = gimp_file_entry_get_filename (GIMP_FILE_ENTRY (widget));
+  dir = _gimp_file_entry_get_filename (GIMP_FILE_ENTRY (widget));
   if (strcmp (dir, "") == 0)
     {
       g_free (dir);
@@ -767,7 +785,7 @@ gimp_path_editor_file_entry_changed (GtkWidget      *widget,
   if (editor->sel_path == NULL)
     {
       gtk_list_store_append (editor->dir_list, &iter);
-      gtk_list_store_set (editor->dir_list, &iter,
+      gtk_list_store_set (editor->dir_list,  &iter,
                           COLUMN_UTF8,      utf8,
                           COLUMN_DIRECTORY, dir,
                           COLUMN_WRITABLE,  FALSE,
@@ -780,7 +798,7 @@ gimp_path_editor_file_entry_changed (GtkWidget      *widget,
     {
       gtk_tree_model_get_iter (GTK_TREE_MODEL (editor->dir_list), &iter,
                                editor->sel_path);
-      gtk_list_store_set (editor->dir_list, &iter,
+      gtk_list_store_set (editor->dir_list,  &iter,
                           COLUMN_UTF8,      utf8,
                           COLUMN_DIRECTORY, dir,
                           -1);
@@ -810,8 +828,8 @@ gimp_path_editor_selection_changed (GtkTreeSelection *sel,
                                        gimp_path_editor_file_entry_changed,
                                        editor);
 
-      gimp_file_entry_set_filename (GIMP_FILE_ENTRY (editor->file_entry),
-                                    directory);
+      _gimp_file_entry_set_filename (GIMP_FILE_ENTRY (editor->file_entry),
+                                     directory);
 
       g_signal_handlers_unblock_by_func (editor->file_entry,
                                          gimp_path_editor_file_entry_changed,

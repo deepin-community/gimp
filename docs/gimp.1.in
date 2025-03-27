@@ -57,7 +57,7 @@ Show GIMP command\-line options.
 Show all command\-line options.
 .TP 8
 .B  \-\-help-gtk
-Show GTK+ command\-line options.
+Show GTK command\-line options.
 .TP 8
 .B  \-\-help-gegl
 Show GEGL command\-line options.
@@ -151,32 +151,32 @@ GIMP respects a number of environment variables.
 .B DISPLAY
 to get the default host and display number.
 .TP 8
-.B GIMP2_DIRECTORY
+.B GIMP3_DIRECTORY
 to get the name of the personal GIMP directory. If unset @manpage_gimpdir@ is
 used.  If this is an absolute path, it is used as is.  If it is a
 relative path, it is taken to be a subdirectory of \fB$XDG_CONFIG_HOME\fP.
 .TP 8
-.B GIMP2_DATADIR
+.B GIMP3_DATADIR
 to get the base location for data files such as brushes and patterns.
 If unset @gimpdatadir@ is used.
 .TP 8
-.B GIMP2_LOCALEDIR
+.B GIMP3_LOCALEDIR
 to get the base location for translations. If unset @gimplocaledir@
 is used.
 .TP 8
-.B GIMP2_PLUGINDIR
+.B GIMP3_PLUGINDIR
 to get the base location for plug-ins and modules. If unset
 @gimpplugindir@ is used.
 .TP 8
-.B GIMP2_SYSCONFDIR
+.B GIMP3_SYSCONFDIR
 to get the location of configuration files. If unset @gimpsysconfdir@
 is used.
 .TP 8
-.B GIMP2_CACHEDIR
+.B GIMP3_CACHEDIR
 to get the location for caches files. If unset the system default for
 per-user cached files is used.
 .TP 8
-.B GIMP2_TEMPDIR
+.B GIMP3_TEMPDIR
 to get the location of temporary files. If unset the system default for
 temporary files is used.
 
@@ -203,14 +203,14 @@ home directories the first time GIMP is run.
 with the tool, colors, brush, pattern and gradient associated to that
 device.
 
-@manpage_gimpdir@/gtkrc - users set of GIMP-specific GTK+ config
+@manpage_gimpdir@/gtkrc - users set of GIMP-specific GTK config
 settings. Options such as widget color and fonts sizes can be set
 here.
 
-@gimpsysconfdir@/gtkrc - system wide default set of GIMP-specific GTK+
+@gimpsysconfdir@/gtkrc - system wide default set of GIMP-specific GTK
 config settings.
 
-@manpage_gimpdir@/menurc - user's set of keybindings.
+@manpage_gimpdir@/shortcutsrc - user's set of keybindings.
 
 @manpage_gimpdir@/parasiterc - Stores all persistent GIMP
 parasites. This file will be rewritten every time you quit GIMP.
@@ -326,7 +326,7 @@ https://gitlab.gnome.org/GNOME/gimp/issues. Before reporting bugs,
 please check to see if the bug has already been reported.
 
 When reporting GIMP bugs, it is important to include a reliable way to
-reproduce the bug, version number of GIMP (and probably GTK+), OS name
+reproduce the bug, version number of GIMP (and probably GTK), OS name
 and version, and any relevant hardware specs. If a bug is causing a
 crash, it is very useful if a stack trace can be provided. And of
 course, patches to rectify the bug are even better.
@@ -340,7 +340,7 @@ tutorials, data sets, mailing list archives, and more.
 There is also a GIMP User Manual available at https://docs.gimp.org/
 that goes into much more detail about the interactive use of GIMP.
 
-The latest versions of GIMP and the GTK+ libs are always available at
+The latest versions of GIMP and the GTK libs are always available at
 https://download.gimp.org/.
 
 

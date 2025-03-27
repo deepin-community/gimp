@@ -23,14 +23,12 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
-/* we use our own deprecated API here */
-#define GIMP_DISABLE_DEPRECATION_WARNINGS
-
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "gimpuitypes.h"
 
 #include "gimp.h"
+#include "gimppdb-private.h"
 
 #include "gimpdrawablepreview.h"
 
@@ -49,14 +47,8 @@
 enum
 {
   PROP_0,
-  PROP_DRAWABLE,
-  PROP_DRAWABLE_ID
+  PROP_DRAWABLE
 };
-
-typedef struct
-{
-  gint32 drawable_ID;
-} GimpDrawablePreviewPrivate;
 
 typedef struct
 {
@@ -66,8 +58,13 @@ typedef struct
 } PreviewSettings;
 
 
-#define GIMP_DRAWABLE_PREVIEW_GET_PRIVATE(obj) \
-  ((GimpDrawablePreviewPrivate *) gimp_drawable_preview_get_instance_private ((GimpDrawablePreview *) (preview)))
+struct _GimpDrawablePreview
+{
+  GimpScrolledPreview  parent_instance;
+
+  GimpDrawable        *drawable;
+};
+
 
 static void  gimp_drawable_preview_constructed   (GObject         *object);
 static void  gimp_drawable_preview_dispose       (GObject         *object);
@@ -80,8 +77,7 @@ static void  gimp_drawable_preview_set_property  (GObject         *object,
                                                   const GValue    *value,
                                                   GParamSpec      *pspec);
 
-static void  gimp_drawable_preview_style_set     (GtkWidget       *widget,
-                                                  GtkStyle        *prev_style);
+static void  gimp_drawable_preview_style_updated (GtkWidget       *widget);
 
 static void  gimp_drawable_preview_draw_original (GimpPreview     *preview);
 static void  gimp_drawable_preview_draw_thumb    (GimpPreview     *preview,
@@ -92,15 +88,11 @@ static void  gimp_drawable_preview_draw_buffer   (GimpPreview     *preview,
                                                   const guchar    *buffer,
                                                   gint             rowstride);
 
-static void  gimp_drawable_preview_set_drawable (GimpDrawablePreview *preview,
-                                                 GimpDrawable        *drawable);
-static void  gimp_drawable_preview_set_drawable_id
-                                                (GimpDrawablePreview *preview,
-                                                 gint32               drawable_ID);
+static void  gimp_drawable_preview_set_drawable  (GimpDrawablePreview *preview,
+                                                  GimpDrawable        *drawable);
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpDrawablePreview, gimp_drawable_preview,
-                            GIMP_TYPE_SCROLLED_PREVIEW)
+G_DEFINE_TYPE (GimpDrawablePreview, gimp_drawable_preview, GIMP_TYPE_SCROLLED_PREVIEW)
 
 #define parent_class gimp_drawable_preview_parent_class
 
@@ -114,30 +106,16 @@ gimp_drawable_preview_class_init (GimpDrawablePreviewClass *klass)
   GtkWidgetClass   *widget_class  = GTK_WIDGET_CLASS (klass);
   GimpPreviewClass *preview_class = GIMP_PREVIEW_CLASS (klass);
 
-  object_class->constructed  = gimp_drawable_preview_constructed;
-  object_class->dispose      = gimp_drawable_preview_dispose;
-  object_class->get_property = gimp_drawable_preview_get_property;
-  object_class->set_property = gimp_drawable_preview_set_property;
+  object_class->constructed   = gimp_drawable_preview_constructed;
+  object_class->dispose       = gimp_drawable_preview_dispose;
+  object_class->get_property  = gimp_drawable_preview_get_property;
+  object_class->set_property  = gimp_drawable_preview_set_property;
 
-  widget_class->style_set    = gimp_drawable_preview_style_set;
+  widget_class->style_updated = gimp_drawable_preview_style_updated;
 
-  preview_class->draw        = gimp_drawable_preview_draw_original;
-  preview_class->draw_thumb  = gimp_drawable_preview_draw_thumb;
-  preview_class->draw_buffer = gimp_drawable_preview_draw_buffer;
-
-  /**
-   * GimpDrawablePreview:drawable:
-   *
-   * Deprecated: use the drawable-id property instead.
-   *
-   * Since: 2.4
-   */
-  g_object_class_install_property (object_class, PROP_DRAWABLE,
-                                   g_param_spec_pointer ("drawable",
-                                                         "Drawable",
-                                                         "Deprecated: use the drawable-id property instead",
-                                                         GIMP_PARAM_READWRITE |
-                                                         G_PARAM_CONSTRUCT_ONLY));
+  preview_class->draw         = gimp_drawable_preview_draw_original;
+  preview_class->draw_thumb   = gimp_drawable_preview_draw_thumb;
+  preview_class->draw_buffer  = gimp_drawable_preview_draw_buffer;
 
   /**
    * GimpDrawablePreview:drawable-id:
@@ -146,22 +124,24 @@ gimp_drawable_preview_class_init (GimpDrawablePreviewClass *klass)
    *
    * Since: 2.10
    */
-  g_object_class_install_property (object_class, PROP_DRAWABLE_ID,
-                                   g_param_spec_int ("drawable-id",
-                                                     "Drawable ID",
-                                                     "The drawable this preview is attached to",
-                                                     -1, G_MAXINT, -1,
-                                                     GIMP_PARAM_READWRITE |
-                                                     G_PARAM_CONSTRUCT_ONLY));
+  g_object_class_install_property (object_class, PROP_DRAWABLE,
+                                   g_param_spec_object ("drawable",
+                                                        "Drawable",
+                                                        "The drawable this preview is attached to",
+                                                        GIMP_TYPE_DRAWABLE,
+                                                        GIMP_PARAM_READWRITE |
+                                                        G_PARAM_CONSTRUCT_ONLY));
 
 }
 
 static void
 gimp_drawable_preview_init (GimpDrawablePreview *preview)
 {
-  g_object_set (GIMP_PREVIEW (preview)->area,
+  g_object_set (gimp_preview_get_area (GIMP_PREVIEW (preview)),
                 "check-size", gimp_check_size (),
                 "check-type", gimp_check_type (),
+                "check-custom-color1", gimp_check_custom_color1 (),
+                "check-custom-color2", gimp_check_custom_color2 (),
                 NULL);
 }
 
@@ -170,6 +150,7 @@ gimp_drawable_preview_constructed (GObject *object)
 {
   gchar           *data_name;
   PreviewSettings  settings;
+  GBytes          *settings_bytes = NULL;
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
@@ -177,12 +158,15 @@ gimp_drawable_preview_constructed (GObject *object)
                                g_get_prgname (),
                                ++gimp_drawable_preview_counter);
 
-  if (gimp_get_data (data_name, &settings))
+  if (gimp_pdb_get_data (data_name, &settings_bytes) &&
+      g_bytes_get_size (settings_bytes) == sizeof (PreviewSettings))
     {
+      settings = *((PreviewSettings *) g_bytes_get_data (settings_bytes, NULL));
       gimp_preview_set_update (GIMP_PREVIEW (object), settings.update);
       gimp_scrolled_preview_set_position (GIMP_SCROLLED_PREVIEW (object),
                                           settings.x, settings.y);
     }
+  g_bytes_unref (settings_bytes);
 
   g_object_set_data_full (object, "gimp-drawable-preview-data-name",
                           data_name, (GDestroyNotify) g_free);
@@ -191,20 +175,26 @@ gimp_drawable_preview_constructed (GObject *object)
 static void
 gimp_drawable_preview_dispose (GObject *object)
 {
-  const gchar *data_name = g_object_get_data (G_OBJECT (object),
-                                              "gimp-drawable-preview-data-name");
+  GimpDrawablePreview *preview = GIMP_DRAWABLE_PREVIEW (object);
+  const gchar         *data_name;
 
+  data_name = g_object_get_data (G_OBJECT (object),
+                                 "gimp-drawable-preview-data-name");
   if (data_name)
     {
       GimpPreview     *preview = GIMP_PREVIEW (object);
+      GBytes          *bytes;
       PreviewSettings  settings;
 
-      settings.x      = preview->xoff + preview->xmin;
-      settings.y      = preview->yoff + preview->ymin;
+      gimp_preview_get_position (preview, &settings.x, &settings.y);
       settings.update = gimp_preview_get_update (preview);
 
-      gimp_set_data (data_name, &settings, sizeof (PreviewSettings));
+      bytes = g_bytes_new_static (&settings, sizeof (PreviewSettings));
+      gimp_pdb_set_data (data_name, bytes);
+      g_bytes_unref (bytes);
     }
+
+  g_clear_object (&preview->drawable);
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
@@ -220,12 +210,8 @@ gimp_drawable_preview_get_property (GObject    *object,
   switch (property_id)
     {
     case PROP_DRAWABLE:
-      g_value_set_pointer (value, preview->drawable);
-      break;
-
-    case PROP_DRAWABLE_ID:
-      g_value_set_int (value,
-                       gimp_drawable_preview_get_drawable_id (preview));
+      g_value_set_object (value,
+                          gimp_drawable_preview_get_drawable (preview));
       break;
 
     default:
@@ -240,21 +226,13 @@ gimp_drawable_preview_set_property (GObject      *object,
                                     const GValue *value,
                                     GParamSpec   *pspec)
 {
-  GimpDrawablePreview        *preview = GIMP_DRAWABLE_PREVIEW (object);
-  GimpDrawablePreviewPrivate *priv    = GIMP_DRAWABLE_PREVIEW_GET_PRIVATE (preview);
+  GimpDrawablePreview *preview = GIMP_DRAWABLE_PREVIEW (object);
 
   switch (property_id)
     {
     case PROP_DRAWABLE:
-      g_return_if_fail (priv->drawable_ID < 1);
-      if (g_value_get_pointer (value))
-        gimp_drawable_preview_set_drawable (preview,
-                                            g_value_get_pointer (value));
-      break;
-
-    case PROP_DRAWABLE_ID:
-      gimp_drawable_preview_set_drawable_id (preview,
-                                             g_value_get_int (value));
+      gimp_drawable_preview_set_drawable (preview,
+                                          g_value_dup_object (value));
       break;
 
     default:
@@ -264,50 +242,62 @@ gimp_drawable_preview_set_property (GObject      *object,
 }
 
 static void
-gimp_drawable_preview_style_set (GtkWidget *widget,
-                                 GtkStyle  *prev_style)
+gimp_drawable_preview_style_updated (GtkWidget *widget)
 {
   GimpPreview *preview = GIMP_PREVIEW (widget);
-  gint         width   = preview->xmax - preview->xmin;
-  gint         height  = preview->ymax - preview->ymin;
-  gint         size;
+  GtkWidget   *area    = gimp_preview_get_area (preview);
 
-  if (GTK_WIDGET_CLASS (parent_class)->style_set)
-    GTK_WIDGET_CLASS (parent_class)->style_set (widget, prev_style);
+  GTK_WIDGET_CLASS (parent_class)->style_updated (widget);
 
-  gtk_widget_style_get (widget,
-                        "size", &size,
-                        NULL);
+  if (area)
+    {
+      gint xmin, ymin;
+      gint xmax, ymax;
+      gint size;
 
-  gtk_widget_set_size_request (GIMP_PREVIEW (preview)->area,
-                               MIN (width, size), MIN (height, size));
+      gimp_preview_get_bounds (preview, &xmin, &ymin, &xmax, &ymax);
+
+      gtk_widget_style_get (widget,
+                            "size", &size,
+                            NULL);
+
+      gtk_widget_set_size_request (area,
+                                   MIN (xmax - xmin, size),
+                                   MIN (ymax - ymin, size));
+    }
 }
 
 static void
 gimp_drawable_preview_draw_original (GimpPreview *preview)
 {
-  GimpDrawablePreviewPrivate *priv = GIMP_DRAWABLE_PREVIEW_GET_PRIVATE (preview);
-  guchar                     *buffer;
-  gint                        width, height;
-  gint                        bpp;
-  GimpImageType               type;
+  GimpDrawablePreview *drawable_preview = GIMP_DRAWABLE_PREVIEW (preview);
+  GBytes              *buffer;
+  gint                 width, height;
+  gint                 tn_width, tn_height;
+  gint                 xoff, yoff;
+  gint                 xmin, ymin;
+  gint                 xmax, ymax;
+  gint                 bpp;
+  GimpImageType        type;
 
-  if (priv->drawable_ID < 1)
+  if (drawable_preview->drawable == NULL)
     return;
 
-  preview->xoff = CLAMP (preview->xoff,
-                         0, preview->xmax - preview->xmin - preview->width);
-  preview->yoff = CLAMP (preview->yoff,
-                         0, preview->ymax - preview->ymin - preview->height);
+  gimp_preview_get_size (preview, &width, &height);
+  gimp_preview_get_offsets (preview, &xoff, &yoff);
+  gimp_preview_get_bounds (preview, &xmin, &ymin, &xmax, &ymax);
 
-  width  = preview->width;
-  height = preview->height;
+  xoff = CLAMP (xoff, 0, xmax - xmin - width);
+  yoff = CLAMP (yoff, 0, ymax - ymin - height);
 
-  buffer = gimp_drawable_get_sub_thumbnail_data (priv->drawable_ID,
-                                                 preview->xoff + preview->xmin,
-                                                 preview->yoff + preview->ymin,
-                                                 preview->width, preview->height,
-                                                 &width, &height, &bpp);
+  gimp_preview_set_offsets (preview, xoff, yoff);
+
+  buffer = gimp_drawable_get_sub_thumbnail_data (drawable_preview->drawable,
+                                                 xoff + xmin,
+                                                 yoff + ymin,
+                                                 width, height,
+                                                 width, height,
+                                                 &tn_width, &tn_height, &bpp);
 
   switch (bpp)
     {
@@ -316,13 +306,14 @@ gimp_drawable_preview_draw_original (GimpPreview *preview)
     case 3: type = GIMP_RGB_IMAGE; break;
     case 4: type = GIMP_RGBA_IMAGE; break;
     default:
-      g_free (buffer);
+      g_bytes_unref (buffer);
       return;
     }
 
-  gimp_preview_area_draw (GIMP_PREVIEW_AREA (preview->area),
-                          0, 0, width, height, type, buffer, width * bpp);
-  g_free (buffer);
+  gimp_preview_area_draw (GIMP_PREVIEW_AREA (gimp_preview_get_area (preview)),
+                          0, 0, tn_width, tn_height, type,
+                          g_bytes_get_data (buffer, NULL), width * bpp);
+  g_bytes_unref (buffer);
 }
 
 static void
@@ -331,38 +322,39 @@ gimp_drawable_preview_draw_thumb (GimpPreview     *preview,
                                   gint             width,
                                   gint             height)
 {
-  GimpDrawablePreviewPrivate *priv = GIMP_DRAWABLE_PREVIEW_GET_PRIVATE (preview);
+  GimpDrawablePreview *drawable_preview = GIMP_DRAWABLE_PREVIEW (preview);
 
-  if (priv->drawable_ID > 0)
-    _gimp_drawable_preview_area_draw_thumb (area, priv->drawable_ID,
+  if (drawable_preview->drawable)
+    _gimp_drawable_preview_area_draw_thumb (area, drawable_preview->drawable,
                                             width, height);
 }
 
 void
 _gimp_drawable_preview_area_draw_thumb (GimpPreviewArea *area,
-                                        gint32           drawable_ID,
+                                        GimpDrawable    *drawable,
                                         gint             width,
                                         gint             height)
 {
-  guchar *buffer;
+  GBytes *buffer;
   gint    x1, y1, x2, y2;
   gint    bpp;
   gint    size = 100;
   gint    nav_width, nav_height;
+  gint    tn_width, tn_height;
 
   g_return_if_fail (GIMP_IS_PREVIEW_AREA (area));
-  g_return_if_fail (gimp_item_is_valid (drawable_ID));
-  g_return_if_fail (gimp_item_is_drawable (drawable_ID));
+  g_return_if_fail (gimp_item_is_valid (GIMP_ITEM (drawable)));
+  g_return_if_fail (gimp_item_is_drawable (GIMP_ITEM (drawable)));
 
-  if (_gimp_drawable_preview_get_bounds (drawable_ID, &x1, &y1, &x2, &y2))
+  if (_gimp_drawable_preview_get_bounds (drawable, &x1, &y1, &x2, &y2))
     {
       width  = x2 - x1;
       height = y2 - y1;
     }
   else
     {
-      width  = gimp_drawable_width  (drawable_ID);
-      height = gimp_drawable_height (drawable_ID);
+      width  = gimp_drawable_get_width  (drawable);
+      height = gimp_drawable_get_height (drawable);
     }
 
   if (width > height)
@@ -376,17 +368,19 @@ _gimp_drawable_preview_area_draw_thumb (GimpPreviewArea *area,
       nav_width  = (width * nav_height) / height;
     }
 
-  if (_gimp_drawable_preview_get_bounds (drawable_ID, &x1, &y1, &x2, &y2))
+  if (_gimp_drawable_preview_get_bounds (drawable, &x1, &y1, &x2, &y2))
     {
-      buffer = gimp_drawable_get_sub_thumbnail_data (drawable_ID,
+      buffer = gimp_drawable_get_sub_thumbnail_data (drawable,
                                                      x1, y1, x2 - x1, y2 - y1,
-                                                     &nav_width, &nav_height,
+                                                     nav_width, nav_height,
+                                                     &tn_width, &tn_height,
                                                      &bpp);
     }
   else
     {
-      buffer = gimp_drawable_get_thumbnail_data (drawable_ID,
-                                                 &nav_width, &nav_height,
+      buffer = gimp_drawable_get_thumbnail_data (drawable,
+                                                 nav_width, nav_height,
+                                                 &tn_width, &tn_height,
                                                  &bpp);
     }
 
@@ -394,7 +388,7 @@ _gimp_drawable_preview_area_draw_thumb (GimpPreviewArea *area,
     {
       GimpImageType type;
 
-      gtk_widget_set_size_request (GTK_WIDGET (area), nav_width, nav_height);
+      gtk_widget_set_size_request (GTK_WIDGET (area), tn_width, tn_height);
       gtk_widget_show (GTK_WIDGET (area));
       gtk_widget_realize (GTK_WIDGET (area));
 
@@ -405,14 +399,15 @@ _gimp_drawable_preview_area_draw_thumb (GimpPreviewArea *area,
         case 3:  type = GIMP_RGB_IMAGE;    break;
         case 4:  type = GIMP_RGBA_IMAGE;   break;
         default:
-          g_free (buffer);
+          g_bytes_unref (buffer);
           return;
         }
 
       gimp_preview_area_draw (area,
-                              0, 0, nav_width, nav_height,
-                              type, buffer, bpp * nav_width);
-      g_free (buffer);
+                              0, 0, tn_width, tn_height,
+                              type,
+                              g_bytes_get_data (buffer, NULL), bpp * tn_width);
+      g_bytes_unref (buffer);
     }
 }
 
@@ -425,20 +420,25 @@ gimp_drawable_preview_draw_area (GimpDrawablePreview *preview,
                                  const guchar        *buf,
                                  gint                 rowstride)
 {
-  GimpDrawablePreviewPrivate *priv         = GIMP_DRAWABLE_PREVIEW_GET_PRIVATE (preview);
-  GimpPreview                *gimp_preview = GIMP_PREVIEW (preview);
-  gint32                      image_ID;
+  GimpPreview *gimp_preview = GIMP_PREVIEW (preview);
+  GtkWidget   *area         = gimp_preview_get_area (gimp_preview);
+  GimpImage   *image;
+  gint         xmin, ymin;
+  gint         xoff, yoff;
 
-  image_ID = gimp_item_get_image (priv->drawable_ID);
+  gimp_preview_get_bounds (gimp_preview, &xmin, &ymin, NULL, NULL);
+  gimp_preview_get_offsets (gimp_preview, &xoff, &yoff);
 
-  if (gimp_selection_is_empty (image_ID))
+  image = gimp_item_get_image (GIMP_ITEM (preview->drawable));
+
+  if (gimp_selection_is_empty (image))
     {
-      gimp_preview_area_draw (GIMP_PREVIEW_AREA (gimp_preview->area),
-                              x - gimp_preview->xoff - gimp_preview->xmin,
-                              y - gimp_preview->yoff - gimp_preview->ymin,
+      gimp_preview_area_draw (GIMP_PREVIEW_AREA (area),
+                              x - xoff - xmin,
+                              y - yoff - ymin,
                               width,
                               height,
-                              gimp_drawable_type (priv->drawable_ID),
+                              gimp_drawable_type (preview->drawable),
                               buf, rowstride);
     }
   else
@@ -449,9 +449,9 @@ gimp_drawable_preview_draw_area (GimpDrawablePreview *preview,
       gint draw_x, draw_y;
       gint draw_width, draw_height;
 
-      gimp_drawable_offsets (priv->drawable_ID, &offset_x, &offset_y);
+      gimp_drawable_get_offsets (preview->drawable, &offset_x, &offset_y);
 
-      if (gimp_drawable_mask_intersect (priv->drawable_ID,
+      if (gimp_drawable_mask_intersect (preview->drawable,
                                         &mask_x, &mask_y,
                                         &mask_width, &mask_height) &&
           gimp_rectangle_intersect (mask_x, mask_y,
@@ -460,30 +460,26 @@ gimp_drawable_preview_draw_area (GimpDrawablePreview *preview,
                                     &draw_x, &draw_y,
                                     &draw_width, &draw_height))
         {
-          GimpImageType  type;
-          gint32         selection_ID;
-          guchar        *src;
-          guchar        *sel;
-          gint           d_w, d_h, d_bpp;
-          gint           s_w, s_h, s_bpp;
+          GimpImageType   type;
+          GimpSelection  *selection;
+          GBytes         *src;
+          GBytes         *sel;
+          gint            d_w, d_h, d_bpp;
+          gint            s_w, s_h, s_bpp;
 
-          d_w = draw_width;
-          d_h = draw_height;
+          selection = gimp_image_get_selection (image);
 
-          s_w = draw_width;
-          s_h = draw_height;
-
-          selection_ID = gimp_image_get_selection (image_ID);
-
-          src = gimp_drawable_get_sub_thumbnail_data (priv->drawable_ID,
+          src = gimp_drawable_get_sub_thumbnail_data (preview->drawable,
                                                       draw_x, draw_y,
+                                                      draw_width, draw_height,
                                                       draw_width, draw_height,
                                                       &d_w, &d_h,
                                                       &d_bpp);
 
-          sel = gimp_drawable_get_sub_thumbnail_data (selection_ID,
+          sel = gimp_drawable_get_sub_thumbnail_data (GIMP_DRAWABLE (selection),
                                                       draw_x + offset_x,
                                                       draw_y + offset_y,
+                                                      draw_width, draw_height,
                                                       draw_width, draw_height,
                                                       &s_w, &s_h,
                                                       &s_bpp);
@@ -495,26 +491,26 @@ gimp_drawable_preview_draw_area (GimpDrawablePreview *preview,
             case 3:  type = GIMP_RGB_IMAGE;    break;
             case 4:  type = GIMP_RGBA_IMAGE;   break;
             default:
-              g_free (sel);
-              g_free (src);
+              g_bytes_unref (sel);
+              g_bytes_unref (src);
               return;
             }
 
-          gimp_preview_area_mask (GIMP_PREVIEW_AREA (gimp_preview->area),
-                                  draw_x - gimp_preview->xoff - gimp_preview->xmin,
-                                  draw_y - gimp_preview->yoff - gimp_preview->ymin,
+          gimp_preview_area_mask (GIMP_PREVIEW_AREA (area),
+                                  draw_x - xoff - xmin,
+                                  draw_y - yoff - ymin,
                                   draw_width,
                                   draw_height,
                                   type,
-                                  src, draw_width * d_bpp,
+                                  g_bytes_get_data (src, NULL), draw_width * d_bpp,
                                   (buf +
                                    (draw_x - x) * d_bpp +
                                    (draw_y - y) * d_w * d_bpp),
                                   rowstride,
-                                  sel, s_w);
+                                  g_bytes_get_data (sel, NULL), s_w);
 
-          g_free (sel);
-          g_free (src);
+          g_bytes_unref (sel);
+          g_bytes_unref (src);
         }
     }
 }
@@ -524,11 +520,15 @@ gimp_drawable_preview_draw_buffer (GimpPreview  *preview,
                                    const guchar *buffer,
                                    gint          rowstride)
 {
+  gint x, y;
+  gint width, height;
+
+  gimp_preview_get_position (preview, &x, &y);
+  gimp_preview_get_size (preview, &width, &height);
+
   gimp_drawable_preview_draw_area (GIMP_DRAWABLE_PREVIEW (preview),
-                                   preview->xmin + preview->xoff,
-                                   preview->ymin + preview->yoff,
-                                   preview->width,
-                                   preview->height,
+                                   x, y,
+                                   width, height,
                                    buffer, rowstride);
 }
 
@@ -536,42 +536,26 @@ static void
 gimp_drawable_preview_set_drawable (GimpDrawablePreview *drawable_preview,
                                     GimpDrawable        *drawable)
 {
-  GimpPreview                *preview = GIMP_PREVIEW (drawable_preview);
-  GimpDrawablePreviewPrivate *priv    = GIMP_DRAWABLE_PREVIEW_GET_PRIVATE (preview);
+  GimpPreview *preview = GIMP_PREVIEW (drawable_preview);
+  gint         x1, y1, x2, y2;
 
   g_return_if_fail (drawable_preview->drawable == NULL);
-  g_return_if_fail (priv->drawable_ID < 1);
 
   drawable_preview->drawable = drawable;
 
-  gimp_drawable_preview_set_drawable_id (drawable_preview,
-                                         drawable->drawable_id);
-}
-
-static void
-gimp_drawable_preview_set_drawable_id (GimpDrawablePreview *drawable_preview,
-                                       gint32               drawable_ID)
-{
-  GimpPreview                *preview = GIMP_PREVIEW (drawable_preview);
-  GimpDrawablePreviewPrivate *priv    = GIMP_DRAWABLE_PREVIEW_GET_PRIVATE (preview);
-  gint                        x1, y1, x2, y2;
-
-  g_return_if_fail (priv->drawable_ID < 1);
-
-  priv->drawable_ID = drawable_ID;
-
-  _gimp_drawable_preview_get_bounds (drawable_ID, &x1, &y1, &x2, &y2);
+  _gimp_drawable_preview_get_bounds (drawable, &x1, &y1, &x2, &y2);
 
   gimp_preview_set_bounds (preview, x1, y1, x2, y2);
 
-  if (gimp_drawable_is_indexed (drawable_ID))
+  if (gimp_drawable_is_indexed (drawable))
     {
-      guint32  image_ID = gimp_item_get_image (drawable_ID);
-      guchar  *cmap;
-      gint     num_colors;
+      GimpImage *image = gimp_item_get_image (GIMP_ITEM (drawable));
+      GtkWidget *area  = gimp_preview_get_area (preview);
+      guchar    *cmap;
+      gint       num_colors;
 
-      cmap = gimp_image_get_colormap (image_ID, &num_colors);
-      gimp_preview_area_set_colormap (GIMP_PREVIEW_AREA (preview->area),
+      cmap = gimp_palette_get_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), &num_colors, NULL);
+      gimp_preview_area_set_colormap (GIMP_PREVIEW_AREA (area),
                                       cmap, num_colors);
       g_free (cmap);
     }
@@ -582,11 +566,11 @@ gimp_drawable_preview_set_drawable_id (GimpDrawablePreview *drawable_preview,
 #define MIN3(a, b, c)  (MIN (MIN ((a), (b)), (c)))
 
 gboolean
-_gimp_drawable_preview_get_bounds (gint32  drawable_ID,
-                                   gint   *xmin,
-                                   gint   *ymin,
-                                   gint   *xmax,
-                                   gint   *ymax)
+_gimp_drawable_preview_get_bounds (GimpDrawable *drawable,
+                                   gint         *xmin,
+                                   gint         *ymin,
+                                   gint         *xmax,
+                                   gint         *ymax)
 {
   gint     width;
   gint     height;
@@ -596,15 +580,15 @@ _gimp_drawable_preview_get_bounds (gint32  drawable_ID,
   gint     x2, y2;
   gboolean retval;
 
-  g_return_val_if_fail (gimp_item_is_valid (drawable_ID), FALSE);
-  g_return_val_if_fail (gimp_item_is_drawable (drawable_ID), FALSE);
+  g_return_val_if_fail (gimp_item_is_valid (GIMP_ITEM (drawable)), FALSE);
+  g_return_val_if_fail (gimp_item_is_drawable (GIMP_ITEM (drawable)), FALSE);
 
-  width  = gimp_drawable_width (drawable_ID);
-  height = gimp_drawable_height (drawable_ID);
+  width  = gimp_drawable_get_width (drawable);
+  height = gimp_drawable_get_height (drawable);
 
-  retval = gimp_drawable_mask_bounds (drawable_ID, &x1, &y1, &x2, &y2);
+  retval = gimp_drawable_mask_bounds (drawable, &x1, &y1, &x2, &y2);
 
-  gimp_drawable_offsets (drawable_ID, &offset_x, &offset_y);
+  gimp_drawable_get_offsets (drawable, &offset_x, &offset_y);
 
   *xmin = MAX3 (x1 - SELECTION_BORDER, 0, - offset_x);
   *ymin = MAX3 (y1 - SELECTION_BORDER, 0, - offset_y);
@@ -616,66 +600,20 @@ _gimp_drawable_preview_get_bounds (gint32  drawable_ID,
 
 
 /**
- * gimp_drawable_preview_new_from_drawable_id:
- * @drawable_ID: a drawable ID
- *
- * Creates a new #GimpDrawablePreview widget for @drawable_ID.
- *
- * Returns: A pointer to the new #GimpDrawablePreview widget.
- *
- * Since: 2.10
- **/
-GtkWidget *
-gimp_drawable_preview_new_from_drawable_id (gint32 drawable_ID)
-{
-  g_return_val_if_fail (gimp_item_is_valid (drawable_ID), NULL);
-  g_return_val_if_fail (gimp_item_is_drawable (drawable_ID), NULL);
-
-  return g_object_new (GIMP_TYPE_DRAWABLE_PREVIEW,
-                       "drawable-id", drawable_ID,
-                       NULL);
-}
-
-/**
- * gimp_drawable_preview_get_drawable_id:
- * @preview:   a #GimpDrawablePreview widget
- *
- * Return value: the drawable_ID that has been passed to
- *               gimp_drawable_preview_new_from_drawable_id().
- *
- * Since: 2.10
- **/
-gint32
-gimp_drawable_preview_get_drawable_id (GimpDrawablePreview *preview)
-{
-  g_return_val_if_fail (GIMP_IS_DRAWABLE_PREVIEW (preview), -1);
-
-  return GIMP_DRAWABLE_PREVIEW_GET_PRIVATE (preview)->drawable_ID;
-}
-
-/**
- * gimp_drawable_preview_new:
- * @drawable: a #GimpDrawable
- * @toggle:   unused
+ * gimp_drawable_preview_new_from_drawable:
+ * @drawable: (transfer none): a drawable
  *
  * Creates a new #GimpDrawablePreview widget for @drawable.
  *
- * In GIMP 2.2 the @toggle parameter was provided to conviently access
- * the state of the "Preview" check-button. This is not any longer
- * necessary as the preview itself now stores this state, as well as
- * the scroll offset.
- *
  * Returns: A pointer to the new #GimpDrawablePreview widget.
  *
- * Deprecated: Use gimp_drawable_preview_new_from_drawable_id() instead.
- *
- * Since: 2.2
+ * Since: 2.10
  **/
 GtkWidget *
-gimp_drawable_preview_new (GimpDrawable *drawable,
-                           gboolean     *toggle)
+gimp_drawable_preview_new_from_drawable (GimpDrawable *drawable)
 {
-  g_return_val_if_fail (drawable != NULL, NULL);
+  g_return_val_if_fail (gimp_item_is_valid (GIMP_ITEM (drawable)), NULL);
+  g_return_val_if_fail (gimp_item_is_drawable (GIMP_ITEM (drawable)), NULL);
 
   return g_object_new (GIMP_TYPE_DRAWABLE_PREVIEW,
                        "drawable", drawable,
@@ -686,12 +624,10 @@ gimp_drawable_preview_new (GimpDrawable *drawable,
  * gimp_drawable_preview_get_drawable:
  * @preview:   a #GimpDrawablePreview widget
  *
- * Return value: the #GimpDrawable that has been passed to
- *               gimp_drawable_preview_new().
+ * Returns: (transfer none): the drawable that has been passed to
+ *          gimp_drawable_preview_new_from_drawable().
  *
- * Deprecated: use gimp_drawable_preview_get_drawable_id() instead.
- *
- * Since: 2.2
+ * Since: 2.10
  **/
 GimpDrawable *
 gimp_drawable_preview_get_drawable (GimpDrawablePreview *preview)
@@ -699,59 +635,4 @@ gimp_drawable_preview_get_drawable (GimpDrawablePreview *preview)
   g_return_val_if_fail (GIMP_IS_DRAWABLE_PREVIEW (preview), NULL);
 
   return preview->drawable;
-}
-
-/**
- * gimp_drawable_preview_draw_region:
- * @preview: a #GimpDrawablePreview widget
- * @region:  a #GimpPixelRgn
- *
- * Since: 2.2
- **/
-void
-gimp_drawable_preview_draw_region (GimpDrawablePreview *preview,
-                                   const GimpPixelRgn  *region)
-{
-  GimpDrawablePreviewPrivate *priv;
-
-  g_return_if_fail (GIMP_IS_DRAWABLE_PREVIEW (preview));
-  g_return_if_fail (region != NULL);
-
-  priv = GIMP_DRAWABLE_PREVIEW_GET_PRIVATE (preview);
-
-  g_return_if_fail (priv->drawable_ID > 0);
-
-  /*  If the data field is initialized, this region is currently being
-   *  processed and we can access it directly.
-   */
-  if (region->data)
-    {
-      gimp_drawable_preview_draw_area (preview,
-                                       region->x,
-                                       region->y,
-                                       region->w,
-                                       region->h,
-                                       region->data,
-                                       region->rowstride);
-    }
-  else
-    {
-      GimpPixelRgn  src = *region;
-      gpointer      iter;
-
-      src.dirty = FALSE; /* we don't dirty the tiles, just read them */
-
-      for (iter = gimp_pixel_rgns_register (1, &src);
-           iter != NULL;
-           iter = gimp_pixel_rgns_process (iter))
-        {
-          gimp_drawable_preview_draw_area (preview,
-                                           src.x,
-                                           src.y,
-                                           src.w,
-                                           src.h,
-                                           src.data,
-                                           src.rowstride);
-        }
-    }
 }

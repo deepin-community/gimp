@@ -17,25 +17,24 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-  /* Example of how to call file_gih_save from script-fu:
+  /* Example of how to call file-gih-export from script-fu:
 
   (let ((ranks (cons-array 1 'byte)))
     (aset ranks 0 12)
-    (file-gih-save 1
-                   img
-                   drawable
-                   "foo.gih"
-                   "foo.gih"
-                   100
-                   "test brush"
-                   125
-                   125
-                   3
-                   4
-                   1
-                   ranks
-                   1
-                   '("random")))
+    (file-gih-export 1
+                     img
+                     "foo.gih"
+                     "foo.gih"
+                     100
+                     "test brush"
+                     125
+                     125
+                     3
+                     4
+                     1
+                     ranks
+                     1
+                     '("random")))
   */
 
 
@@ -48,69 +47,66 @@
 #include "libgimp/stdplugins-intl.h"
 
 
-#define SAVE_PROC      "file-gih-save"
+#define EXPORT_PROC    "file-gih-export"
 #define PLUG_IN_BINARY "file-gih"
 #define PLUG_IN_ROLE   "gimp-file-gih"
 
 
-/* Parameters applicable each time we export a gih, exported in the
- * main gimp application between invocations of this plug-in.
- */
 typedef struct
 {
-  gchar description[256];
-  gint  spacing;
-} BrushInfo;
-
-typedef struct
-{
-  GimpOrientationType  orientation;
-  gint32               image;
-  gint32               toplayer;
-  gint                 nguides;
-  gint32              *guides;
-  gint                *value;
-  GtkWidget           *count_label;    /* Corresponding count adjustment, */
-  gint                *count;          /* cols or rows                    */
-  gint                *other_count;    /* and the other one               */
-  GtkAdjustment       *ncells;
-  GtkAdjustment       *rank0;
-  GtkWidget           *warning_label;
-  GtkWidget           *rank_entry[GIMP_PIXPIPE_MAXDIM];
-  GtkWidget           *mode_entry[GIMP_PIXPIPE_MAXDIM];
+  GtkWidget *rank_entry[GIMP_PIXPIPE_MAXDIM];
+  GtkWidget *mode_entry[GIMP_PIXPIPE_MAXDIM];
 } SizeAdjustmentData;
 
 
-/*  local function prototypes  */
+typedef struct _Gih      Gih;
+typedef struct _GihClass GihClass;
 
-static void      query           (void);
-static void      run             (const gchar      *name,
-                                  gint              nparams,
-                                  const GimpParam  *param,
-                                  gint             *nreturn_vals,
-                                  GimpParam       **return_vals);
-
-static gboolean  gih_save_dialog (gint32            image_ID);
-
-
-/*  private variables  */
-
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _Gih
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
+  GimpPlugIn      parent_instance;
 };
 
-static BrushInfo info =
+struct _GihClass
 {
-  "GIMP Brush Pipe",
-  20
+  GimpPlugInClass parent_class;
 };
 
-static gint              num_layers = 0;
-static GimpPixPipeParams gihparams  = { 0, };
+
+#define GIH_TYPE  (gih_get_type ())
+#define GIH(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIH_TYPE, Gih))
+
+GType                   gih_get_type          (void) G_GNUC_CONST;
+
+static GList          * gih_query_procedures  (GimpPlugIn           *plug_in);
+static GimpProcedure  * gih_create_procedure  (GimpPlugIn           *plug_in,
+                                               const gchar          *name);
+
+static GimpValueArray * gih_export            (GimpProcedure        *procedure,
+                                               GimpRunMode           run_mode,
+                                               GimpImage            *image,
+                                               GFile                *file,
+                                               GimpExportOptions    *options,
+                                               GimpMetadata         *metadata,
+                                               GimpProcedureConfig  *config,
+                                               gpointer              run_data);
+
+static void             gih_remove_guides     (GimpProcedureConfig  *config,
+                                               GimpImage            *image);
+static void             gih_cell_width_notify (GimpProcedureConfig  *config,
+                                               const GParamSpec     *pspec,
+                                               GimpProcedureDialog  *dialog);
+
+static gboolean         gih_save_dialog       (GimpImage            *image,
+                                               GimpProcedure        *procedure,
+                                               GimpProcedureConfig  *config);
+
+
+G_DEFINE_TYPE (Gih, gih, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (GIH_TYPE)
+DEFINE_STD_SET_I18N
+
 
 static const gchar * const selection_modes[] = { "incremental",
                                                  "angular",
@@ -121,640 +117,660 @@ static const gchar * const selection_modes[] = { "incremental",
                                                  "ytilt" };
 
 
-MAIN ()
-
 static void
-query (void)
+gih_class_init (GihClass *klass)
 {
-  static const GimpParamDef gih_save_args[] =
-  {
-    { GIMP_PDB_INT32,       "run-mode",     "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,       "image",        "Input image" },
-    { GIMP_PDB_DRAWABLE,    "drawable",     "Drawable to export" },
-    { GIMP_PDB_STRING,      "uri",          "The URI of the file to export the brush pipe in" },
-    { GIMP_PDB_STRING,      "raw-uri",      "The URI of the file to export the brush pipe in" },
-    { GIMP_PDB_INT32,       "spacing",      "Spacing of the brush" },
-    { GIMP_PDB_STRING,      "description",  "Short description of the brush pipe" },
-    { GIMP_PDB_INT32,       "cell-width",   "Width of the brush cells" },
-    { GIMP_PDB_INT32,       "cell-height",  "Width of the brush cells" },
-    { GIMP_PDB_INT8,        "display-cols", "Display column number" },
-    { GIMP_PDB_INT8,        "display-rows", "Display row number" },
-    { GIMP_PDB_INT32,       "dimension",    "Dimension of the brush pipe" },
-    /* The number of rank and sel args depend on the dimension */
-    { GIMP_PDB_INT8ARRAY,   "rank",         "Ranks of the dimensions" },
-    { GIMP_PDB_INT32,       "dimension",    "Dimension (again)" },
-    { GIMP_PDB_STRINGARRAY, "sel",          "Selection modes" }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  gimp_install_procedure (SAVE_PROC,
-                          "exports images in GIMP brush pipe format",
-                          "This plug-in exports an image in the GIMP brush pipe "
-                          "format. For a colored brush pipe, RGBA layers are "
-                          "used, otherwise the layers should be grayscale "
-                          "masks. The image can be multi-layered, and "
-                          "additionally the layers can be divided into a "
-                          "rectangular array of brushes.",
-                          "Tor Lillqvist",
-                          "Tor Lillqvist",
-                          "1999",
-                          N_("GIMP brush (animated)"),
-                          "RGB*, GRAY*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (gih_save_args), 0,
-                          gih_save_args, NULL);
-
-  gimp_plugin_icon_register (SAVE_PROC, GIMP_ICON_TYPE_ICON_NAME,
-                             (const guint8 *) GIMP_ICON_BRUSH);
-  gimp_register_file_handler_mime (SAVE_PROC, "image/x-gimp-gih");
-  gimp_register_file_handler_uri (SAVE_PROC);
-  gimp_register_save_handler (SAVE_PROC, "gih", "");
+  plug_in_class->query_procedures = gih_query_procedures;
+  plug_in_class->create_procedure = gih_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+gih_init (Gih *gih)
 {
-  static GimpParam   values[2];
-  GimpRunMode        run_mode;
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  gint32             image_ID;
-  gint32             drawable_ID;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
-  GError            *error  = NULL;
-  gint               i;
+}
 
-  INIT_I18N();
+static GList *
+gih_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (EXPORT_PROC));
+}
 
-  run_mode = param[0].data.d_int32;
+static GimpProcedure *
+gih_create_procedure (GimpPlugIn  *plug_in,
+                      const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
 
-  *return_vals  = values;
-  *nreturn_vals = 1;
-
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
-
-  if (strcmp (name, SAVE_PROC) == 0)
+  if (! strcmp (name, EXPORT_PROC))
     {
-      GFile        *file;
-      GimpParasite *parasite;
-      gint32        orig_image_ID;
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, gih_export, NULL, NULL);
 
-      image_ID    = param[1].data.d_int32;
-      drawable_ID = param[2].data.d_int32;
-      file        = g_file_new_for_uri (param[3].data.d_string);
+      gimp_procedure_set_image_types (procedure, "RGB*, GRAY*");
 
-      orig_image_ID = image_ID;
+      gimp_procedure_set_menu_label (procedure, _("GIMP brush (animated)"));
+      gimp_procedure_set_icon_name (procedure, GIMP_ICON_BRUSH);
 
-      switch (run_mode)
-        {
-        case GIMP_RUN_INTERACTIVE:
-        case GIMP_RUN_WITH_LAST_VALS:
-          gimp_ui_init (PLUG_IN_BINARY, FALSE);
+      gimp_procedure_set_documentation (procedure,
+                                        _("Exports images in GIMP Brush Pipe "
+                                          "format"),
+                                        _("This plug-in exports an image in "
+                                          "the GIMP brush pipe format. For a "
+                                          "colored brush pipe, RGBA layers are "
+                                          "used, otherwise the layers should be "
+                                          "grayscale masks. The image can be "
+                                          "multi-layered, and additionally the "
+                                          "layers can be divided into a "
+                                          "rectangular array of brushes."),
+                                        EXPORT_PROC);
+      gimp_procedure_set_attribution (procedure,
+                                      "Tor Lillqvist",
+                                      "Tor Lillqvist",
+                                      "1999");
 
-          export = gimp_export_image (&image_ID, &drawable_ID, "GIH",
-                                      GIMP_EXPORT_CAN_HANDLE_RGB   |
-                                      GIMP_EXPORT_CAN_HANDLE_GRAY  |
-                                      GIMP_EXPORT_CAN_HANDLE_ALPHA |
-                                      GIMP_EXPORT_CAN_HANDLE_LAYERS);
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "image/x-gimp-gih");
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           _("Brush Pipe"));
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "gih");
+      gimp_file_procedure_set_handles_remote (GIMP_FILE_PROCEDURE (procedure),
+                                              TRUE);
 
-          if (export == GIMP_EXPORT_CANCEL)
-            {
-              values[0].data.d_status = GIMP_PDB_CANCEL;
-              return;
-            }
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB   |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY  |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA |
+                                              GIMP_EXPORT_CAN_HANDLE_LAYERS,
+                                              NULL, NULL, NULL);
 
-          /*  Possibly retrieve data  */
-          gimp_get_data (SAVE_PROC, &info);
+      gimp_procedure_add_int_argument (procedure, "spacing",
+                                       _("Spacing (_percent)"),
+                                       _("Spacing of the brush"),
+                                       1, 1000, 20,
+                                       GIMP_PARAM_READWRITE);
 
-          parasite = gimp_image_get_parasite (orig_image_ID,
-                                              "gimp-brush-pipe-name");
-          if (parasite)
-            {
-              strncpy (info.description,
-                       gimp_parasite_data (parasite),
-                       MIN (sizeof (info.description),
-                            gimp_parasite_data_size (parasite)));
-              info.description[sizeof (info.description) - 1] = '\0';
+      gimp_procedure_add_string_argument (procedure, "description",
+                                          _("_Description"),
+                                          _("Short description of the GIH brush pipe"),
+                                          "GIMP Brush Pipe",
+                                          GIMP_PARAM_READWRITE);
 
-              gimp_parasite_free (parasite);
-            }
-          else
-            {
-              gchar *name = g_path_get_basename (gimp_file_get_utf8_name (file));
+      gimp_procedure_add_int_argument (procedure, "cell-width",
+                                       _("Cell _width"),
+                                       _("Width of the brush cells in pixels"),
+                                       1, GIMP_MAX_IMAGE_SIZE, 1,
+                                       GIMP_PARAM_READWRITE);
 
-              if (g_str_has_suffix (name, ".gih"))
-                name[strlen (name) - 4] = '\0';
+      gimp_procedure_add_int_argument (procedure, "cell-height",
+                                       _("Cell _height"),
+                                       _("Height of the brush cells in pixels"),
+                                       1, GIMP_MAX_IMAGE_SIZE, 1,
+                                       GIMP_PARAM_READWRITE);
 
-              if (strlen (name))
-                {
-                  strncpy (info.description, name, sizeof (info.description));
-                  info.description[sizeof (info.description) - 1] = '\0';
-                }
+      gimp_procedure_add_int_argument (procedure, "num-cells",
+                                       _("_Number of cells"),
+                                       _("Number of cells to cut up"),
+                                       1, 1000, 1,
+                                       GIMP_PARAM_READWRITE);
 
-              g_free (name);
-            }
+      gimp_procedure_add_bytes_argument (procedure, "ranks",
+                                         _("_Rank"),
+                                         _("Ranks of the dimensions"),
+                                         GIMP_PARAM_READWRITE);
 
-          parasite = gimp_image_get_parasite (orig_image_ID,
-                                              "gimp-brush-pipe-spacing");
-          if (parasite)
-            {
-              info.spacing = atoi (gimp_parasite_data (parasite));
-              gimp_parasite_free (parasite);
-            }
-          break;
+      gimp_procedure_add_string_array_argument (procedure, "selection-modes",
+                                               _("Selection modes"),
+                                               _("Selection modes"),
+                                               GIMP_PARAM_READWRITE);
 
-        default:
-          break;
-        }
+      /* Auxiliary arguments. Only useful for the GUI, to pass info around. */
 
-      g_free (gimp_image_get_layers (image_ID, &num_layers));
+      gimp_procedure_add_string_aux_argument (procedure, "info-text",
+                                              _("Display as"),
+                                              _("Describe how the layers will be split"),
+                                              "", GIMP_PARAM_READWRITE);
+
+      gimp_procedure_add_int_aux_argument (procedure, "dimension",
+                                           _("D_imension"),
+                                           _("How many dimensions the animated brush has"),
+                                           1, GIMP_PIXPIPE_MAXDIM, 1,
+                                           GIMP_PARAM_READWRITE);
+
+      gimp_procedure_add_int32_array_aux_argument (procedure, "guides",
+                                                   "Guides",
+                                                   "Guides to show how the layers will be split in cells",
+                                                   GIMP_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+gih_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
+{
+  GimpPDBStatusType  status    = GIMP_PDB_SUCCESS;
+  GimpExportReturn   export    = GIMP_EXPORT_IGNORE;
+  GimpLayer        **layers    = NULL;
+  GimpParasite      *parasite;
+  GimpImage         *orig_image;
+  GError            *error     = NULL;
+
+  GimpPixPipeParams  gihparams   = { 0, };
+  gchar             *description = NULL;
+  gint               spacing;
+  GBytes            *rank_bytes;
+  const guint8      *rank;
+  gchar            **selection;
+
+  orig_image = image;
+
+  if (run_mode == GIMP_RUN_INTERACTIVE)
+    {
+      GParamSpec *spec;
+      gint        image_width;
+      gint        image_height;
+      gint        cell_width;
+      gint        cell_height;
 
       gimp_pixpipe_params_init (&gihparams);
 
-      switch (run_mode)
+      /*  Possibly retrieve data  */
+      parasite = gimp_image_get_parasite (orig_image,
+                                          "gimp-brush-pipe-name");
+      if (parasite)
         {
-        case GIMP_RUN_INTERACTIVE:
-          gihparams.ncells = (num_layers * gihparams.rows * gihparams.cols);
+          gchar   *parasite_data;
+          guint32  parasite_size;
 
-          gihparams.cellwidth  = gimp_image_width (image_ID)  / gihparams.cols;
-          gihparams.cellheight = gimp_image_height (image_ID) / gihparams.rows;
+          parasite_data = (gchar *) gimp_parasite_get_data (parasite, &parasite_size);
 
-          parasite = gimp_image_get_parasite (orig_image_ID,
-                                              "gimp-brush-pipe-parameters");
-          if (parasite)
-            {
-              gimp_pixpipe_params_parse (gimp_parasite_data (parasite),
-                                         &gihparams);
-              gimp_parasite_free (parasite);
-            }
+          g_object_set (config, "description", parasite_data, NULL);
 
-          /* Force default rank to same as number of cells if there is
-           * just one dim
-           */
-          if (gihparams.dim == 1)
-            gihparams.rank[0] = gihparams.ncells;
+          gimp_parasite_free (parasite);
+        }
+      else
+        {
+          gchar *name = g_path_get_basename (gimp_file_get_utf8_name (file));
 
-          if (! gih_save_dialog (image_ID))
-            status = GIMP_PDB_CANCEL;
-          break;
+          if (g_str_has_suffix (name, ".gih"))
+            name[strlen (name) - 4] = '\0';
 
-        case GIMP_RUN_NONINTERACTIVE:
-          if (nparams != 15)
-            {
-              status = GIMP_PDB_CALLING_ERROR;
-            }
-          else
-            {
-              info.spacing = param[5].data.d_int32;
-              strncpy (info.description, param[6].data.d_string,
-                       sizeof (info.description));
-              info.description[sizeof (info.description) - 1] = '\0';
+          if (strlen (name))
+            g_object_set (config, "description", name, NULL);
 
-              gihparams.cellwidth  = param[7].data.d_int32;
-              gihparams.cellheight = param[8].data.d_int32;
-              gihparams.cols       = param[9].data.d_int8;
-              gihparams.rows       = param[10].data.d_int8;
-              gihparams.dim        = param[11].data.d_int32;
-              gihparams.ncells     = 1;
-
-              if (param[13].data.d_int32 != gihparams.dim)
-                {
-                  status = GIMP_PDB_CALLING_ERROR;
-                }
-              else
-                {
-                  for (i = 0; i < gihparams.dim; i++)
-                    {
-                      gihparams.rank[i]      = param[12].data.d_int8array[i];
-                      gihparams.selection[i] = g_strdup (param[14].data.d_stringarray[i]);
-                      gihparams.ncells       *= gihparams.rank[i];
-                    }
-                }
-            }
-          break;
-
-        case GIMP_RUN_WITH_LAST_VALS:
-          parasite = gimp_image_get_parasite (orig_image_ID,
-                                              "gimp-brush-pipe-parameters");
-          if (parasite)
-            {
-              gimp_pixpipe_params_parse (gimp_parasite_data (parasite),
-                                         &gihparams);
-              gimp_parasite_free (parasite);
-            }
-          break;
+          g_free (name);
         }
 
-      if (status == GIMP_PDB_SUCCESS)
+      parasite = gimp_image_get_parasite (orig_image,
+                                          "gimp-brush-pipe-parameters");
+      if (parasite)
+       {
+          gchar   *parasite_data;
+          guint32  parasite_size;
+
+          parasite_data = (gchar *) gimp_parasite_get_data (parasite,
+                                                            &parasite_size);
+          parasite_data = g_strndup (parasite_data, parasite_size);
+
+          gimp_pixpipe_params_parse (parasite_data, &gihparams);
+
+          g_object_set (config,
+                        "num-cells", gihparams.ncells,
+                        "dimension", gihparams.dim,
+                        NULL);
+
+          if (gihparams.dim > 0)
+            {
+              GBytes  *ranks = NULL;
+              guint8   rank_int[gihparams.dim];
+              gchar  **selection_modes;
+
+              selection_modes = g_new0 (gchar *, gihparams.dim + 1);
+
+              for (gint i = 0; i < gihparams.dim; i++)
+                {
+                  selection_modes[i] = gihparams.selection[i];
+                  rank_int[i]        = (guint8) gihparams.rank[i];
+                }
+
+              ranks =
+                g_bytes_new (rank_int, sizeof (guint8) * gihparams.dim);
+              g_object_set (config,
+                            "ranks",           ranks,
+                            "selection-modes", selection_modes,
+                            NULL);
+
+              g_bytes_unref (ranks);
+              g_free (selection_modes);
+            }
+
+          gimp_parasite_free (parasite);
+          g_free (parasite_data);
+       }
+
+      g_object_get (config,
+                    "cell-width",  &cell_width,
+                    "cell-height", &cell_height,
+                    NULL);
+
+      image_width  = gimp_image_get_width (image);
+      image_height = gimp_image_get_height (image);
+
+      spec = g_object_class_find_property (G_OBJECT_GET_CLASS (config), "cell-width");
+      G_PARAM_SPEC_INT (spec)->default_value = image_width;
+      G_PARAM_SPEC_INT (spec)->maximum       = image_width;
+
+      spec = g_object_class_find_property (G_OBJECT_GET_CLASS (config), "cell-height");
+      G_PARAM_SPEC_INT (spec)->default_value = image_height;
+      G_PARAM_SPEC_INT (spec)->maximum       = image_height;
+
+      if (cell_width == 1 && cell_height == 1)
         {
-          GimpParam *save_retvals;
-          gint       n_save_retvals;
-          gchar      spacing[8];
-          gchar     *paramstring;
+          g_object_set (config,
+                        "cell-width",  image_width,
+                        "cell-height", image_height,
+                        NULL);
 
-          paramstring = gimp_pixpipe_params_build (&gihparams);
-
-          save_retvals =
-            gimp_run_procedure ("file-gih-save-internal",
-                                &n_save_retvals,
-                                GIMP_PDB_INT32,    GIMP_RUN_NONINTERACTIVE,
-                                GIMP_PDB_IMAGE,    image_ID,
-                                GIMP_PDB_DRAWABLE, drawable_ID,
-                                GIMP_PDB_STRING,   param[3].data.d_string,
-                                GIMP_PDB_STRING,   param[4].data.d_string,
-                                GIMP_PDB_INT32,    info.spacing,
-                                GIMP_PDB_STRING,   info.description,
-                                GIMP_PDB_STRING,   paramstring,
-                                GIMP_PDB_END);
-
-          if (save_retvals[0].data.d_status == GIMP_PDB_SUCCESS)
-            {
-              gimp_set_data (SAVE_PROC, &info, sizeof (info));
-
-              parasite = gimp_parasite_new ("gimp-brush-pipe-name",
-                                            GIMP_PARASITE_PERSISTENT,
-                                            strlen (info.description) + 1,
-                                            info.description);
-              gimp_image_attach_parasite (orig_image_ID, parasite);
-              gimp_parasite_free (parasite);
-
-              g_snprintf (spacing, sizeof (spacing), "%d",
-                          info.spacing);
-
-              parasite = gimp_parasite_new ("gimp-brush-pipe-spacing",
-                                            GIMP_PARASITE_PERSISTENT,
-                                            strlen (spacing) + 1, spacing);
-              gimp_image_attach_parasite (orig_image_ID, parasite);
-              gimp_parasite_free (parasite);
-
-              parasite = gimp_parasite_new ("gimp-brush-pipe-parameters",
-                                            GIMP_PARASITE_PERSISTENT,
-                                            strlen (paramstring) + 1,
-                                            paramstring);
-              gimp_image_attach_parasite (orig_image_ID, parasite);
-              gimp_parasite_free (parasite);
-            }
-          else
-            {
-              g_set_error (&error, 0, 0,
-                           "Running procedure 'file-gih-save-internal' "
-                           "failed: %s",
-                           gimp_get_pdb_error ());
-
-              status = GIMP_PDB_EXECUTION_ERROR;
-            }
-
-          g_free (paramstring);
+          spec = g_object_class_find_property (G_OBJECT_GET_CLASS (config), "num-cells");
+          G_PARAM_SPEC_INT (spec)->maximum = 1;
         }
 
-      gimp_pixpipe_params_free (&gihparams);
+      gimp_ui_init (PLUG_IN_BINARY);
 
-      if (export == GIMP_EXPORT_EXPORT)
-        gimp_image_delete (image_ID);
+      if (! gih_save_dialog (image, procedure, config))
+        {
+          status = GIMP_PDB_CANCEL;
+          goto out;
+        }
     }
-  else
+
+  export = gimp_export_options_get_image (options, &image);
+  layers = gimp_image_get_layers (image);
+
+  g_object_get (config,
+                "spacing",         &spacing,
+                "description",     &description,
+                "cell-width",      &gihparams.cellwidth,
+                "cell-height",     &gihparams.cellheight,
+                "num-cells",       &gihparams.ncells,
+                "ranks",           &rank_bytes,
+                "selection-modes", &selection,
+                NULL);
+
+  gihparams.cols = gimp_image_get_width (image) / gihparams.cellwidth;
+  gihparams.rows = gimp_image_get_height (image) / gihparams.cellheight;
+
+  rank           = g_bytes_get_data (rank_bytes, NULL);
+  gihparams.dim  = g_bytes_get_size (rank_bytes);
+
+  for (gint i = 0; i < gihparams.dim; i++)
     {
-      status = GIMP_PDB_CALLING_ERROR;
+      gihparams.rank[i]      = rank[i];
+      gihparams.selection[i] = g_strdup (selection[i]);
     }
 
-  if (status != GIMP_PDB_SUCCESS && error)
+  g_strfreev (selection);
+  g_bytes_unref (rank_bytes);
+
+  if (status == GIMP_PDB_SUCCESS)
     {
-      *nreturn_vals = 2;
-      values[1].type          = GIMP_PDB_STRING;
-      values[1].data.d_string = error->message;
+      GimpProcedure  *procedure;
+      GimpValueArray *save_retvals;
+      gchar          *paramstring;
+
+      paramstring = gimp_pixpipe_params_build (&gihparams);
+
+      procedure = gimp_pdb_lookup_procedure (gimp_get_pdb (),
+                                             "file-gih-export-internal");
+      save_retvals = gimp_procedure_run (procedure,
+                                         "image",     image,
+                                         "drawables", (GimpDrawable **) layers,
+                                         "file",      file,
+                                         "spacing",   spacing,
+                                         "name",      description,
+                                         "params",    paramstring,
+                                         NULL);
+
+      if (GIMP_VALUES_GET_ENUM (save_retvals, 0) == GIMP_PDB_SUCCESS)
+        {
+          parasite = gimp_parasite_new ("gimp-brush-pipe-name",
+                                        GIMP_PARASITE_PERSISTENT,
+                                        strlen (description) + 1,
+                                        description);
+          gimp_image_attach_parasite (orig_image, parasite);
+          gimp_parasite_free (parasite);
+
+          gimp_image_detach_parasite (image, "gimp-brush-pipe-parameters");
+        }
+      else
+        {
+          g_set_error (&error, 0, 0,
+                       "Running procedure 'file-gih-export-internal' "
+                       "failed: %s",
+                       gimp_pdb_get_last_error (gimp_get_pdb ()));
+
+          status = GIMP_PDB_EXECUTION_ERROR;
+        }
+
+      g_free (paramstring);
     }
 
-  values[0].data.d_status = status;
+  gimp_pixpipe_params_free (&gihparams);
+  g_free (description);
+
+ out:
+  if (export == GIMP_EXPORT_EXPORT)
+    gimp_image_delete (image);
+
+  g_free (layers);
+  return gimp_procedure_new_return_values (procedure, status, error);
 }
 
 
-/*  save routines */
+/*  export routines */
 
 static void
-size_adjustment_callback (GtkWidget          *widget,
-                          SizeAdjustmentData *adj)
+gih_remove_guides (GimpProcedureConfig *config,
+                   GimpImage           *image)
 {
-  gint  i;
-  gint  size;
-  gint  newn;
-  gchar buf[10];
+  GimpArray *array;
 
-  for (i = 0; i < adj->nguides; i++)
-    gimp_image_delete_guide (adj->image, adj->guides[i]);
+  g_object_get (config, "guides", &array, NULL);
 
-  g_free (adj->guides);
-  adj->guides = NULL;
-  gimp_displays_flush ();
-
-  *(adj->value) = gtk_adjustment_get_value (GTK_ADJUSTMENT (widget));
-
-  if (adj->orientation == GIMP_ORIENTATION_VERTICAL)
+  if (array != NULL)
     {
-      size = gimp_image_width (adj->image);
-      newn = size / *(adj->value);
-      adj->nguides = newn - 1;
-      adj->guides = g_new (gint32, adj->nguides);
-      for (i = 0; i < adj->nguides; i++)
-        adj->guides[i] = gimp_image_add_vguide (adj->image,
-                                                *(adj->value) * (i+1));
+      gint32 *guides   = (gint32 *) array->data;
+      gint    n_guides = array->length / 4;
+
+      for (gint i = 0; i < n_guides; i++)
+        gimp_image_delete_guide (image, guides[i]);
     }
-  else
-    {
-      size = gimp_image_height (adj->image);
-      newn = size / *(adj->value);
-      adj->nguides = newn - 1;
-      adj->guides = g_new (gint32, adj->nguides);
-      for (i = 0; i < adj->nguides; i++)
-        adj->guides[i] = gimp_image_add_hguide (adj->image,
-                                                *(adj->value) * (i+1));
-    }
-  gimp_displays_flush ();
-  g_snprintf (buf, sizeof (buf), "%2d", newn);
-  gtk_label_set_text (GTK_LABEL (adj->count_label), buf);
+  g_clear_pointer (&array, gimp_array_free);
 
-  *(adj->count) = newn;
-
-  gtk_widget_set_visible (GTK_WIDGET (adj->warning_label),
-                          newn * *(adj->value) != size);
-
-  if (adj->ncells != NULL)
-    gtk_adjustment_set_value (GTK_ADJUSTMENT (adj->ncells),
-                              *(adj->other_count) * *(adj->count));
-  if (adj->rank0 != NULL)
-    gtk_adjustment_set_value (GTK_ADJUSTMENT (adj->rank0),
-                              *(adj->other_count) * *(adj->count));
+  g_object_set (config, "guides", NULL, NULL);
 }
 
 static void
-entry_callback (GtkWidget *widget,
-                gpointer   data)
+gih_cell_width_notify (GimpProcedureConfig *config,
+                       const GParamSpec    *pspec,
+                       GimpProcedureDialog *dialog)
 {
-  if (data == info.description)
+  GimpImage      *image;
+  GParamSpec     *spec;
+  gchar          *info_text;
+  gchar          *grid_text      = NULL;
+  const gchar    *width_warning  = _("Width Mismatch!");
+  gchar          *height_warning = _("Height Mismatch!");
+  GtkWidget      *widget;
+  GtkAdjustment  *rank0;
+  gint            dimension;
+
+  gint            cell_width;
+  gint            image_width;
+  gint            n_horiz_cells;
+  gint            n_vert_cells;
+
+  gint            cell_height;
+  gint            image_height;
+  gint            n_vert_guides;
+  gint            n_horiz_guides;
+
+  gint            old_max_cells;
+  gint            max_cells;
+  gint            num_cells;
+
+  image = g_object_get_data (G_OBJECT (dialog), "image");
+  rank0 = g_object_get_data (G_OBJECT (dialog), "rank0");
+
+  g_object_get (config,
+                "cell-width",  &cell_width,
+                "cell-height", &cell_height,
+                "num-cells",   &num_cells,
+                "dimension",   &dimension,
+                NULL);
+
+  spec = g_object_class_find_property (G_OBJECT_GET_CLASS (config), "cell-width");
+  image_width    = G_PARAM_SPEC_INT (spec)->maximum;
+  n_horiz_cells  = image_width / cell_width;
+  n_vert_guides  = n_horiz_cells - 1;
+
+  if (cell_width * n_horiz_cells == image_width)
+    width_warning = NULL;
+
+  spec = g_object_class_find_property (G_OBJECT_GET_CLASS (config), "cell-height");
+  image_height   = G_PARAM_SPEC_INT (spec)->maximum;
+  n_vert_cells   = image_height / cell_height;
+  n_horiz_guides = n_vert_cells - 1;
+
+  if (cell_height * n_vert_cells == image_height)
+    height_warning = NULL;
+
+  /* TRANSLATORS: \xc3\x97 is the UTF-8 encoding for the multiplication sign. */
+  if (n_horiz_guides + n_vert_guides > 0)
+    grid_text = g_strdup_printf (_("Displays as a %d \xc3\x97 %d grid on each layer"),
+                                 n_horiz_cells, n_vert_cells);
+  info_text = g_strdup_printf ("%s%s%s%s%s",
+                               grid_text != NULL ? grid_text : "",
+                               grid_text != NULL && width_warning != NULL ? " / " : "",
+                               width_warning != NULL ? width_warning : "",
+                               (grid_text != NULL || width_warning != NULL) && height_warning != NULL ? " / " : "",
+                               height_warning != NULL ? height_warning : "");
+
+  spec = g_object_class_find_property (G_OBJECT_GET_CLASS (config), "num-cells");
+  old_max_cells = G_PARAM_SPEC_INT (spec)->maximum;
+  max_cells     = n_horiz_cells * n_vert_cells;
+
+  if (num_cells == old_max_cells)
+    num_cells = max_cells;
+  else
+    num_cells = MIN (max_cells, num_cells);
+
+  G_PARAM_SPEC_INT (spec)->maximum = max_cells;
+  widget = gimp_procedure_dialog_get_widget (dialog, "num-cells", G_TYPE_NONE);
+  g_object_set (widget, "upper", (gdouble) max_cells, NULL);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (widget), 1.0, 1.0);
+
+  gih_remove_guides (config, image);
+
+  widget = gimp_procedure_dialog_get_widget (dialog, "info-text", G_TYPE_NONE);
+  gtk_widget_set_visible (widget, (strlen (info_text) > 0));
+  if (n_horiz_guides + n_vert_guides > 0)
     {
-      strncpy (info.description, gtk_entry_get_text (GTK_ENTRY (widget)),
-               sizeof (info.description));
-      info.description[sizeof (info.description) - 1]  = 0;
+      gint32 *guides = NULL;
+      GValue  value  = G_VALUE_INIT;
+
+      guides = g_new0 (gint32, n_horiz_guides + n_vert_guides);
+
+      for (gint i = 0; i < n_vert_guides; i++)
+        guides[i] = gimp_image_add_vguide (image, cell_width * (i + 1));
+
+      for (gint i = 0; i < n_horiz_guides; i++)
+        guides[n_vert_guides + i] = gimp_image_add_hguide (image, cell_height * (i + 1));
+
+      g_value_init (&value, GIMP_TYPE_INT32_ARRAY);
+      gimp_value_set_int32_array (&value, guides, n_horiz_guides + n_vert_guides);
+      g_object_set_property (G_OBJECT (config), "guides", &value);
+      g_free (guides);
     }
+
+  g_object_set (config,
+                "info-text", info_text,
+                "num-cells", num_cells,
+                NULL);
+  if (rank0 != NULL && dimension == 1)
+    gtk_adjustment_set_value (rank0, num_cells);
+
+  g_free (info_text);
+  g_free (grid_text);
 }
 
 static void
-cb_callback (GtkWidget *widget,
-             gpointer   data)
+gih_selection_mode_changed (GtkWidget *widget,
+                            gpointer   data)
 {
   gint index;
 
   index = gtk_combo_box_get_active (GTK_COMBO_BOX (widget));
 
-  *((const gchar **) data) = selection_modes [index];
+  g_free (*((gchar **) data));
+  *((gchar **) data) = g_strdup (selection_modes [index]);
 }
 
 static void
-dim_callback (GtkAdjustment      *adjustment,
-              SizeAdjustmentData *data)
+gih_dimension_notify (GimpProcedureConfig *config,
+                      const GParamSpec    *pspec,
+                      SizeAdjustmentData  *data)
 {
+  gint dimension;
   gint i;
 
-  gihparams.dim = RINT (gtk_adjustment_get_value (adjustment));
+  g_object_get (config, "dimension", &dimension, NULL);
 
   for (i = 0; i < GIMP_PIXPIPE_MAXDIM; i++)
     {
-      gtk_widget_set_sensitive (data->rank_entry[i], i < gihparams.dim);
-      gtk_widget_set_sensitive (data->mode_entry[i], i < gihparams.dim);
+      gtk_widget_set_sensitive (data->rank_entry[i], i < dimension);
+      gtk_widget_set_sensitive (data->mode_entry[i], i < dimension);
     }
 }
 
 static gboolean
-gih_save_dialog (gint32 image_ID)
+gih_save_dialog (GimpImage           *image,
+                 GimpProcedure       *procedure,
+                 GimpProcedureConfig *config)
 {
-  GtkWidget          *dialog;
-  GtkWidget          *table;
-  GtkWidget          *dimtable;
-  GtkWidget          *label;
-  GtkAdjustment      *adjustment;
-  GtkWidget          *spinbutton;
-  GtkWidget          *entry;
-  GtkWidget          *box;
-  GtkWidget          *cb;
-  gint                i;
-  gchar               buffer[100];
-  SizeAdjustmentData  cellw_adjust;
-  SizeAdjustmentData  cellh_adjust;
-  gint32             *layer_ID;
-  gint32              nlayers;
-  gboolean            run;
+  GtkWidget           *dialog;
+  GtkWidget           *dimgrid;
+  GtkWidget           *label;
+  GtkAdjustment       *adjustment;
+  GtkWidget           *spinbutton;
+  GtkWidget           *cb;
+  gint                 i;
+  SizeAdjustmentData   cellw_adjust;
+  SizeAdjustmentData   cellh_adjust;
+  gchar              **selection;
+  GBytes              *rank_bytes = NULL;
+  guint8               rank[GIMP_PIXPIPE_MAXDIM];
+  gint                 num_cells;
+  gint                 dimension;
+  gboolean             run;
 
-  dialog = gimp_export_dialog_new (_("Brush Pipe"), PLUG_IN_BINARY, SAVE_PROC);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
-  /* The main table */
-  table = gtk_table_new (8, 2, FALSE);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_container_set_border_width (GTK_CONTAINER (table), 12);
-  gtk_box_pack_start (GTK_BOX (gimp_export_dialog_get_content_area (dialog)),
-                      table, TRUE, TRUE, 0);
-  gtk_widget_show (table);
+  gtk_widget_set_halign (gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                                          "info-text", NULL, TRUE, FALSE),
+                         GTK_ALIGN_START);
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
+                              "description", "spacing",
+                              "cell-width", "cell-height", "num-cells",
+                              "info-text", "dimension", NULL);
 
-  /*
-   * Description: ___________
-   */
-  entry = gtk_entry_new ();
-  gtk_widget_set_size_request (entry, 200, -1);
-  gtk_entry_set_text (GTK_ENTRY (entry), info.description);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 0,
-                             _("_Description:"), 0.0, 0.5,
-                             entry, 1, FALSE);
+  g_object_set_data (G_OBJECT (dialog), "image", image);
+  g_signal_connect (config, "notify::cell-width",
+                    G_CALLBACK (gih_cell_width_notify),
+                    dialog);
+  g_signal_connect (config, "notify::cell-height",
+                    G_CALLBACK (gih_cell_width_notify),
+                    dialog);
+  gih_cell_width_notify (config, NULL, GIMP_PROCEDURE_DIALOG (dialog));
 
-  g_signal_connect (entry, "changed",
-                    G_CALLBACK (entry_callback),
-                    info.description);
-
-  /*
-   * Spacing: __
-   */
-  adjustment = (GtkAdjustment *) gtk_adjustment_new (info.spacing,
-                                                     1, 1000, 1, 10, 0);
-  spinbutton = gimp_spin_button_new (adjustment, 1.0, 0);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 1,
-                             _("_Spacing (percent):"), 0.0, 0.5,
-                             spinbutton, 1, TRUE);
-
-  g_signal_connect (adjustment, "value-changed",
-                    G_CALLBACK (gimp_int_adjustment_update),
-                    &info.spacing);
-
-  /*
-   * Cell size: __ x __ pixels
-   */
-  box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
-
-  adjustment = (GtkAdjustment *)
-    gtk_adjustment_new (gihparams.cellwidth,
-                        2, gimp_image_width (image_ID), 1, 10, 0);
-  spinbutton = gimp_spin_button_new (adjustment, 1.0, 0);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-  gtk_box_pack_start (GTK_BOX (box), spinbutton, FALSE, FALSE, 0);
-  gtk_widget_show (spinbutton);
-
-  layer_ID = gimp_image_get_layers (image_ID, &nlayers);
-  cellw_adjust.orientation = GIMP_ORIENTATION_VERTICAL;
-  cellw_adjust.image       = image_ID;
-  cellw_adjust.toplayer    = layer_ID[nlayers-1];
-  cellw_adjust.nguides     = 0;
-  cellw_adjust.guides      = NULL;
-  cellw_adjust.value       = &gihparams.cellwidth;
-
-  g_signal_connect (adjustment, "value-changed",
-                    G_CALLBACK (size_adjustment_callback),
-                    &cellw_adjust);
-
-  label = gtk_label_new ("x");
-  gtk_box_pack_start (GTK_BOX (box), label, FALSE, FALSE, 0);
-  gtk_widget_show (label);
-
-  adjustment = (GtkAdjustment *)
-    gtk_adjustment_new (gihparams.cellheight,
-                        2, gimp_image_height (image_ID), 1, 10, 0);
-  spinbutton = gimp_spin_button_new (adjustment, 1.0, 0);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-  gtk_box_pack_start (GTK_BOX (box), spinbutton, FALSE, FALSE, 0);
-  gtk_widget_show (spinbutton);
-
-  cellh_adjust.orientation = GIMP_ORIENTATION_HORIZONTAL;
-  cellh_adjust.image       = image_ID;
-  cellh_adjust.toplayer    = layer_ID[nlayers-1];
-  cellh_adjust.nguides     = 0;
-  cellh_adjust.guides      = NULL;
-  cellh_adjust.value       = &gihparams.cellheight;
-
-  g_signal_connect (adjustment, "value-changed",
-                    G_CALLBACK (size_adjustment_callback),
-                    &cellh_adjust);
-
-  label = gtk_label_new ( _("Pixels"));
-  gtk_box_pack_start (GTK_BOX (box), label, FALSE, FALSE, 0);
-  gtk_widget_show (label);
-
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 2,
-                             _("Ce_ll size:"), 0.0, 0.5,
-                             box, 1, FALSE);
-
-  g_free (layer_ID);
-
-  /*
-   * Number of cells: ___
-   */
-  adjustment = (GtkAdjustment *)
-    gtk_adjustment_new (gihparams.ncells, 1, 1000, 1, 10, 0);
-  spinbutton = gimp_spin_button_new (adjustment, 1.0, 0);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 3,
-                             _("_Number of cells:"), 0.0, 0.5,
-                             spinbutton, 1, TRUE);
-
-  g_signal_connect (adjustment, "value-changed",
-                    G_CALLBACK (gimp_int_adjustment_update),
-                    &gihparams.ncells);
-
-  if (gihparams.dim == 1)
-    cellw_adjust.ncells = cellh_adjust.ncells = adjustment;
-  else
-    cellw_adjust.ncells = cellh_adjust.ncells = NULL;
-
-  /*
-   * Display as: __ rows x __ cols
-   */
-  box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-
-  g_snprintf (buffer, sizeof (buffer), "%2d", gihparams.rows);
-  label = gtk_label_new (buffer);
-  gtk_box_pack_start (GTK_BOX (box), label, FALSE, FALSE, 0);
-  cellh_adjust.count_label = label;
-  cellh_adjust.count       = &gihparams.rows;
-  cellh_adjust.other_count = &gihparams.cols;
-  gtk_widget_show (label);
-
-  label = gtk_label_new (_(" Rows of "));
-  gtk_box_pack_start (GTK_BOX (box), label, FALSE, FALSE, 0);
-  gtk_widget_show (label);
-
-  g_snprintf (buffer, sizeof (buffer), "%2d", gihparams.cols);
-  label = gtk_label_new (buffer);
-  gtk_box_pack_start (GTK_BOX (box), label, FALSE, FALSE, 0);
-  cellw_adjust.count_label = label;
-  cellw_adjust.count       = &gihparams.cols;
-  cellw_adjust.other_count = &gihparams.rows;
-  gtk_widget_show (label);
-
-  label = gtk_label_new (_(" Columns on each layer"));
-  gtk_box_pack_start (GTK_BOX (box), label, FALSE, FALSE, 0);
-  gtk_widget_show (label);
-
-  label = gtk_label_new (_(" (Width Mismatch!) "));
-  gtk_box_pack_start (GTK_BOX (box), label, FALSE, FALSE, 0);
-  cellw_adjust.warning_label = label;
-
-  label = gtk_label_new (_(" (Height Mismatch!) "));
-  gtk_box_pack_start (GTK_BOX (box), label, FALSE, FALSE, 0);
-  cellh_adjust.warning_label = label;
-
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 4,
-                             _("Display as:"), 0.0, 0.5,
-                             box, 1, FALSE);
-
-  /*
-   * Dimension: ___
-   */
-  adjustment = (GtkAdjustment *)
-    gtk_adjustment_new (gihparams.dim, 1, GIMP_PIXPIPE_MAXDIM, 1, 1, 0);
-  spinbutton = gimp_spin_button_new (adjustment, 1.0, 0);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 5,
-                             _("Di_mension:"), 0.0, 0.5,
-                             spinbutton, 1, TRUE);
-
-  g_signal_connect (adjustment, "value-changed",
-                    G_CALLBACK (dim_callback),
+  g_signal_connect (config, "notify::dimension",
+                    G_CALLBACK (gih_dimension_notify),
                     &cellw_adjust);
 
   /*
    * Ranks / Selection: ______ ______ ______ ______ ______
    */
 
-  dimtable = gtk_table_new (2, GIMP_PIXPIPE_MAXDIM, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (dimtable), 4);
+  g_object_get (config,
+                "selection-modes", &selection,
+                "ranks",           &rank_bytes,
+                "num-cells",       &num_cells,
+                NULL);
+  if (selection == NULL || g_strv_length (selection) != GIMP_PIXPIPE_MAXDIM)
+    {
+      GStrvBuilder *builder = g_strv_builder_new ();
+      gint          old_len;
+
+      old_len = (selection == NULL ? 0 : g_strv_length (selection));
+
+      for (i = 0; i < MIN (old_len, GIMP_PIXPIPE_MAXDIM); i++)
+        g_strv_builder_add (builder, selection[i]);
+
+      for (i = old_len; i < GIMP_PIXPIPE_MAXDIM; i++)
+        g_strv_builder_add (builder, "random");
+
+      g_strfreev (selection);
+      selection = g_strv_builder_end (builder);
+      g_strv_builder_unref (builder);
+    }
+
+  if (rank_bytes == NULL)
+    {
+      dimension = 1;
+
+      rank[0] = 1;
+      for (i = 1; i < GIMP_PIXPIPE_MAXDIM; i++)
+        rank[i] = 0;
+    }
+  else
+    {
+      const guint8 *stored;
+
+      stored = g_bytes_get_data (rank_bytes, NULL);
+      dimension = g_bytes_get_size (rank_bytes);
+
+      for (i = 0; i < dimension; i++)
+        rank[i] = stored[i];
+
+      for (i = dimension; i < GIMP_PIXPIPE_MAXDIM; i++)
+        rank[i] = 1;
+    }
+  g_bytes_unref (rank_bytes);
+  dimension = MAX (dimension, 1);
+
+  dimgrid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (dimgrid), 4);
+
+  label = gtk_label_new (_("Ranks:"));
+  gtk_grid_attach (GTK_GRID (dimgrid), label, 0, 0, 1, 1);
+  gtk_widget_show (label);
+
   for (i = 0; i < GIMP_PIXPIPE_MAXDIM; i++)
     {
-      gint j;
+      gsize j;
 
-      adjustment = (GtkAdjustment *)
-        gtk_adjustment_new (gihparams.rank[i], 1, 100, 1, 1, 0);
+      adjustment = gtk_adjustment_new (rank[i], 1, 100, 1, 1, 0);
+      if (i == 0)
+        g_object_set_data (G_OBJECT (dialog), "rank0", adjustment);
+
       spinbutton = gimp_spin_button_new (adjustment, 1.0, 0);
       gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-      gtk_table_attach (GTK_TABLE (dimtable), spinbutton, 0, 1, i, i + 1,
-                        GTK_EXPAND | GTK_FILL, GTK_EXPAND | GTK_FILL, 0, 0);
+      gtk_grid_attach (GTK_GRID (dimgrid), spinbutton, 1, i, 1, 1);
 
       gtk_widget_show (spinbutton);
 
-      if (i >= gihparams.dim)
+      if (i >= dimension)
         gtk_widget_set_sensitive (spinbutton, FALSE);
 
       g_signal_connect (adjustment, "value-changed",
                         G_CALLBACK (gimp_int_adjustment_update),
-                        &gihparams.rank[i]);
+                        &rank[i]);
 
       cellw_adjust.rank_entry[i] = cellh_adjust.rank_entry[i] = spinbutton;
-
-      if (i == 0)
-        {
-          if (gihparams.dim == 1)
-            cellw_adjust.rank0 = cellh_adjust.rank0 = adjustment;
-          else
-            cellw_adjust.rank0 = cellh_adjust.rank0 = NULL;
-        }
 
       cb = gtk_combo_box_text_new ();
 
@@ -763,57 +779,46 @@ gih_save_dialog (gint32 image_ID)
                                         selection_modes[j]);
       gtk_combo_box_set_active (GTK_COMBO_BOX (cb), 2);  /* random */
 
-      if (gihparams.selection[i])
-        for (j = 0; j < G_N_ELEMENTS (selection_modes); j++)
-          if (!strcmp (gihparams.selection[i], selection_modes[j]))
-            {
-              gtk_combo_box_set_active (GTK_COMBO_BOX (cb), j);
-              break;
-            }
+      for (j = 0; j < G_N_ELEMENTS (selection_modes); j++)
+        if (!strcmp (selection[i], selection_modes[j]))
+          {
+            gtk_combo_box_set_active (GTK_COMBO_BOX (cb), j);
+            break;
+          }
 
-      gtk_table_attach (GTK_TABLE (dimtable), cb, 1, 2, i, i + 1,
-                        GTK_EXPAND | GTK_FILL, GTK_EXPAND | GTK_FILL, 0, 0);
+      gtk_grid_attach (GTK_GRID (dimgrid), cb, 2, i, 1, 1);
 
       gtk_widget_show (cb);
 
-      if (i >= gihparams.dim)
+      if (i >= dimension)
         gtk_widget_set_sensitive (cb, FALSE);
 
       g_signal_connect (GTK_COMBO_BOX (cb), "changed",
-                        G_CALLBACK (cb_callback),
-                        &gihparams.selection[i]);
+                        G_CALLBACK (gih_selection_mode_changed),
+                        &selection[i]);
 
       cellw_adjust.mode_entry[i] = cellh_adjust.mode_entry[i] = cb;
-
-
     }
 
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 6,
-                             _("Ranks:"), 0.0, 0.0,
-                             dimtable, 1, FALSE);
+  gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
+                      dimgrid, TRUE, TRUE, 0);
+  gtk_widget_show (dimgrid);
 
-  gtk_widget_show (dialog);
+  run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
-  run = (gimp_dialog_run (GIMP_DIALOG (dialog)) == GTK_RESPONSE_OK);
+  g_object_get (config, "dimension", &dimension, NULL);
+  rank_bytes = g_bytes_new (rank, sizeof (guint8) * dimension);
 
-  if (run)
-    {
-      gint i;
+  g_object_set (config,
+                "selection-modes", selection,
+                "ranks",           rank_bytes,
+                NULL);
 
-      for (i = 0; i < GIMP_PIXPIPE_MAXDIM; i++)
-        gihparams.selection[i] = g_strdup (gihparams.selection[i]);
-
-      /* Fix up bogus values */
-      gihparams.ncells = MIN (gihparams.ncells,
-                              num_layers * gihparams.rows * gihparams.cols);
-    }
-
+  gih_remove_guides (config, image);
   gtk_widget_destroy (dialog);
 
-  for (i = 0; i < cellw_adjust.nguides; i++)
-    gimp_image_delete_guide (image_ID, cellw_adjust.guides[i]);
-  for (i = 0; i < cellh_adjust.nguides; i++)
-    gimp_image_delete_guide (image_ID, cellh_adjust.guides[i]);
+  g_strfreev (selection);
+  g_bytes_unref (rank_bytes);
 
   return run;
 }

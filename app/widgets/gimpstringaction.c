@@ -22,6 +22,8 @@
 
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "widgets-types.h"
 
 #include "gimpaction.h"
@@ -36,20 +38,24 @@ enum
 };
 
 
-static void   gimp_string_action_finalize     (GObject      *object);
-static void   gimp_string_action_set_property (GObject      *object,
-                                               guint         prop_id,
-                                               const GValue *value,
-                                               GParamSpec   *pspec);
-static void   gimp_string_action_get_property (GObject      *object,
-                                               guint         prop_id,
-                                               GValue       *value,
-                                               GParamSpec   *pspec);
+static void   gimp_string_action_g_action_iface_init (GActionInterface *iface);
 
-static void   gimp_string_action_activate     (GtkAction    *action);
+static void   gimp_string_action_finalize            (GObject          *object);
+static void   gimp_string_action_set_property        (GObject          *object,
+                                                      guint             prop_id,
+                                                      const GValue     *value,
+                                                      GParamSpec       *pspec);
+static void   gimp_string_action_get_property        (GObject          *object,
+                                                      guint             prop_id,
+                                                      GValue           *value,
+                                                      GParamSpec       *pspec);
+
+static void   gimp_string_action_activate            (GAction          *action,
+                                                      GVariant         *parameter);
 
 
-G_DEFINE_TYPE (GimpStringAction, gimp_string_action, GIMP_TYPE_ACTION_IMPL)
+G_DEFINE_TYPE_WITH_CODE (GimpStringAction, gimp_string_action, GIMP_TYPE_ACTION_IMPL,
+                         G_IMPLEMENT_INTERFACE (G_TYPE_ACTION, gimp_string_action_g_action_iface_init))
 
 #define parent_class gimp_string_action_parent_class
 
@@ -57,20 +63,23 @@ G_DEFINE_TYPE (GimpStringAction, gimp_string_action, GIMP_TYPE_ACTION_IMPL)
 static void
 gimp_string_action_class_init (GimpStringActionClass *klass)
 {
-  GObjectClass   *object_class = G_OBJECT_CLASS (klass);
-  GtkActionClass *action_class = GTK_ACTION_CLASS (klass);
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->finalize     = gimp_string_action_finalize;
   object_class->set_property = gimp_string_action_set_property;
   object_class->get_property = gimp_string_action_get_property;
-
-  action_class->activate = gimp_string_action_activate;
 
   g_object_class_install_property (object_class, PROP_VALUE,
                                    g_param_spec_string ("value",
                                                         NULL, NULL,
                                                         NULL,
                                                         GIMP_PARAM_READWRITE));
+}
+
+static void
+gimp_string_action_g_action_iface_init (GActionInterface *iface)
+{
+  iface->activate = gimp_string_action_activate;
 }
 
 static void
@@ -130,19 +139,23 @@ gimp_string_action_set_property (GObject      *object,
 GimpStringAction *
 gimp_string_action_new (const gchar *name,
                         const gchar *label,
+                        const gchar *short_label,
                         const gchar *tooltip,
                         const gchar *icon_name,
                         const gchar *help_id,
-                        const gchar *value)
+                        const gchar *value,
+                        GimpContext *context)
 {
   GimpStringAction *action;
 
   action = g_object_new (GIMP_TYPE_STRING_ACTION,
-                         "name",      name,
-                         "label",     label,
-                         "tooltip",   tooltip,
-                         "icon-name", icon_name,
-                         "value",     value,
+                         "name",        name,
+                         "label",       label,
+                         "short-label", short_label,
+                         "tooltip",     tooltip,
+                         "icon-name",   icon_name,
+                         "value",       value,
+                         "context",     context,
                          NULL);
 
   gimp_action_set_help_id (GIMP_ACTION (action), help_id);
@@ -151,7 +164,8 @@ gimp_string_action_new (const gchar *name,
 }
 
 static void
-gimp_string_action_activate (GtkAction *action)
+gimp_string_action_activate (GAction  *action,
+                             GVariant *parameter)
 {
   GimpStringAction *string_action = GIMP_STRING_ACTION (action);
 

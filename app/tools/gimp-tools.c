@@ -75,6 +75,7 @@
 #include "gimpnpointdeformationtool.h"
 #include "gimpoffsettool.h"
 #include "gimppaintbrushtool.h"
+#include "gimppaintselecttool.h"
 #include "gimppenciltool.h"
 #include "gimpperspectiveclonetool.h"
 #include "gimpperspectivetool.h"
@@ -140,6 +141,7 @@ gimp_tools_init (Gimp *gimp)
     gimp_by_color_select_tool_register,
     gimp_iscissors_tool_register,
     gimp_foreground_select_tool_register,
+    gimp_paint_select_tool_register,
 
     /*  path tool */
 
@@ -376,7 +378,7 @@ gimp_tools_save (Gimp     *gimp,
   if (gimp->be_verbose)
     g_print ("Writing '%s'\n", gimp_file_get_utf8_name (file));
 
-  writer = gimp_config_writer_new_gfile (file, TRUE, "GIMP toolrc", NULL);
+  writer = gimp_config_writer_new_from_file (file, TRUE, "GIMP toolrc", NULL);
 
   if (writer)
     {
@@ -606,11 +608,11 @@ gimp_tools_reset (Gimp          *gimp,
       if (gimp->be_verbose)
         g_print ("Parsing '%s'\n", gimp_file_get_utf8_name (file));
 
-      scanner = gimp_scanner_new_gfile (file, &error);
+      scanner = gimp_scanner_new_file (file, &error);
 
       if (scanner && gimp_tools_deserialize (gimp, container, scanner))
         {
-          gimp_scanner_destroy (scanner);
+          gimp_scanner_unref (scanner);
 
           break;
         }
@@ -627,7 +629,7 @@ gimp_tools_reset (Gimp          *gimp,
           gimp_container_clear (container);
         }
 
-      g_clear_pointer (&scanner, gimp_scanner_destroy);
+      g_clear_pointer (&scanner, gimp_scanner_unref);
     }
 
   g_list_free_full (files, g_object_unref);
@@ -751,7 +753,8 @@ gimp_tools_register (GType                   tool_type,
 
   /* hack to not require experimental tools to be present in toolrc */
   if (tool_type == GIMP_TYPE_N_POINT_DEFORMATION_TOOL ||
-      tool_type == GIMP_TYPE_SEAMLESS_CLONE_TOOL)
+      tool_type == GIMP_TYPE_SEAMLESS_CLONE_TOOL      ||
+      tool_type == GIMP_TYPE_PAINT_SELECT_TOOL)
     {
       tool_info->experimental = TRUE;
     }

@@ -23,6 +23,7 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 #include "libgimpcolor/gimpcolor.h"
 #include "libgimpconfig/gimpconfig.h"
@@ -30,10 +31,11 @@
 
 #include "widgets-types.h"
 
+#include "config/gimpcoreconfig.h"
+
 #include "core/gimp.h"
 #include "core/gimpcurve.h"
 #include "core/gimpcurve-map.h"
-#include "core/gimpmarshal.h"
 
 #include "gimpclipboard.h"
 #include "gimpcurveview.h"
@@ -67,7 +69,7 @@ enum
 typedef struct
 {
   GimpCurve *curve;
-  GimpRGB    color;
+  GeglColor *color;
   gboolean   color_set;
 } BGCurve;
 
@@ -83,10 +85,9 @@ static void       gimp_curve_view_get_property          (GObject          *objec
                                                          GValue           *value,
                                                          GParamSpec       *pspec);
 
-static void       gimp_curve_view_style_set             (GtkWidget        *widget,
-                                                         GtkStyle         *prev_style);
-static gboolean   gimp_curve_view_expose                (GtkWidget        *widget,
-                                                         GdkEventExpose   *event);
+static void       gimp_curve_view_style_updated         (GtkWidget        *widget);
+static gboolean   gimp_curve_view_draw                  (GtkWidget        *widget,
+                                                         cairo_t          *cr);
 static gboolean   gimp_curve_view_button_press          (GtkWidget        *widget,
                                                          GdkEventButton   *bevent);
 static gboolean   gimp_curve_view_button_release        (GtkWidget        *widget,
@@ -134,8 +135,8 @@ gimp_curve_view_class_init (GimpCurveViewClass *klass)
   object_class->set_property         = gimp_curve_view_set_property;
   object_class->get_property         = gimp_curve_view_get_property;
 
-  widget_class->style_set            = gimp_curve_view_style_set;
-  widget_class->expose_event         = gimp_curve_view_expose;
+  widget_class->style_updated        = gimp_curve_view_style_updated;
+  widget_class->draw                 = gimp_curve_view_draw;
   widget_class->button_press_event   = gimp_curve_view_button_press;
   widget_class->button_release_event = gimp_curve_view_button_release;
   widget_class->motion_notify_event  = gimp_curve_view_motion_notify;
@@ -187,8 +188,7 @@ gimp_curve_view_class_init (GimpCurveViewClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpCurveViewClass, selection_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   curve_view_signals[CUT_CLIPBOARD] =
@@ -196,8 +196,7 @@ gimp_curve_view_class_init (GimpCurveViewClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
                   G_STRUCT_OFFSET (GimpCurveViewClass, cut_clipboard),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   curve_view_signals[COPY_CLIPBOARD] =
@@ -205,8 +204,7 @@ gimp_curve_view_class_init (GimpCurveViewClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
                   G_STRUCT_OFFSET (GimpCurveViewClass, copy_clipboard),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   curve_view_signals[PASTE_CLIPBOARD] =
@@ -214,8 +212,7 @@ gimp_curve_view_class_init (GimpCurveViewClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
                   G_STRUCT_OFFSET (GimpCurveViewClass, paste_clipboard),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   binding_set = gtk_binding_set_by_class (klass);
@@ -357,12 +354,11 @@ gimp_curve_view_get_property (GObject    *object,
 }
 
 static void
-gimp_curve_view_style_set (GtkWidget *widget,
-                           GtkStyle  *prev_style)
+gimp_curve_view_style_updated (GtkWidget *widget)
 {
   GimpCurveView *view = GIMP_CURVE_VIEW (widget);
 
-  GTK_WIDGET_CLASS (parent_class)->style_set (widget, prev_style);
+  GTK_WIDGET_CLASS (parent_class)->style_updated (widget);
 
   g_clear_object (&view->layout);
   g_clear_object (&view->cursor_layout);
@@ -508,27 +504,33 @@ gimp_curve_view_draw_curve (GimpCurveView *view,
 }
 
 static gboolean
-gimp_curve_view_expose (GtkWidget      *widget,
-                        GdkEventExpose *event)
+gimp_curve_view_draw (GtkWidget *widget,
+                      cairo_t   *cr)
 {
-  GimpCurveView *view   = GIMP_CURVE_VIEW (widget);
-  GdkWindow     *window = gtk_widget_get_window (widget);
-  GtkStyle      *style  = gtk_widget_get_style (widget);
-  GtkAllocation  allocation;
-  cairo_t       *cr;
-  GList         *list;
-  gint           border;
-  gint           width;
-  gint           height;
-  gint           layout_x;
-  gint           layout_y;
-  gdouble        x, y;
-  gint           i;
+  GimpCurveView   *view  = GIMP_CURVE_VIEW (widget);
+  GtkStyleContext *style = gtk_widget_get_style_context (widget);
+  GtkAllocation    allocation;
+  GdkRGBA          grid_color;
+  GdkRGBA          fg_color;
+  GdkRGBA          bg_color;
+  GList           *list;
+  gint             border;
+  gint             width;
+  gint             height;
+  gint             layout_x;
+  gint             layout_y;
+  gdouble          x, y;
+  gint             i;
 
-  GTK_WIDGET_CLASS (parent_class)->expose_event (widget, event);
+  cairo_save (cr);
+  GTK_WIDGET_CLASS (parent_class)->draw (widget, cr);
+  cairo_restore (cr);
 
   if (! view->curve)
     return FALSE;
+
+  gtk_style_context_save (style);
+  gtk_style_context_add_class (style, "view");
 
   gtk_widget_get_allocation (widget, &allocation);
 
@@ -536,26 +538,31 @@ gimp_curve_view_expose (GtkWidget      *widget,
   width  = allocation.width  - 2 * border;
   height = allocation.height - 2 * border;
 
-  cr = gdk_cairo_create (gtk_widget_get_window (widget));
-
-  gdk_cairo_region (cr, event->region);
-  cairo_clip (cr);
-
   if (gtk_widget_has_focus (widget))
     {
-      gtk_paint_focus (style, window,
-                       gtk_widget_get_state (widget),
-                       &event->area, widget, NULL,
-                       border - 2, border - 2,
-                       width + 4, height + 4);
+      gtk_render_focus (style, cr,
+                        border - 2, border - 2,
+                        width + 4, height + 4);
     }
 
   cairo_set_line_width (cr, 1.0);
   cairo_set_line_cap (cr, CAIRO_LINE_CAP_SQUARE);
   cairo_translate (cr, 0.5, 0.5);
 
+  gtk_style_context_get_color (style, gtk_style_context_get_state (style),
+                               &fg_color);
+  bg_color       = fg_color;
+  bg_color.red   = 1 - bg_color.red;
+  bg_color.green = 1 - bg_color.green;
+  bg_color.blue  = 1 - bg_color.blue;
+
+  gtk_style_context_add_class (style, "grid");
+  gtk_style_context_get_color (style, gtk_style_context_get_state (style),
+                               &grid_color);
+  gtk_style_context_remove_class (style, "grid");
+
   /*  Draw the grid lines  */
-  gdk_cairo_set_source_color (cr, &style->text_aa[GTK_STATE_NORMAL]);
+  gdk_cairo_set_source_rgba (cr, &grid_color);
 
   gimp_curve_view_draw_grid (view, cr, width, height, border);
 
@@ -573,7 +580,6 @@ gimp_curve_view_expose (GtkWidget      *widget,
                      width - border - layout_x,
                      height - border - layout_y);
 
-      gdk_cairo_set_source_color (cr, &style->text[GTK_STATE_NORMAL]);
       pango_cairo_show_layout (cr, view->layout);
     }
 
@@ -592,7 +598,6 @@ gimp_curve_view_expose (GtkWidget      *widget,
                      2 * border + layout_x);
       cairo_rotate (cr, - G_PI / 2);
 
-      gdk_cairo_set_source_color (cr, &style->text[GTK_STATE_NORMAL]);
       pango_cairo_show_layout (cr, view->layout);
 
       cairo_restore (cr);
@@ -606,18 +611,20 @@ gimp_curve_view_expose (GtkWidget      *widget,
 
       if (bg->color_set)
         {
-          cairo_set_source_rgba (cr,
-                                 bg->color.r,
-                                 bg->color.g,
-                                 bg->color.b,
-                                 0.5);
+          GeglColor *color = gegl_color_duplicate (bg->color);
+
+          gimp_color_set_alpha (color, 0.5);
+          gimp_cairo_set_source_color (cr, color,
+                                       view->gimp ? view->gimp->config->color_management : NULL,
+                                       FALSE, widget);
+          g_object_unref (color);
         }
       else
         {
           cairo_set_source_rgba (cr,
-                                 style->text[GTK_STATE_NORMAL].red / 65535.0,
-                                 style->text[GTK_STATE_NORMAL].green / 65535.0,
-                                 style->text[GTK_STATE_NORMAL].blue / 65535.0,
+                                 fg_color.red,
+                                 fg_color.green,
+                                 fg_color.blue,
                                  0.5);
         }
 
@@ -627,9 +634,11 @@ gimp_curve_view_expose (GtkWidget      *widget,
 
   /*  Draw the curve  */
   if (view->curve_color)
-    gimp_cairo_set_source_rgb (cr, view->curve_color);
+    gimp_cairo_set_source_color (cr, view->curve_color,
+                                 view->gimp ? view->gimp->config->color_management : NULL,
+                                 FALSE, widget);
   else
-    gdk_cairo_set_source_color (cr, &style->text[GTK_STATE_NORMAL]);
+    gdk_cairo_set_source_rgba (cr, &fg_color);
 
   gimp_curve_view_draw_curve (view, cr, view->curve,
                               width, height, border);
@@ -637,8 +646,6 @@ gimp_curve_view_expose (GtkWidget      *widget,
   /*  Draw the points  */
   if (gimp_curve_get_curve_type (view->curve) == GIMP_CURVE_SMOOTH)
     {
-      gdk_cairo_set_source_color (cr, &style->text[GTK_STATE_NORMAL]);
-
       /*  Draw the unselected points  */
       for (i = 0; i < view->curve->n_points; i++)
         {
@@ -662,8 +669,6 @@ gimp_curve_view_expose (GtkWidget      *widget,
   if (view->xpos >= 0.0)
     {
       gchar buf[32];
-
-      gdk_cairo_set_source_color (cr, &style->text[GTK_STATE_NORMAL]);
 
       /* draw the color line */
       cairo_move_to (cr,
@@ -777,7 +782,7 @@ gimp_curve_view_expose (GtkWidget      *widget,
 
       cairo_push_group (cr);
 
-      gdk_cairo_set_source_color (cr, &style->text[GTK_STATE_NORMAL]);
+      gdk_cairo_set_source_rgba (cr, &grid_color);
       cairo_rectangle (cr, x + 0.5, y + 0.5, w, h);
       cairo_fill_preserve (cr);
 
@@ -785,7 +790,8 @@ gimp_curve_view_expose (GtkWidget      *widget,
       cairo_set_line_join (cr, CAIRO_LINE_JOIN_ROUND);
       cairo_stroke (cr);
 
-      gdk_cairo_set_source_color (cr, &style->base[GTK_STATE_NORMAL]);
+      gdk_cairo_set_source_rgba (cr, &bg_color);
+
       cairo_move_to (cr, x, y);
       pango_cairo_show_layout (cr, view->cursor_layout);
 
@@ -793,7 +799,7 @@ gimp_curve_view_expose (GtkWidget      *widget,
       cairo_paint_with_alpha (cr, 0.6);
     }
 
-  cairo_destroy (cr);
+  gtk_style_context_restore (style);
 
   return FALSE;
 }
@@ -808,7 +814,7 @@ set_cursor (GimpCurveView *view,
       GdkCursor  *cursor  = gdk_cursor_new_for_display (display, new_cursor);
 
       gdk_window_set_cursor (gtk_widget_get_window (GTK_WIDGET (view)), cursor);
-      gdk_cursor_unref (cursor);
+      g_object_unref (cursor);
 
       view->cursor_type = new_cursor;
     }
@@ -1279,7 +1285,7 @@ gimp_curve_view_new (void)
 void
 gimp_curve_view_set_curve (GimpCurveView *view,
                            GimpCurve     *curve,
-                           const GimpRGB *color)
+                           GeglColor     *color)
 {
   g_return_if_fail (GIMP_IS_CURVE_VIEW (view));
   g_return_if_fail (curve == NULL || GIMP_IS_CURVE (curve));
@@ -1311,11 +1317,9 @@ gimp_curve_view_set_curve (GimpCurveView *view,
                         view);
     }
 
-  if (view->curve_color)
-    g_free (view->curve_color);
-
+  g_clear_object (&view->curve_color);
   if (color)
-    view->curve_color = g_memdup (color, sizeof (GimpRGB));
+    view->curve_color = gegl_color_duplicate (color);
   else
     view->curve_color = NULL;
 
@@ -1335,7 +1339,7 @@ gimp_curve_view_get_curve (GimpCurveView *view)
 void
 gimp_curve_view_add_background (GimpCurveView *view,
                                 GimpCurve     *curve,
-                                const GimpRGB *color)
+                                GeglColor     *color)
 {
   GList   *list;
   BGCurve *bg;
@@ -1356,7 +1360,7 @@ gimp_curve_view_add_background (GimpCurveView *view,
 
   if (color)
     {
-      bg->color     = *color;
+      bg->color     = gegl_color_duplicate (color);
       bg->color_set = TRUE;
     }
 
@@ -1387,6 +1391,7 @@ gimp_curve_view_remove_background (GimpCurveView *view,
           g_signal_handlers_disconnect_by_func (bg->curve,
                                                 gimp_curve_view_curve_dirty,
                                                 view);
+          g_clear_object (&bg->color);
           g_object_unref (bg->curve);
 
           view->bg_curves = g_list_remove (view->bg_curves, bg);
@@ -1415,6 +1420,7 @@ gimp_curve_view_remove_all_backgrounds (GimpCurveView *view)
       g_signal_handlers_disconnect_by_func (bg->curve,
                                             gimp_curve_view_curve_dirty,
                                             view);
+      g_clear_object (&bg->color);
       g_object_unref (bg->curve);
 
       view->bg_curves = g_list_remove (view->bg_curves, bg);

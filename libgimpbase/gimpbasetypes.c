@@ -71,7 +71,7 @@ gimp_type_set_translation_domain (GType        type,
  * not need to use this function directly, use gimp_enum_get_value()
  * or gimp_enum_value_get_desc() instead.
  *
- * Return value: the translation domain associated with @type
+ * Returns: the translation domain associated with @type
  *               or %NULL if no domain was set
  *
  * Since: 2.2
@@ -111,7 +111,7 @@ gimp_type_set_translation_context (GType        type,
  * use this function directly, use gimp_enum_get_value() or
  * gimp_enum_value_get_desc() instead.
  *
- * Return value: the translation context associated with @type
+ * Returns: the translation context associated with @type
  *               or %NULL if no context was set
  *
  * Since: 2.8
@@ -149,7 +149,7 @@ gimp_enum_set_value_descriptions (GType               enum_type,
  * gimp_enum_get_value_descriptions:
  * @enum_type: a #GType
  *
- * Retreives the array of human readable and translatable descriptions
+ * Retrieves the array of human readable and translatable descriptions
  * and help texts for enum values.
  *
  * Returns: a %NULL terminated constant array of #GimpEnumDesc
@@ -191,7 +191,7 @@ gimp_flags_set_value_descriptions (GType                flags_type,
  * gimp_flags_get_value_descriptions:
  * @flags_type: a #GType
  *
- * Retreives the array of human readable and translatable descriptions
+ * Retrieves the array of human readable and translatable descriptions
  * and help texts for flags values.
  *
  * Returns: a %NULL terminated constant array of #GimpFlagsDesc

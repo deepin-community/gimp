@@ -74,7 +74,7 @@ gimp_memsize_get_type (void)
  * config files. It should not be displayed to the user. If you need a
  * nice human-readable string please use g_format_size().
  *
- * Return value: A newly allocated string representation of @memsize.
+ * Returns: A newly allocated string representation of @memsize.
  *
  * Since: 2.2
  **/
@@ -94,12 +94,12 @@ gimp_memsize_serialize (guint64 memsize)
 /**
  * gimp_memsize_deserialize:
  * @string:  a string as returned by gimp_memsize_serialize()
- * @memsize: return location for memory size in bytes
+ * @memsize: (out): return location for memory size in bytes
  *
  * Parses a string representation of a memory size as returned by
  * gimp_memsize_serialize().
  *
- * Return value: %TRUE if the @string was successfully parsed and
+ * Returns: %TRUE if the @string was successfully parsed and
  *               @memsize has been set, %FALSE otherwise.
  *
  * Since: 2.2
@@ -156,21 +156,6 @@ gimp_memsize_deserialize (const gchar *string,
   *memsize = size;
 
   return TRUE;
-}
-
-
-/**
- * gimp_memsize_to_string:
- * @memsize: A memory size in bytes.
- *
- * This function is deprecated! Use g_format_size() instead.
- *
- * Return value: A newly allocated human-readable, translated string.
- **/
-gchar *
-gimp_memsize_to_string (guint64 memsize)
-{
-  return g_format_size (memsize);
 }
 
 
@@ -261,7 +246,7 @@ gimp_param_memsize_class_init (GParamSpecClass *class)
  * Creates a param spec to hold a memory size value.
  * See g_param_spec_internal() for more information.
  *
- * Returns: a newly allocated #GParamSpec instance
+ * Returns: (transfer full): a newly allocated #GParamSpec instance
  *
  * Since: 2.4
  **/

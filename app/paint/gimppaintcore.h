@@ -59,20 +59,23 @@ struct _GimpPaintCore
 
   GimpPickable   *image_pickable;    /*  the image pickable                  */
 
-  GeglBuffer     *undo_buffer;       /*  pixels which have been modified     */
+  GHashTable     *undo_buffers;      /*  pixels which have been modified     */
   GeglBuffer     *saved_proj_buffer; /*  proj tiles which have been modified */
   GeglBuffer     *canvas_buffer;     /*  the buffer to paint the mask to     */
   GeglBuffer     *paint_buffer;      /*  the buffer to paint pixels to       */
   gint            paint_buffer_x;
   gint            paint_buffer_y;
+  GHashTable     *original_bounds;   /* the original bounds of drawables     */
 
   GeglBuffer     *mask_buffer;       /*  the target drawable's mask          */
-  gint            mask_x_offset;
-  gint            mask_y_offset;
 
-  GimpApplicator *applicator;
+  GHashTable     *applicators;
 
   GArray         *stroke_buffer;
+
+  GimpSymmetry   *sym;
+  GimpPaintLockBlinkState
+                  lock_blink_state;
 };
 
 struct _GimpPaintCoreClass
@@ -81,30 +84,30 @@ struct _GimpPaintCoreClass
 
   /*  virtual functions  */
   gboolean     (* start)            (GimpPaintCore    *core,
-                                     GimpDrawable     *drawable,
+                                     GList            *drawables,
                                      GimpPaintOptions *paint_options,
                                      const GimpCoords *coords,
                                      GError          **error);
 
   gboolean     (* pre_paint)        (GimpPaintCore    *core,
-                                     GimpDrawable     *drawable,
+                                     GList            *drawables,
                                      GimpPaintOptions *paint_options,
                                      GimpPaintState    paint_state,
                                      guint32           time);
   void         (* paint)            (GimpPaintCore    *core,
-                                     GimpDrawable     *drawable,
+                                     GList            *drawables,
                                      GimpPaintOptions *paint_options,
                                      GimpSymmetry     *sym,
                                      GimpPaintState    paint_state,
                                      guint32           time);
   void         (* post_paint)       (GimpPaintCore    *core,
-                                     GimpDrawable     *drawable,
+                                     GList            *drawables,
                                      GimpPaintOptions *paint_options,
                                      GimpPaintState    paint_state,
                                      guint32           time);
 
   void         (* interpolate)      (GimpPaintCore    *core,
-                                     GimpDrawable     *drawable,
+                                     GList            *drawables,
                                      GimpPaintOptions *paint_options,
                                      guint32           time);
 
@@ -127,25 +130,25 @@ struct _GimpPaintCoreClass
 GType     gimp_paint_core_get_type                  (void) G_GNUC_CONST;
 
 void      gimp_paint_core_paint                     (GimpPaintCore    *core,
-                                                     GimpDrawable     *drawable,
+                                                     GList            *drawables,
                                                      GimpPaintOptions *paint_options,
                                                      GimpPaintState    state,
                                                      guint32           time);
 
 gboolean  gimp_paint_core_start                     (GimpPaintCore    *core,
-                                                     GimpDrawable     *drawable,
+                                                     GList            *drawables,
                                                      GimpPaintOptions *paint_options,
                                                      const GimpCoords *coords,
                                                      GError          **error);
 void      gimp_paint_core_finish                    (GimpPaintCore    *core,
-                                                     GimpDrawable     *drawable,
+                                                     GList            *drawables,
                                                      gboolean          push_undo);
 void      gimp_paint_core_cancel                    (GimpPaintCore    *core,
-                                                     GimpDrawable     *drawable);
+                                                     GList            *drawables);
 void      gimp_paint_core_cleanup                   (GimpPaintCore    *core);
 
 void      gimp_paint_core_interpolate               (GimpPaintCore    *core,
-                                                     GimpDrawable     *drawable,
+                                                     GList            *drawables,
                                                      GimpPaintOptions *paint_options,
                                                      const GimpCoords *coords,
                                                      guint32           time);
@@ -153,6 +156,16 @@ void      gimp_paint_core_interpolate               (GimpPaintCore    *core,
 void      gimp_paint_core_set_show_all              (GimpPaintCore    *core,
                                                      gboolean          show_all);
 gboolean  gimp_paint_core_get_show_all              (GimpPaintCore    *core);
+
+gboolean  gimp_paint_core_expand_drawable           (GimpPaintCore    *paint_core,
+                                                     GimpDrawable     *drawable,
+                                                     GimpPaintOptions *paint_options,
+                                                     gint              x1,
+                                                     gint              x2,
+                                                     gint              y1,
+                                                     gint              y2,
+                                                     gint             *x,
+                                                     gint             *y);
 
 void      gimp_paint_core_set_current_coords        (GimpPaintCore    *core,
                                                      const GimpCoords *coords);
@@ -186,7 +199,8 @@ GeglBuffer * gimp_paint_core_get_paint_buffer       (GimpPaintCore    *core,
 
 GimpPickable * gimp_paint_core_get_image_pickable   (GimpPaintCore    *core);
 
-GeglBuffer * gimp_paint_core_get_orig_image         (GimpPaintCore    *core);
+GeglBuffer * gimp_paint_core_get_orig_image         (GimpPaintCore    *core,
+                                                     GimpDrawable     *drawable);
 GeglBuffer * gimp_paint_core_get_orig_proj          (GimpPaintCore    *core);
 
 void      gimp_paint_core_paste             (GimpPaintCore            *core,

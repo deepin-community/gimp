@@ -23,6 +23,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "propgui/propgui-types.h" /* ugly, but what the heck */
@@ -102,6 +103,7 @@ gimp_symmetry_editor_init (GimpSymmetryEditor *editor)
   gtk_widget_show (viewport);
 
   editor->p->options_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+  g_object_set (editor->p->options_vbox, "valign", GTK_ALIGN_START, NULL);
   gtk_container_set_border_width (GTK_CONTAINER (editor->p->options_vbox), 2);
   gtk_container_add (GTK_CONTAINER (viewport), editor->p->options_vbox);
   gtk_widget_show (editor->p->options_vbox);
@@ -137,7 +139,7 @@ gimp_symmetry_editor_set_image (GimpImageEditor *image_editor,
       editor->p->menu = NULL;
     }
 
-  store = gimp_int_store_new ();
+  store = g_object_new (GIMP_TYPE_INT_STORE, NULL);
 
   /* The menu of available symmetries. */
   syms = gimp_image_symmetry_list ();
@@ -200,8 +202,8 @@ gimp_symmetry_editor_set_image (GimpImageEditor *image_editor,
     {
       gimp_int_combo_box_set_active (GIMP_INT_COMBO_BOX (editor->p->menu), 0);
       gtk_widget_set_sensitive (editor->p->menu, FALSE);
+      gtk_widget_show (editor->p->menu);
     }
-  gtk_widget_show (editor->p->menu);
 }
 
 static void
@@ -264,7 +266,6 @@ gimp_symmetry_editor_set_options (GimpSymmetryEditor *editor,
                                NULL, NULL, NULL);
       gtk_box_pack_start (GTK_BOX (editor->p->options_vbox), gui,
                           FALSE, FALSE, 0);
-      gtk_widget_show (gui);
     }
 }
 

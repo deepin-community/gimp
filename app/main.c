@@ -32,6 +32,7 @@
 #include <locale.h>
 
 #include <gio/gio.h>
+#include <glib/gstdio.h>
 
 #ifdef G_OS_WIN32
 #include <io.h> /* get_osfhandle */
@@ -52,6 +53,7 @@
 #include <babl/babl.h>
 
 #include "libgimpbase/gimpbase.h"
+#include "libgimpbase/gimpbase-private.h"
 
 #include "pdb/pdb-types.h"
 
@@ -60,7 +62,6 @@
 
 #include "core/gimp.h"
 #include "core/gimpbacktrace.h"
-#include "core/gimp-utils.h"
 
 #include "pdb/gimppdb.h"
 #include "pdb/gimpprocedure.h"
@@ -74,13 +75,6 @@
 #include "unique.h"
 
 #ifdef G_OS_WIN32
-/* To get PROCESS_DEP_* defined we need _WIN32_WINNT at 0x0601. We still
- * use the API optionally only if present, though.
- */
-#ifdef _WIN32_WINNT
-#undef _WIN32_WINNT
-#endif
-#define _WIN32_WINNT 0x0601
 #include <windows.h>
 #include <conio.h>
 #endif
@@ -130,6 +124,7 @@ static const gchar        *session_name      = NULL;
 static const gchar        *batch_interpreter = NULL;
 static const gchar       **batch_commands    = NULL;
 static const gchar       **filenames         = NULL;
+static gboolean            quit              = FALSE;
 static gboolean            as_new            = FALSE;
 static gboolean            no_interface      = FALSE;
 static gboolean            no_data           = FALSE;
@@ -146,7 +141,7 @@ static gboolean            use_cpu_accel     = TRUE;
 static gboolean            console_messages  = FALSE;
 static gboolean            use_debug_handler = FALSE;
 
-#ifdef GIMP_UNSTABLE
+#if defined (GIMP_UNSTABLE) || ! defined (GIMP_RELEASE)
 static gboolean            show_playground   = TRUE;
 static gboolean            show_debug_menu   = TRUE;
 static GimpStackTraceMode  stack_trace_mode  = GIMP_STACK_TRACE_QUERY;
@@ -241,6 +236,11 @@ static const GOptionEntry main_entries[] =
     N_("The procedure to process batch commands with"), "<proc>"
   },
   {
+    "quit", 0, 0,
+    G_OPTION_ARG_NONE, &quit,
+    N_("Quit immediately after performing requested actions"), NULL
+  },
+  {
     "console-messages", 'c', 0,
     G_OPTION_ARG_NONE, &console_messages,
     N_("Send messages to console instead of using a dialog"), NULL
@@ -328,15 +328,14 @@ gimp_macos_setenv (const char * progname)
        * instead of system one
        */
       static gboolean            show_playground   = TRUE;
-      gboolean                   need_pythonpath   = FALSE;
 
-      gchar *path;
-      gchar *tmp;
-      gchar *app_dir;
-      gchar *res_dir;
-      size_t path_len;
-      struct stat sb;
-      gchar *pythonpath_format;
+      gchar   *path;
+      gchar   *tmp;
+      gchar   *app_dir;
+      gchar   *res_dir;
+      size_t   path_len;
+      struct   stat sb;
+      gboolean need_pythonhome = TRUE;
 
       app_dir = g_path_get_dirname (resolved_path);
       tmp = g_strdup_printf ("%s/../Resources", app_dir);
@@ -348,16 +347,40 @@ gimp_macos_setenv (const char * progname)
         }
       else
         {
-          g_free (res_dir);
-          return;
+          tmp = g_strdup_printf ("%s/../share", app_dir);
+          res_dir = g_canonicalize_filename (tmp, NULL);
+          g_free (tmp);
+          if (res_dir && !stat (res_dir, &sb) && S_ISDIR (sb.st_mode))
+            {
+              g_free (res_dir);
+
+              g_print ("GIMP is started in the build directory\n");
+
+              tmp = g_strdup_printf ("%s/..", app_dir); /* running in build dir */
+              res_dir = g_canonicalize_filename (tmp, NULL);
+              g_free (tmp);
+            }
+          else
+            {
+              g_free (res_dir);
+              return;
+            }
         }
 
-      /* Detect we were built in MacPorts for MacOS and setup PYTHONPATH */
+      /* Detect we were built in homebrew for MacOS */
+      tmp = g_strdup_printf ("%s/Frameworks/Python.framework", res_dir);
+      if (tmp && !stat (tmp, &sb) && S_ISDIR (sb.st_mode))
+        {
+          g_print ("GIMP was built with homebrew\n");
+          need_pythonhome = FALSE;
+        }
+      g_free (tmp);
+      /* Detect we were built in MacPorts for MacOS */
       tmp = g_strdup_printf ("%s/Library/Frameworks/Python.framework", res_dir);
       if (tmp && !stat (tmp, &sb) && S_ISDIR (sb.st_mode))
         {
           g_print ("GIMP was built with MacPorts\n");
-          need_pythonpath = TRUE;
+          need_pythonhome = FALSE;
         }
       g_free (tmp);
 
@@ -375,11 +398,8 @@ gimp_macos_setenv (const char * progname)
       g_free (app_dir);
       g_setenv ("PATH", path, TRUE);
       g_free (path);
-      tmp = g_strdup_printf ("%s/lib/gtk-2.0/2.10.0", res_dir);
+      tmp = g_strdup_printf ("%s/lib/gtk-3.0/3.0.0", res_dir);
       g_setenv ("GTK_PATH", tmp, TRUE);
-      g_free (tmp);
-      tmp = g_strdup_printf ("%s/etc/gtk-2.0/gtk.immodules", res_dir);
-      g_setenv ("GTK_IM_MODULE_FILE", tmp, TRUE);
       g_free (tmp);
       tmp = g_strdup_printf ("%s/lib/gegl-0.4", res_dir);
       g_setenv ("GEGL_PATH", tmp, TRUE);
@@ -393,32 +413,33 @@ gimp_macos_setenv (const char * progname)
       tmp = g_strdup_printf ("%s/etc/fonts", res_dir);
       g_setenv ("FONTCONFIG_PATH", tmp, TRUE);
       g_free (tmp);
-      if (need_pythonpath)
-        {
-          g_unsetenv ("PYTHONHOME");
-          pythonpath_format = "%s/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/site-packages:%s/lib/gimp/2.0/python";
-          tmp = g_strdup_printf (pythonpath_format, res_dir, res_dir);
-          g_setenv ("PYTHONPATH", tmp, TRUE);
-          g_free (tmp);
-        }
-      else
+      if (need_pythonhome)
         {
           tmp = g_strdup_printf ("%s", res_dir);
           g_setenv ("PYTHONHOME", tmp, TRUE);
           g_free (tmp);
-          tmp = g_strdup_printf ("%s/lib/python2.7:%s/lib/gimp/2.0/python", res_dir, res_dir);
-          g_setenv ("PYTHONPATH", tmp, TRUE);
-          g_free (tmp);
         }
+      tmp = g_strdup_printf ("%s/lib/python3.9", res_dir);
+      g_setenv ("PYTHONPATH", tmp, TRUE);
+      g_free (tmp);
       tmp = g_strdup_printf ("%s/lib/gio/modules", res_dir);
       g_setenv ("GIO_MODULE_DIR", tmp, TRUE);
       g_free (tmp);
       tmp = g_strdup_printf ("%s/share/libwmf/fonts", res_dir);
       g_setenv ("WMF_FONTDIR", tmp, TRUE);
       g_free (tmp);
+      if (g_getenv ("XDG_DATA_DIRS"))
+        tmp = g_strdup_printf ("%s/share:%s", res_dir, g_getenv ("XDG_DATA_DIRS"));
+      else
+        tmp = g_strdup_printf ("%s/share", res_dir);
+      g_setenv ("XDG_DATA_DIRS", tmp, TRUE);
+      g_free (tmp);
+      tmp = g_strdup_printf ("%s/lib/girepository-1.0", res_dir);
+      g_setenv ("GI_TYPELIB_PATH", tmp, TRUE);
+      g_free (tmp);
       if (g_getenv ("HOME") != NULL)
         {
-          tmp = g_strdup_printf ("%s/Library/Application Support/GIMP/2.10/cache",
+          tmp = g_strdup_printf ("%s/Library/Application Support/GIMP/3.00/cache",
                                  g_getenv ("HOME"));
           g_setenv ("XDG_CACHE_HOME", tmp, TRUE);
           g_free (tmp);
@@ -465,12 +486,23 @@ gimp_early_configuration (void)
   language = gimp_early_rc_get_language (earlyrc);
 
   /*  change the locale if a language if specified  */
-  language_init (language);
+  language_init (language, NULL);
   if (language)
     g_free (language);
 
 #if defined (G_OS_WIN32) && !defined (GIMP_CONSOLE_COMPILATION)
-  if (gimp_win32_have_windows_ink ())
+
+#if GTK_MAJOR_VERSION > 3
+#warning For GTK4 and above use the proper backend-specific API instead of the GDK_WIN32_TABLET_INPUT_API environment variable
+#endif
+
+  /* Set a GdkWin32-specific environment variable to specify
+   * the desired pen / touch input API to use on Windows
+  */
+  if (gtk_get_major_version () == 3 &&
+      (gtk_get_minor_version () > 24 ||
+       (gtk_get_minor_version () == 24 &&
+        gtk_get_micro_version () >= 30)))
     {
       GimpWin32PointerInputAPI api = gimp_early_rc_get_win32_pointer_input_api (earlyrc);
 
@@ -484,15 +516,13 @@ gimp_early_configuration (void)
           break;
         }
     }
+
 #endif
 
   g_object_unref (earlyrc);
 
-  if (system_gimprc_file)
-    g_object_unref (system_gimprc_file);
-
-  if (user_gimprc_file)
-    g_object_unref (user_gimprc_file);
+  g_clear_object (&system_gimprc_file);
+  g_clear_object (&user_gimprc_file);
 }
 
 static gboolean
@@ -519,6 +549,7 @@ main (int    argc,
   GFile          *user_gimprc_file   = NULL;
   GOptionGroup   *gimp_group         = NULL;
   gchar          *backtrace_file     = NULL;
+  gint            retval;
   gint            i;
 
 #ifdef ENABLE_WIN32_DEBUG_CONSOLE
@@ -564,17 +595,11 @@ main (int    argc,
   gimp_init_signal_handlers (&backtrace_file);
 
 #ifdef G_OS_WIN32
-  /* Reduce risks */
-  {
-    typedef BOOL (WINAPI *t_SetDllDirectoryA) (LPCSTR lpPathName);
-    t_SetDllDirectoryA p_SetDllDirectoryA;
+  /* Enable Anti-Aliasing*/
+  g_setenv ("PANGOCAIRO_BACKEND", "fc", TRUE);
 
-    p_SetDllDirectoryA =
-      (t_SetDllDirectoryA) GetProcAddress (GetModuleHandle ("kernel32.dll"),
-                                           "SetDllDirectoryA");
-    if (p_SetDllDirectoryA)
-      (*p_SetDllDirectoryA) ("");
-  }
+  /* Reduce risks */
+  SetDllDirectoryW (L"");
 
   /* On Windows, set DLL search path to $INSTALLDIR/bin so that .exe
      plug-ins in the plug-ins directory can find libgimp and file
@@ -583,29 +608,18 @@ main (int    argc,
     const gchar *install_dir;
     gchar       *bin_dir;
     LPWSTR       w_bin_dir;
-    int          n;
 
     w_bin_dir = NULL;
     install_dir = gimp_installation_directory ();
     bin_dir = g_build_filename (install_dir, "bin", NULL);
 
-    n = MultiByteToWideChar (CP_UTF8, MB_ERR_INVALID_CHARS,
-                             bin_dir, -1, NULL, 0);
-    if (n == 0)
-      goto out;
-
-    w_bin_dir = g_malloc_n (n + 1, sizeof (wchar_t));
-    n = MultiByteToWideChar (CP_UTF8, MB_ERR_INVALID_CHARS,
-                             bin_dir, -1,
-                             w_bin_dir, (n + 1) * sizeof (wchar_t));
-    if (n == 0)
-      goto out;
-
-    SetDllDirectoryW (w_bin_dir);
-
-  out:
+    w_bin_dir = g_utf8_to_utf16 (bin_dir, -1, NULL, NULL, NULL);
     if (w_bin_dir)
-      g_free (w_bin_dir);
+      {
+        SetDllDirectoryW (w_bin_dir);
+        g_free (w_bin_dir);
+      }
+
     g_free (bin_dir);
   }
 
@@ -615,7 +629,7 @@ main (int    argc,
     t_SetProcessDEPPolicy p_SetProcessDEPPolicy;
 
     p_SetProcessDEPPolicy =
-      (t_SetProcessDEPPolicy) GetProcAddress (GetModuleHandle ("kernel32.dll"),
+      (t_SetProcessDEPPolicy) GetProcAddress (GetModuleHandleW (L"kernel32.dll"),
                                               "SetProcessDEPPolicy");
     if (p_SetProcessDEPPolicy)
       (*p_SetProcessDEPPolicy) (PROCESS_DEP_ENABLE|PROCESS_DEP_DISABLE_ATL_THUNK_EMULATION);
@@ -628,7 +642,7 @@ main (int    argc,
     t_SetCurrentProcessExplicitAppUserModelID p_SetCurrentProcessExplicitAppUserModelID;
 
     p_SetCurrentProcessExplicitAppUserModelID =
-      (t_SetCurrentProcessExplicitAppUserModelID) GetProcAddress (GetModuleHandle ("shell32.dll"),
+      (t_SetCurrentProcessExplicitAppUserModelID) GetProcAddress (GetModuleHandleW (L"shell32.dll"),
                                                                   "SetCurrentProcessExplicitAppUserModelID");
     if (p_SetCurrentProcessExplicitAppUserModelID)
       (*p_SetCurrentProcessExplicitAppUserModelID) (L"gimp.GimpApplication");
@@ -702,6 +716,8 @@ main (int    argc,
   context = g_option_context_new (_("[FILE|URI...]"));
   g_option_context_set_summary (context, GIMP_NAME);
 
+  g_option_context_add_main_entries (context, main_entries, GETTEXT_PACKAGE);
+
   /* The GIMP option group is just an empty option group, created for the sole
    * purpose of running a post-parse hook before any other of dependant libraries
    * are run. This makes it possible to apply options from configuration data
@@ -711,8 +727,6 @@ main (int    argc,
   gimp_group = g_option_group_new ("gimp", "", "", NULL, NULL);
   g_option_group_set_parse_hooks (gimp_group, NULL, gimp_options_group_parse_hook);
   g_option_context_add_group (context, gimp_group);
-
-  g_option_context_add_main_entries (context, main_entries, GETTEXT_PACKAGE);
 
   app_libs_init (context, no_interface);
 
@@ -744,16 +758,19 @@ main (int    argc,
 #ifndef GIMP_CONSOLE_COMPILATION
   if (! new_instance && gimp_unique_open (filenames, as_new))
     {
+      int success = EXIT_SUCCESS;
+
       if (be_verbose)
         g_print ("%s\n",
                  _("Another GIMP instance is already running."));
 
-      if (batch_commands)
-        gimp_unique_batch_run (batch_interpreter, batch_commands);
+      if (batch_commands &&
+          ! gimp_unique_batch_run (batch_interpreter, batch_commands))
+        success = EXIT_FAILURE;
 
       gdk_notify_startup_complete ();
 
-      return EXIT_SUCCESS;
+      return success;
     }
 #endif
 
@@ -767,43 +784,40 @@ main (int    argc,
   if (user_gimprc)
     user_gimprc_file = g_file_new_for_commandline_arg (user_gimprc);
 
-  app_run (argv[0],
-           filenames,
-           system_gimprc_file,
-           user_gimprc_file,
-           session_name,
-           batch_interpreter,
-           batch_commands,
-           as_new,
-           no_interface,
-           no_data,
-           no_fonts,
-           no_splash,
-           be_verbose,
-           use_shm,
-           use_cpu_accel,
-           console_messages,
-           use_debug_handler,
-           show_playground,
-           show_debug_menu,
-           stack_trace_mode,
-           pdb_compat_mode,
-           backtrace_file);
+  retval = app_run (argv[0],
+                    filenames,
+                    system_gimprc_file,
+                    user_gimprc_file,
+                    session_name,
+                    batch_interpreter,
+                    batch_commands,
+                    quit,
+                    as_new,
+                    no_interface,
+                    no_data,
+                    no_fonts,
+                    no_splash,
+                    be_verbose,
+                    use_shm,
+                    use_cpu_accel,
+                    console_messages,
+                    use_debug_handler,
+                    show_playground,
+                    show_debug_menu,
+                    stack_trace_mode,
+                    pdb_compat_mode,
+                    backtrace_file);
 
-  if (backtrace_file)
-    g_free (backtrace_file);
+  g_free (backtrace_file);
 
-  if (system_gimprc_file)
-    g_object_unref (system_gimprc_file);
-
-  if (user_gimprc_file)
-    g_object_unref (user_gimprc_file);
+  g_clear_object (&system_gimprc_file);
+  g_clear_object (&user_gimprc_file);
 
   g_strfreev (argv);
 
   g_option_context_free (context);
 
-  return EXIT_SUCCESS;
+  return retval;
 }
 
 
@@ -835,7 +849,7 @@ WinMain (struct HINSTANCE__ *hInstance,
 static void
 wait_console_window (void)
 {
-  FILE *console = fopen ("CONOUT$", "w");
+  FILE *console = g_fopen ("CONOUT$", "w");
 
   SetConsoleTitleW (g_utf8_to_utf16 (_("GIMP output. Type any character to close this window."), -1, NULL, NULL, NULL));
   fprintf (console, _("(Type any character to close this window)\n"));
@@ -982,7 +996,7 @@ gimp_option_dump_pdb_procedures_deprecated (const gchar  *option_name,
     {
       GimpProcedure *procedure = GIMP_PROCEDURE (iter->data);
 
-      g_print ("%s\n", procedure->original_name);
+      g_print ("%s\n", gimp_object_get_name (procedure));
     }
 
   g_list_free (deprecated_procs);
@@ -1053,12 +1067,12 @@ gimp_init_i18n (void)
 
   setlocale (LC_ALL, "");
 
-  bindtextdomain (GETTEXT_PACKAGE"-libgimp", gimp_locale_directory ());
+  gimp_bind_text_domain (GETTEXT_PACKAGE"-libgimp", gimp_locale_directory ());
 #ifdef HAVE_BIND_TEXTDOMAIN_CODESET
   bind_textdomain_codeset (GETTEXT_PACKAGE"-libgimp", "UTF-8");
 #endif
 
-  bindtextdomain (GETTEXT_PACKAGE, gimp_locale_directory ());
+  gimp_bind_text_domain (GETTEXT_PACKAGE, gimp_locale_directory ());
 #ifdef HAVE_BIND_TEXTDOMAIN_CODESET
   bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
 #endif

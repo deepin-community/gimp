@@ -104,7 +104,7 @@ file_open_dialog_response (GtkWidget *dialog,
 
   if (response_id != GTK_RESPONSE_OK)
     {
-      if (! file_dialog->busy)
+      if (! file_dialog->busy && response_id != GTK_RESPONSE_HELP)
         gtk_widget_destroy (dialog);
 
       return;
@@ -131,6 +131,14 @@ file_open_dialog_response (GtkWidget *dialog,
   if (file_dialog->image)
     g_object_ref (file_dialog->image);
 
+  /* If we open multiple files as layers, compress the undos */
+  if (file_dialog->image          &&
+      open_dialog->open_as_layers &&
+      g_slist_length (files) > 1)
+    gimp_image_undo_group_start (file_dialog->image,
+                                 GIMP_UNDO_GROUP_LAYER_ADD,
+                                 _("Open layers"));
+
   for (list = files; list; list = g_slist_next (list))
     {
       GFile *file = list->data;
@@ -150,6 +158,12 @@ file_open_dialog_response (GtkWidget *dialog,
               if (file_dialog->image)
                 {
                   g_object_ref (file_dialog->image);
+
+                  if (g_slist_length (files) > 1)
+                    gimp_image_undo_group_start (file_dialog->image,
+                                                 GIMP_UNDO_GROUP_LAYER_ADD,
+                                                 _("Open layers"));
+
                   success = TRUE;
                 }
             }
@@ -180,6 +194,11 @@ file_open_dialog_response (GtkWidget *dialog,
       if (file_dialog->canceled)
         break;
     }
+
+  if (file_dialog->image          &&
+      open_dialog->open_as_layers &&
+      g_slist_length (files) > 1)
+    gimp_image_undo_group_end (file_dialog->image);
 
   if (success)
     {
@@ -217,13 +236,12 @@ file_open_dialog_open_image (GtkWidget           *dialog,
   image = file_open_with_proc_and_display (gimp,
                                            gimp_get_user_context (gimp),
                                            GIMP_PROGRESS (dialog),
-                                           file, file, FALSE,
+                                           file, FALSE,
                                            load_proc,
-                                           G_OBJECT (gtk_widget_get_screen (dialog)),
-                                           gimp_widget_get_monitor (dialog),
+                                           G_OBJECT (gimp_widget_get_monitor (dialog)),
                                            &status, &error);
 
-  if (! image && status != GIMP_PDB_CANCEL)
+  if (! image && status != GIMP_PDB_SUCCESS && status != GIMP_PDB_CANCEL)
     {
       gimp_message (gimp, G_OBJECT (dialog), GIMP_MESSAGE_ERROR,
                     _("Opening '%s' failed:\n\n%s"),

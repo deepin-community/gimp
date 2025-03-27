@@ -39,6 +39,7 @@
 #include "gimpimage-metadata.h"
 #include "gimpimage-private.h"
 #include "gimpimageundo.h"
+#include "gimppalette.h"
 
 
 enum
@@ -182,13 +183,18 @@ gimp_image_undo_constructed (GObject *object)
       break;
 
     case GIMP_UNDO_IMAGE_COLORMAP:
-      image_undo->num_colors = gimp_image_get_colormap_size (image);
-      image_undo->colormap   = g_memdup (gimp_image_get_colormap (image),
-                                         GIMP_IMAGE_COLORMAP_SIZE);
+        {
+          GimpPalette *palette;
+
+          palette = gimp_image_get_colormap_palette (image);
+          image_undo->colormap = GIMP_PALETTE (gimp_palette_new (NULL, gimp_object_get_name (palette)));
+          gimp_data_copy (GIMP_DATA (image_undo->colormap), GIMP_DATA (palette));
+        }
       break;
 
-    case GIMP_UNDO_IMAGE_COLOR_MANAGED:
-      image_undo->is_color_managed = gimp_image_get_is_color_managed (image);
+    case GIMP_UNDO_IMAGE_HIDDEN_PROFILE:
+      g_set_object (&image_undo->hidden_profile,
+                    _gimp_image_get_hidden_profile (image));
       break;
 
     case GIMP_UNDO_IMAGE_METADATA:
@@ -424,7 +430,7 @@ gimp_image_undo_pop (GimpUndo            *undo,
 
       if (image_undo->resolution_unit != gimp_image_get_unit (image))
         {
-          GimpUnit unit;
+          GimpUnit *unit;
 
           unit = gimp_image_get_unit (image);
           private->resolution_unit = image_undo->resolution_unit;
@@ -449,36 +455,37 @@ gimp_image_undo_pop (GimpUndo            *undo,
 
     case GIMP_UNDO_IMAGE_COLORMAP:
       {
-        guchar *colormap;
-        gint    num_colors;
+        GimpPalette *colormap;
 
-        num_colors = gimp_image_get_colormap_size (image);
-        colormap   = g_memdup (gimp_image_get_colormap (image),
-                               GIMP_IMAGE_COLORMAP_SIZE);
+        colormap = gimp_image_get_colormap_palette (image);
+        if (colormap)
+          {
+            GimpPalette *palette = colormap;
+
+            colormap = GIMP_PALETTE (gimp_palette_new (NULL, gimp_object_get_name (palette)));
+            gimp_data_copy (GIMP_DATA (colormap), GIMP_DATA (palette));
+          }
 
         if (image_undo->colormap)
-          gimp_image_set_colormap (image,
-                                   image_undo->colormap, image_undo->num_colors,
-                                   FALSE);
+          gimp_image_set_colormap_palette (image, image_undo->colormap, FALSE);
         else
           gimp_image_unset_colormap (image, FALSE);
 
         if (image_undo->colormap)
-          g_free (image_undo->colormap);
+          g_object_unref (image_undo->colormap);
 
-        image_undo->num_colors = num_colors;
-        image_undo->colormap   = colormap;
+        image_undo->colormap = colormap;
       }
       break;
 
-    case GIMP_UNDO_IMAGE_COLOR_MANAGED:
+    case GIMP_UNDO_IMAGE_HIDDEN_PROFILE:
       {
-        gboolean is_color_managed;
+        GimpColorProfile *hidden_profile = NULL;
 
-        is_color_managed = gimp_image_get_is_color_managed (image);
-        gimp_image_set_is_color_managed (image, image_undo->is_color_managed,
-                                         FALSE);
-        image_undo->is_color_managed = is_color_managed;
+        g_set_object (&hidden_profile, _gimp_image_get_hidden_profile (image));
+        _gimp_image_set_hidden_profile (image, image_undo->hidden_profile,
+                                        FALSE);
+        image_undo->hidden_profile = hidden_profile;
       }
       break;
 
@@ -526,7 +533,8 @@ gimp_image_undo_free (GimpUndo     *undo,
   GimpImageUndo *image_undo = GIMP_IMAGE_UNDO (undo);
 
   g_clear_object (&image_undo->grid);
-  g_clear_pointer (&image_undo->colormap, g_free);
+  g_clear_object (&image_undo->colormap);
+  g_clear_object (&image_undo->hidden_profile);
   g_clear_object (&image_undo->metadata);
   g_clear_pointer (&image_undo->parasite_name, g_free);
   g_clear_pointer (&image_undo->parasite, gimp_parasite_free);

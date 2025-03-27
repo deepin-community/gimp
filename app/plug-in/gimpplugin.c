@@ -43,6 +43,10 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
 
+#ifdef __APPLE__
+#include <sys/ioctl.h>
+#endif
+
 #if defined(G_OS_WIN32) || defined(G_WITH_CYGWIN)
 
 #define STRICT
@@ -75,6 +79,7 @@
 #include "plug-in-types.h"
 
 #include "core/gimp.h"
+#include "core/gimpdisplay.h"
 #include "core/gimp-spawn.h"
 #include "core/gimpprogress.h"
 
@@ -89,29 +94,36 @@
 #include "gimpplugindef.h"
 #include "gimppluginmanager.h"
 #include "gimppluginmanager-help-domain.h"
-#include "gimppluginmanager-locale-domain.h"
 #include "gimptemporaryprocedure.h"
-#include "plug-in-params.h"
 
 #include "gimp-intl.h"
 
 
-static void       gimp_plug_in_finalize      (GObject      *object);
+static void       gimp_plug_in_finalize               (GObject      *object);
 
-static gboolean   gimp_plug_in_recv_message  (GIOChannel   *channel,
-                                              GIOCondition  cond,
-                                              gpointer      data);
-static gboolean   gimp_plug_in_write         (GIOChannel   *channel,
-                                              const guint8 *buf,
-                                              gulong        count,
-                                              gpointer      data);
-static gboolean   gimp_plug_in_flush         (GIOChannel   *channel,
-                                              gpointer      data);
+static gboolean   gimp_plug_in_recv_message           (GIOChannel   *channel,
+                                                       GIOCondition  cond,
+                                                       gpointer      data);
+static gboolean   gimp_plug_in_write                  (GIOChannel   *channel,
+                                                       const guint8 *buf,
+                                                       gulong        count,
+                                                       gpointer      data);
+static gboolean   gimp_plug_in_flush                  (GIOChannel   *channel,
+                                                       gpointer      data);
 
 #if defined G_OS_WIN32 && defined WIN32_32BIT_DLL_FOLDER
-static void       gimp_plug_in_set_dll_directory (const gchar *path);
+static void       gimp_plug_in_set_dll_directory      (const gchar  *path);
 #endif
 
+#ifndef G_OS_WIN32
+static void       gimp_plug_in_close_waitpid          (GPid          pid,
+                                                       gint          status,
+                                                       GimpPlugIn   *plug_in);
+#endif
+
+#ifdef __APPLE__
+static guint      gimp_plug_in_wire_count_bytes_ready (GIOChannel   *channel);
+#endif
 
 
 G_DEFINE_TYPE (GimpPlugIn, gimp_plug_in, GIMP_TYPE_OBJECT)
@@ -139,6 +151,7 @@ gimp_plug_in_init (GimpPlugIn *plug_in)
 {
   plug_in->manager            = NULL;
   plug_in->file               = NULL;
+  plug_in->display            = NULL;
 
   plug_in->call_mode          = GIMP_PLUG_IN_CALL_NONE;
   plug_in->open               = FALSE;
@@ -168,12 +181,17 @@ gimp_plug_in_finalize (GObject *object)
   GimpPlugIn *plug_in = GIMP_PLUG_IN (object);
 
   g_clear_object (&plug_in->file);
+  g_clear_weak_pointer (&plug_in->display);
 
   gimp_plug_in_proc_frame_dispose (&plug_in->main_proc_frame, plug_in);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
+/* Always returns TRUE.
+ * This is of type GIOFunc, for which returning TRUE
+ * means the IO event source should not be removed.
+ */
 static gboolean
 gimp_plug_in_recv_message (GIOChannel   *channel,
                            GIOCondition  cond,
@@ -187,6 +205,18 @@ gimp_plug_in_recv_message (GIOChannel   *channel,
    * reason...
    */
   if (cond == 0)
+    return TRUE;
+#endif
+
+#ifdef __APPLE__
+  /* Workaround for #12711:
+   * sometimes we get an IO event of type G_IO_IN when the pipe is empty.
+   *
+   * There must be at least 4 bytes of message type
+   * else reads will hang, and the app appear non-responsive.
+   */
+
+  if (gimp_plug_in_wire_count_bytes_ready (channel) < 4)
     return TRUE;
 #endif
 
@@ -335,39 +365,90 @@ gimp_plug_in_flush (GIOChannel *channel,
 static void
 gimp_plug_in_set_dll_directory (const gchar *path)
 {
+  LPWSTR       w_path;
   const gchar *install_dir;
   gchar       *bin_dir;
   LPWSTR       w_bin_dir;
   DWORD        BinaryType;
-  int          n;
 
+  w_path = NULL;
   w_bin_dir = NULL;
   install_dir = gimp_installation_directory ();
-  if (path                               &&
-      GetBinaryTypeA (path, &BinaryType) &&
+  if (path &&
+      (w_path = g_utf8_to_utf16 (path, -1, NULL, NULL, NULL)) &&
+      GetBinaryTypeW (w_path, &BinaryType) &&
       BinaryType == SCS_32BIT_BINARY)
     bin_dir = g_build_filename (install_dir, WIN32_32BIT_DLL_FOLDER, NULL);
   else
     bin_dir = g_build_filename (install_dir, "bin", NULL);
 
-  n = MultiByteToWideChar (CP_UTF8, MB_ERR_INVALID_CHARS,
-                           bin_dir, -1, NULL, 0);
-  if (n == 0)
-    goto out;
-
-  w_bin_dir = g_malloc_n (n + 1, sizeof (wchar_t));
-  n = MultiByteToWideChar (CP_UTF8, MB_ERR_INVALID_CHARS,
-                           bin_dir, -1,
-                           w_bin_dir, (n + 1) * sizeof (wchar_t));
-  if (n == 0)
-    goto out;
-
-  SetDllDirectoryW (w_bin_dir);
-
-out:
+  w_bin_dir = g_utf8_to_utf16 (bin_dir, -1, NULL, NULL, NULL);
   if (w_bin_dir)
-    g_free ((void*) w_bin_dir);
+    {
+      SetDllDirectoryW (w_bin_dir);
+      g_free (w_bin_dir);
+    }
+
   g_free (bin_dir);
+  g_free (w_path);
+}
+#endif
+
+#ifndef G_OS_WIN32
+static void
+gimp_plug_in_close_waitpid (GPid        pid,
+                            gint        status,
+                            GimpPlugIn *plug_in)
+{
+  GError *error = NULL;
+
+  if (plug_in->manager->gimp->be_verbose &&
+      ! g_spawn_check_wait_status (status, &error))
+    {
+      g_printerr ("Process for plug-in '%s' terminated with error: %s\n",
+                  gimp_object_get_name (plug_in),
+                  error->message);
+    }
+  g_clear_error (&error);
+
+  g_spawn_close_pid (pid);
+}
+#endif
+
+#ifdef __APPLE__
+/* Returns the count of bytes in the channel.
+ * Bytes that can be read without blocking.
+ *
+ * Returns zero on an IO error.
+ * Also may return zero if the channel is empty.
+ *
+ * Requires channel is a pipe open for reading.
+ *
+ * This should only be used in extraordinary situations.
+ * It is only for UNIX-like platforms; might not be portable to MSWindows.
+ * It can also be used for debugging the protocol, to know message lengths.
+ *
+ * Used on MacOS for a seeming bug in IO events.
+ * Usually, on an IO event on condition G_IO_IN,
+ * you can assume the pipe is not empty and a read will not block.
+ */
+static guint
+gimp_plug_in_wire_count_bytes_ready (GIOChannel *channel)
+{
+  int   err = 0;
+  guint result;
+  int   fd;
+
+  fd  = g_io_channel_unix_get_fd (channel);
+  err = ioctl (fd, FIONREAD, &result);
+  if (err < 0)
+    {
+      g_warning ("%s ioctl failed.", G_STRFUNC);
+      result = 0;
+    }
+
+  g_debug ("%s bytes ready: %d", G_STRFUNC, result);
+  return result;
 }
 #endif
 
@@ -379,7 +460,8 @@ gimp_plug_in_new (GimpPlugInManager   *manager,
                   GimpContext         *context,
                   GimpProgress        *progress,
                   GimpPlugInProcedure *procedure,
-                  GFile               *file)
+                  GFile               *file,
+                  GimpDisplay         *display)
 {
   GimpPlugIn *plug_in;
 
@@ -389,6 +471,7 @@ gimp_plug_in_new (GimpPlugInManager   *manager,
   g_return_val_if_fail (procedure == NULL ||
                         GIMP_IS_PLUG_IN_PROCEDURE (procedure), NULL);
   g_return_val_if_fail (file == NULL || G_IS_FILE (file), NULL);
+  g_return_val_if_fail (display == NULL || GIMP_IS_DISPLAY (display), NULL);
   g_return_val_if_fail ((procedure != NULL || file != NULL) &&
                         ! (procedure != NULL && file != NULL), NULL);
 
@@ -402,6 +485,7 @@ gimp_plug_in_new (GimpPlugInManager   *manager,
 
   plug_in->manager = manager;
   plug_in->file    = g_object_ref (file);
+  g_set_weak_pointer (&plug_in->display, display);
 
   gimp_plug_in_proc_frame_init (&plug_in->main_proc_frame,
                                 context, progress, procedure);
@@ -418,9 +502,10 @@ gimp_plug_in_open (GimpPlugIn         *plug_in,
   gint          my_read[2];
   gint          my_write[2];
   gchar       **envp;
-  const gchar  *args[9];
+  const gchar  *args[10];
   gchar       **argv;
   gint          argc;
+  gchar         protocol_version[8];
   gchar        *interp, *interp_arg;
   gchar        *his_read_fd, *his_write_fd;
   const gchar  *mode;
@@ -527,8 +612,12 @@ gimp_plug_in_open (GimpPlugIn         *plug_in,
   if (interp_arg)
     args[argc++] = interp_arg;
 
+  g_snprintf (protocol_version, sizeof (protocol_version),
+              "%d", GIMP_PROTOCOL_VERSION);
+
   args[argc++] = progname;
   args[argc++] = "-gimp";
+  args[argc++] = protocol_version;
   args[argc++] = his_read_fd;
   args[argc++] = his_write_fd;
   args[argc++] = mode;
@@ -660,12 +749,33 @@ gimp_plug_in_close (GimpPlugIn *plug_in,
             status = kill (- plug_in->pid, SIGKILL);
           else
             status = kill (plug_in->pid, SIGKILL);
-        }
 
-      /* Wait for the process to exit. This will happen
-       * immediately if it was just killed.
-       */
-      waitpid (plug_in->pid, &status, 0);
+          /* Wait for the process to exit. This will happen
+           * immediately as it was just killed.
+           */
+          waitpid (plug_in->pid, &status, 0);
+        }
+      else
+        {
+          /*
+           * If we don't kill it, it means the plug-in ended normally
+           * hence its process should just return without problem. And
+           * this is the case nearly all the time. Yet I had this one
+           * case where the process would never return (even though the
+           * plug-in returned with a result and no errors) and a
+           * waitpid() would block the main process forever.
+           * Thus use instead a child watch source. My idea was that in
+           * the rare case when the child process doesn't return, it is
+           * better to leave a zombie than freeze the core. As it turns
+           * out, doing this even made the broken process exit (does
+           * g_child_watch_add_full() do something better than
+           * waitpid()?).
+           */
+          g_object_ref (plug_in);
+          g_child_watch_add_full (G_PRIORITY_LOW, plug_in->pid,
+                                  (GChildWatchFunc) gimp_plug_in_close_waitpid,
+                                  plug_in, (GDestroyNotify) g_object_unref);
+        }
 
 #else /* G_OS_WIN32 */
 
@@ -696,9 +806,9 @@ gimp_plug_in_close (GimpPlugIn *plug_in,
             }
         }
 
+      g_spawn_close_pid (plug_in->pid);
 #endif /* G_OS_WIN32 */
 
-      g_spawn_close_pid (plug_in->pid);
       plug_in->pid = 0;
     }
 
@@ -721,7 +831,7 @@ gimp_plug_in_close (GimpPlugIn *plug_in,
     {
       GimpPlugInProcFrame *proc_frame = plug_in->temp_proc_frames->data;
 
-#ifdef GIMP_UNSTABLE
+#ifndef GIMP_RELEASE
       g_printerr ("plug-in '%s' aborted before sending its "
                   "temporary procedure return values\n",
                   gimp_object_get_name (plug_in));
@@ -743,10 +853,11 @@ gimp_plug_in_close (GimpPlugIn *plug_in,
   if (plug_in->main_proc_frame.main_loop &&
       g_main_loop_is_running (plug_in->main_proc_frame.main_loop))
     {
-#ifdef GIMP_UNSTABLE
-      g_printerr ("plug-in '%s' aborted before sending its "
-                  "procedure return values\n",
-                  gimp_object_get_name (plug_in));
+#ifndef GIMP_RELEASE
+      if (! kill_it)
+        g_printerr ("plug-in '%s' aborted before sending its "
+                    "procedure return values\n",
+                    gimp_object_get_name (plug_in));
 #endif
 
       g_main_loop_quit (plug_in->main_proc_frame.main_loop);
@@ -755,7 +866,7 @@ gimp_plug_in_close (GimpPlugIn *plug_in,
   if (plug_in->ext_main_loop &&
       g_main_loop_is_running (plug_in->ext_main_loop))
     {
-#ifdef GIMP_UNSTABLE
+#ifndef GIMP_RELEASE
       g_printerr ("extension '%s' aborted before sending its "
                   "extension_ack message\n",
                   gimp_object_get_name (plug_in));
@@ -834,9 +945,7 @@ gimp_plug_in_main_loop (GimpPlugIn *plug_in)
 
   proc_frame->main_loop = g_main_loop_new (NULL, FALSE);
 
-  gimp_threads_leave (plug_in->manager->gimp);
   g_main_loop_run (proc_frame->main_loop);
-  gimp_threads_enter (plug_in->manager->gimp);
 
   g_clear_pointer (&proc_frame->main_loop, g_main_loop_unref);
 }
@@ -872,105 +981,11 @@ gimp_plug_in_get_undo_desc (GimpPlugIn *plug_in)
   return undo_desc ? undo_desc : gimp_object_get_name (plug_in);
 }
 
-/*  called from the PDB (gimp_plugin_menu_register)  */
-gboolean
-gimp_plug_in_menu_register (GimpPlugIn  *plug_in,
-                            const gchar *proc_name,
-                            const gchar *menu_path)
-{
-  GimpPlugInProcedure *proc  = NULL;
-  GError              *error = NULL;
-
-  g_return_val_if_fail (GIMP_IS_PLUG_IN (plug_in), FALSE);
-  g_return_val_if_fail (proc_name != NULL, FALSE);
-  g_return_val_if_fail (menu_path != NULL, FALSE);
-
-  if (plug_in->plug_in_def)
-    proc = gimp_plug_in_procedure_find (plug_in->plug_in_def->procedures,
-                                        proc_name);
-
-  if (! proc)
-    proc = gimp_plug_in_procedure_find (plug_in->temp_procedures, proc_name);
-
-  if (! proc)
-    {
-      gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_ERROR,
-                    "Plug-in \"%s\"\n(%s)\n"
-                    "attempted to register the menu item \"%s\" "
-                    "for the procedure \"%s\".\n"
-                    "It has however not installed that procedure.  This "
-                    "is not allowed.",
-                    gimp_object_get_name (plug_in),
-                    gimp_file_get_utf8_name (plug_in->file),
-                    menu_path, proc_name);
-
-      return FALSE;
-    }
-
-  switch (GIMP_PROCEDURE (proc)->proc_type)
-    {
-    case GIMP_INTERNAL:
-      return FALSE;
-
-    case GIMP_PLUGIN:
-    case GIMP_EXTENSION:
-      if (plug_in->call_mode != GIMP_PLUG_IN_CALL_QUERY &&
-          plug_in->call_mode != GIMP_PLUG_IN_CALL_INIT)
-        return FALSE;
-
-    case GIMP_TEMPORARY:
-      break;
-    }
-
-  if (! proc->menu_label)
-    {
-      gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_ERROR,
-                    "Plug-in \"%s\"\n(%s)\n"
-                    "attempted to register the menu item \"%s\" "
-                    "for procedure \"%s\".\n"
-                    "The menu label given in gimp_install_procedure() "
-                    "already contained a path.  To make this work, "
-                    "pass just the menu's label to "
-                    "gimp_install_procedure().",
-                    gimp_object_get_name (plug_in),
-                    gimp_file_get_utf8_name (plug_in->file),
-                    menu_path, proc_name);
-
-      return FALSE;
-    }
-
-  if (! strlen (proc->menu_label))
-    {
-      gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_ERROR,
-                    "Plug-in \"%s\"\n(%s)\n"
-                    "attempted to register the procedure \"%s\" "
-                    "in the menu \"%s\", but the procedure has no label.  "
-                    "This is not allowed.",
-                    gimp_object_get_name (plug_in),
-                    gimp_file_get_utf8_name (plug_in->file),
-                    proc_name, menu_path);
-
-      return FALSE;
-    }
-
-  if (! gimp_plug_in_procedure_add_menu_path (proc, menu_path, &error))
-    {
-      gimp_message_literal (plug_in->manager->gimp, NULL, GIMP_MESSAGE_ERROR,
-                            error->message);
-      g_clear_error (&error);
-
-      return FALSE;
-    }
-
-  return TRUE;
-}
-
 void
 gimp_plug_in_add_temp_proc (GimpPlugIn             *plug_in,
                             GimpTemporaryProcedure *proc)
 {
   GimpPlugInProcedure *overridden;
-  const gchar         *locale_domain;
   const gchar         *help_domain;
 
   g_return_if_fail (GIMP_IS_PLUG_IN (plug_in));
@@ -983,15 +998,10 @@ gimp_plug_in_add_temp_proc (GimpPlugIn             *plug_in,
     gimp_plug_in_remove_temp_proc (plug_in,
                                    GIMP_TEMPORARY_PROCEDURE (overridden));
 
-  locale_domain = gimp_plug_in_manager_get_locale_domain (plug_in->manager,
-                                                          plug_in->file,
-                                                          NULL);
   help_domain = gimp_plug_in_manager_get_help_domain (plug_in->manager,
                                                       plug_in->file,
                                                       NULL);
 
-  gimp_plug_in_procedure_set_locale_domain (GIMP_PLUG_IN_PROCEDURE (proc),
-                                            locale_domain);
   gimp_plug_in_procedure_set_help_domain (GIMP_PLUG_IN_PROCEDURE (proc),
                                           help_domain);
 
@@ -1041,20 +1051,4 @@ gimp_plug_in_get_error_handler (GimpPlugIn *plug_in)
     return proc_frame->error_handler;
 
   return GIMP_PDB_ERROR_HANDLER_INTERNAL;
-}
-
-void
-gimp_plug_in_enable_precision (GimpPlugIn *plug_in)
-{
-  g_return_if_fail (GIMP_IS_PLUG_IN (plug_in));
-
-  plug_in->precision = TRUE;
-}
-
-gboolean
-gimp_plug_in_precision_enabled (GimpPlugIn *plug_in)
-{
-  g_return_val_if_fail (GIMP_IS_PLUG_IN (plug_in), FALSE);
-
-  return plug_in->precision;
 }

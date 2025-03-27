@@ -39,166 +39,234 @@ typedef enum
     PALETTE_MODE
   } MapMode;
 
-static void     query                 (void);
-static void     run                   (const gchar      *name,
-                                       gint              nparams,
-                                       const GimpParam  *param,
-                                       gint             *nreturn_vals,
-                                       GimpParam       **return_vals);
-static void     map                   (GeglBuffer       *buffer,
-                                       GeglBuffer       *shadow_buffer,
-                                       gint32            drawable_id,
-                                       MapMode           mode);
-static gdouble * get_samples_gradient (gint32            drawable_id);
-static gdouble * get_samples_palette  (gint32            drawable_id);
 
+typedef struct _Map      Map;
+typedef struct _MapClass MapClass;
 
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _Map
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
+  GimpPlugIn parent_instance;
 };
 
-MAIN ()
+struct _MapClass
+{
+  GimpPlugInClass parent_class;
+};
+
+
+#define MAP_TYPE  (map_get_type ())
+#define MAP(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), MAP_TYPE, Map))
+
+GType                   map_get_type         (void) G_GNUC_CONST;
+
+static GList          * map_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * map_create_procedure (GimpPlugIn           *plug_in,
+                                              const gchar          *name);
+
+static GimpValueArray * map_run              (GimpProcedure        *procedure,
+                                              GimpRunMode           run_mode,
+                                              GimpImage            *image,
+                                              GimpDrawable        **drawables,
+                                              GimpProcedureConfig  *config,
+                                              gpointer              run_data);
+
+static void             map                  (GeglBuffer           *buffer,
+                                              GeglBuffer           *shadow_buffer,
+                                              GimpDrawable         *drawable,
+                                              MapMode               mode);
+static gdouble        * get_samples_gradient (GimpDrawable         *drawable);
+static gdouble        * get_samples_palette  (GimpDrawable         *drawable);
+
+
+G_DEFINE_TYPE (Map, map, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (MAP_TYPE)
+DEFINE_STD_SET_I18N
+
 
 static void
-query (void)
+map_class_init (MapClass *klass)
 {
-  static const GimpParamDef args[]=
-  {
-    { GIMP_PDB_INT32,    "run-mode", "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",    "Input image (unused)" },
-    { GIMP_PDB_DRAWABLE, "drawable", "Input drawable"       }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  gimp_install_procedure (GRADMAP_PROC,
-                          N_("Recolor the image using colors from the active gradient"),
-                          "This plug-in maps the contents of the specified "
-                          "drawable with active gradient. It calculates "
-                          "luminosity of each pixel and replaces the pixel "
-                          "by the sample of active gradient at the position "
-                          "proportional to that luminosity. Complete black "
-                          "pixel becomes the leftmost color of the gradient, "
-                          "and complete white becomes the rightmost. Works on "
-                          "both Grayscale and RGB image with/without alpha "
-                          "channel.",
-                          "Eiichi Takamori",
-                          "Eiichi Takamori",
-                          "1997",
-                          N_("_Gradient Map"),
-                          "RGB*, GRAY*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args), 0,
-                          args, NULL);
-
-  gimp_plugin_menu_register (GRADMAP_PROC, "<Image>/Colors/Map");
-
-  gimp_install_procedure (PALETTEMAP_PROC,
-                          N_("Recolor the image using colors from the active palette"),
-                          "This plug-in maps the contents of the specified "
-                          "drawable with the active palette. It calculates "
-                          "luminosity of each pixel and replaces the pixel "
-                          "by the palette sample  at the corresponding "
-                          "index. A complete black "
-                          "pixel becomes the lowest palette entry, "
-                          "and complete white becomes the highest. Works on "
-                          "both Grayscale and RGB image with/without alpha "
-                          "channel.",
-                          "Bill Skaggs",
-                          "Bill Skaggs",
-                          "2004",
-                          N_("_Palette Map"),
-                          "RGB*, GRAY*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args), 0,
-                          args, NULL);
-
-  gimp_plugin_menu_register (PALETTEMAP_PROC, "<Image>/Colors/Map");
+  plug_in_class->query_procedures = map_query_procedures;
+  plug_in_class->create_procedure = map_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+map_init (Map *map)
 {
-  static GimpParam   values[1];
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpRunMode        run_mode;
-  gint32             drawable_id;
-  GeglBuffer        *shadow_buffer;
-  GeglBuffer        *buffer;
+}
 
-  run_mode    = param[0].data.d_int32;
-  drawable_id = param[2].data.d_drawable;
+static GList *
+map_query_procedures (GimpPlugIn *plug_in)
+{
+  GList *list = NULL;
 
-  INIT_I18N ();
+  list = g_list_append (list, g_strdup (GRADMAP_PROC));
+  list = g_list_append (list, g_strdup (PALETTEMAP_PROC));
+
+  return list;
+}
+
+static GimpProcedure *
+map_create_procedure (GimpPlugIn  *plug_in,
+                           const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, GRADMAP_PROC))
+    {
+      procedure = gimp_image_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            map_run,
+                                            GINT_TO_POINTER (GRADIENT_MODE),
+                                            NULL);
+
+      gimp_procedure_set_image_types (procedure, "RGB*, GRAY*");
+      gimp_procedure_set_sensitivity_mask (procedure,
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLE);
+
+      gimp_procedure_set_menu_label (procedure, _("_Gradient Map"));
+      gimp_procedure_add_menu_path (procedure, "<Image>/Colors/Map");
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Recolor the image using colors "
+                                          "from the active gradient"),
+                                        "This plug-in maps the contents of "
+                                        "the specified drawable with active "
+                                        "gradient. It calculates luminosity "
+                                        "of each pixel and replaces the pixel "
+                                        "by the sample of active gradient at "
+                                        "the position proportional to that "
+                                        "luminosity. Complete black pixel "
+                                        "becomes the leftmost color of the "
+                                        "gradient, and complete white becomes "
+                                        "the rightmost. Works on both "
+                                        "Grayscale and RGB image "
+                                        "with/without alpha channel.",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Eiichi Takamori",
+                                      "Eiichi Takamori",
+                                      "1997");
+    }
+  else if (! strcmp (name, PALETTEMAP_PROC))
+    {
+      procedure = gimp_image_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            map_run,
+                                            GINT_TO_POINTER (PALETTE_MODE),
+                                            NULL);
+
+      gimp_procedure_set_image_types (procedure, "RGB*, GRAY*");
+      gimp_procedure_set_sensitivity_mask (procedure,
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLE);
+
+      gimp_procedure_set_menu_label (procedure, _("_Palette Map"));
+      gimp_procedure_add_menu_path (procedure, "<Image>/Colors/Map");
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Recolor the image using colors "
+                                          "from the active palette"),
+                                        "This plug-in maps the contents of "
+                                        "the specified drawable with the "
+                                        "active palette. It calculates "
+                                        "luminosity of each pixel and "
+                                        "replaces the pixel by the palette "
+                                        "sample at the corresponding index. "
+                                        "A complete black pixel becomes the "
+                                        "lowest palette entry, and complete "
+                                        "white becomes the highest. Works on "
+                                        "both Grayscale and RGB image "
+                                        "with/without alpha channel.",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Bill Skaggs",
+                                      "Bill Skaggs",
+                                      "2004");
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+map_run (GimpProcedure        *procedure,
+         GimpRunMode           run_mode,
+         GimpImage            *image,
+         GimpDrawable        **drawables,
+         GimpProcedureConfig  *config,
+         gpointer              run_data)
+{
+  MapMode       mode = GPOINTER_TO_INT (run_data);
+  GeglBuffer   *shadow_buffer;
+  GeglBuffer   *buffer;
+  GimpDrawable *drawable;
+
   gegl_init (NULL, NULL);
 
-  *nreturn_vals = 1;
-  *return_vals  = values;
-
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
-
-  /*  Get the specified drawable  */
-  shadow_buffer = gimp_drawable_get_shadow_buffer (drawable_id);
-  buffer        = gimp_drawable_get_buffer (drawable_id);
-
-  /*  Make sure that the drawable is gray or RGB color  */
-  if (gimp_drawable_is_rgb  (drawable_id) ||
-      gimp_drawable_is_gray (drawable_id))
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
-      MapMode mode = 0;
+      GError *error = NULL;
 
-      if ( !strcmp (name, GRADMAP_PROC))
-        {
-          mode = GRADIENT_MODE;
-          gimp_progress_init (_("Gradient Map"));
-        }
-      else if ( !strcmp (name, PALETTEMAP_PROC))
-        {
-          mode = PALETTE_MODE;
-          gimp_progress_init (_("Palette Map"));
-        }
-      else
-        {
-          status = GIMP_PDB_CALLING_ERROR;
-        }
+      g_set_error (&error, GIMP_PLUG_IN_ERROR, 0,
+                   _("Procedure '%s' only works with one drawable."),
+                   gimp_procedure_get_name (procedure));
 
-      if (status == GIMP_PDB_SUCCESS)
-        {
-          if (mode)
-            map (buffer, shadow_buffer, drawable_id, mode);
-        }
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_CALLING_ERROR,
+                                               error);
     }
   else
     {
-      status = GIMP_PDB_EXECUTION_ERROR;
+      drawable = drawables[0];
+    }
+
+  shadow_buffer = gimp_drawable_get_shadow_buffer (drawable);
+  buffer        = gimp_drawable_get_buffer (drawable);
+
+  /*  Make sure that the drawable is gray or RGB color  */
+  if (gimp_drawable_is_rgb  (drawable) ||
+      gimp_drawable_is_gray (drawable))
+    {
+      if (mode == GRADIENT_MODE)
+        {
+          gimp_progress_init (_("Gradient Map"));
+        }
+      else
+        {
+          gimp_progress_init (_("Palette Map"));
+        }
+
+      map (buffer, shadow_buffer, drawable, mode);
+    }
+  else
+    {
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_EXECUTION_ERROR,
+                                               NULL);
     }
 
   g_object_unref (buffer);
   g_object_unref (shadow_buffer);
 
-  gimp_drawable_merge_shadow (drawable_id, TRUE);
+  gimp_drawable_merge_shadow (drawable, TRUE);
 
-  gimp_drawable_update (drawable_id, 0, 0,
-                        gimp_drawable_width (drawable_id),
-                        gimp_drawable_height (drawable_id));
-
-  values[0].data.d_status = status;
+  gimp_drawable_update (drawable, 0, 0,
+                        gimp_drawable_get_width  (drawable),
+                        gimp_drawable_get_height (drawable));
 
   if (run_mode != GIMP_RUN_NONINTERACTIVE)
     gimp_displays_flush ();
+
+  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }
 
 static void
 map (GeglBuffer   *buffer,
      GeglBuffer   *shadow_buffer,
-     gint32        drawable_id,
+     GimpDrawable *drawable,
      MapMode       mode)
 {
   GeglBufferIterator *gi;
@@ -214,17 +282,17 @@ map (GeglBuffer   *buffer,
   const Babl         *format_shadow;
   const Babl         *format_buffer;
 
-  is_rgb = gimp_drawable_is_rgb (drawable_id);
-  has_alpha = gimp_drawable_has_alpha (drawable_id);
+  is_rgb    = gimp_drawable_is_rgb (drawable);
+  has_alpha = gimp_drawable_has_alpha (drawable);
 
   switch (mode)
     {
     case GRADIENT_MODE:
-      samples = get_samples_gradient (drawable_id);
+      samples = get_samples_gradient (drawable);
       interpolate = TRUE;
       break;
     case PALETTE_MODE:
-      samples = get_samples_palette (drawable_id);
+      samples = get_samples_palette (drawable);
       interpolate = FALSE;
       break;
     default:
@@ -344,26 +412,36 @@ map (GeglBuffer   *buffer,
   Each sample is (R'G'B'A float) or (Y'A float), depending on the drawable
  */
 static gdouble *
-get_samples_gradient (gint32 drawable_id)
+get_samples_gradient (GimpDrawable *drawable)
 {
-  gchar   *gradient_name;
-  gint     n_d_samples;
-  gdouble *d_samples = NULL;
+  GimpGradient  *gradient;
+  GeglColor    **colors;
+  const Babl    *format_dst;
+  gdouble       *d_samples;
+  gint           bpp;
 
-  gradient_name = gimp_context_get_gradient ();
+  gradient = gimp_context_get_gradient ();
 
   /* FIXME: "reverse" hardcoded to FALSE. */
-  gimp_gradient_get_uniform_samples (gradient_name, NSAMPLES, FALSE,
-                                     &n_d_samples, &d_samples);
-  g_free (gradient_name);
+  colors = gimp_gradient_get_uniform_samples (gradient, NSAMPLES, FALSE);
 
-  if (!gimp_drawable_is_rgb (drawable_id))
+  if (gimp_drawable_is_rgb (drawable))
     {
-      const Babl *format_src = babl_format ("R'G'B'A double");
-      const Babl *format_dst = babl_format ("Y'A double");
-      const Babl *fish = babl_fish (format_src, format_dst);
-      babl_process (fish, d_samples, d_samples, NSAMPLES);
+      format_dst = babl_format ("R'G'B'A double");
+      bpp        = 4;
     }
+  else
+    {
+      format_dst = babl_format ("Y'A double");
+      bpp        = 2;
+    }
+
+  d_samples = g_new0 (gdouble, NSAMPLES * bpp);
+
+  for (gint i = 0; colors[i] != NULL; i++)
+    gegl_color_get_pixel (colors[i], format_dst, &d_samples[i * bpp]);
+
+  gimp_color_array_free (colors);
 
   return d_samples;
 }
@@ -373,10 +451,10 @@ get_samples_gradient (gint32 drawable_id)
   Each sample is (R'G'B'A float) or (Y'A float), depending on the drawable
  */
 static gdouble *
-get_samples_palette (gint32 drawable_id)
+get_samples_palette (GimpDrawable *drawable)
 {
-  gchar      *palette_name;
-  GimpRGB     color_sample;
+  GimpPalette *palette;
+
   gdouble    *d_samples, *d_samp;
   gboolean    is_rgb;
   gdouble     factor;
@@ -384,10 +462,10 @@ get_samples_palette (gint32 drawable_id)
   gint        nb_color_chan, nb_chan, i;
   const Babl *format;
 
-  palette_name = gimp_context_get_palette ();
-  gimp_palette_get_info (palette_name, &num_colors);
+  palette = gimp_context_get_palette ();
+  num_colors = gimp_palette_get_color_count (palette);
 
-  is_rgb = gimp_drawable_is_rgb (drawable_id);
+  is_rgb = gimp_drawable_is_rgb (drawable);
 
   factor = ((double) num_colors) / NSAMPLES;
   format = is_rgb ? babl_format ("R'G'B'A double") : babl_format ("Y'A double");
@@ -398,15 +476,14 @@ get_samples_palette (gint32 drawable_id)
 
   for (i = 0; i < NSAMPLES; i++)
     {
+      GeglColor *color_sample;
+
       d_samp = &d_samples[i * nb_chan];
       pal_entry = CLAMP ((int)(i * factor), 0, num_colors - 1);
 
-      gimp_palette_entry_get_color (palette_name, pal_entry, &color_sample);
-      gimp_rgb_get_pixel (&color_sample,
-                          format,
-                          d_samp);
+      color_sample = gimp_palette_get_entry_color (palette, pal_entry);
+      gegl_color_get_pixel (color_sample, format, d_samp);
     }
 
-  g_free (palette_name);
   return d_samples;
 }

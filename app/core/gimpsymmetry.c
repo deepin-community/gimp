@@ -235,7 +235,7 @@ gimp_symmetry_real_update_strokes (GimpSymmetry *sym,
 {
   /* The basic symmetry just uses the origin as is. */
   sym->strokes = g_list_prepend (sym->strokes,
-                                 g_memdup (origin, sizeof (GimpCoords)));
+                                 g_memdup2 (origin, sizeof (GimpCoords)));
 }
 
 static void
@@ -323,7 +323,7 @@ gimp_symmetry_set_origin (GimpSymmetry *sym,
   if (origin != sym->origin)
     {
       g_free (sym->origin);
-      sym->origin = g_memdup (origin, sizeof (GimpCoords));
+      sym->origin = g_memdup2 (origin, sizeof (GimpCoords));
     }
 
   g_list_free_full (sym->strokes, g_free);
@@ -401,9 +401,9 @@ gimp_symmetry_get_coords (GimpSymmetry *sym,
  * gimp_symmetry_get_transform:
  * @sym:     the #GimpSymmetry
  * @stroke:  the stroke number
- * @angle:   output pointer to the transformation rotation angle,
+ * @angle: (out): output pointer to the transformation rotation angle,
  *           in degrees (ccw)
- * @reflect: output pointer to the transformation reflection flag
+ * @reflect: (out): output pointer to the transformation reflection flag
  *
  * Returns: the transformation to apply to the paint content for stroke
  * number @stroke.  The transformation is comprised of rotation, possibly
@@ -499,19 +499,17 @@ gimp_symmetry_to_parasite (const GimpSymmetry *sym)
 {
   GimpParasite *parasite;
   gchar        *parasite_name;
-  gchar        *str;
 
   g_return_val_if_fail (GIMP_IS_SYMMETRY (sym), NULL);
 
-  str = gimp_config_serialize_to_string (GIMP_CONFIG (sym), NULL);
-  g_return_val_if_fail (str != NULL, NULL);
-
   parasite_name = gimp_symmetry_parasite_name (G_TYPE_FROM_INSTANCE (sym));
-  parasite = gimp_parasite_new (parasite_name,
-                                GIMP_PARASITE_PERSISTENT,
-                                strlen (str) + 1, str);
+
+  parasite = gimp_config_serialize_to_parasite ((GimpConfig *) sym,
+                                                parasite_name,
+                                                GIMP_PARASITE_PERSISTENT,
+                                                NULL);
+
   g_free (parasite_name);
-  g_free (str);
 
   return parasite;
 }
@@ -521,21 +519,21 @@ gimp_symmetry_from_parasite (const GimpParasite *parasite,
                              GimpImage          *image,
                              GType               type)
 {
-  GimpSymmetry    *symmetry;
-  gchar           *parasite_name;
-  const gchar     *str;
-  GError          *error = NULL;
+  GimpSymmetry *symmetry;
+  gchar        *parasite_name;
+  gchar        *parasite_contents;
+  guint32       parasite_size;
+  GError       *error = NULL;
 
   parasite_name = gimp_symmetry_parasite_name (type);
 
   g_return_val_if_fail (parasite != NULL, NULL);
-  g_return_val_if_fail (strcmp (gimp_parasite_name (parasite),
+  g_return_val_if_fail (strcmp (gimp_parasite_get_name (parasite),
                                 parasite_name) == 0,
                         NULL);
 
-  str = gimp_parasite_data (parasite);
-
-  if (! str)
+  parasite_contents = (gchar *) gimp_parasite_get_data (parasite, &parasite_size);
+  if (! parasite_contents)
     {
       g_warning ("Empty symmetry parasite \"%s\"", parasite_name);
 
@@ -548,15 +546,15 @@ gimp_symmetry_from_parasite (const GimpParasite *parasite,
                 "version", -1,
                 NULL);
 
-  if (! gimp_config_deserialize_string (GIMP_CONFIG (symmetry),
-                                        str,
-                                        gimp_parasite_data_size (parasite),
-                                        NULL,
-                                        &error))
+  if (! gimp_config_deserialize_parasite (GIMP_CONFIG (symmetry),
+                                          parasite,
+                                          NULL,
+                                          &error))
     {
       g_printerr ("Failed to deserialize symmetry parasite: %s\n"
-                  "\t- parasite name: %s\n\t- parasite data: %s\n",
-                  error->message, parasite_name, str);
+                  "\t- parasite name: %s\n\t- parasite data: %.*s\n",
+                  error->message, parasite_name,
+                  parasite_size, parasite_contents);
       g_error_free (error);
 
       g_object_unref (symmetry);

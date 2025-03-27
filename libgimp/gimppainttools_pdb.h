@@ -32,75 +32,75 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-gboolean gimp_airbrush           (gint32                    drawable_ID,
+gboolean gimp_airbrush           (GimpDrawable             *drawable,
                                   gdouble                   pressure,
-                                  gint                      num_strokes,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_airbrush_default   (gint32                    drawable_ID,
-                                  gint                      num_strokes,
+gboolean gimp_airbrush_default   (GimpDrawable             *drawable,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_clone              (gint32                    drawable_ID,
-                                  gint32                    src_drawable_ID,
+gboolean gimp_clone              (GimpDrawable             *drawable,
+                                  GimpDrawable             *src_drawable,
                                   GimpCloneType             clone_type,
                                   gdouble                   src_x,
                                   gdouble                   src_y,
-                                  gint                      num_strokes,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_clone_default      (gint32                    drawable_ID,
-                                  gint                      num_strokes,
+gboolean gimp_clone_default      (GimpDrawable             *drawable,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_convolve           (gint32                    drawable_ID,
+gboolean gimp_convolve           (GimpDrawable             *drawable,
                                   gdouble                   pressure,
                                   GimpConvolveType          convolve_type,
-                                  gint                      num_strokes,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_convolve_default   (gint32                    drawable_ID,
-                                  gint                      num_strokes,
+gboolean gimp_convolve_default   (GimpDrawable             *drawable,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_dodgeburn          (gint32                    drawable_ID,
+gboolean gimp_dodgeburn          (GimpDrawable             *drawable,
                                   gdouble                   exposure,
                                   GimpDodgeBurnType         dodgeburn_type,
                                   GimpTransferMode          dodgeburn_mode,
-                                  gint                      num_strokes,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_dodgeburn_default  (gint32                    drawable_ID,
-                                  gint                      num_strokes,
+gboolean gimp_dodgeburn_default  (GimpDrawable             *drawable,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_eraser             (gint32                    drawable_ID,
-                                  gint                      num_strokes,
+gboolean gimp_eraser             (GimpDrawable             *drawable,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes,
                                   GimpBrushApplicationMode  hardness,
                                   GimpPaintApplicationMode  method);
-gboolean gimp_eraser_default     (gint32                    drawable_ID,
-                                  gint                      num_strokes,
+gboolean gimp_eraser_default     (GimpDrawable             *drawable,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_heal               (gint32                    drawable_ID,
-                                  gint32                    src_drawable_ID,
+gboolean gimp_heal               (GimpDrawable             *drawable,
+                                  GimpDrawable             *src_drawable,
                                   gdouble                   src_x,
                                   gdouble                   src_y,
-                                  gint                      num_strokes,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_heal_default       (gint32                    drawable_ID,
-                                  gint                      num_strokes,
+gboolean gimp_heal_default       (GimpDrawable             *drawable,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_paintbrush         (gint32                    drawable_ID,
+gboolean gimp_paintbrush         (GimpDrawable             *drawable,
                                   gdouble                   fade_out,
-                                  gint                      num_strokes,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes,
                                   GimpPaintApplicationMode  method,
                                   gdouble                   gradient_length);
-gboolean gimp_paintbrush_default (gint32                    drawable_ID,
-                                  gint                      num_strokes,
+gboolean gimp_paintbrush_default (GimpDrawable             *drawable,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_pencil             (gint32                    drawable_ID,
-                                  gint                      num_strokes,
+gboolean gimp_pencil             (GimpDrawable             *drawable,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_smudge             (gint32                    drawable_ID,
+gboolean gimp_smudge             (GimpDrawable             *drawable,
                                   gdouble                   pressure,
-                                  gint                      num_strokes,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
-gboolean gimp_smudge_default     (gint32                    drawable_ID,
-                                  gint                      num_strokes,
+gboolean gimp_smudge_default     (GimpDrawable             *drawable,
+                                  gsize                     num_strokes,
                                   const gdouble            *strokes);
 
 

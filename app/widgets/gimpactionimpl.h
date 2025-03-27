@@ -21,6 +21,7 @@
 #ifndef __GIMP_ACTION_IMPL_H__
 #define __GIMP_ACTION_IMPL_H__
 
+#include "core/gimpobject.h"
 
 #define GIMP_TYPE_ACTION_IMPL            (gimp_action_impl_get_type ())
 #define GIMP_ACTION_IMPL(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_ACTION_IMPL, GimpActionImpl))
@@ -29,33 +30,34 @@
 #define GIMP_IS_ACTION_IMPL_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((obj), GIMP_TYPE_ACTION_IMPL))
 #define GIMP_ACTION_IMPL_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS((obj), GIMP_TYPE_ACTION_IMPL, GimpActionImplClass))
 
-typedef struct _GimpActionImpl      GimpActionImpl;
-typedef struct _GimpActionImplClass GimpActionImplClass;
+typedef struct _GimpActionImplClass   GimpActionImplClass;
+typedef struct _GimpActionImplPrivate GimpActionImplPrivate;
 
 struct _GimpActionImpl
 {
-  GtkAction           parent_instance;
+  GimpObject             parent_instance;
 
-  GimpContext        *context;
-
-  GimpRGB            *color;
-  GimpViewable       *viewable;
-  PangoEllipsizeMode  ellipsize;
-  gint                max_width_chars;
+  GimpActionImplPrivate *priv;
 };
 
 struct _GimpActionImplClass
 {
-  GtkActionClass parent_class;
+  GimpObjectClass   parent_class;
+
+  /*  signals  */
+  void           (* change_state) (GimpActionImpl *impl,
+                                   GVariant       *value);
 };
 
 GType         gimp_action_impl_get_type       (void) G_GNUC_CONST;
 
 GimpAction  * gimp_action_impl_new            (const gchar   *name,
                                                const gchar   *label,
+                                               const gchar   *short_label,
                                                const gchar   *tooltip,
                                                const gchar   *icon_name,
-                                               const gchar   *help_id);
+                                               const gchar   *help_id,
+                                               GimpContext   *context);
 
 
 #endif  /* __GIMP_ACTION_IMPL_H__ */

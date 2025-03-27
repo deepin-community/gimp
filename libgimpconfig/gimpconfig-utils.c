@@ -21,9 +21,12 @@
 
 #include "config.h"
 
+#include <cairo.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gio/gio.h>
 
 #include "libgimpbase/gimpbase.h"
+#include "libgimpcolor/gimpcolor.h"
 
 #include "gimpconfigtypes.h"
 
@@ -57,7 +60,17 @@ gimp_config_diff_property (GObject    *a,
   g_object_get_property (a, prop_spec->name, &a_value);
   g_object_get_property (b, prop_spec->name, &b_value);
 
-  if (g_param_values_cmp (prop_spec, &a_value, &b_value))
+  /* TODO: temporary hack to handle case of NULL GeglColor in a param value.
+   * This got fixed in commit c0477bcb0 which should be available for GEGL
+   * 0.4.50. In the meantime, this will do.
+   */
+  if (GEGL_IS_PARAM_SPEC_COLOR (prop_spec) &&
+      (! g_value_get_object (&a_value) ||
+       ! g_value_get_object (&b_value)))
+    {
+      retval = (g_value_get_object (&a_value) != g_value_get_object (&b_value));
+    }
+  else if (g_param_values_cmp (prop_spec, &a_value, &b_value))
     {
       if ((prop_spec->flags & GIMP_CONFIG_PARAM_AGGREGATE) &&
           G_IS_PARAM_SPEC_OBJECT (prop_spec)               &&
@@ -89,7 +102,7 @@ gimp_config_diff_same (GObject     *a,
 {
   GParamSpec **param_specs;
   guint        n_param_specs;
-  gint         i;
+  guint        i;
   GList       *list = NULL;
 
   param_specs = g_object_class_list_properties (G_OBJECT_GET_CLASS (a),
@@ -118,7 +131,7 @@ gimp_config_diff_other (GObject     *a,
 {
   GParamSpec **param_specs;
   guint        n_param_specs;
-  gint         i;
+  guint        i;
   GList       *list = NULL;
 
   param_specs = g_object_class_list_properties (G_OBJECT_GET_CLASS (a),
@@ -158,7 +171,7 @@ gimp_config_diff_other (GObject     *a,
  * exist in both object classes and are of the same value_type are
  * compared.
  *
- * Return value: a GList of differing GParamSpecs.
+ * Returns: (transfer container) (element-type GParamSpec): a GList of differing GParamSpecs.
  *
  * Since: 2.4
  **/
@@ -196,7 +209,7 @@ gimp_config_diff (GObject     *a,
  * exist in both object classes and are of the same value_type are
  * synchronized
  *
- * Return value: %TRUE if @dest was modified, %FALSE otherwise
+ * Returns: %TRUE if @dest was modified, %FALSE otherwise
  *
  * Since: 2.4
  **/
@@ -289,12 +302,14 @@ gimp_config_reset_properties (GObject *object)
       if ((prop_spec->flags & G_PARAM_WRITABLE) &&
           ! (prop_spec->flags & G_PARAM_CONSTRUCT_ONLY))
         {
-          if (G_IS_PARAM_SPEC_OBJECT (prop_spec))
+          if (G_IS_PARAM_SPEC_OBJECT (prop_spec)        &&
+              ! GIMP_IS_PARAM_SPEC_OBJECT (prop_spec)   &&
+              g_type_class_peek (prop_spec->value_type) &&
+              g_type_interface_peek (g_type_class_peek (prop_spec->value_type),
+                                     GIMP_TYPE_CONFIG))
             {
               if ((prop_spec->flags & GIMP_CONFIG_PARAM_SERIALIZE) &&
-                  (prop_spec->flags & GIMP_CONFIG_PARAM_AGGREGATE) &&
-                  g_type_interface_peek (g_type_class_peek (prop_spec->value_type),
-                                         GIMP_TYPE_CONFIG))
+                  (prop_spec->flags & GIMP_CONFIG_PARAM_AGGREGATE))
                 {
                   g_value_init (&value, prop_spec->value_type);
 

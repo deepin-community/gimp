@@ -31,196 +31,179 @@
 #include "libgimp/stdplugins-intl.h"
 
 
-/*
- * Constants...
- */
-
 #define PLUG_IN_PROC    "plug-in-destripe"
 #define PLUG_IN_BINARY  "destripe"
 #define PLUG_IN_ROLE    "gimp-destripe"
 #define PLUG_IN_VERSION "0.2"
-#define SCALE_WIDTH     140
 #define MAX_AVG         100
 
 
-/*
- * Local functions...
- */
+typedef struct _Destripe      Destripe;
+typedef struct _DestripeClass DestripeClass;
 
-static void      query (void);
-static void      run   (const gchar      *name,
-                        gint              nparams,
-                        const GimpParam  *param,
-                        gint             *nreturn_vals,
-                        GimpParam       **return_vals);
-
-static void      destripe         (gint32        drawable_ID,
-                                   GimpPreview  *preview);
-static void      destripe_preview (gpointer      drawable_ID,
-                                   GimpPreview  *preview);
-
-static gboolean  destripe_dialog  (gint32        drawable_ID);
-
-/*
- * Globals...
- */
-
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _Destripe
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run    /* run_proc   */
+  GimpPlugIn parent_instance;
 };
 
-typedef struct
+struct _DestripeClass
 {
-  gboolean histogram;
-  gint     avg_width;
-  gboolean preview;
-} DestripeValues;
-
-static DestripeValues vals =
-{
-  FALSE, /* histogram     */
-  36,    /* average width */
-  TRUE   /* preview */
+  GimpPlugInClass parent_class;
 };
 
 
-MAIN ()
+#define DESTRIPE_TYPE  (destripe_get_type ())
+#define DESTRIPE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), DESTRIPE_TYPE, Destripe))
+
+GType                   destripe_get_type         (void) G_GNUC_CONST;
+
+static GList          * destripe_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * destripe_create_procedure (GimpPlugIn           *plug_in,
+                                                   const gchar          *name);
+
+static GimpValueArray * destripe_run              (GimpProcedure        *procedure,
+                                                   GimpRunMode           run_mode,
+                                                   GimpImage            *image,
+                                                   GimpDrawable        **drawables,
+                                                   GimpProcedureConfig  *config,
+                                                   gpointer              run_data);
+
+static void             destripe                  (GObject              *config,
+                                                   GimpDrawable         *drawable,
+                                                   GimpPreview          *preview);
+static void             destripe_preview          (GtkWidget            *widget,
+                                                   GObject              *config);
+
+static gboolean         destripe_dialog           (GimpProcedure        *procedure,
+                                                   GObject              *config,
+                                                   GimpDrawable         *drawable);
+
+
+G_DEFINE_TYPE (Destripe, destripe, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (DESTRIPE_TYPE)
+DEFINE_STD_SET_I18N
+
 
 static void
-query (void)
+destripe_class_init (DestripeClass *klass)
 {
-  static const GimpParamDef args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode",  "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }"          },
-    { GIMP_PDB_IMAGE,    "image",     "Input image"                           },
-    { GIMP_PDB_DRAWABLE, "drawable",  "Input drawable"                        },
-    { GIMP_PDB_INT32,    "avg-width", "Averaging filter width (default = 36)" }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  gimp_install_procedure (PLUG_IN_PROC,
-                          N_("Remove vertical stripe artifacts from the image"),
-                          "This plug-in tries to remove vertical stripes from "
-                          "an image.",
-                          "Marc Lehmann <pcg@goof.com>",
-                          "Marc Lehmann <pcg@goof.com>",
-                          PLUG_IN_VERSION,
-                          N_("Des_tripe..."),
-                          "RGB*, GRAY*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args), 0,
-                          args, NULL);
-
-  gimp_plugin_menu_register (PLUG_IN_PROC, "<Image>/Filters/Enhance");
+  plug_in_class->query_procedures = destripe_query_procedures;
+  plug_in_class->create_procedure = destripe_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+destripe_init (Destripe *destripe)
 {
-  static GimpParam   values[1];  /* Return values */
-  GimpPDBStatusType  status;     /* Return status */
-  GimpRunMode        run_mode;   /* Current run mode */
-  gint32             drawable_ID;
+}
 
-  INIT_I18N ();
+static GList *
+destripe_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (PLUG_IN_PROC));
+}
+
+static GimpProcedure *
+destripe_create_procedure (GimpPlugIn  *plug_in,
+                               const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, PLUG_IN_PROC))
+    {
+      procedure = gimp_image_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            destripe_run, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "RGB*, GRAY*");
+      gimp_procedure_set_sensitivity_mask (procedure,
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLE);
+
+      gimp_procedure_set_menu_label (procedure, _("Des_tripe..."));
+      gimp_procedure_add_menu_path (procedure, "<Image>/Colors/Tone Mapping");
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Remove vertical stripe artifacts "
+                                          "from the image"),
+                                        _("This plug-in tries to remove vertical "
+                                          "stripes from an image."),
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Marc Lehmann <pcg@goof.com>",
+                                      "Marc Lehmann <pcg@goof.com>",
+                                      PLUG_IN_VERSION);
+
+      gimp_procedure_add_int_argument (procedure, "avg-width",
+                                       _("_Width"),
+                                       _("Averaging filter width"),
+                                       2, MAX_AVG, 36,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_boolean_argument (procedure,
+                                           "create-histogram",
+                                           _("Create _histogram"),
+                                           _("Output a histogram"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+destripe_run (GimpProcedure        *procedure,
+              GimpRunMode           run_mode,
+              GimpImage            *image,
+              GimpDrawable        **drawables,
+              GimpProcedureConfig  *config,
+              gpointer              run_data)
+{
+  GimpDrawable *drawable;
+
   gegl_init (NULL, NULL);
 
-  status   = GIMP_PDB_SUCCESS;
-
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
-
-  *nreturn_vals = 1;
-  *return_vals  = values;
-
-  run_mode    = param[0].data.d_int32;
-  drawable_ID = param[2].data.d_drawable;
-
-  switch (run_mode)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
-    case GIMP_RUN_INTERACTIVE:
-      /*
-       * Possibly retrieve data...
-       */
-      gimp_get_data (PLUG_IN_PROC, &vals);
+      GError *error = NULL;
 
-      /*
-       * Get information from the dialog...
-       */
-      if (! destripe_dialog (drawable_ID))
-        return;
-      break;
+      g_set_error (&error, GIMP_PLUG_IN_ERROR, 0,
+                   _("Procedure '%s' only works with one drawable."),
+                   PLUG_IN_PROC);
 
-    case GIMP_RUN_NONINTERACTIVE:
-      /*
-       * Make sure all the arguments are present...
-       */
-      if (nparams != 4)
-        status = GIMP_PDB_CALLING_ERROR;
-      else
-        vals.avg_width = param[3].data.d_int32;
-      break;
-
-    case GIMP_RUN_WITH_LAST_VALS :
-      /*
-       * Possibly retrieve data...
-       */
-      gimp_get_data (PLUG_IN_PROC, &vals);
-      break;
-
-    default :
-      status = GIMP_PDB_CALLING_ERROR;
-      break;
-    };
-
-  /*
-   * Destripe the image...
-   */
-
-  if (status == GIMP_PDB_SUCCESS)
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_CALLING_ERROR,
+                                               error);
+    }
+  else
     {
-      if ((gimp_drawable_is_rgb (drawable_ID) ||
-           gimp_drawable_is_gray (drawable_ID)))
-        {
-          /*
-           * Run!
-           */
-          destripe (drawable_ID, NULL);
+      drawable = drawables[0];
+    }
 
-          /*
-           * If run mode is interactive, flush displays...
-           */
-          if (run_mode != GIMP_RUN_NONINTERACTIVE)
-            gimp_displays_flush ();
+  if (run_mode == GIMP_RUN_INTERACTIVE && ! destripe_dialog (procedure, G_OBJECT (config), drawable))
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_CANCEL,
+                                             NULL);
 
-          /*
-           * Store data...
-           */
-          if (run_mode == GIMP_RUN_INTERACTIVE)
-            gimp_set_data (PLUG_IN_PROC, &vals, sizeof (vals));
-        }
-      else
-        {
-          status = GIMP_PDB_EXECUTION_ERROR;
-        }
-    };
+  if (gimp_drawable_is_rgb (drawable)|| gimp_drawable_is_gray (drawable))
+    destripe (G_OBJECT (config), drawable, NULL);
+  else
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_EXECUTION_ERROR,
+                                             NULL);
 
-  /*
-   * Reset the current run status...
-   */
-  values[0].data.d_status = status;
+  if (run_mode != GIMP_RUN_NONINTERACTIVE)
+    gimp_displays_flush ();
+
+  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }
 
 static void
-destripe (gint32       drawable_ID,
-          GimpPreview *preview)
+destripe (GObject      *config,
+          GimpDrawable *drawable,
+          GimpPreview  *preview)
 {
   GeglBuffer *src_buffer;
   GeglBuffer *dest_buffer;
@@ -233,6 +216,13 @@ destripe (gint32       drawable_ID,
   glong      *hist, *corr;        /* "histogram" data */
   gint        tile_width = gimp_tile_width ();
   gint        i, x, y, ox, cols;
+  gint        avg_width;
+  gboolean    histogram;
+
+  g_object_get (config,
+                "avg-width",        &avg_width,
+                "create-histogram", &histogram,
+                NULL);
 
   progress     = 0.0;
   progress_inc = 0.0;
@@ -246,7 +236,7 @@ destripe (gint32       drawable_ID,
     {
       gimp_progress_init (_("Destriping"));
 
-      if (! gimp_drawable_mask_intersect (drawable_ID,
+      if (! gimp_drawable_mask_intersect (drawable,
                                           &x1, &y1, &width, &height))
         {
           return;
@@ -258,16 +248,16 @@ destripe (gint32       drawable_ID,
 
   x2 = x1 + width;
 
-  if (gimp_drawable_is_rgb (drawable_ID))
+  if (gimp_drawable_is_rgb (drawable))
     {
-      if (gimp_drawable_has_alpha (drawable_ID))
+      if (gimp_drawable_has_alpha (drawable))
         format = babl_format ("R'G'B'A u8");
       else
         format = babl_format ("R'G'B' u8");
     }
   else
     {
-      if (gimp_drawable_has_alpha (drawable_ID))
+      if (gimp_drawable_has_alpha (drawable))
         format = babl_format ("Y'A u8");
       else
         format = babl_format ("Y' u8");
@@ -279,8 +269,8 @@ destripe (gint32       drawable_ID,
    * Setup for filter...
    */
 
-  src_buffer  = gimp_drawable_get_buffer (drawable_ID);
-  dest_buffer = gimp_drawable_get_shadow_buffer (drawable_ID);
+  src_buffer  = gimp_drawable_get_buffer (drawable);
+  dest_buffer = gimp_drawable_get_shadow_buffer (drawable);
 
   hist = g_new (long, width * bpp);
   corr = g_new (long, width * bpp);
@@ -322,7 +312,7 @@ destripe (gint32       drawable_ID,
    */
 
   {
-    gint extend = (vals.avg_width / 2) * bpp;
+    gint extend = (avg_width / 2) * bpp;
 
     for (i = 0; i < MIN (3, bpp); i++)
       {
@@ -381,7 +371,7 @@ destripe (gint32       drawable_ID,
           long   *c = corr + (ox - x1) * bpp;
           guchar *row_end = rows + cols * bpp;
 
-          if (vals.histogram)
+          if (histogram)
             {
               while (rows < row_end)
                 {
@@ -431,8 +421,8 @@ destripe (gint32       drawable_ID,
 
       gimp_progress_update (1.0);
 
-      gimp_drawable_merge_shadow (drawable_ID, TRUE);
-      gimp_drawable_update (drawable_ID,
+      gimp_drawable_merge_shadow (drawable, TRUE);
+      gimp_drawable_update (drawable,
                             x1, y1, width, height);
     }
 
@@ -441,88 +431,69 @@ destripe (gint32       drawable_ID,
 }
 
 static void
-destripe_preview (gpointer     drawable_ID,
-                  GimpPreview *preview)
+destripe_preview (GtkWidget *widget,
+                  GObject   *config)
 {
-  destripe (GPOINTER_TO_INT (drawable_ID), preview);
+  GimpPreview  *preview  = GIMP_PREVIEW (widget);
+  GimpDrawable *drawable = g_object_get_data (config, "drawable");
+
+  destripe (config, drawable, preview);
 }
 
 
 static gboolean
-destripe_dialog (gint32 drawable_ID)
+destripe_dialog (GimpProcedure *procedure,
+                 GObject       *config,
+                 GimpDrawable  *drawable)
 {
-  GtkWidget *dialog;
-  GtkWidget *main_vbox;
-  GtkWidget *preview;
-  GtkWidget *table;
-  GtkWidget *button;
-  GtkObject *adj;
-  gboolean   run;
+  GtkWidget     *dialog;
+  GtkWidget     *preview;
+  GtkWidget     *scale;
+  GtkWidget     *button;
+  gboolean       run;
 
-  gimp_ui_init (PLUG_IN_BINARY, TRUE);
+  gimp_ui_init (PLUG_IN_BINARY);
 
-  dialog = gimp_dialog_new (_("Destripe"), PLUG_IN_ROLE,
-                            NULL, 0,
-                            gimp_standard_help_func, PLUG_IN_PROC,
+  dialog = gimp_procedure_dialog_new (procedure,
+                                      GIMP_PROCEDURE_CONFIG (config),
+                                      _("Destripe"));
 
-                            _("_Cancel"), GTK_RESPONSE_CANCEL,
-                            _("_OK"),     GTK_RESPONSE_OK,
-
-                            NULL);
-
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+                                            GTK_RESPONSE_OK,
+                                            GTK_RESPONSE_CANCEL,
                                            -1);
 
   gimp_window_set_transient (GTK_WINDOW (dialog));
 
-  main_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-  gtk_container_set_border_width (GTK_CONTAINER (main_vbox), 12);
-  gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
-                      main_vbox, TRUE, TRUE, 0);
-  gtk_widget_show (main_vbox);
+  preview = gimp_procedure_dialog_get_drawable_preview (GIMP_PROCEDURE_DIALOG (dialog),
+                                                        "preview", drawable);
 
-  preview = gimp_drawable_preview_new_from_drawable_id (drawable_ID);
-  gtk_box_pack_start (GTK_BOX (main_vbox), preview, TRUE, TRUE, 0);
-  gtk_widget_show (preview);
+  scale = gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                                 "avg-width", 1.0);
+  gtk_widget_set_margin_bottom (scale, 12);
 
-  g_signal_connect_swapped (preview, "invalidated",
-                            G_CALLBACK (destripe_preview),
-                            GINT_TO_POINTER (drawable_ID));
+  button = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                             "create-histogram",
+                                             GTK_TYPE_CHECK_BUTTON);
+  gtk_widget_set_margin_bottom (button, 12);
 
-  table = gtk_table_new (1, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_box_pack_start (GTK_BOX (main_vbox), table, FALSE, FALSE, 0);
-  gtk_widget_show (table);
+  g_object_set_data (config, "drawable", drawable);
 
-  adj = gimp_scale_entry_new (GTK_TABLE (table), 0, 1,
-                              _("_Width:"), SCALE_WIDTH, 0,
-                              vals.avg_width, 2, MAX_AVG, 1, 10, 0,
-                              TRUE, 0, 0,
-                              NULL, NULL);
-  g_signal_connect (adj, "value-changed",
-                    G_CALLBACK (gimp_int_adjustment_update),
-                    &vals.avg_width);
-  g_signal_connect_swapped (adj, "value-changed",
+  g_signal_connect (preview, "invalidated",
+                    G_CALLBACK (destripe_preview),
+                    config);
+
+  g_signal_connect_swapped (config, "notify",
                             G_CALLBACK (gimp_preview_invalidate),
                             preview);
 
-  button = gtk_check_button_new_with_mnemonic (_("Create _histogram"));
-  gtk_box_pack_start (GTK_BOX (main_vbox), button, FALSE, FALSE, 0);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (button), vals.histogram);
-  gtk_widget_show (button);
-
-  g_signal_connect (button, "toggled",
-                    G_CALLBACK (gimp_toggle_button_update),
-                    &vals.histogram);
-  g_signal_connect_swapped (button, "toggled",
-                            G_CALLBACK (gimp_preview_invalidate),
-                            preview);
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
+                              "preview", "avg-width", "create-histogram",
+                              NULL);
 
   gtk_widget_show (dialog);
 
-  run = (gimp_dialog_run (GIMP_DIALOG (dialog)) == GTK_RESPONSE_OK);
+  run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
   gtk_widget_destroy (dialog);
 

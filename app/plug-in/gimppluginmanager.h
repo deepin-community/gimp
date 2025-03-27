@@ -48,6 +48,7 @@ struct _GimpPlugInManager
   GSList            *save_procs;
   GSList            *export_procs;
   GSList            *raw_load_procs;
+  GSList            *batch_procs;
 
   GSList            *display_load_procs;
   GSList            *display_save_procs;
@@ -55,7 +56,6 @@ struct _GimpPlugInManager
   GSList            *display_raw_load_procs;
 
   GSList            *menu_branches;
-  GSList            *locale_domains;
   GSList            *help_domains;
 
   GimpPlugIn        *current_plug_in;
@@ -99,6 +99,10 @@ void    gimp_plug_in_manager_exit                 (GimpPlugInManager   *manager)
  */
 void    gimp_plug_in_manager_add_procedure        (GimpPlugInManager   *manager,
                                                    GimpPlugInProcedure *procedure);
+
+void    gimp_plug_in_manager_add_batch_procedure  (GimpPlugInManager      *manager,
+                                                   GimpPlugInProcedure    *proc);
+GSList * gimp_plug_in_manager_get_batch_procedures (GimpPlugInManager      *manager);
 
 void    gimp_plug_in_manager_add_temp_proc        (GimpPlugInManager      *manager,
                                                    GimpTemporaryProcedure *procedure);

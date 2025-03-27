@@ -42,14 +42,13 @@ enum
   ENTRY_CLICKED,
   ENTRY_SELECTED,
   ENTRY_ACTIVATED,
-  ENTRY_CONTEXT,
   COLOR_DROPPED,
   LAST_SIGNAL
 };
 
 
-static gboolean gimp_palette_view_expose         (GtkWidget        *widget,
-                                                  GdkEventExpose   *eevent);
+static gboolean gimp_palette_view_draw           (GtkWidget        *widget,
+                                                  cairo_t          *cr);
 static gboolean gimp_palette_view_button_press   (GtkWidget        *widget,
                                                   GdkEventButton   *bevent);
 static gboolean gimp_palette_view_key_press      (GtkWidget        *widget,
@@ -68,12 +67,12 @@ static void     gimp_palette_view_expose_entry   (GimpPaletteView  *view,
 static void     gimp_palette_view_invalidate     (GimpPalette      *palette,
                                                   GimpPaletteView  *view);
 static void     gimp_palette_view_drag_color     (GtkWidget        *widget,
-                                                  GimpRGB          *color,
+                                                  GeglColor       **color,
                                                   gpointer          data);
 static void     gimp_palette_view_drop_color     (GtkWidget        *widget,
                                                   gint              x,
                                                   gint              y,
-                                                  const GimpRGB    *color,
+                                                  GeglColor        *color,
                                                   gpointer          data);
 
 
@@ -106,8 +105,7 @@ gimp_palette_view_class_init (GimpPaletteViewClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpPaletteViewClass, entry_selected),
-                  NULL, NULL,
-                  gimp_marshal_VOID__POINTER,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   G_TYPE_POINTER);
 
@@ -116,18 +114,7 @@ gimp_palette_view_class_init (GimpPaletteViewClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpPaletteViewClass, entry_activated),
-                  NULL, NULL,
-                  gimp_marshal_VOID__POINTER,
-                  G_TYPE_NONE, 1,
-                  G_TYPE_POINTER);
-
-  view_signals[ENTRY_CONTEXT] =
-    g_signal_new ("entry-context",
-                  G_TYPE_FROM_CLASS (klass),
-                  G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (GimpPaletteViewClass, entry_context),
-                  NULL, NULL,
-                  gimp_marshal_VOID__POINTER,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   G_TYPE_POINTER);
 
@@ -140,9 +127,9 @@ gimp_palette_view_class_init (GimpPaletteViewClass *klass)
                   gimp_marshal_VOID__POINTER_BOXED,
                   G_TYPE_NONE, 2,
                   G_TYPE_POINTER,
-                  GIMP_TYPE_RGB);
+                  GEGL_TYPE_COLOR);
 
-  widget_class->expose_event       = gimp_palette_view_expose;
+  widget_class->draw               = gimp_palette_view_draw;
   widget_class->button_press_event = gimp_palette_view_button_press;
   widget_class->key_press_event    = gimp_palette_view_key_press;
   widget_class->focus              = gimp_palette_view_focus;
@@ -160,36 +147,33 @@ gimp_palette_view_init (GimpPaletteView *view)
 }
 
 static gboolean
-gimp_palette_view_expose (GtkWidget      *widget,
-                          GdkEventExpose *eevent)
+gimp_palette_view_draw (GtkWidget *widget,
+                        cairo_t   *cr)
 {
   GimpPaletteView *pal_view = GIMP_PALETTE_VIEW (widget);
   GimpView        *view     = GIMP_VIEW (widget);
+  GimpPalette     *palette;
 
-  if (! gtk_widget_is_drawable (widget))
-    return FALSE;
+  palette = GIMP_PALETTE (GIMP_VIEW (view)->renderer->viewable);
 
-  GTK_WIDGET_CLASS (parent_class)->expose_event (widget, eevent);
+  cairo_save (cr);
+  GTK_WIDGET_CLASS (parent_class)->draw (widget, cr);
+  cairo_restore (cr);
 
   if (view->renderer->viewable && pal_view->selected)
     {
       GimpViewRendererPalette *renderer;
       GtkAllocation            allocation;
-      cairo_t                 *cr;
-      gint                     row, col;
+      gint                     pos, row, col;
 
       renderer = GIMP_VIEW_RENDERER_PALETTE (view->renderer);
 
       gtk_widget_get_allocation (widget, &allocation);
 
-      row = pal_view->selected->position / renderer->columns;
-      col = pal_view->selected->position % renderer->columns;
+      pos = gimp_palette_get_entry_position (palette, pal_view->selected);
 
-      cr = gdk_cairo_create (gtk_widget_get_window (widget));
-      gdk_cairo_region (cr, eevent->region);
-      cairo_clip (cr);
-
-      cairo_translate (cr, allocation.x, allocation.y);
+      row = pos / renderer->columns;
+      col = pos % renderer->columns;
 
       cairo_rectangle (cr,
                        col * renderer->cell_width  + 0.5,
@@ -206,8 +190,6 @@ gimp_palette_view_expose (GtkWidget      *widget,
           cairo_set_source_rgba (cr, 0.0, 0.0, 0.0, 1.0);
           cairo_stroke (cr);
         }
-
-      cairo_destroy (cr);
     }
 
   return FALSE;
@@ -239,7 +221,9 @@ gimp_palette_view_button_press (GtkWidget      *widget,
       if (entry != view->selected)
         gimp_palette_view_select_entry (view, entry);
 
-      g_signal_emit (view, view_signals[ENTRY_CONTEXT], 0, entry);
+      /* Usually the menu is provided by a GimpEditor.
+	   * Make sure it's also run by returning FALSE here */
+      return FALSE;
     }
   else if (bevent->button == 1)
     {
@@ -331,9 +315,12 @@ gimp_palette_view_focus (GtkWidget        *widget,
       if (skip != 0)
         {
           GimpPaletteEntry *entry;
+          GimpPalette      *palette;
           gint              position;
 
-          position = view->selected->position + skip;
+          palette = GIMP_PALETTE (GIMP_VIEW (view)->renderer->viewable);
+          position = gimp_palette_get_entry_position (palette, view->selected);
+          position += skip;
 
           entry = gimp_palette_get_entry (palette, position);
 
@@ -355,7 +342,6 @@ gimp_palette_view_set_viewable (GimpView     *view,
   GimpPaletteView *pal_view = GIMP_PALETTE_VIEW (view);
 
   pal_view->dnd_entry = NULL;
-  gimp_palette_view_select_entry (pal_view, NULL);
 
   if (old_viewable)
     {
@@ -391,6 +377,8 @@ gimp_palette_view_set_viewable (GimpView     *view,
                                    gimp_palette_view_drop_color,
                                    view);
         }
+
+      gimp_palette_view_select_entry (pal_view, NULL);
     }
 }
 
@@ -417,6 +405,42 @@ gimp_palette_view_select_entry (GimpPaletteView  *view,
   g_signal_emit (view, view_signals[ENTRY_SELECTED], 0, view->selected);
 }
 
+GimpPaletteEntry *
+gimp_palette_view_get_selected_entry (GimpPaletteView *view)
+{
+  g_return_val_if_fail (GIMP_IS_PALETTE_VIEW (view), NULL);
+
+  return view->selected;
+}
+
+void
+gimp_palette_view_get_entry_rect (GimpPaletteView  *view,
+                                  GimpPaletteEntry *entry,
+                                  GdkRectangle     *rect)
+{
+  GimpViewRendererPalette *renderer;
+  GimpPalette             *palette;
+  GtkAllocation            allocation;
+  gint                     pos, row, col;
+
+  g_return_if_fail (GIMP_IS_PALETTE_VIEW (view));
+  g_return_if_fail (entry);
+  g_return_if_fail (rect);
+
+  gtk_widget_get_allocation (GTK_WIDGET (view), &allocation);
+
+  renderer = GIMP_VIEW_RENDERER_PALETTE (GIMP_VIEW (view)->renderer);
+  palette = GIMP_PALETTE (GIMP_VIEW_RENDERER (renderer)->viewable);
+  pos = gimp_palette_get_entry_position (palette, entry);
+  row = pos / renderer->columns;
+  col = pos % renderer->columns;
+
+  rect->x = allocation.x + col * renderer->cell_width;
+  rect->y = allocation.y + row * renderer->cell_height;
+  rect->width = renderer->cell_width;
+  rect->height = renderer->cell_height;
+}
+
 
 /*  private functions  */
 
@@ -430,8 +454,8 @@ gimp_palette_view_find_entry (GimpPaletteView *view,
   GimpPaletteEntry        *entry = NULL;
   gint                     col, row;
 
-  palette  = GIMP_PALETTE (GIMP_VIEW (view)->renderer->viewable);
   renderer = GIMP_VIEW_RENDERER_PALETTE (GIMP_VIEW (view)->renderer);
+  palette  = GIMP_PALETTE (GIMP_VIEW_RENDERER (renderer)->viewable);
 
   if (! palette || ! gimp_palette_get_n_colors (palette))
     return NULL;
@@ -454,16 +478,21 @@ gimp_palette_view_expose_entry (GimpPaletteView  *view,
                                 GimpPaletteEntry *entry)
 {
   GimpViewRendererPalette *renderer;
-  gint                     row, col;
+  gint                     pos, row, col;
   GtkWidget               *widget = GTK_WIDGET (view);
   GtkAllocation            allocation;
+  GimpPalette             *palette;
 
   renderer = GIMP_VIEW_RENDERER_PALETTE (GIMP_VIEW (view)->renderer);
+  palette = GIMP_PALETTE (GIMP_VIEW_RENDERER (renderer)->viewable);
+
+  g_return_if_fail (GIMP_IS_PALETTE (palette));
 
   gtk_widget_get_allocation (widget, &allocation);
 
-  row = entry->position / renderer->columns;
-  col = entry->position % renderer->columns;
+  pos = gimp_palette_get_entry_position (palette, entry);
+  row = pos / renderer->columns;
+  col = pos % renderer->columns;
 
   gtk_widget_queue_draw_area (GTK_WIDGET (view),
                               allocation.x + col * renderer->cell_width,
@@ -486,24 +515,24 @@ gimp_palette_view_invalidate (GimpPalette     *palette,
 }
 
 static void
-gimp_palette_view_drag_color (GtkWidget *widget,
-                              GimpRGB   *color,
-                              gpointer   data)
+gimp_palette_view_drag_color (GtkWidget  *widget,
+                              GeglColor **color,
+                              gpointer    data)
 {
   GimpPaletteView *view = GIMP_PALETTE_VIEW (data);
 
   if (view->dnd_entry)
-    *color = view->dnd_entry->color;
+    *color = gegl_color_duplicate (view->dnd_entry->color);
   else
-    gimp_rgba_set (color, 0.0, 0.0, 0.0, 1.0);
+    *color = gegl_color_new ("black");
 }
 
 static void
-gimp_palette_view_drop_color (GtkWidget     *widget,
-                              gint           x,
-                              gint           y,
-                              const GimpRGB *color,
-                              gpointer       data)
+gimp_palette_view_drop_color (GtkWidget *widget,
+                              gint       x,
+                              gint       y,
+                              GeglColor *color,
+                              gpointer   data)
 {
   GimpPaletteView  *view = GIMP_PALETTE_VIEW (data);
   GimpPaletteEntry *entry;

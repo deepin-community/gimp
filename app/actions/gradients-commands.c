@@ -31,6 +31,7 @@
 #include "widgets/gimpcontainereditor.h"
 #include "widgets/gimpcontainerview.h"
 #include "widgets/gimphelp-ids.h"
+#include "widgets/gimpwidgets-utils.h"
 
 #include "dialogs/dialogs.h"
 
@@ -84,10 +85,10 @@ gradients_save_as_pov_ray_cmd_callback (GimpAction *action,
       g_free (title);
 
       gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                               GTK_RESPONSE_OK,
-                                               GTK_RESPONSE_CANCEL,
-                                               -1);
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+                                                GTK_RESPONSE_OK,
+                                                GTK_RESPONSE_CANCEL,
+                                                -1);
 
       g_object_set_data (G_OBJECT (dialog), "gimp", context->gimp);
 
@@ -111,14 +112,18 @@ gradients_save_as_pov_ray_cmd_callback (GimpAction *action,
                                g_object_ref (gradient),
                                G_CONNECT_SWAPPED);
 
-      gimp_help_connect (dialog, gimp_standard_help_func,
-                         GIMP_HELP_GRADIENT_SAVE_AS_POV, NULL);
+      gimp_help_connect (dialog, NULL, gimp_standard_help_func,
+                         GIMP_HELP_GRADIENT_SAVE_AS_POV, NULL, NULL);
 
       dialogs_attach_dialog (G_OBJECT (gradient),
                              SAVE_AS_POV_DIALOG_KEY, dialog);
     }
 
   gtk_window_present (GTK_WINDOW (dialog));
+
+#ifdef G_OS_WIN32
+  gimp_window_set_title_bar_theme (context->gimp, dialog);
+#endif
 }
 
 

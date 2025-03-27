@@ -36,18 +36,24 @@ static guint preview_update_timer = 0;
 
 /* Protos */
 /* ====== */
-static gboolean
-interactive_preview_timer_callback ( gpointer data );
+static gboolean  interactive_preview_timer_callback  (gpointer data);
+
+void             composite_behind                    (gdouble *color1,
+                                                      gdouble *color2);
 
 static void
-compute_preview (gint startx, gint starty, gint w, gint h)
+compute_preview (gint startx,
+                 gint starty,
+                 gint w,
+                 gint h)
 {
   gint xcnt, ycnt, f1, f2;
   guchar r, g, b;
   gdouble imagex, imagey;
   gint32 index = 0;
-  GimpRGB color;
-  GimpRGB lightcheck, darkcheck;
+  gdouble color[4];
+  gdouble lightcheck[4] = { GIMP_CHECK_LIGHT,  GIMP_CHECK_LIGHT, GIMP_CHECK_LIGHT, 1.0 };
+  gdouble darkcheck[4]  = { GIMP_CHECK_DARK,  GIMP_CHECK_DARK, GIMP_CHECK_DARK, 1.0 };
   GimpVector3 pos;
   get_ray_func ray_func;
 
@@ -88,15 +94,9 @@ compute_preview (gint startx, gint starty, gint w, gint h)
 
   precompute_init (width, height);
 
-  gimp_rgba_set (&lightcheck,
-                 GIMP_CHECK_LIGHT, GIMP_CHECK_LIGHT, GIMP_CHECK_LIGHT,
-                 1.0);
-  gimp_rgba_set (&darkcheck, GIMP_CHECK_DARK, GIMP_CHECK_DARK,
-                 GIMP_CHECK_DARK, 1.0);
-
   if (mapvals.bump_mapped == TRUE && mapvals.bumpmap_id != -1)
     {
-      bumpmap_setup (mapvals.bumpmap_id);
+      bumpmap_setup (gimp_drawable_get_by_id (mapvals.bumpmap_id));
     }
 
   imagey = 0;
@@ -108,7 +108,7 @@ compute_preview (gint startx, gint starty, gint w, gint h)
 
   if (mapvals.env_mapped == TRUE && mapvals.envmap_id != -1)
     {
-      envmap_setup (mapvals.envmap_id);
+      envmap_setup (gimp_drawable_get_by_id (mapvals.envmap_id));
 
       if (mapvals.previewquality)
         ray_func = get_ray_color_ref;
@@ -138,9 +138,9 @@ compute_preview (gint startx, gint starty, gint w, gint h)
                   precompute_normals (0, width, RINT (imagey));
                 }
 
-              color = (*ray_func) (&pos);
+              (*ray_func) (&pos, color);
 
-              if (color.a < 1.0)
+              if (color[3] < 1.0)
                 {
                   f1 = ((xcnt % 32) < 16);
                   f2 = ((ycnt % 32) < 16);
@@ -148,25 +148,33 @@ compute_preview (gint startx, gint starty, gint w, gint h)
 
                   if (f1)
                     {
-                      if (color.a == 0.0)
-                        color = lightcheck;
+                      if (color[3] == 0.0)
+                        {
+                          for (gint i = 0; i < 4; i++)
+                            color[i] = lightcheck[i];
+                        }
                       else
-                        gimp_rgb_composite (&color,
-                                            &lightcheck,
-                                            GIMP_RGB_COMPOSITE_BEHIND);
+                        {
+                          composite_behind (color, lightcheck);
+                        }
                     }
                   else
                     {
-                      if (color.a == 0.0)
-                        color = darkcheck;
+                      if (color[3] == 0.0)
+                        {
+                          for (gint i = 0; i < 4; i++)
+                            color[i] = darkcheck[i];
+                        }
                       else
-                        gimp_rgb_composite (&color,
-                                            &darkcheck,
-                                            GIMP_RGB_COMPOSITE_BEHIND);
+                        {
+                          composite_behind (color, darkcheck);
+                        }
                     }
                 }
 
-              gimp_rgb_get_uchar (&color, &r, &g, &b);
+              r = (guchar) (color[0] * 255);
+              g = (guchar) (color[1] * 255);
+              b = (guchar) (color[2] * 255);
               GIMP_CAIRO_RGB24_SET_PIXEL((preview_rgb_data + index), r, g, b);
               index += 4;
               imagex++;
@@ -246,7 +254,7 @@ check_handle_hit (gint xpos, gint ypos)
 
 
 static void
-draw_handles (void)
+draw_handles (cairo_t *cr)
 {
   gdouble     dxpos, dypos;
   gint        startx, starty, pw, ph;
@@ -291,16 +299,15 @@ draw_handles (void)
 
   if (mapvals.lightsource[k].type != NO_LIGHT)
     {
-      GdkColor  color;
-      cairo_t *cr;
-      cr = gdk_cairo_create (gtk_widget_get_window (previewarea));
+      GdkRGBA  color;
 
       cairo_set_line_width (cr, 1.0);
 
-      color.red   = 0x0;
-      color.green = 0x4000;
-      color.blue  = 0xFFFF;
-      gdk_cairo_set_source_color (cr, &color);
+      color.red   = 0.0;
+      color.green = 0.2;
+      color.blue  = 1.0;
+      color.alpha = 1.0;
+      gdk_cairo_set_source_rgba (cr, &color);
 
       /* draw circle at light position */
       switch (mapvals.lightsource[k].type)
@@ -322,7 +329,6 @@ draw_handles (void)
         case NO_LIGHT:
           break;
         }
-      cairo_destroy (cr);
     }
 }
 
@@ -379,16 +385,18 @@ preview_compute (void)
 
   compute_preview_rectangle (&startx, &starty, &pw, &ph);
 
-  cursor = gdk_cursor_new_for_display (display, GDK_WATCH);
+  if (GDK_IS_WINDOW (gtk_widget_get_window (previewarea)))
+    {
+      cursor = gdk_cursor_new_for_display (display, GDK_WATCH);
+      gdk_window_set_cursor (gtk_widget_get_window (previewarea), cursor);
+      g_object_unref (cursor);
 
-  gdk_window_set_cursor (gtk_widget_get_window (previewarea), cursor);
-  gdk_cursor_unref (cursor);
-
-  compute_preview (startx, starty, pw, ph);
-  cursor = gdk_cursor_new_for_display (display, GDK_HAND2);
-  gdk_window_set_cursor (gtk_widget_get_window (previewarea), cursor);
-  gdk_cursor_unref (cursor);
-  gdk_flush ();
+      compute_preview (startx, starty, pw, ph);
+      cursor = gdk_cursor_new_for_display (display, GDK_HAND2);
+      gdk_window_set_cursor (gtk_widget_get_window (previewarea), cursor);
+      g_object_unref (cursor);
+      gdk_display_flush (display);
+    }
 }
 
 
@@ -431,13 +439,9 @@ preview_events (GtkWidget *area,
 }
 
 gboolean
-preview_expose (GtkWidget *area,
-                GdkEventExpose *eevent)
+preview_draw (GtkWidget *area,
+              cairo_t   *cr)
 {
-  cairo_t *cr;
-
-  cr = gdk_cairo_create (eevent->window);
-
   cairo_set_source_surface (cr, preview_surface, 0.0, 0.0);
 
   cairo_paint (cr);
@@ -445,10 +449,8 @@ preview_expose (GtkWidget *area,
   /* draw symbols if enabled in UI */
   if (mapvals.interactive_preview)
     {
-      draw_handles ();
+      draw_handles (cr);
     }
-
-  cairo_destroy (cr);
 
   return FALSE;
 }
@@ -467,22 +469,31 @@ interactive_preview_callback (GtkWidget *widget)
 static gboolean
 interactive_preview_timer_callback (gpointer data)
 {
-  gint k = mapvals.light_selected;
+  gint   k     = mapvals.light_selected;
+  gchar *pos_x = g_strdup_printf (("light-position-x-%d"), k + 1);
+  gchar *pos_y = g_strdup_printf (("light-position-y-%d"), k + 1);
+  gchar *pos_z = g_strdup_printf (("light-position-z-%d"), k + 1);
+  gchar *dir_x = g_strdup_printf (("light-direction-x-%d"), k + 1);
+  gchar *dir_y = g_strdup_printf (("light-direction-y-%d"), k + 1);
+  gchar *dir_z = g_strdup_printf (("light-direction-z-%d"), k + 1);
 
   mapvals.update_enabled = FALSE;  /* disable apply_settings() */
 
-  gtk_spin_button_set_value (GTK_SPIN_BUTTON(spin_pos_x),
-                             mapvals.lightsource[k].position.x);
-  gtk_spin_button_set_value (GTK_SPIN_BUTTON(spin_pos_y),
-                             mapvals.lightsource[k].position.y);
-  gtk_spin_button_set_value (GTK_SPIN_BUTTON(spin_pos_z),
-                             mapvals.lightsource[k].position.z);
-  gtk_spin_button_set_value (GTK_SPIN_BUTTON(spin_dir_x),
-                             mapvals.lightsource[k].direction.x);
-  gtk_spin_button_set_value (GTK_SPIN_BUTTON(spin_dir_y),
-                             mapvals.lightsource[k].direction.y);
-  gtk_spin_button_set_value (GTK_SPIN_BUTTON(spin_dir_z),
-                             mapvals.lightsource[k].direction.z);
+  g_object_set (mapvals.config,
+                pos_x, mapvals.lightsource[k].position.x,
+                pos_y, mapvals.lightsource[k].position.y,
+                pos_z, mapvals.lightsource[k].position.z,
+                dir_x, mapvals.lightsource[k].direction.x,
+                dir_y, mapvals.lightsource[k].direction.y,
+                dir_z, mapvals.lightsource[k].direction.z,
+                NULL);
+
+  g_free (pos_x);
+  g_free (pos_y);
+  g_free (pos_z);
+  g_free (dir_x);
+  g_free (dir_y);
+  g_free (dir_z);
 
   mapvals.update_enabled = TRUE;
 
@@ -493,4 +504,22 @@ interactive_preview_timer_callback (gpointer data)
   preview_update_timer = 0;
 
   return FALSE;
+}
+
+void
+composite_behind (gdouble *color1,
+                  gdouble *color2)
+{
+  g_return_if_fail (color1 != NULL);
+  g_return_if_fail (color2 != NULL);
+
+  if (color1[3] < 1.0)
+    {
+      gdouble factor = color2[3] * (1.0 - color1[3]);
+
+      color1[0] = color2[0] * factor + color1[0] * color1[3];
+      color1[1] = color2[1] * factor + color1[1] * color1[3];
+      color1[2] = color2[2] * factor + color1[2] * color1[3];
+      color1[3] = factor + color1[3];
+    }
 }

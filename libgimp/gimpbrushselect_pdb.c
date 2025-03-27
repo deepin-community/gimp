@@ -22,58 +22,59 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
 /**
  * SECTION: gimpbrushselect
  * @title: gimpbrushselect
- * @short_description: Functions providing a brush selection dialog.
+ * @short_description: Methods of a font chooser dialog
  *
- * Functions providing a brush selection dialog.
+ * A dialog letting a user choose a brush.  Read more at
+ * gimpfontselect.
  **/
 
 
 /**
  * gimp_brushes_popup:
- * @brush_callback: The callback PDB proc to call when brush selection is made.
+ * @brush_callback: The callback PDB proc to call when user chooses a brush.
  * @popup_title: Title of the brush selection dialog.
- * @initial_brush: The name of the brush to set as the first selected.
- * @opacity: The initial opacity of the brush.
- * @spacing: The initial spacing of the brush (if < 0 then use brush default spacing).
- * @paint_mode: The initial paint mode.
+ * @initial_brush: (nullable): The brush to set as the initial choice.
+ * @parent_window: (nullable): An optional parent window handle for the popup to be set transient to.
  *
- * Invokes the Gimp brush selection.
+ * Invokes the GIMP brush selection dialog.
  *
- * This procedure opens the brush selection dialog.
+ * Opens a dialog letting a user choose a brush.
  *
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_brushes_popup (const gchar   *brush_callback,
-                    const gchar   *popup_title,
-                    const gchar   *initial_brush,
-                    gdouble        opacity,
-                    gint           spacing,
-                    GimpLayerMode  paint_mode)
+gimp_brushes_popup (const gchar *brush_callback,
+                    const gchar *popup_title,
+                    GimpBrush   *initial_brush,
+                    GBytes      *parent_window)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-brushes-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, brush_callback,
-                                    GIMP_PDB_STRING, popup_title,
-                                    GIMP_PDB_STRING, initial_brush,
-                                    GIMP_PDB_FLOAT, opacity,
-                                    GIMP_PDB_INT32, spacing,
-                                    GIMP_PDB_INT32, paint_mode,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, brush_callback,
+                                          G_TYPE_STRING, popup_title,
+                                          GIMP_TYPE_BRUSH, initial_brush,
+                                          G_TYPE_BYTES, parent_window,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-brushes-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -84,25 +85,29 @@ gimp_brushes_popup (const gchar   *brush_callback,
  *
  * Close the brush selection dialog.
  *
- * This procedure closes an opened brush selection dialog.
+ * Closes an open brush selection dialog.
  *
  * Returns: TRUE on success.
  **/
 gboolean
 gimp_brushes_close_popup (const gchar *brush_callback)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-brushes-close-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, brush_callback,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, brush_callback,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-brushes-close-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -110,40 +115,35 @@ gimp_brushes_close_popup (const gchar *brush_callback)
 /**
  * gimp_brushes_set_popup:
  * @brush_callback: The name of the callback registered for this pop-up.
- * @brush_name: The name of the brush to set as selected.
- * @opacity: The initial opacity of the brush.
- * @spacing: The initial spacing of the brush (if < 0 then use brush default spacing).
- * @paint_mode: The initial paint mode.
+ * @brush: The brush to set as selected.
  *
- * Sets the current brush in a brush selection dialog.
+ * Sets the selected brush in a brush selection dialog.
  *
- * Sets the current brush in a brush selection dialog.
+ * Sets the selected brush in a brush selection dialog.
  *
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_brushes_set_popup (const gchar   *brush_callback,
-                        const gchar   *brush_name,
-                        gdouble        opacity,
-                        gint           spacing,
-                        GimpLayerMode  paint_mode)
+gimp_brushes_set_popup (const gchar *brush_callback,
+                        GimpBrush   *brush)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-brushes-set-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, brush_callback,
-                                    GIMP_PDB_STRING, brush_name,
-                                    GIMP_PDB_FLOAT, opacity,
-                                    GIMP_PDB_INT32, spacing,
-                                    GIMP_PDB_INT32, paint_mode,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, brush_callback,
+                                          GIMP_TYPE_BRUSH, brush,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-brushes-set-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

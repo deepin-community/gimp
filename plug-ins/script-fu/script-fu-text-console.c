@@ -26,35 +26,26 @@
 
 #include "libgimp/gimp.h"
 
-#include "scheme-wrapper.h"
 #include "script-fu-text-console.h"
 
 #include "script-fu-intl.h"
+#include "script-fu-lib.h"
 
-void
-script_fu_text_console_run (const gchar      *name,
-                            gint              nparams,
-                            const GimpParam  *params,
-                            gint             *nreturn_vals,
-                            GimpParam       **return_vals)
+GimpValueArray *
+script_fu_text_console_run (GimpProcedure        *procedure,
+                            GimpProcedureConfig  *config)
 {
-  static GimpParam  values[1];
+  script_fu_redirect_output_to_stdout ();
 
-  /*  Enable Script-Fu output  */
-  ts_register_output_func (ts_stdout_output_func, NULL);
+  script_fu_print_welcome ();
 
-  ts_print_welcome ();
+  gimp_plug_in_set_pdb_error_handler (gimp_procedure_get_plug_in (procedure),
+                                      GIMP_PDB_ERROR_HANDLER_PLUGIN);
 
-  gimp_plugin_set_pdb_error_handler (GIMP_PDB_ERROR_HANDLER_PLUGIN);
+  script_fu_run_read_eval_print_loop ();
 
-  /*  Run the interface  */
-  ts_interpret_stdin ();
+  gimp_plug_in_set_pdb_error_handler (gimp_procedure_get_plug_in (procedure),
+                                      GIMP_PDB_ERROR_HANDLER_INTERNAL);
 
-  gimp_plugin_set_pdb_error_handler (GIMP_PDB_ERROR_HANDLER_INTERNAL);
-
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = GIMP_PDB_SUCCESS;
-
-  *nreturn_vals = 1;
-  *return_vals  = values;
+  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }

@@ -23,6 +23,7 @@
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
+#include "libgimpconfig/gimpconfig.h"
 
 #include "core/core-types.h"
 
@@ -30,11 +31,15 @@
 #include "core/gimpbrush.h"
 #include "core/gimpbrush-load.h"
 #include "core/gimpbrush-private.h"
+#include "core/gimpcontainer.h"
 #include "core/gimpdrawable.h"
 #include "core/gimpimage.h"
-#include "core/gimplayer-new.h"
+#include "core/gimpimage-merge.h"
+#include "core/gimpimage-new.h"
 #include "core/gimpimage-resize.h"
+#include "core/gimplayer-new.h"
 #include "core/gimpparamspecs.h"
+#include "core/gimppickable.h"
 #include "core/gimptempbuf.h"
 
 #include "pdb/gimpprocedure.h"
@@ -46,12 +51,14 @@
 
 /*  local function prototypes  */
 
-static GimpImage * file_gbr_brush_to_image (Gimp         *gimp,
-                                            GimpBrush    *brush);
-static GimpBrush * file_gbr_image_to_brush (GimpImage    *image,
-                                            GimpDrawable *drawable,
-                                            const gchar  *name,
-                                            gdouble       spacing);
+static GimpImage * file_gbr_brush_to_image (Gimp          *gimp,
+                                            GimpBrush     *brush);
+static GimpBrush * file_gbr_image_to_brush (GimpImage     *image,
+                                            GimpContext   *context,
+                                            gint           n_drawables,
+                                            GimpDrawable **drawables,
+                                            const gchar   *name,
+                                            gdouble        spacing);
 
 
 /*  public functions  */
@@ -66,15 +73,13 @@ file_gbr_load_invoker (GimpProcedure         *procedure,
 {
   GimpValueArray *return_vals;
   GimpImage      *image = NULL;
-  const gchar    *uri;
   GFile          *file;
   GInputStream   *input;
   GError         *my_error = NULL;
 
   gimp_set_busy (gimp);
 
-  uri  = g_value_get_string (gimp_value_array_index (args, 1));
-  file = g_file_new_for_uri (uri);
+  file = g_value_get_object (gimp_value_array_index (args, 1));
 
   input = G_INPUT_STREAM (g_file_read (file, NULL, &my_error));
 
@@ -97,13 +102,11 @@ file_gbr_load_invoker (GimpProcedure         *procedure,
                                   gimp_file_get_utf8_name (file));
     }
 
-  g_object_unref (file);
-
   return_vals = gimp_procedure_get_return_values (procedure, image != NULL,
                                                   error ? *error : NULL);
 
   if (image)
-    gimp_value_set_image (gimp_value_array_index (return_vals, 1), image);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), image);
 
   gimp_unset_busy (gimp);
 
@@ -118,34 +121,32 @@ file_gbr_save_invoker (GimpProcedure         *procedure,
                        const GimpValueArray  *args,
                        GError               **error)
 {
-  GimpValueArray *return_vals;
-  GimpImage      *image;
-  GimpDrawable   *drawable;
-  GimpBrush      *brush;
-  const gchar    *uri;
-  const gchar    *name;
-  GFile          *file;
-  gint            spacing;
-  gboolean        success;
+  GimpValueArray  *return_vals;
+  GimpImage       *image;
+  GimpDrawable   **drawables;
+  gint             n_drawables;
+  GimpBrush       *brush;
+  const gchar     *name;
+  GFile           *file;
+  gint             spacing;
+  gboolean         success;
 
   gimp_set_busy (gimp);
 
-  image    = gimp_value_get_image (gimp_value_array_index (args, 1), gimp);
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 2), gimp);
-  uri      = g_value_get_string (gimp_value_array_index (args, 3));
-  spacing  = g_value_get_int (gimp_value_array_index (args, 5));
-  name     = g_value_get_string (gimp_value_array_index (args, 6));
+  image       = g_value_get_object (gimp_value_array_index (args, 1));
+  drawables   = (GimpDrawable **) g_value_get_boxed (gimp_value_array_index (args, 2));
+  n_drawables = gimp_core_object_array_get_length ((GObject **) drawables);
+  file        = g_value_get_object (gimp_value_array_index (args, 3));
+  spacing     = g_value_get_int    (gimp_value_array_index (args, 4));
+  name        = g_value_get_string (gimp_value_array_index (args, 5));
 
-  file = g_file_new_for_uri (uri);
-
-  brush = file_gbr_image_to_brush (image, drawable, name, spacing);
+  brush = file_gbr_image_to_brush (image, context, n_drawables, drawables, name, spacing);
 
   gimp_data_set_file (GIMP_DATA (brush), file, TRUE, TRUE);
 
   success = gimp_data_save (GIMP_DATA (brush), error);
 
   g_object_unref (brush);
-  g_object_unref (file);
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
@@ -290,39 +291,32 @@ file_gbr_drawable_to_brush (GimpDrawable        *drawable,
       if (gimp_drawable_has_alpha (drawable))
         {
           GeglBufferIterator *iter;
-          GimpRGB             white;
-
-          gimp_rgba_set_uchar (&white, 255, 255, 255, 255);
 
           iter = gegl_buffer_iterator_new (buffer, rect, 0,
-                                           babl_format ("Y'A u8"),
+                                           babl_format ("Y'A float"),
                                            GEGL_ACCESS_READ, GEGL_ABYSS_NONE,
                                            1);
 
           while (gegl_buffer_iterator_next (iter))
             {
-              guint8 *data = (guint8 *) iter->items[0].data;
+              gfloat *data = (gfloat *) iter->items[0].data;
               gint    j;
 
               for (j = 0; j < iter->length; j++)
                 {
-                  GimpRGB gray;
-                  gint    x, y;
-                  gint    dest;
+                  gint x, y;
+                  gint dest;
 
-                  gimp_rgba_set_uchar (&gray,
-                                       data[0], data[0], data[0],
-                                       data[1]);
-
-                  gimp_rgb_composite (&gray, &white,
-                                      GIMP_RGB_COMPOSITE_BEHIND);
+                  /* Composite brush color on top of white (1.0, 1.0, 1.0, 1.0) */
+                  if (data[1] < 1.0)
+                    data[0] = (1.0 - data[1]) + (data[0] * data[1]);
 
                   x = iter->items[0].roi.x + j % iter->items[0].roi.width;
                   y = iter->items[0].roi.y + j / iter->items[0].roi.width;
 
                   dest = y * width + x;
 
-                  gimp_rgba_get_uchar (&gray, &m[dest], NULL, NULL, NULL);
+                  m[dest] = (guchar) (data[0] * 255);
 
                   data += 2;
                 }
@@ -370,12 +364,13 @@ file_gbr_brush_to_image (Gimp      *gimp,
 {
   GimpImage         *image;
   GimpLayer         *layer;
-  const gchar       *name;
   GimpImageBaseType  base_type;
   gint               width;
   gint               height;
   GimpTempBuf       *mask   = gimp_brush_get_mask   (brush);
   GimpTempBuf       *pixmap = gimp_brush_get_pixmap (brush);
+  GString           *string;
+  GimpConfigWriter  *writer;
   GimpParasite      *parasite;
 
   if (pixmap)
@@ -383,18 +378,34 @@ file_gbr_brush_to_image (Gimp      *gimp,
   else
     base_type = GIMP_GRAY;
 
-  name   = gimp_object_get_name (brush);
   width  = gimp_temp_buf_get_width  (mask);
   height = gimp_temp_buf_get_height (mask);
 
   image = gimp_image_new (gimp, width, height, base_type,
-                          GIMP_PRECISION_U8_GAMMA);
+                          GIMP_PRECISION_U8_NON_LINEAR);
 
-  parasite = gimp_parasite_new ("gimp-brush-name",
+  string = g_string_new (NULL);
+  writer = gimp_config_writer_new_from_string (string);
+
+  gimp_config_writer_open (writer, "spacing");
+  gimp_config_writer_printf (writer, "%d", gimp_brush_get_spacing (brush));
+  gimp_config_writer_close (writer);
+
+  gimp_config_writer_linefeed (writer);
+
+  gimp_config_writer_open (writer, "description");
+  gimp_config_writer_string (writer, gimp_object_get_name (brush));
+  gimp_config_writer_close (writer);
+
+  gimp_config_writer_finish (writer, NULL, NULL);
+
+  parasite = gimp_parasite_new ("GimpProcedureConfig-file-gbr-save-last",
                                 GIMP_PARASITE_PERSISTENT,
-                                strlen (name) + 1, name);
+                                string->len + 1, string->str);
   gimp_image_parasite_attach (image, parasite, FALSE);
   gimp_parasite_free (parasite);
+
+  g_string_free (string, TRUE);
 
   layer = file_gbr_brush_to_layer (image, brush);
   gimp_image_add_layer (image, layer, NULL, 0, FALSE);
@@ -403,15 +414,49 @@ file_gbr_brush_to_image (Gimp      *gimp,
 }
 
 static GimpBrush *
-file_gbr_image_to_brush (GimpImage    *image,
-                         GimpDrawable *drawable,
-                         const gchar  *name,
-                         gdouble       spacing)
+file_gbr_image_to_brush (GimpImage     *image,
+                         GimpContext   *context,
+                         gint           n_drawables,
+                         GimpDrawable **drawables,
+                         const gchar   *name,
+                         gdouble        spacing)
 {
-  gint width  = gimp_item_get_width  (GIMP_ITEM (drawable));
-  gint height = gimp_item_get_height (GIMP_ITEM (drawable));
+  GimpBrush    *brush;
+  GimpImage    *subimage = NULL;
+  GimpDrawable *drawable;
+  gint          width;
+  gint          height;
 
-  return file_gbr_drawable_to_brush (drawable,
-                                     GEGL_RECTANGLE (0, 0, width, height),
-                                     name, spacing);
+  g_return_val_if_fail (n_drawables > 0, NULL);
+  g_return_val_if_fail (drawables != NULL, NULL);
+
+  if (n_drawables > 1)
+    {
+      GList *drawable_list = NULL;
+
+      for (gint i = 0; i < n_drawables; i++)
+        drawable_list = g_list_prepend (drawable_list, drawables[i]);
+
+      subimage = gimp_image_new_from_drawables (image->gimp, drawable_list, FALSE, FALSE);
+      g_list_free (drawable_list);
+      gimp_container_remove (image->gimp->images, GIMP_OBJECT (subimage));
+      gimp_image_resize_to_layers (subimage, context,
+                                   NULL, NULL, NULL, NULL, NULL);
+      drawable = GIMP_DRAWABLE (gimp_image_merge_visible_layers (subimage, context, GIMP_CLIP_TO_IMAGE,
+                                                                 FALSE, TRUE, NULL));
+      gimp_pickable_flush (GIMP_PICKABLE (subimage));
+    }
+  else
+    {
+      drawable = drawables[0];
+    }
+  width  = gimp_item_get_width  (GIMP_ITEM (drawable));
+  height = gimp_item_get_height (GIMP_ITEM (drawable));
+
+  brush = file_gbr_drawable_to_brush (drawable,
+                                      GEGL_RECTANGLE (0, 0, width, height),
+                                      name, spacing);
+  g_clear_object (&subimage);
+
+  return brush;
 }

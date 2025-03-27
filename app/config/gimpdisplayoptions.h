@@ -57,9 +57,11 @@ struct _GimpDisplayOptions
   gboolean               snap_to_grid;
   gboolean               snap_to_canvas;
   gboolean               snap_to_path;
+  gboolean               snap_to_bbox;
+  gboolean               snap_to_equidistance;
 
   GimpCanvasPaddingMode  padding_mode;
-  GimpRGB                padding_color;
+  GeglColor             *padding_color;
   gboolean               padding_mode_set;
   gboolean               padding_in_show_all;
 };

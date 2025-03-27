@@ -14,7 +14,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: gimp trunk\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gimp/issues\n"
-"POT-Creation-Date: 2020-06-07 20:25+0000\n"
+"POT-Creation-Date: 2020-06-08 09:15+0000\n"
 "PO-Revision-Date: 2020-06-08 00:00+0900\n"
 "Last-Translator: sicklylife <translation@sicklylife.jp>\n"
 "Language-Team: Japanese <gnome-translation@gnome.gr.jp>\n"
@@ -25,81 +25,81 @@ msgstr ""
 "X-Poedit-Bookmarks: 465,278,170,-1,-1,-1,-1,-1,-1,-1\n"
 "Plural-Forms: nplurals=1; plural=0;\n"
 
-#: ../plug-ins/script-fu/script-fu.c:111
+#: ../plug-ins/script-fu/script-fu.c:138
+msgid "Script-Fu _Console"
+msgstr "Script-Fu コンソール(_C)"
+
+#: ../plug-ins/script-fu/script-fu.c:143
 msgid "Interactive console for Script-Fu development"
 msgstr "Script-Fu 開発のための対話的コンソールです"
 
-#: ../plug-ins/script-fu/script-fu.c:117
-msgid "_Console"
-msgstr "Script-Fu コンソール(_C)"
-
-#: ../plug-ins/script-fu/script-fu.c:141
-msgid "Server for remote Script-Fu operation"
-msgstr "Script-Fu をリモート操作するためのサーバーを開始します"
-
-#: ../plug-ins/script-fu/script-fu.c:151
+#: ../plug-ins/script-fu/script-fu.c:190
 msgid "_Start Server..."
 msgstr "サーバースタート(_S)..."
 
-#: ../plug-ins/script-fu/script-fu.c:306
+#: ../plug-ins/script-fu/script-fu.c:195
+msgid "Server for remote Script-Fu operation"
+msgstr "Script-Fu をリモート操作するためのサーバーを開始します"
+
+#: ../plug-ins/script-fu/script-fu.c:394
 msgid "_GIMP Online"
 msgstr "GIMP 関連のウェブサイト(_G)"
 
-#: ../plug-ins/script-fu/script-fu.c:307
+#: ../plug-ins/script-fu/script-fu.c:395
 msgid "_User Manual"
 msgstr "ユーザーマニュアル(_U)"
 
-#: ../plug-ins/script-fu/script-fu.c:310
+#: ../plug-ins/script-fu/script-fu.c:398
 msgid "_Script-Fu"
 msgstr "Script-Fu(_S)"
 
-#: ../plug-ins/script-fu/script-fu.c:312
+#: ../plug-ins/script-fu/script-fu.c:400
 msgid "_Test"
 msgstr "テスト(_T)"
 
-#: ../plug-ins/script-fu/script-fu.c:315
+#: ../plug-ins/script-fu/script-fu.c:403
 msgid "_Buttons"
 msgstr "ボタン(_B)"
 
-#: ../plug-ins/script-fu/script-fu.c:317
+#: ../plug-ins/script-fu/script-fu.c:405
 msgid "_Logos"
 msgstr "ロゴ(_L)"
 
-#: ../plug-ins/script-fu/script-fu.c:319
+#: ../plug-ins/script-fu/script-fu.c:407
 msgid "_Patterns"
 msgstr "パターン(_P)"
 
-#: ../plug-ins/script-fu/script-fu.c:322
+#: ../plug-ins/script-fu/script-fu.c:410
 msgid "_Web Page Themes"
 msgstr "Web ページテーマ(_W)"
 
-#: ../plug-ins/script-fu/script-fu.c:324
+#: ../plug-ins/script-fu/script-fu.c:412
 msgid "_Alien Glow"
 msgstr "エイリアン発光(_A)"
 
-#: ../plug-ins/script-fu/script-fu.c:326
+#: ../plug-ins/script-fu/script-fu.c:414
 msgid "_Beveled Pattern"
 msgstr "ベベルパターン(_B)"
 
-#: ../plug-ins/script-fu/script-fu.c:328
+#: ../plug-ins/script-fu/script-fu.c:416
 msgid "_Classic.Gimp.Org"
 msgstr "クラシック Gimp.Org(_C)"
 
 # これまでは「透明度をロゴに(_L)」
 # この表記では機能が連想しにくいと感じたため「ロゴ効果(_L)」に変更した
-#: ../plug-ins/script-fu/script-fu.c:331
+#: ../plug-ins/script-fu/script-fu.c:419
 msgid "Alpha to _Logo"
 msgstr "ロゴ効果(_L)"
 
-#: ../plug-ins/script-fu/script-fu.c:334
-msgid "Re-read all available Script-Fu scripts"
-msgstr "使用可能なスクリプトをディスクから再読み込みします"
-
-#: ../plug-ins/script-fu/script-fu.c:339
+#: ../plug-ins/script-fu/script-fu.c:425
 msgid "_Refresh Scripts"
 msgstr "スクリプトを再読み込み(_R)"
 
-#: ../plug-ins/script-fu/script-fu.c:362
+#: ../plug-ins/script-fu/script-fu.c:430
+msgid "Re-read all available Script-Fu scripts"
+msgstr "使用可能なスクリプトをディスクから再読み込みします"
+
+#: ../plug-ins/script-fu/script-fu.c:456
 msgid ""
 "You can not use \"Refresh Scripts\" while a Script-Fu dialog box is open.  "
 "Please close all Script-Fu windows and try again."
@@ -108,161 +108,161 @@ msgstr ""
 "を再試行してください。 (Script-Fu のダイアログボックスが開いているときは、"
 "「スクリプトの再読み込み」は実行出来ません。)"
 
-#: ../plug-ins/script-fu/script-fu-console.c:127
-#: ../plug-ins/script-fu/script-fu-console.c:194
+#: ../plug-ins/script-fu/script-fu-console.c:110
+#: ../plug-ins/script-fu/script-fu-console.c:177
 msgid "Script-Fu Console"
 msgstr "Script-Fu コンソール"
 
-#: ../plug-ins/script-fu/script-fu-console.c:132
-#: ../plug-ins/script-fu/script-fu-console.c:293
+#: ../plug-ins/script-fu/script-fu-console.c:115
+#: ../plug-ins/script-fu/script-fu-console.c:281
 msgid "_Save"
 msgstr "保存(_S)"
 
-#: ../plug-ins/script-fu/script-fu-console.c:133
+#: ../plug-ins/script-fu/script-fu-console.c:116
 msgid "C_lear"
 msgstr "クリア(_L)"
 
-#: ../plug-ins/script-fu/script-fu-console.c:134
-#: ../plug-ins/script-fu/script-fu-console.c:371
+#: ../plug-ins/script-fu/script-fu-console.c:117
+#: ../plug-ins/script-fu/script-fu-console.c:359
 msgid "_Close"
 msgstr "閉じる(_C)"
 
-#: ../plug-ins/script-fu/script-fu-console.c:190
+#: ../plug-ins/script-fu/script-fu-console.c:173
 msgid "Welcome to TinyScheme"
 msgstr "Welcome to TinyScheme"
 
-#: ../plug-ins/script-fu/script-fu-console.c:196
+#: ../plug-ins/script-fu/script-fu-console.c:179
 msgid "Interactive Scheme Development"
 msgstr "Interactive Scheme Development"
 
-#: ../plug-ins/script-fu/script-fu-console.c:232
+#: ../plug-ins/script-fu/script-fu-console.c:215
 msgid "_Browse..."
 msgstr "参照(_B)..."
 
-#: ../plug-ins/script-fu/script-fu-console.c:288
+#: ../plug-ins/script-fu/script-fu-console.c:276
 msgid "Save Script-Fu Console Output"
 msgstr "Script-Fu コンソールの出力を保存"
 
-#: ../plug-ins/script-fu/script-fu-console.c:292
-#: ../plug-ins/script-fu/script-fu-interface.c:236
-#: ../plug-ins/script-fu/script-fu-server.c:839
+#: ../plug-ins/script-fu/script-fu-console.c:280
+#: ../plug-ins/script-fu/script-fu-interface.c:238
+#: ../plug-ins/script-fu/script-fu-server.c:834
 msgid "_Cancel"
 msgstr "キャンセル(_C)"
 
-#: ../plug-ins/script-fu/script-fu-console.c:337
+#: ../plug-ins/script-fu/script-fu-console.c:325
 #, c-format
 msgid "Could not open '%s' for writing: %s"
 msgstr "ファイル '%s' を書き込み用で開けませんでした： %s"
 
-#: ../plug-ins/script-fu/script-fu-console.c:366
+#: ../plug-ins/script-fu/script-fu-console.c:354
 msgid "Script-Fu Procedure Browser"
 msgstr "Script-Fu プロシージャブラウザー"
 
-#: ../plug-ins/script-fu/script-fu-console.c:370
+#: ../plug-ins/script-fu/script-fu-console.c:358
 msgid "_Apply"
 msgstr "適用(_A)"
 
-#: ../plug-ins/script-fu/script-fu-eval.c:60
+#: ../plug-ins/script-fu/script-fu-eval.c:53
 msgid "Script-Fu evaluation mode only allows non-interactive invocation"
 msgstr "Script-Fu 評価モードは非インタラクティブ動作しかできません"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:200
+#: ../plug-ins/script-fu/script-fu-interface.c:202
 msgid "Script-Fu cannot process two scripts at the same time."
 msgstr "Script-Fu は２つのスクリプトを同時に実行できません。"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:202
+#: ../plug-ins/script-fu/script-fu-interface.c:204
 #, c-format
 msgid "You are already running the \"%s\" script."
 msgstr "すでに \"%s\" スクリプトを実行中です。"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:228
+#: ../plug-ins/script-fu/script-fu-interface.c:230
 #, c-format
 msgid "Script-Fu: %s"
 msgstr "Script-Fu: %s"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:235
+#: ../plug-ins/script-fu/script-fu-interface.c:237
 msgid "_Reset"
 msgstr "リセット(_R)"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:237
+#: ../plug-ins/script-fu/script-fu-interface.c:239
 msgid "_OK"
 msgstr "OK(_O)"
 
 #. we add a colon after the label;
 #. *  some languages want an extra space here
 #.
-#: ../plug-ins/script-fu/script-fu-interface.c:291
+#: ../plug-ins/script-fu/script-fu-interface.c:293
 #, c-format
 msgid "%s:"
 msgstr "%s:"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:341
+#: ../plug-ins/script-fu/script-fu-interface.c:343
 msgid "Script-Fu Color Selection"
 msgstr "色の選択 (Script-Fu)"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:457
+#: ../plug-ins/script-fu/script-fu-interface.c:459
 msgid "Script-Fu File Selection"
 msgstr "ファイルの選択 (Script-Fu)"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:460
+#: ../plug-ins/script-fu/script-fu-interface.c:462
 msgid "Script-Fu Folder Selection"
 msgstr "フォルダーの選択 (Script-Fu)"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:473
+#: ../plug-ins/script-fu/script-fu-interface.c:475
 msgid "Script-Fu Font Selection"
 msgstr "フォントの選択 (Script-Fu)"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:481
+#: ../plug-ins/script-fu/script-fu-interface.c:483
 msgid "Script-Fu Palette Selection"
 msgstr "パレットの選択 (Script-Fu)"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:490
+#: ../plug-ins/script-fu/script-fu-interface.c:492
 msgid "Script-Fu Pattern Selection"
 msgstr "パターンの選択 (Script-Fu)"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:499
+#: ../plug-ins/script-fu/script-fu-interface.c:501
 msgid "Script-Fu Gradient Selection"
 msgstr "グラデーションの選択 (Script-Fu)"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:508
+#: ../plug-ins/script-fu/script-fu-interface.c:510
 msgid "Script-Fu Brush Selection"
 msgstr "ブラシの選択 (Script-Fu)"
 
-#: ../plug-ins/script-fu/script-fu-interface.c:877
+#: ../plug-ins/script-fu/script-fu-interface.c:888
 #, c-format
 msgid "Error while executing %s:"
 msgstr "%s の実行中にエラーが発生しました。"
 
-#: ../plug-ins/script-fu/script-fu-scripts.c:149
+#: ../plug-ins/script-fu/script-fu-scripts.c:148
 msgid "Too few arguments to 'script-fu-register' call"
 msgstr "'script-fu-register' を呼ぶための引数が不足しています。"
 
-#: ../plug-ins/script-fu/script-fu-scripts.c:648
+#: ../plug-ins/script-fu/script-fu-scripts.c:647
 #, c-format
 msgid "Error while loading %s:"
 msgstr "%s の読み込み中にエラーが発生しました。"
 
-#: ../plug-ins/script-fu/script-fu-server.c:835
+#: ../plug-ins/script-fu/script-fu-server.c:830
 msgid "Script-Fu Server Options"
 msgstr "Script-Fu サーバーオプション"
 
-#: ../plug-ins/script-fu/script-fu-server.c:840
+#: ../plug-ins/script-fu/script-fu-server.c:835
 msgid "_Start Server"
 msgstr "サーバースタート(_S)"
 
-#: ../plug-ins/script-fu/script-fu-server.c:873
+#: ../plug-ins/script-fu/script-fu-server.c:868
 msgid "Listen on IP:"
 msgstr "待ち受け IP:"
 
-#: ../plug-ins/script-fu/script-fu-server.c:880
+#: ../plug-ins/script-fu/script-fu-server.c:875
 msgid "Server port:"
 msgstr "サーバーポート:"
 
-#: ../plug-ins/script-fu/script-fu-server.c:886
+#: ../plug-ins/script-fu/script-fu-server.c:881
 msgid "Server logfile:"
 msgstr "サーバーログファイル:"
 
-#: ../plug-ins/script-fu/script-fu-server.c:899
+#: ../plug-ins/script-fu/script-fu-server.c:894
 msgid ""
 "Listening on an IP address other than 127.0.0.1 (especially 0.0.0.0) can "
 "allow attackers to remotely execute arbitrary code on this machine."
@@ -329,7 +329,6 @@ msgid "Delta value on color"
 msgstr "色のデフォルト値"
 
 #: ../plug-ins/script-fu/scripts/blend-anim.scm:206
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:327
 msgid "Frame"
 msgstr "画面"
 
@@ -672,7 +671,6 @@ msgstr "ぼかし半径"
 #: ../plug-ins/script-fu/scripts/drop-shadow.scm:181
 #: ../plug-ins/script-fu/scripts/fuzzyborder.scm:157
 #: ../plug-ins/script-fu/scripts/perspective-shadow.scm:210
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:350
 msgid "Color"
 msgstr "色"
 
@@ -1032,7 +1030,6 @@ msgid "Roughness"
 msgstr "荒さ"
 
 #: ../plug-ins/script-fu/scripts/lava.scm:128
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:351
 msgid "Gradient"
 msgstr "グラデーション"
 
@@ -1464,128 +1461,6 @@ msgstr "透過背景"
 msgid "Index to n colors (0 = remain RGB)"
 msgstr "n 色にインデックス化 (0 = RGB のまま)"
 
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:240
-msgid "Rendering Spyro"
-msgstr "SpyroGimp を描いています..."
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:314
-msgid "_Spyrogimp (older script-fu version)..."
-msgstr "SpyroGimp (Script-Fu の古いバージョン)(_S)..."
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:315
-msgid "This procedure is deprecated! Use 'plug-in-spyrogimp' instead."
-msgstr ""
-"これは廃止されました。代わりに 'plug-in-spyrogimp' を使用してください。"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:323
-msgid "Type"
-msgstr "種類"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:323
-msgid "Spyrograph"
-msgstr "スピログラフ"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:324
-msgid "Epitrochoid"
-msgstr "外トロコイド"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:325
-msgid "Lissajous"
-msgstr "リサージュ図形"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:326
-msgid "Shape"
-msgstr "形"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:326
-msgid "Circle"
-msgstr "円"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:328
-msgid "Triangle"
-msgstr "三角形"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:329
-msgid "Square"
-msgstr "四角形"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:330
-msgid "Pentagon"
-msgstr "五角形"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:331
-msgid "Hexagon"
-msgstr "六角形"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:332
-msgid "Polygon: 7 sides"
-msgstr "七角形"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:333
-msgid "Polygon: 8 sides"
-msgstr "八角形"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:334
-msgid "Polygon: 9 sides"
-msgstr "九角形"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:335
-msgid "Polygon: 10 sides"
-msgstr "十角形"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:336
-msgid "Outer teeth"
-msgstr "外枠"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:337
-msgid "Inner teeth"
-msgstr "内枠"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:338
-msgid "Margin (pixels)"
-msgstr "マージン (ピクセル)"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:339
-msgid "Hole ratio"
-msgstr "穴の変化率"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:340
-msgid "Start angle"
-msgstr "開始角度"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:342
-msgid "Tool"
-msgstr "道具"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:342
-msgid "Pencil"
-msgstr "鉛筆"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:343
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:345
-msgid "Brush"
-msgstr "ブラシ"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:344
-msgid "Airbrush"
-msgstr "エアブラシ"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:347
-msgid "Color method"
-msgstr "色の塗り方"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:347
-msgid "Solid Color"
-msgstr "単色"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:348
-msgid "Gradient: Loop Sawtooth"
-msgstr "グラデーション: ノコギリ歯のループ"
-
-#: ../plug-ins/script-fu/scripts/spyrogimp.scm:349
-msgid "Gradient: Loop Triangle"
-msgstr "グラデーション: 三角形のループ"
-
 #: ../plug-ins/script-fu/scripts/test-sphere.scm:272
 msgid "_Sphere..."
 msgstr "球体(_S)..."
@@ -1742,8 +1617,14 @@ msgstr "ドロップシャドウ X オフセット"
 msgid "Drop shadow Y offset"
 msgstr "ドロップシャドウ Y オフセット"
 
+#~ msgid "_Console"
+#~ msgstr "Script-Fu コンソール(_C)"
+
 #~ msgid "Plug-in _Registry"
 #~ msgstr "プラグインレジストリ (英語)(_R)"
+
+#~ msgid "Rendering Spyro"
+#~ msgstr "SpyroGimp を描いています..."
 
 #~ msgid "_Spyrogimp..."
 #~ msgstr "Spyrogimp(_S)..."
@@ -1751,6 +1632,87 @@ msgstr "ドロップシャドウ Y オフセット"
 #~ msgid ""
 #~ "Add Spirographs, Epitrochoids, and Lissajous Curves to the current layer"
 #~ msgstr "スピログラフ、外トロコイド、リサージュ図形を描きます"
+
+#~ msgid "Type"
+#~ msgstr "種類"
+
+#~ msgid "Spyrograph"
+#~ msgstr "スピログラフ"
+
+#~ msgid "Epitrochoid"
+#~ msgstr "外トロコイド"
+
+#~ msgid "Lissajous"
+#~ msgstr "リサージュ図形"
+
+#~ msgid "Shape"
+#~ msgstr "形"
+
+#~ msgid "Circle"
+#~ msgstr "円"
+
+#~ msgid "Triangle"
+#~ msgstr "三角形"
+
+#~ msgid "Square"
+#~ msgstr "四角形"
+
+#~ msgid "Pentagon"
+#~ msgstr "五角形"
+
+#~ msgid "Hexagon"
+#~ msgstr "六角形"
+
+#~ msgid "Polygon: 7 sides"
+#~ msgstr "七角形"
+
+#~ msgid "Polygon: 8 sides"
+#~ msgstr "八角形"
+
+#~ msgid "Polygon: 9 sides"
+#~ msgstr "九角形"
+
+#~ msgid "Polygon: 10 sides"
+#~ msgstr "十角形"
+
+#~ msgid "Outer teeth"
+#~ msgstr "外枠"
+
+#~ msgid "Inner teeth"
+#~ msgstr "内枠"
+
+#~ msgid "Margin (pixels)"
+#~ msgstr "マージン (ピクセル)"
+
+#~ msgid "Hole ratio"
+#~ msgstr "穴の変化率"
+
+#~ msgid "Start angle"
+#~ msgstr "開始角度"
+
+#~ msgid "Tool"
+#~ msgstr "道具"
+
+#~ msgid "Pencil"
+#~ msgstr "鉛筆"
+
+#~ msgid "Brush"
+#~ msgstr "ブラシ"
+
+#~ msgid "Airbrush"
+#~ msgstr "エアブラシ"
+
+#~ msgid "Color method"
+#~ msgstr "色の塗り方"
+
+#~ msgid "Solid Color"
+#~ msgstr "単色"
+
+#~ msgid "Gradient: Loop Sawtooth"
+#~ msgstr "グラデーション: ノコギリ歯のループ"
+
+#~ msgid "Gradient: Loop Triangle"
+#~ msgstr "グラデーション: 三角形のループ"
 
 #~ msgid "3D _Outline..."
 #~ msgstr "3D アウトライン(_O)..."
@@ -1890,8 +1852,8 @@ msgstr "ドロップシャドウ Y オフセット"
 
 #~ msgid "Add an eerie glow around the selected region (or alpha)"
 #~ msgstr ""
-#~ "エイリアン発光ロゴ ([ファイル] → [画像の生成] → [ロゴ] → [エイリアン発光])"
-#~ "と同じ効果を選択範囲 (または不透明部分) に適用します。"
+#~ "エイリアン発光ロゴ ([ファイル] → [画像の生成] → [ロゴ] → [エイリアン発"
+#~ "光]) と同じ効果を選択範囲 (または不透明部分) に適用します。"
 
 #~ msgid "Alien _Glow..."
 #~ msgstr "エイリアン発光(_G)..."

@@ -27,15 +27,15 @@
 #include "core/gimp.h"
 
 #include "widgets/gimpdeviceeditor.h"
+#include "widgets/gimpdevicemanager.h"
 #include "widgets/gimpdevices.h"
 #include "widgets/gimphelp-ids.h"
+#include "widgets/gimpmessagebox.h"
+#include "widgets/gimpmessagedialog.h"
 
 #include "input-devices-dialog.h"
 
 #include "gimp-intl.h"
-
-
-#define RESPONSE_SAVE 1
 
 
 /*  local function prototypes  */
@@ -62,10 +62,17 @@ input_devices_dialog_new (Gimp *gimp)
                             gimp_standard_help_func,
                             GIMP_HELP_INPUT_DEVICES,
 
-                            _("_Save"),  RESPONSE_SAVE,
-                            _("_Close"), GTK_RESPONSE_CLOSE,
+                            _("_Reset"),  GTK_RESPONSE_REJECT,
+                            _("_Cancel"), GTK_RESPONSE_CANCEL,
+                            _("_OK"),     GTK_RESPONSE_OK,
 
                             NULL);
+
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+                                            GTK_RESPONSE_REJECT,
+                                            GTK_RESPONSE_OK,
+                                            GTK_RESPONSE_CANCEL,
+                                            -1);
 
   g_signal_connect (dialog, "response",
                     G_CALLBACK (input_devices_dialog_response),
@@ -91,12 +98,53 @@ input_devices_dialog_response (GtkWidget *dialog,
 {
   switch (response_id)
     {
-    case RESPONSE_SAVE:
+    case GTK_RESPONSE_OK:
       gimp_devices_save (gimp, TRUE);
       break;
 
+    case GTK_RESPONSE_DELETE_EVENT:
+    case GTK_RESPONSE_CANCEL:
+      gimp_devices_restore (gimp);
+      break;
+
+    case GTK_RESPONSE_REJECT:
+      {
+        GtkWidget *confirm;
+
+        confirm = gimp_message_dialog_new (_("Reset Input Device Configuration"),
+                                           GIMP_ICON_DIALOG_QUESTION,
+                                           dialog,
+                                           GTK_DIALOG_MODAL |
+                                           GTK_DIALOG_DESTROY_WITH_PARENT,
+                                           gimp_standard_help_func, NULL,
+
+                                           _("_Cancel"), GTK_RESPONSE_CANCEL,
+                                           _("_Reset"),  GTK_RESPONSE_OK,
+
+                                           NULL);
+
+        gimp_dialog_set_alternative_button_order (GTK_DIALOG (confirm),
+                                                  GTK_RESPONSE_OK,
+                                                  GTK_RESPONSE_CANCEL,
+                                                  -1);
+
+        gimp_message_box_set_primary_text (GIMP_MESSAGE_DIALOG (confirm)->box,
+                                           _("Do you really want to reset all "
+                                             "input devices to default configuration?"));
+
+        if (gimp_dialog_run (GIMP_DIALOG (confirm)) == GTK_RESPONSE_OK)
+          {
+            gimp_device_manager_reset (gimp_devices_get_manager (gimp));
+            gimp_devices_save (gimp, TRUE);
+            gimp_devices_restore (gimp);
+          }
+        gtk_widget_destroy (confirm);
+      }
+      return;
+
     default:
-      gtk_widget_destroy (dialog);
       break;
     }
+
+  gtk_widget_destroy (dialog);
 }

@@ -37,7 +37,6 @@
 #include "gimpcontrollerinfo.h"
 #include "gimpcontrollers.h"
 #include "gimpcontrollerkeyboard.h"
-#include "gimpcontrollermouse.h"
 #include "gimpcontrollerwheel.h"
 #include "gimpenumaction.h"
 #include "gimpuimanager.h"
@@ -54,7 +53,6 @@ struct _GimpControllerManager
 {
   GimpContainer  *controllers;
   GQuark          event_mapped_id;
-  GimpController *mouse;
   GimpController *wheel;
   GimpController *keyboard;
   GimpUIManager  *ui_manager;
@@ -110,7 +108,6 @@ gimp_controllers_init (Gimp *gimp)
                                 G_CALLBACK (gimp_controllers_event_mapped),
                                 manager);
 
-  g_type_class_ref (GIMP_TYPE_CONTROLLER_MOUSE);
   g_type_class_ref (GIMP_TYPE_CONTROLLER_WHEEL);
   g_type_class_ref (GIMP_TYPE_CONTROLLER_KEYBOARD);
 }
@@ -143,25 +140,36 @@ gimp_controllers_restore (Gimp          *gimp,
   g_return_if_fail (manager != NULL);
   g_return_if_fail (manager->ui_manager == NULL);
 
-  manager->ui_manager = g_object_ref (ui_manager);
+  manager->ui_manager = ui_manager;
 
   file = gimp_directory_file ("controllerrc", NULL);
 
   if (gimp->be_verbose)
     g_print ("Parsing '%s'\n", gimp_file_get_utf8_name (file));
 
-  if (! gimp_config_deserialize_gfile (GIMP_CONFIG (manager->controllers),
-                                       file, NULL, &error))
+  if (! gimp_config_deserialize_file (GIMP_CONFIG (manager->controllers),
+                                      file, NULL, &error))
     {
       if (error->code == GIMP_CONFIG_ERROR_OPEN_ENOENT)
         {
           g_clear_error (&error);
           g_object_unref (file);
 
-          file = gimp_sysconf_directory_file ("controllerrc", NULL);
+          if (g_getenv ("GIMP_TESTING_ABS_TOP_SRCDIR"))
+            {
+              gchar *path;
+              path = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_SRCDIR"),
+                                       "etc", "controllerrc", NULL);
+              file = g_file_new_for_path (path);
+              g_free (path);
+            }
+          else
+            {
+              file = gimp_sysconf_directory_file ("controllerrc", NULL);
+            }
 
-          if (! gimp_config_deserialize_gfile (GIMP_CONFIG (manager->controllers),
-                                               file, NULL, &error))
+          if (! gimp_config_deserialize_file (GIMP_CONFIG (manager->controllers),
+                                              file, NULL, &error))
             {
               gimp_message_literal (gimp, NULL, GIMP_MESSAGE_ERROR,
                                     error->message);
@@ -205,10 +213,10 @@ gimp_controllers_save (Gimp *gimp)
   if (gimp->be_verbose)
     g_print ("Writing '%s'\n", gimp_file_get_utf8_name (file));
 
-  if (! gimp_config_serialize_to_gfile (GIMP_CONFIG (manager->controllers),
-                                        file,
-                                        header, footer, NULL,
-                                        &error))
+  if (! gimp_config_serialize_to_file (GIMP_CONFIG (manager->controllers),
+                                       file,
+                                       header, footer, NULL,
+                                       &error))
     {
       gimp_message_literal (gimp, NULL, GIMP_MESSAGE_ERROR, error->message);
       g_error_free (error);
@@ -243,20 +251,6 @@ gimp_controllers_get_ui_manager (Gimp *gimp)
   g_return_val_if_fail (manager != NULL, NULL);
 
   return manager->ui_manager;
-}
-
-GimpController *
-gimp_controllers_get_mouse (Gimp *gimp)
-{
-  GimpControllerManager *manager;
-
-  g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
-
-  manager = gimp_controller_manager_get (gimp);
-
-  g_return_val_if_fail (manager != NULL, NULL);
-
-  return manager->mouse;
 }
 
 GimpController *
@@ -303,7 +297,6 @@ gimp_controller_manager_free (GimpControllerManager *manager)
                                  manager->event_mapped_id);
 
   g_clear_object (&manager->controllers);
-  g_clear_object (&manager->ui_manager);
 
   g_slice_free (GimpControllerManager, manager);
 }
@@ -317,8 +310,6 @@ gimp_controllers_add (GimpContainer         *container,
     manager->wheel = info->controller;
   else if (GIMP_IS_CONTROLLER_KEYBOARD (info->controller))
     manager->keyboard = info->controller;
-  else if (GIMP_IS_CONTROLLER_MOUSE (info->controller))
-    manager->mouse = info->controller;
 }
 
 static void

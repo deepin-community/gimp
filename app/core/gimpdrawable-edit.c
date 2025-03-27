@@ -27,8 +27,10 @@
 #include "gegl/gimp-gegl-loops.h"
 
 #include "gimpchannel.h"
+#include "core/gimpcontainer.h"
 #include "gimpdrawable.h"
 #include "gimpdrawable-edit.h"
+#include "core/gimpdrawable-filters.h"
 #include "gimpdrawablefilter.h"
 #include "gimpcontext.h"
 #include "gimpfilloptions.h"
@@ -79,7 +81,8 @@ gimp_drawable_edit_can_fill_direct (GimpDrawable    *drawable,
     {
       switch (gimp_fill_options_get_style (options))
         {
-        case GIMP_FILL_STYLE_SOLID:
+        case GIMP_FILL_STYLE_FG_COLOR:
+        case GIMP_FILL_STYLE_BG_COLOR:
           return TRUE;
 
         case GIMP_FILL_STYLE_PATTERN:
@@ -191,15 +194,28 @@ gimp_drawable_edit_fill (GimpDrawable    *drawable,
     {
       gimp_drawable_edit_fill_direct (drawable, options, undo_desc);
 
-      gimp_drawable_update (drawable, x, y, width, height);
+      if (gimp_drawable_has_visible_filters (drawable))
+        {
+          /* For drawables with filters, update the bounding box then
+           * let the drawable update everything, because the filtered
+           * render may be bigger than the filled part.
+           */
+          gimp_drawable_update_bounding_box (drawable);
+          gimp_drawable_update (drawable, 0, 0, -1, -1);
+        }
+      else
+        {
+          gimp_drawable_update (drawable, x, y, width, height);
+        }
     }
   else
     {
-      GeglNode           *operation;
-      GimpDrawableFilter *filter;
-      gdouble             opacity;
-      GimpLayerMode       mode;
-      GimpLayerMode       composite_mode;
+      GeglNode               *operation;
+      GimpDrawableFilter     *filter;
+      gdouble                 opacity;
+      GimpLayerMode           mode;
+      GimpLayerCompositeMode  composite_mode;
+      GimpContainer          *filter_stack;
 
       opacity        = gimp_context_get_opacity (context);
       mode           = gimp_context_get_paint_mode (context);
@@ -223,7 +239,13 @@ gimp_drawable_edit_fill (GimpDrawable    *drawable,
                                         composite_mode);
 
       gimp_drawable_filter_apply  (filter, NULL);
-      gimp_drawable_filter_commit (filter, NULL, FALSE);
+      /* Move to bottom of filter stack */
+      filter_stack = gimp_drawable_get_filters (drawable);
+      if (filter_stack)
+        gimp_container_reorder (filter_stack, GIMP_OBJECT (filter),
+                                gimp_container_get_n_children (filter_stack) - 1);
+
+      gimp_drawable_filter_commit (filter, FALSE, NULL, FALSE);
 
       g_object_unref (filter);
       g_object_unref (operation);

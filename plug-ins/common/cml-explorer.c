@@ -28,7 +28,7 @@
  *
  *                      Value    Time     Space
  *  Coupled-Map Lattice cont.    discrete discrete
- *  Celluar Automata    discrete discrete discrete
+ *  Cellular Automata   discrete discrete discrete
  *  Differential Eq.    cont.    cont.    cont.
  *
  *  (But this program uses a parameter: hold-rate to avoid very fast changes.
@@ -68,6 +68,7 @@
  *    Michael Sweet <mike@easysw.com>
  *
  */
+
 #include "config.h"
 
 #include <errno.h>
@@ -81,6 +82,7 @@
 
 #include "libgimp/stdplugins-intl.h"
 
+
 #define PARAM_FILE_FORMAT_VERSION 1.0
 #define PLUG_IN_PROC              "plug-in-cml-explorer"
 #define PLUG_IN_BINARY            "cml-explorer"
@@ -89,7 +91,6 @@
 #define PROGRESS_UPDATE_NUM        100
 #define CML_LINE_SIZE             1024
 #define TILE_CACHE_SIZE             32
-#define SCALE_WIDTH                130
 #define PREVIEW_WIDTH               64
 #define PREVIEW_HEIGHT             220
 
@@ -262,7 +263,6 @@ typedef struct
   gint      scale;
   gint      start_offset;
   gint      seed;
-  gchar     last_file_name[256];
 } ValueType;
 
 static ValueType VALS =
@@ -285,7 +285,6 @@ static ValueType VALS =
   1,    /* scale */
   0,    /* start_offset */
   0,    /* seed */
-  ""    /* last filename */
 };
 
 static CML_PARAM *channel_params[] =
@@ -310,98 +309,124 @@ static const gchar *load_channel_names[] =
   N_("Value")
 };
 
-static void query (void);
-static void run   (const gchar      *name,
-                   gint              nparams,
-                   const GimpParam  *param,
-                   gint             *nreturn_vals,
-                   GimpParam       **return_vals);
 
-static GimpPDBStatusType CML_main_function     (gboolean   preview_p);
-static void              CML_compute_next_step (gint       size,
-                                                gdouble  **h,
-                                                gdouble  **s,
-                                                gdouble  **v,
-                                                gdouble  **hn,
-                                                gdouble  **sn,
-                                                gdouble  **vn,
-                                                gdouble  **haux,
-                                                gdouble  **saux,
-                                                gdouble  **vaux);
-static gdouble           CML_next_value        (gdouble   *vec,
-                                                gint       pos,
-                                                gint       size,
-                                                gdouble    c1,
-                                                gdouble    c2,
-                                                CML_PARAM *param,
-                                                gdouble    aux);
-static gdouble           logistic_function     (CML_PARAM *param,
-                                                gdouble    x,
-                                                gdouble    power);
+typedef struct _Explorer      Explorer;
+typedef struct _ExplorerClass ExplorerClass;
+
+struct _Explorer
+{
+  GimpPlugIn parent_instance;
+};
+
+struct _ExplorerClass
+{
+  GimpPlugInClass parent_class;
+};
 
 
-static gint        CML_explorer_dialog           (void);
-static GtkWidget * CML_dialog_channel_panel_new  (CML_PARAM *param,
-                                                  gint       channel_id);
-static GtkWidget * CML_dialog_advanced_panel_new (void);
+#define EXPLORER_TYPE  (explorer_get_type ())
+#define EXPLORER(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), EXPLORER_TYPE, Explorer))
 
-static void     CML_explorer_toggle_entry_init   (WidgetEntry *widget_entry,
-                                                  GtkWidget   *widget,
-                                                  gpointer     value_ptr);
+GType                   explorer_get_type         (void) G_GNUC_CONST;
 
-static void     CML_explorer_int_entry_init      (WidgetEntry *widget_entry,
-                                                  GtkObject   *object,
-                                                  gpointer     value_ptr);
+static GList          * explorer_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * explorer_create_procedure (GimpPlugIn           *plug_in,
+                                                   const gchar          *name);
 
-static void     CML_explorer_double_entry_init   (WidgetEntry *widget_entry,
-                                                  GtkObject   *object,
-                                                  gpointer     value_ptr);
+static GimpValueArray * explorer_run              (GimpProcedure        *procedure,
+                                                   GimpRunMode           run_mode,
+                                                   GimpImage            *image,
+                                                   GimpDrawable        **drawables,
+                                                   GimpProcedureConfig  *config,
+                                                   gpointer              run_data);
 
-static void     CML_explorer_menu_update         (GtkWidget   *widget,
-                                                  gpointer     data);
-static void     CML_initial_value_menu_update    (GtkWidget   *widget,
-                                                  gpointer     data);
-static void     CML_explorer_menu_entry_init     (WidgetEntry *widget_entry,
-                                                  GtkWidget   *widget,
-                                                  gpointer     value_ptr);
+static gboolean          CML_main_function        (gboolean              preview_p);
+static void              CML_compute_next_step    (gint                  size,
+                                                   gdouble             **h,
+                                                   gdouble             **s,
+                                                   gdouble             **v,
+                                                   gdouble             **hn,
+                                                   gdouble             **sn,
+                                                   gdouble             **vn,
+                                                   gdouble             **haux,
+                                                   gdouble             **saux,
+                                                   gdouble             **vaux);
+static gdouble           CML_next_value           (gdouble              *vec,
+                                                   gint                  pos,
+                                                   gint                  size,
+                                                   gdouble               c1,
+                                                   gdouble               c2,
+                                                   CML_PARAM            *param,
+                                                   gdouble               aux);
+static gdouble           logistic_function        (CML_PARAM            *param,
+                                                   gdouble               x,
+                                                   gdouble               power);
+
+
+static gint        CML_explorer_dialog            (GimpProcedureConfig  *config);
+static GtkWidget * CML_dialog_channel_panel_new   (CML_PARAM            *param,
+                                                   gint                  channel_id);
+static GtkWidget * CML_dialog_advanced_panel_new  (void);
+
+static void     CML_explorer_toggle_entry_init    (WidgetEntry          *widget_entry,
+                                                   GtkWidget            *widget,
+                                                   gpointer              value_ptr);
+
+static void     CML_explorer_int_entry_init       (WidgetEntry          *widget_entry,
+                                                   GtkWidget            *scale,
+                                                   gpointer               value_ptr);
+
+static void     CML_explorer_double_entry_init    (WidgetEntry          *widget_entry,
+                                                   GtkWidget            *scale,
+                                                   gpointer              value_ptr);
+
+static void     CML_explorer_menu_update          (GtkWidget             *widget,
+                                                   gpointer               data);
+static void     CML_initial_value_menu_update     (GtkWidget             *widget,
+                                                   gpointer               data);
+static void     CML_explorer_menu_entry_init      (WidgetEntry           *widget_entry,
+                                                   GtkWidget             *widget,
+                                                   gpointer               value_ptr);
 
 static void    preview_update                      (void);
-static void    function_graph_new                  (GtkWidget *widget,
-                                                    gpointer  *data);
-static void    CML_set_or_randomize_seed_callback  (GtkWidget *widget,
-                                                    gpointer   data);
-static void    CML_copy_parameters_callback        (GtkWidget *widget,
-                                                    gpointer   data);
+static void    function_graph_new                  (GtkWidget            *widget,
+                                                    gpointer             *data);
+static void    CML_set_or_randomize_seed_callback  (GtkWidget            *widget,
+                                                    gpointer              data);
+static void    CML_copy_parameters_callback        (GtkWidget            *widget,
+                                                    gpointer              data);
 static void    CML_initial_value_sensitives_update (void);
 
-static void    CML_save_to_file_callback   (GtkWidget        *widget,
-                                            gpointer          data);
-static void    CML_save_to_file_response   (GtkWidget        *dialog,
-                                            gint              response_id,
-                                            gpointer          data);
+static void    CML_save_to_file_callback           (GtkWidget            *widget,
+                                                    GimpProcedureConfig  *config);
+static void    CML_save_to_file_response           (GtkWidget            *dialog,
+                                                    gint                  response_id,
+                                                    GimpProcedureConfig  *config);
 
-static void    CML_preview_update_callback (GtkWidget        *widget,
-                                            gpointer          data);
-static void    CML_load_from_file_callback (GtkWidget        *widget,
-                                            gpointer          data);
-static gboolean CML_load_parameter_file     (const gchar     *filename,
-                                             gboolean         interactive_mode);
-static void    CML_load_from_file_response (GtkWidget        *dialog,
-                                            gint              response_id,
-                                            gpointer          data);
-static gint    parse_line_to_gint          (FILE             *file,
-                                            gboolean         *flag);
-static gdouble parse_line_to_gdouble       (FILE             *file,
-                                            gboolean         *flag);
+static void    CML_preview_update_callback         (GtkWidget            *widget,
+                                                    gpointer              data);
+static void    CML_load_from_file_callback         (GtkWidget            *widget,
+                                                    GimpProcedureConfig  *config);
+static gboolean CML_load_parameter_file            (GFile                *file,
+                                                    gboolean              interactive_mode,
+                                                    GimpProcedureConfig  *config,
+                                                    GError              **error);
+static void    CML_load_from_file_response         (GtkWidget            *dialog,
+                                                    gint                  response_id,
+                                                    GimpProcedureConfig  *config);
+static gint    parse_line_to_gint                  (GDataInputStream         *input,
+                                                    gboolean             *flag,
+                                                    GError              **error);
+static gdouble parse_line_to_gdouble               (GDataInputStream         *input,
+                                                    gboolean             *flag,
+                                                    GError              **error);
 
 
-const GimpPlugInInfo PLUG_IN_INFO =
-{
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
-};
+G_DEFINE_TYPE (Explorer, explorer, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (EXPLORER_TYPE)
+DEFINE_STD_SET_I18N
+
 
 static GtkWidget   *preview;
 static WidgetEntry  widget_pointers[4][CML_PARAM_NUM];
@@ -428,13 +453,13 @@ static CML_sensitive_widget_table random_sensitives[RANDOM_SENSITIVES_NUM] =
   { NULL, 0 }
 };
 
-static GRand    *gr;
-static gint      drawable_id = 0;
-static gint      copy_source = 0;
-static gint      copy_destination = 0;
-static gint      selective_load_source = 0;
-static gint      selective_load_destination = 0;
-static gboolean  CML_preview_defer = FALSE;
+static GRand        *gr;
+static GimpDrawable *drawable = NULL;
+static gint          copy_source = 0;
+static gint          copy_destination = 0;
+static gint          selective_load_source = 0;
+static gint          selective_load_destination = 0;
+static gboolean      CML_preview_defer = FALSE;
 
 static gdouble  *mem_chank0 = NULL;
 static gint      mem_chank0_size = 0;
@@ -443,105 +468,201 @@ static gint      mem_chank1_size = 0;
 static guchar   *mem_chank2 = NULL;
 static gint      mem_chank2_size = 0;
 
-MAIN ()
 
 static void
-query (void)
+explorer_class_init (ExplorerClass *klass)
 {
-  static const GimpParamDef args [] =
-  {
-    { GIMP_PDB_INT32,    "ru-_mode",           "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",              "Input image (not used)" },
-    { GIMP_PDB_DRAWABLE, "drawable",           "Input drawable"  },
-    { GIMP_PDB_STRING,   "parameter-filename", "The name of parameter file. CML_explorer makes an image with its settings." }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  gimp_install_procedure (PLUG_IN_PROC,
-                          N_("Create abstract Coupled-Map Lattice patterns"),
-                          "Make an image of Coupled-Map Lattice (CML). CML is "
-                          "a kind of Cellula Automata on continuous (value) "
-                          "domain. In GIMP_RUN_NONINTERACTIVE, the name of a "
-                          "parameter file is passed as the 4th arg. You can "
-                          "control CML_explorer via parameter file.",
-                          /*  Or do you want to call me with over 50 args? */
-                          "Shuji Narazaki (narazaki@InetQ.or.jp); "
-                          "http://www.inetq.or.jp/~narazaki/TheGIMP/",
-                          "Shuji Narazaki",
-                          "1997",
-                          N_("CML _Explorer..."),
-                          "RGB*, GRAY*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args), 0,
-                          args, NULL);
-
-  gimp_plugin_menu_register (PLUG_IN_PROC, "<Image>/Filters/Render/Pattern");
+  plug_in_class->query_procedures = explorer_query_procedures;
+  plug_in_class->create_procedure = explorer_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+explorer_init (Explorer *explorer)
 {
-  static GimpParam  values[1];
-  GimpPDBStatusType status = GIMP_PDB_EXECUTION_ERROR;
-  GimpRunMode       run_mode;
+}
 
-  run_mode    = param[0].data.d_int32;
-  drawable_id = param[2].data.d_drawable;
+static GList *
+explorer_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (PLUG_IN_PROC));
+}
 
-  INIT_I18N ();
+static GimpProcedure *
+explorer_create_procedure (GimpPlugIn  *plug_in,
+                           const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, PLUG_IN_PROC))
+    {
+      procedure = gimp_image_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            explorer_run, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "RGB*, GRAY*");
+      gimp_procedure_set_sensitivity_mask (procedure,
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLE);
+
+      gimp_procedure_set_menu_label (procedure, _("CML _Explorer..."));
+      gimp_procedure_add_menu_path (procedure,
+                                    "<Image>/Filters/Render/Pattern");
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Create abstract Coupled-Map "
+                                          "Lattice patterns"),
+                                        _("Make an image of Coupled-Map Lattice "
+                                          "(CML). CML is a kind of Cellular "
+                                          "Automata on continuous (value) "
+                                          "domain. In GIMP_RUN_NONINTERACTIVE, "
+                                          "the name of a parameter file is "
+                                          "passed as the 4th arg. You can "
+                                          "control CML_explorer via parameter "
+                                          "file."),
+                                        /*  Or do you want to call me
+                                         *  with over 50 args?
+                                         */
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Shuji Narazaki (narazaki@InetQ.or.jp); "
+                                      "http://www.inetq.or.jp/~narazaki/TheGIMP/",
+                                      "Shuji Narazaki",
+                                      "1997");
+
+      gimp_procedure_add_file_argument (procedure, "parameter-file",
+                                        _("Parameter File"),
+                                        _("The parameter file from which CML_explorer makes an image. "
+                                          "This argument is only used in non-interactive runs."),
+                                        GIMP_FILE_CHOOSER_ACTION_OPEN,
+                                        FALSE, NULL,
+                                        G_PARAM_READWRITE);
+
+      gimp_procedure_add_bytes_aux_argument (procedure, "settings-data",
+                                             "Settings data",
+                                             "TODO: eventually we must implement proper args for every settings",
+                                             GIMP_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+explorer_run (GimpProcedure        *procedure,
+              GimpRunMode           run_mode,
+              GimpImage            *image,
+              GimpDrawable        **drawables,
+              GimpProcedureConfig  *config,
+              gpointer              run_data)
+{
+  GBytes *settings_bytes = NULL;
+  GError *error          = NULL;
+
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
+    {
+      g_set_error (&error, GIMP_PLUG_IN_ERROR, 0,
+                   _("Procedure '%s' only works with one drawable."),
+                   PLUG_IN_PROC);
+
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_CALLING_ERROR,
+                                               error);
+    }
+  else
+    {
+      drawable = drawables[0];
+    }
+
   gegl_init (NULL, NULL);
 
-  *nreturn_vals = 1;
-  *return_vals = values;
-
-  values[0].type = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
+  /* Temporary code replacing legacy gimp_[gs]et_data() using an AUX argument.
+   * This doesn't actually fix the "Reset to initial values|factory defaults"
+   * features, but at least makes per-run value storage work.
+   * TODO: eventually we want proper separate arguments as a complete fix.
+   */
+  g_object_get (config, "settings-data", &settings_bytes, NULL);
+  if (settings_bytes != NULL && g_bytes_get_size (settings_bytes) == sizeof (ValueType))
+    VALS = *((ValueType *) g_bytes_get_data (settings_bytes, NULL));
+  g_bytes_unref (settings_bytes);
 
   switch (run_mode)
     {
     case GIMP_RUN_INTERACTIVE:
-      gimp_get_data (PLUG_IN_PROC, &VALS);
-      if (! CML_explorer_dialog ())
-        return;
+      if (! CML_explorer_dialog (config))
+        return gimp_procedure_new_return_values (procedure,
+                                                 GIMP_PDB_CANCEL,
+                                                 NULL);
       break;
+
     case GIMP_RUN_NONINTERACTIVE:
       {
-        gchar *filename = param[3].data.d_string;
+        GFile *file = NULL;
 
-        if (! CML_load_parameter_file (filename, FALSE))
-          return;
-        break;
+        g_object_get (config,
+                      "parameter-file", &file,
+                      NULL);
+
+        if (file == NULL)
+          {
+            g_set_error (&error, GIMP_PLUG_IN_ERROR, 0,
+                         "Procedure '%s' requires \"parameter-file\" argument "
+                         "in non-interactive runs.",
+                         PLUG_IN_PROC);
+
+            return gimp_procedure_new_return_values (procedure,
+                                                     GIMP_PDB_CALLING_ERROR,
+                                                     error);
+          }
+        else if (! CML_load_parameter_file (file, FALSE, config, &error))
+          {
+            g_object_unref (file);
+
+            return gimp_procedure_new_return_values (procedure,
+                                                     GIMP_PDB_CALLING_ERROR,
+                                                     error);
+          }
+
+        g_object_unref (file);
       }
+      break;
+
     case GIMP_RUN_WITH_LAST_VALS:
-      gimp_get_data (PLUG_IN_PROC, &VALS);
       break;
     }
 
-  status = CML_main_function (FALSE);
+  if (CML_main_function (FALSE))
+    {
+      if (run_mode != GIMP_RUN_NONINTERACTIVE)
+        gimp_displays_flush();
+    }
+  else
+    {
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_EXECUTION_ERROR,
+                                               NULL);
+    }
 
-  if (run_mode != GIMP_RUN_NONINTERACTIVE)
-    gimp_displays_flush();
-  if (run_mode == GIMP_RUN_INTERACTIVE && status == GIMP_PDB_SUCCESS)
-    gimp_set_data (PLUG_IN_PROC, &VALS, sizeof (ValueType));
+  settings_bytes = g_bytes_new (&VALS, sizeof (ValueType));
+  g_object_set (config, "settings-data", settings_bytes, NULL);
+  g_bytes_unref (settings_bytes);
 
   g_free (mem_chank0);
   g_free (mem_chank1);
   g_free (mem_chank2);
 
-  values[0].type = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
+  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }
 
-static GimpPDBStatusType
+static gboolean
 CML_main_function (gboolean preview_p)
 {
   GeglBuffer *src_buffer;
   GeglBuffer *dest_buffer;
   const Babl *src_format;
   const Babl *dest_format;
+  const Babl *to_hsv;
+  const Babl *to_rgb;
   guchar     *dest_buf = NULL;
   guchar     *src_buf  = NULL;
   gint        x, y;
@@ -560,13 +681,16 @@ CML_main_function (gboolean preview_p)
   gdouble    *newh, *news, *newv;
   gdouble    *haux, *saux, *vaux;
 
-  if (! gimp_drawable_mask_intersect (drawable_id,
+  if (! gimp_drawable_mask_intersect (drawable,
                                       &x, &y,
                                       &width_by_pixel, &height_by_pixel))
-    return GIMP_PDB_SUCCESS;
+    return TRUE;
 
-  src_has_alpha = dest_has_alpha = gimp_drawable_has_alpha (drawable_id);
-  src_is_gray   = dest_is_gray   = gimp_drawable_is_gray (drawable_id);
+  to_hsv = babl_fish (babl_format ("R'G'B' float"), babl_format ("HSV float"));
+  to_rgb = babl_fish (babl_format ("HSV float"), babl_format ("R'G'B' float"));
+
+  src_has_alpha = dest_has_alpha = gimp_drawable_has_alpha (drawable);
+  src_is_gray   = dest_is_gray   = gimp_drawable_is_gray (drawable);
 
   if (src_is_gray)
     {
@@ -606,7 +730,7 @@ CML_main_function (gboolean preview_p)
   total = height_by_pixel * width_by_pixel;
 
   if (total < 1)
-    return GIMP_PDB_EXECUTION_ERROR;
+    return FALSE;
 
   keep_height = VALS.scale;
 
@@ -645,9 +769,9 @@ CML_main_function (gboolean preview_p)
   dest_buf = mem_chank2;
 
   if (! preview_p)
-    dest_buffer = gimp_drawable_get_shadow_buffer (drawable_id);
+    dest_buffer = gimp_drawable_get_shadow_buffer (drawable);
 
-  src_buffer = gimp_drawable_get_buffer (drawable_id);
+  src_buffer = gimp_drawable_get_buffer (drawable);
 
   gr = g_rand_new ();
   if (VALS.initial_value == CML_INITIAL_RANDOM_FROM_SEED)
@@ -762,25 +886,22 @@ CML_main_function (gboolean preview_p)
 
   if (VALS.initial_value == 3)
     {
-      int       index;
+      int index;
 
       for (index = 0;
            index < MIN (cell_num, width_by_pixel / VALS.scale);
            index++)
         {
-          guchar buffer[4];
-          int   rgbi[3];
-          int   i;
+          gfloat hsv[3] = {0, 0, 0};
 
           gegl_buffer_sample (src_buffer, x + (index * VALS.scale), y, NULL,
-                              buffer, src_format,
+                              buffer, babl_format ("HSV float"),
                               GEGL_SAMPLER_NEAREST, GEGL_ABYSS_NONE);
 
-          for (i = 0; i < 3; i++) rgbi[i] = buffer[i];
-          gimp_rgb_to_hsv_int (rgbi, rgbi + 1, rgbi + 2);
-          hues[index] = (gdouble) rgbi[0] / (gdouble) 255;
-          sats[index] = (gdouble) rgbi[1] / (gdouble) 255;
-          vals[index] = (gdouble) rgbi[2] / (gdouble) 255;
+
+          hues[index] = hsv[0];
+          sats[index] = hsv[1];
+          vals[index] = hsv[2];
         }
     }
 
@@ -824,7 +945,16 @@ CML_main_function (gboolean preview_p)
           v = b = CANNONIZE (VALS.val, vals[dx]);
 
           if (! dest_is_gray)
-            gimp_hsv_to_rgb_int (&r, &g, &b);
+            {
+              gfloat hsv[3] = { h / 255.0, s / 255.0, v / 255.0 };
+              gfloat rgb[3];
+
+              babl_process (to_rgb, hsv, rgb, 1);
+
+              r = ROUND (rgb[0] * 255.0);
+              g = ROUND (rgb[1] * 255.0);
+              b = ROUND (rgb[2] * 255.0);
+            }
 
           /* render destination */
           for (offset_y = 0;
@@ -850,12 +980,28 @@ CML_main_function (gboolean preview_p)
                       }
                     else
                       {
-                        gimp_rgb_to_hsv_int (rgbi, rgbi + 1, rgbi + 2);
+                        gfloat rgb[3];
+                        gfloat hsv[3];
 
-                        r = (VALS.hue.function == CML_KEEP_VALUES) ? rgbi[0] : h;
-                        g = (VALS.sat.function == CML_KEEP_VALUES) ? rgbi[1] : s;
-                        b = (VALS.val.function == CML_KEEP_VALUES) ? rgbi[2] : v;
-                        gimp_hsv_to_rgb_int (&r, &g, &b);
+                        for (i = 0; i < 3; i++)
+                          rgb[i] = (gfloat) rgbi[i] / 255.0;
+
+                        babl_process (to_hsv, rgb, hsv, 1);
+
+                        if (VALS.hue.function != CML_KEEP_VALUES)
+                          hsv[0] = (gfloat) h / 255.0;
+
+                        if  (VALS.sat.function != CML_KEEP_VALUES)
+                          hsv[1] = (gfloat) s / 255.0;
+
+                        if (VALS.val.function != CML_KEEP_VALUES)
+                          hsv[2] = (gfloat) v / 255.0;
+
+                        babl_process (to_rgb, hsv, rgb, 1);
+
+                        r = ROUND (rgb[0] * 255.0);
+                        g = ROUND (rgb[1] * 255.0);
+                        b = ROUND (rgb[2] * 255.0);
                       }
                   }
 
@@ -917,14 +1063,14 @@ CML_main_function (gboolean preview_p)
 
       g_object_unref (dest_buffer);
 
-      gimp_drawable_merge_shadow (drawable_id, TRUE);
-      gimp_drawable_update (drawable_id,
+      gimp_drawable_merge_shadow (drawable, TRUE);
+      gimp_drawable_update (drawable,
                             x, y, width_by_pixel, height_by_pixel);
     }
 
   g_rand_free (gr);
 
-  return GIMP_PDB_SUCCESS;
+  return TRUE;
 }
 
 static void
@@ -1209,18 +1355,17 @@ logistic_function (CML_PARAM *param,
 
 /* dialog stuff */
 static gint
-CML_explorer_dialog (void)
+CML_explorer_dialog (GimpProcedureConfig *config)
 {
   GtkWidget *dialog;
   GtkWidget *hbox;
   GtkWidget *vbox;
   GtkWidget *frame;
-  GtkWidget *abox;
   GtkWidget *bbox;
   GtkWidget *button;
   gboolean   run;
 
-  gimp_ui_init (PLUG_IN_BINARY, TRUE);
+  gimp_ui_init (PLUG_IN_BINARY);
 
   dialog = gimp_dialog_new (_("Coupled-Map-Lattice Explorer"), PLUG_IN_ROLE,
                             NULL, 0,
@@ -1231,7 +1376,7 @@ CML_explorer_dialog (void)
 
                             NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
                                            -1);
@@ -1250,13 +1395,10 @@ CML_explorer_dialog (void)
   gtk_box_pack_start (GTK_BOX (hbox), vbox, FALSE, FALSE, 0);
   gtk_widget_show (vbox);
 
-  abox = gtk_alignment_new (0.5, 0.5, 0.0, 0.0);
-  gtk_box_pack_start (GTK_BOX (vbox), abox, FALSE, FALSE, 0);
-  gtk_widget_show (abox);
-
   frame = gtk_frame_new (NULL);
   gtk_frame_set_shadow_type (GTK_FRAME (frame), GTK_SHADOW_IN);
-  gtk_container_add (GTK_CONTAINER (abox), frame);
+  gtk_widget_set_halign (frame, GTK_ALIGN_CENTER);
+  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
 
   preview = gimp_preview_area_new ();
@@ -1312,7 +1454,7 @@ CML_explorer_dialog (void)
 
   g_signal_connect (button, "clicked",
                     G_CALLBACK (CML_load_from_file_callback),
-                    &VALS);
+                    config);
 
   button = gtk_button_new_with_mnemonic (_("_Save"));
   gtk_container_add (GTK_CONTAINER (bbox), button);
@@ -1320,7 +1462,7 @@ CML_explorer_dialog (void)
 
   g_signal_connect (button, "clicked",
                     G_CALLBACK (CML_save_to_file_callback),
-                    &VALS);
+                    config);
 
   {
     GtkWidget *notebook;
@@ -1349,12 +1491,12 @@ CML_explorer_dialog (void)
 
     {
       GtkSizeGroup *group = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
-      GtkWidget    *table;
+      GtkWidget    *grid;
       GtkWidget    *label;
       GtkWidget    *combo;
       GtkWidget    *frame;
       GtkWidget    *vbox;
-      GtkObject    *adj;
+      GtkWidget    *scale;
 
       vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
       gtk_container_set_border_width (GTK_CONTAINER (vbox), 12);
@@ -1364,11 +1506,11 @@ CML_explorer_dialog (void)
       gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
       gtk_widget_show (frame);
 
-      table = gtk_table_new (3, 3, FALSE);
-      gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-      gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-      gtk_container_add (GTK_CONTAINER (frame), table);
-      gtk_widget_show (table);
+      grid = gtk_grid_new ();
+      gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+      gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+      gtk_container_add (GTK_CONTAINER (frame), grid);
+      gtk_widget_show (grid);
 
       combo = gimp_int_combo_box_new_array (CML_INITIAL_NUM_VALUES,
                                             initial_value_names);
@@ -1381,57 +1523,51 @@ CML_explorer_dialog (void)
 
       CML_explorer_menu_entry_init (&widget_pointers[3][0],
                                     combo, &VALS.initial_value);
-      label = gimp_table_attach_aligned (GTK_TABLE (table), 0, 0,
-                                         _("Initial value:"), 0.0, 0.5,
-                                         combo, 2, FALSE);
+      label = gimp_grid_attach_aligned (GTK_GRID (grid), 0, 0,
+                                        _("Initial value:"), 0.0, 0.5,
+                                        combo, 2);
       gtk_size_group_add_widget (group, label);
       g_object_unref (group);
 
-      adj = gimp_scale_entry_new (GTK_TABLE (table), 0, 1,
-                                  _("Zoom scale:"), SCALE_WIDTH, 3,
-                                  VALS.scale, 1, 10, 1, 2, 0,
-                                  TRUE, 0, 0,
-                                  NULL, NULL);
-      gtk_size_group_add_widget (group, GIMP_SCALE_ENTRY_LABEL (adj));
+      scale = gimp_scale_entry_new (_("Zoom scale:"), VALS.scale, 1, 10, 0);
+      gtk_size_group_add_widget (group, gimp_labeled_get_label (GIMP_LABELED (scale)));
       CML_explorer_int_entry_init (&widget_pointers[3][1],
-                                   adj, &VALS.scale);
+                                   scale, &VALS.scale);
+      gtk_grid_attach (GTK_GRID (grid), scale, 0, 1, 3, 1);
+      gtk_widget_show (scale);
 
-      adj = gimp_scale_entry_new (GTK_TABLE (table), 0, 2,
-                                  _("Start offset:"), SCALE_WIDTH, 3,
-                                  VALS.start_offset, 0, 100, 1, 10, 0,
-                                  TRUE, 0, 0,
-                                  NULL, NULL);
-      gtk_size_group_add_widget (group, GIMP_SCALE_ENTRY_LABEL (adj));
+      scale = gimp_scale_entry_new (_("Start offset:"), VALS.start_offset, 0, 100, 0);
+      gtk_size_group_add_widget (group, gimp_labeled_get_label (GIMP_LABELED (scale)));
       CML_explorer_int_entry_init (&widget_pointers[3][2],
-                                   adj, &VALS.start_offset);
+                                   scale, &VALS.start_offset);
+      gtk_grid_attach (GTK_GRID (grid), scale, 0, 2, 3, 1);
+      gtk_widget_show (scale);
 
       frame =
         gimp_frame_new (_("Seed of Random (only for \"From Seed\" Modes)"));
       gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
       gtk_widget_show (frame);
 
-      table = gtk_table_new (2, 3, FALSE);
-      gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-      gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-      gtk_container_add (GTK_CONTAINER (frame), table);
-      gtk_widget_show (table);
+      grid = gtk_grid_new ();
+      gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+      gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+      gtk_container_add (GTK_CONTAINER (frame), grid);
+      gtk_widget_show (grid);
 
-      adj = gimp_scale_entry_new (GTK_TABLE (table), 0, 0,
-                                  _("Seed:"), SCALE_WIDTH, 0,
-                                  VALS.seed, 0, (guint32) -1, 1, 10, 0,
-                                  TRUE, 0, 0,
-                                  NULL, NULL);
-      gtk_size_group_add_widget (group, GIMP_SCALE_ENTRY_LABEL (adj));
+      scale = gimp_scale_entry_new (_("Seed:"), VALS.seed, 0, (guint32) -1, 0);
+      gtk_size_group_add_widget (group, gimp_labeled_get_label (GIMP_LABELED (scale)));
       CML_explorer_int_entry_init (&widget_pointers[3][3],
-                                   adj, &VALS.seed);
+                                   scale, &VALS.seed);
+      gtk_grid_attach (GTK_GRID (grid), scale, 0, 0, 3, 1);
+      gtk_widget_show (scale);
 
-      random_sensitives[3].widget = table;
+      random_sensitives[3].widget = grid;
       random_sensitives[3].logic  = FALSE;
 
       button =
         gtk_button_new_with_label
         (_("Switch to \"From seed\" With the Last Seed"));
-      gtk_table_attach_defaults (GTK_TABLE (table), button, 0, 3, 1, 2);
+      gtk_grid_attach (GTK_GRID (grid), button, 0, 1, 3, 1);
       gtk_widget_show (button);
 
       g_signal_connect (button, "clicked",
@@ -1455,7 +1591,7 @@ CML_explorer_dialog (void)
 
     {
       GtkSizeGroup *group = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
-      GtkWidget    *table;
+      GtkWidget    *grid;
       GtkWidget    *frame;
       GtkWidget    *label;
       GtkWidget    *combo;
@@ -1469,11 +1605,11 @@ CML_explorer_dialog (void)
       gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
       gtk_widget_show (frame);
 
-      table = gtk_table_new (3, 2, FALSE);
-      gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-      gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-      gtk_container_add (GTK_CONTAINER (frame), table);
-      gtk_widget_show (table);
+      grid = gtk_grid_new ();
+      gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+      gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+      gtk_container_add (GTK_CONTAINER (frame), grid);
+      gtk_widget_show (grid);
 
       combo = gimp_int_combo_box_new_array (G_N_ELEMENTS (channel_names),
                                             channel_names);
@@ -1483,9 +1619,9 @@ CML_explorer_dialog (void)
                         G_CALLBACK (gimp_int_combo_box_get_active),
                         &copy_source);
 
-      label = gimp_table_attach_aligned (GTK_TABLE (table), 0, 0,
-                                         _("Source channel:"), 0.0, 0.5,
-                                         combo, 1, FALSE);
+      label = gimp_grid_attach_aligned (GTK_GRID (grid), 0, 0,
+                                        _("Source channel:"), 0.0, 0.5,
+                                        combo, 1);
       gtk_size_group_add_widget (group, label);
       g_object_unref (group);
 
@@ -1498,14 +1634,13 @@ CML_explorer_dialog (void)
                         G_CALLBACK (gimp_int_combo_box_get_active),
                         &copy_destination);
 
-      label = gimp_table_attach_aligned (GTK_TABLE (table), 0, 1,
-                                         _("Destination channel:"), 0.0, 0.5,
-                                         combo, 1, FALSE);
+      label = gimp_grid_attach_aligned (GTK_GRID (grid), 0, 1,
+                                        _("Destination channel:"), 0.0, 0.5,
+                                        combo, 1);
       gtk_size_group_add_widget (group, label);
 
       button = gtk_button_new_with_label (_("Copy Parameters"));
-      gtk_table_attach (GTK_TABLE (table), button, 0, 2, 2, 3,
-                        GTK_SHRINK | GTK_FILL, GTK_SHRINK, 0, 0);
+      gtk_grid_attach (GTK_GRID (grid), button, 0, 2, 2, 1);
       gtk_widget_show (button);
 
       g_signal_connect (button, "clicked",
@@ -1516,11 +1651,11 @@ CML_explorer_dialog (void)
       gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
       gtk_widget_show (frame);
 
-      table = gtk_table_new (2, 2, FALSE);
-      gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-      gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-      gtk_container_add (GTK_CONTAINER (frame), table);
-      gtk_widget_show (table);
+      grid = gtk_grid_new ();
+      gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+      gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+      gtk_container_add (GTK_CONTAINER (frame), grid);
+      gtk_widget_show (grid);
 
       combo = gimp_int_combo_box_new_array (G_N_ELEMENTS (load_channel_names),
                                             load_channel_names);
@@ -1531,10 +1666,10 @@ CML_explorer_dialog (void)
                         G_CALLBACK (gimp_int_combo_box_get_active),
                         &selective_load_source);
 
-      label = gimp_table_attach_aligned (GTK_TABLE (table), 0, 0,
-                                         _("Source channel in file:"),
-                                         0.0, 0.5,
-                                         combo, 1, FALSE);
+      label = gimp_grid_attach_aligned (GTK_GRID (grid), 0, 0,
+                                        _("Source channel in file:"),
+                                        0.0, 0.5,
+                                        combo, 1);
       gtk_size_group_add_widget (group, label);
 
       combo = gimp_int_combo_box_new_array (G_N_ELEMENTS (load_channel_names),
@@ -1546,14 +1681,14 @@ CML_explorer_dialog (void)
                         G_CALLBACK (gimp_int_combo_box_get_active),
                         &selective_load_destination);
 
-      label = gimp_table_attach_aligned (GTK_TABLE (table), 0, 1,
-                                         _("Destination channel:"),
-                                         0.0, 0.5,
-                                         combo, 1, FALSE);
+      label = gimp_grid_attach_aligned (GTK_GRID (grid), 0, 1,
+                                        _("Destination channel:"),
+                                        0.0, 0.5,
+                                        combo, 1);
       gtk_size_group_add_widget (group, label);
 
       gtk_notebook_append_page (GTK_NOTEBOOK (notebook), vbox,
-                                gtk_label_new_with_mnemonic (_("_Misc Ops.")));
+                                gtk_label_new_with_mnemonic (_("_Misc")));
     }
   }
 
@@ -1588,19 +1723,19 @@ static GtkWidget *
 CML_dialog_channel_panel_new (CML_PARAM *param,
                               gint       channel_id)
 {
-  GtkWidget *table;
+  GtkWidget *grid;
   GtkWidget *combo;
   GtkWidget *toggle;
   GtkWidget *button;
-  GtkObject *adj;
+  GtkWidget *scale;
   gpointer  *chank;
   gint       index = 0;
 
-  table = gtk_table_new (13, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_container_set_border_width (GTK_CONTAINER (table), 12);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+  gtk_container_set_border_width (GTK_CONTAINER (grid), 12);
+  gtk_widget_show (grid);
 
   combo = gimp_int_combo_box_new_array (CML_NUM_VALUES, function_names);
   gimp_int_combo_box_set_active (GIMP_INT_COMBO_BOX (combo), param->function);
@@ -1611,9 +1746,9 @@ CML_dialog_channel_panel_new (CML_PARAM *param,
 
   CML_explorer_menu_entry_init (&widget_pointers[channel_id][index],
                                 combo, &param->function);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, index,
-                             _("Function type:"), 0.0, 0.5,
-                             combo, 2, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, index,
+                            _("Function type:"), 0.0, 0.5,
+                            combo, 2);
   index++;
 
   combo = gimp_int_combo_box_new_array (COMP_NUM_VALUES, composition_names);
@@ -1627,9 +1762,9 @@ CML_dialog_channel_panel_new (CML_PARAM *param,
 
   CML_explorer_menu_entry_init (&widget_pointers[channel_id][index],
                                 combo, &param->composition);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, index,
-                             _("Composition:"), 0.0, 0.5,
-                             combo, 2, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, index,
+                            _("Composition:"), 0.0, 0.5,
+                            combo, 2);
   index++;
 
   combo = gimp_int_combo_box_new_array (ARRANGE_NUM_VALUES, arrange_names);
@@ -1641,90 +1776,76 @@ CML_dialog_channel_panel_new (CML_PARAM *param,
 
   CML_explorer_menu_entry_init (&widget_pointers[channel_id][index],
                                 combo, &param->arrange);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, index,
-                             _("Misc arrange:"), 0.0, 0.5,
-                             combo, 2, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, index,
+                            _("Misc arrange:"), 0.0, 0.5,
+                            combo, 2);
   index++;
 
   toggle = gtk_check_button_new_with_label (_("Use cyclic range"));
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle),
                                 param->cyclic_range);
-  gtk_table_attach_defaults (GTK_TABLE (table), toggle, 0, 3, index, index + 1);
+  gtk_grid_attach (GTK_GRID (grid), toggle, 0, index, 3, 1);
   CML_explorer_toggle_entry_init (&widget_pointers[channel_id][index],
                                   toggle, &param->cyclic_range);
   gtk_widget_show (toggle);
   index++;
 
-  adj = gimp_scale_entry_new (GTK_TABLE (table), 0, index,
-                              _("Mod. rate:"), SCALE_WIDTH, 5,
-                              param->mod_rate, 0.0, 1.0, 0.01, 0.1, 2,
-                              TRUE, 0, 0,
-                              NULL, NULL);
+  scale = gimp_scale_entry_new (_("Mod. rate:"), param->mod_rate, 0.0, 1.0, 2);
   CML_explorer_double_entry_init (&widget_pointers[channel_id][index],
-                                  adj, &param->mod_rate);
+                                  scale, &param->mod_rate);
+  gtk_grid_attach (GTK_GRID (grid), scale, 0, index, 3, 1);
+  gtk_widget_show (scale);
   index++;
 
-  adj = gimp_scale_entry_new (GTK_TABLE (table), 0, index,
-                              _("Env. sensitivity:"), SCALE_WIDTH, 5,
-                              param->env_sensitivity, 0.0, 1.0, 0.01, 0.1, 2,
-                              TRUE, 0, 0,
-                              NULL, NULL);
+  scale = gimp_scale_entry_new (_("Env. sensitivity:"), param->env_sensitivity, 0.0, 1.0, 2);
   CML_explorer_double_entry_init (&widget_pointers[channel_id][index],
-                                  adj, &param->env_sensitivity);
+                                  scale, &param->env_sensitivity);
+  gtk_grid_attach (GTK_GRID (grid), scale, 0, index, 3, 1);
+  gtk_widget_show (scale);
   index++;
 
-  adj = gimp_scale_entry_new (GTK_TABLE (table), 0, index,
-                              _("Diffusion dist.:"), SCALE_WIDTH, 5,
-                              param->diffusion_dist, 2, 10, 1, 2, 0,
-                              TRUE, 0, 0,
-                              NULL, NULL);
+  scale = gimp_scale_entry_new (_("Diffusion dist.:"), param->diffusion_dist, 2, 10, 0);
   CML_explorer_int_entry_init (&widget_pointers[channel_id][index],
-                               adj, &param->diffusion_dist);
+                               scale, &param->diffusion_dist);
+  gtk_grid_attach (GTK_GRID (grid), scale, 0, index, 3, 1);
+  gtk_widget_show (scale);
   index++;
 
-  adj = gimp_scale_entry_new (GTK_TABLE (table), 0, index,
-                              _("# of subranges:"), SCALE_WIDTH, 5,
-                              param->range_num, 1, 10, 1, 2, 0,
-                              TRUE, 0, 0,
-                              NULL, NULL);
+  scale = gimp_scale_entry_new (_("# of subranges:"), param->range_num, 1, 10, 0);
   CML_explorer_int_entry_init (&widget_pointers[channel_id][index],
-                               adj, &param->range_num);
+                               scale, &param->range_num);
+  gtk_grid_attach (GTK_GRID (grid), scale, 0, index, 3, 1);
+  gtk_widget_show (scale);
   index++;
 
-  adj = gimp_scale_entry_new (GTK_TABLE (table), 0, index,
-                              _("P(ower factor):"), SCALE_WIDTH, 5,
-                              param->power, 0.0, 10.0, 0.1, 1.0, 2,
-                              TRUE, 0, 0,
-                              NULL, NULL);
+  scale = gimp_scale_entry_new (_("P(ower factor):"), param->power, 0.0, 10.0, 2);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (scale), 0.1, 1.0);
   CML_explorer_double_entry_init (&widget_pointers[channel_id][index],
-                                  adj, &param->power);
+                                  scale, &param->power);
+  gtk_grid_attach (GTK_GRID (grid), scale, 0, index, 3, 1);
+  gtk_widget_show (scale);
   index++;
 
-  adj = gimp_scale_entry_new (GTK_TABLE (table), 0, index,
-                              _("Parameter k:"), SCALE_WIDTH, 5,
-                              param->parameter_k, 0.0, 10.0, 0.1, 1.0, 2,
-                              TRUE, 0, 0,
-                              NULL, NULL);
+  scale = gimp_scale_entry_new (_("Parameter k:"), param->parameter_k, 0.0, 10.0, 2);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (scale), 0.1, 1.0);
   CML_explorer_double_entry_init (&widget_pointers[channel_id][index],
-                                  adj, &param->parameter_k);
+                                  scale, &param->parameter_k);
+  gtk_grid_attach (GTK_GRID (grid), scale, 0, index, 3, 1);
+  gtk_widget_show (scale);
   index++;
 
-  adj = gimp_scale_entry_new (GTK_TABLE (table), 0, index,
-                              _("Range low:"), SCALE_WIDTH, 5,
-                              param->range_l, 0.0, 1.0, 0.01, 0.1, 2,
-                              TRUE, 0, 0,
-                              NULL, NULL);
+  scale = gimp_scale_entry_new (_("Range low:"), param->range_l, 0.0, 1.0, 2);
   CML_explorer_double_entry_init (&widget_pointers[channel_id][index],
-                                  adj, &param->range_l);
+                                  scale, &param->range_l);
+  gtk_grid_attach (GTK_GRID (grid), scale, 0, index, 3, 1);
+  gtk_widget_show (scale);
   index++;
 
-  adj = gimp_scale_entry_new (GTK_TABLE (table), 0, index,
-                              _("Range high:"), SCALE_WIDTH, 5,
-                              param->range_h, 0.0, 1.0, 0.01, 0.1, 2,
-                              TRUE, 0, 0,
-                              NULL, NULL);
+  scale = gimp_scale_entry_new (_("Range high:"), param->range_h, 0.0, 1.0, 2);
   CML_explorer_double_entry_init (&widget_pointers[channel_id][index],
-                                  adj, &param->range_h);
+                                  scale, &param->range_h);
+  gtk_grid_attach (GTK_GRID (grid), scale, 0, index, 3, 1);
+  gtk_widget_show (scale);
   index++;
 
   chank = g_new (gpointer, 2);
@@ -1732,14 +1853,13 @@ CML_dialog_channel_panel_new (CML_PARAM *param,
   chank[1] = param;
 
   button = gtk_button_new_with_label (_("Plot a Graph of the Settings"));
-  gtk_table_attach_defaults (GTK_TABLE (table), button,
-                             0, 3, index, index + 1);
+  gtk_grid_attach (GTK_GRID (grid), button, 0, index, 3, 1);
   gtk_widget_show (button);
 
   g_signal_connect (button, "clicked",
                     G_CALLBACK (function_graph_new),
                     chank);
-  return table;
+  return grid;
 }
 
 static GtkWidget *
@@ -1747,9 +1867,8 @@ CML_dialog_advanced_panel_new (void)
 {
   GtkWidget *vbox;
   GtkWidget *subframe;
-  GtkWidget *table;
-  GtkObject *adj;
-
+  GtkWidget *grid;
+  GtkWidget *scale;
   gint       index = 0;
   gint       widget_offset = 12;
   gint       channel_id;
@@ -1767,42 +1886,36 @@ CML_dialog_advanced_panel_new (void)
       gtk_box_pack_start (GTK_BOX (vbox), subframe, FALSE, FALSE, 0);
       gtk_widget_show (subframe);
 
-      table = gtk_table_new (3, 3, FALSE);
-      gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-      gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-      gtk_container_add (GTK_CONTAINER (subframe), table);
-      gtk_widget_show (table);
+      grid = gtk_grid_new ();
+      gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+      gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+      gtk_container_add (GTK_CONTAINER (subframe), grid);
+      gtk_widget_show (grid);
 
       index = 0;
 
-      adj = gimp_scale_entry_new (GTK_TABLE (table), 0, index,
-                                  _("Ch. sensitivity:"), SCALE_WIDTH, 0,
-                                  param->ch_sensitivity, 0.0, 1.0, 0.01, 0.1, 2,
-                                  TRUE, 0, 0,
-                                  NULL, NULL);
+      scale = gimp_scale_entry_new (_("Ch. sensitivity:"), param->ch_sensitivity, 0.0, 1.0, 2);
       CML_explorer_double_entry_init (&widget_pointers[channel_id][index +
                                                                   widget_offset],
-                                      adj, &param->ch_sensitivity);
+                                      scale, &param->ch_sensitivity);
+      gtk_grid_attach (GTK_GRID (grid), scale, 0, index, 3, 1);
+      gtk_widget_show (scale);
       index++;
 
-      adj = gimp_scale_entry_new (GTK_TABLE (table), 0, index,
-                                  _("Mutation rate:"), SCALE_WIDTH, 0,
-                                  param->mutation_rate, 0.0, 1.0, 0.01, 0.1, 2,
-                                  TRUE, 0, 0,
-                                  NULL, NULL);
+      scale = gimp_scale_entry_new (_("Mutation rate:"), param->mutation_rate, 0.0, 1.0, 2);
       CML_explorer_double_entry_init (&widget_pointers[channel_id][index +
                                                                   widget_offset],
-                                      adj, &param->mutation_rate);
+                                      scale, &param->mutation_rate);
+      gtk_grid_attach (GTK_GRID (grid), scale, 0, index, 3, 1);
+      gtk_widget_show (scale);
       index++;
 
-      adj = gimp_scale_entry_new (GTK_TABLE (table), 0, index,
-                                  _("Mutation dist.:"), SCALE_WIDTH, 0,
-                                  param->mutation_dist, 0.0, 1.0, 0.01, 0.1, 2,
-                                  TRUE, 0, 0,
-                                  NULL, NULL);
+      scale = gimp_scale_entry_new (_("Mutation dist.:"), param->mutation_dist, 0.0, 1.0, 2);
       CML_explorer_double_entry_init (&widget_pointers[channel_id][index +
                                                                   widget_offset],
-                                      adj, &param->mutation_dist);
+                                      scale, &param->mutation_dist);
+      gtk_grid_attach (GTK_GRID (grid), scale, 0, index, 3, 1);
+      gtk_widget_show (scale);
     }
   return vbox;
 }
@@ -1815,21 +1928,19 @@ preview_update (void)
 }
 
 static gboolean
-function_graph_expose (GtkWidget      *widget,
-                       GdkEventExpose *event,
-                       gpointer       *data)
+function_graph_draw (GtkWidget *widget,
+                     cairo_t   *cr,
+                     gpointer  *data)
 {
-  GtkStyle  *style = gtk_widget_get_style (widget);
-  gint       x, y;
-  gint       rgbi[3];
-  gint       channel_id = GPOINTER_TO_INT (data[0]);
-  CML_PARAM *param      = data[1];
-  cairo_t   *cr;
+  gint        x, y;
+  gint        rgbi[3];
+  gfloat      hsv[3];
+  gfloat      rgb[3];
+  gint        channel_id = GPOINTER_TO_INT (data[0]);
+  CML_PARAM  *param      = data[1];
+  const Babl *fish;
 
-  cr = gdk_cairo_create (gtk_widget_get_window (widget));
-
-  gdk_cairo_region (cr, event->region);
-  cairo_clip (cr);
+  fish = babl_fish (babl_format ("HSV float"), babl_format ("R'G'B' float"));
 
   cairo_set_line_width (cr, 1.0);
 
@@ -1841,14 +1952,20 @@ function_graph_expose (GtkWidget      *widget,
       rgbi[0] = rgbi[1] = rgbi[2] = 127;
       if ((0 <= channel_id) && (channel_id <= 2))
         rgbi[channel_id] = CANNONIZE ((*param), ((gdouble) x / (gdouble) 255));
-      gimp_hsv_to_rgb_int (rgbi, rgbi+1, rgbi+2);
+
+      hsv[0] = (gdouble) rgbi[0] / 255.0;
+      hsv[1] = (gdouble) rgbi[1] / 255.0;
+      hsv[2] = (gdouble) rgbi[2] / 255.0;
+
+      babl_process (fish, hsv, rgb, 1);
+
       for (y = 0; y < GRAPHSIZE; y++)
-      {
-        GIMP_CAIRO_RGB24_SET_PIXEL((img+(y*img_stride+x*4)),
-                                   rgbi[0],
-                                   rgbi[1],
-                                   rgbi[2]);
-      }
+        {
+          GIMP_CAIRO_RGB24_SET_PIXEL((img+(y*img_stride+x*4)),
+                                     ROUND (rgb[0] * 255.0),
+                                     ROUND (rgb[1] * 255.0),
+                                     ROUND (rgb[2] * 255.0));
+        }
     }
 
   cairo_surface_mark_dirty (buffer);
@@ -1860,7 +1977,7 @@ function_graph_expose (GtkWidget      *widget,
 
   cairo_move_to (cr, 0, 255);
   cairo_line_to (cr, 255, 0);
-  gdk_cairo_set_source_color (cr, &style->white);
+  cairo_set_source_rgb (cr, 1.0, 1.0, 1.0);
   cairo_stroke (cr);
 
   y = 255 * CLAMP (logistic_function (param, 0, param->power),
@@ -1874,9 +1991,8 @@ function_graph_expose (GtkWidget      *widget,
       cairo_line_to (cr, x, 255-y);
     }
 
-  gdk_cairo_set_source_color (cr, &style->black);
+  cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
   cairo_stroke (cr);
-  cairo_destroy (cr);
 
   return TRUE;
 }
@@ -1908,8 +2024,9 @@ function_graph_new (GtkWidget *widget,
   gtk_widget_set_size_request (preview, GRAPHSIZE, GRAPHSIZE);
   gtk_container_add (GTK_CONTAINER (frame), preview);
   gtk_widget_show (preview);
-  g_signal_connect (preview, "expose-event",
-                    G_CALLBACK (function_graph_expose), data);
+  g_signal_connect (preview, "draw",
+                    G_CALLBACK (function_graph_draw),
+                    data);
 
   gtk_widget_show (dialog);
 
@@ -2011,10 +2128,11 @@ CML_preview_update_callback (GtkWidget *widget,
 /*  parameter file saving functions  */
 
 static void
-CML_save_to_file_callback (GtkWidget *widget,
-                           gpointer   data)
+CML_save_to_file_callback (GtkWidget           *widget,
+                           GimpProcedureConfig *config)
 {
   static GtkWidget *dialog = NULL;
+  GFile            *file   = NULL;
 
   if (! dialog)
     {
@@ -2028,7 +2146,7 @@ CML_save_to_file_callback (GtkWidget *widget,
 
                                      NULL);
 
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                                GTK_RESPONSE_OK,
                                                GTK_RESPONSE_CANCEL,
                                                -1);
@@ -2039,27 +2157,38 @@ CML_save_to_file_callback (GtkWidget *widget,
 
       g_signal_connect (dialog, "response",
                         G_CALLBACK (CML_save_to_file_response),
-                        NULL);
+                        config);
       g_signal_connect (dialog, "delete-event",
                         G_CALLBACK (gtk_true),
                         NULL);
     }
 
-  if (strlen (VALS.last_file_name))
-    gtk_file_chooser_set_filename (GTK_FILE_CHOOSER (dialog),
-                                   VALS.last_file_name);
+  g_object_get (config, "parameter-file", &file, NULL);
+  if (file != NULL)
+    {
+      GError *error = NULL;
+
+      gtk_file_chooser_set_file (GTK_FILE_CHOOSER (dialog), file, &error);
+      if (error != NULL)
+        g_printerr ("%s: failed to set file '%s'.\n", PLUG_IN_PROC,
+                    g_file_peek_path (file));
+      g_clear_error (&error);
+    }
+  g_clear_object (&file);
 
   gtk_window_present (GTK_WINDOW (dialog));
 }
 
 static void
-CML_save_to_file_response (GtkWidget *dialog,
-                           gint       response_id,
-                           gpointer   data)
+CML_save_to_file_response (GtkWidget           *dialog,
+                           gint                 response_id,
+                           GimpProcedureConfig *config)
 {
-  gchar *filename;
-  FILE  *file;
-  gint   channel_id;
+  GFile             *file;
+  GFileOutputStream *fstream;
+  GOutputStream     *output;
+  GError            *error = NULL;
+  gint               channel_id;
 
   if (response_id != GTK_RESPONSE_OK)
     {
@@ -2067,23 +2196,37 @@ CML_save_to_file_response (GtkWidget *dialog,
       return;
     }
 
-  filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
-  if (! filename)
+  file = gtk_file_chooser_get_file (GTK_FILE_CHOOSER (dialog));
+  if (! file)
     return;
 
-  file = g_fopen (filename, "wb");
+  fstream = g_file_replace (file, NULL, FALSE,
+                            G_FILE_CREATE_REPLACE_DESTINATION,
+                            NULL, &error);
+  output  = G_OUTPUT_STREAM (fstream);
 
-  if (! file)
+  if (error != NULL)
     {
       g_message (_("Could not open '%s' for writing: %s"),
-                 gimp_filename_to_utf8 (filename), g_strerror (errno));
-      g_free (filename);
+                 g_file_peek_path (file), error->message);
+      g_object_unref (file);
+      g_clear_error (&error);
       return;
     }
 
-  fprintf (file, "; This is a parameter file for CML_explorer\n");
-  fprintf (file, "; File format version: %1.1f\n", PARAM_FILE_FORMAT_VERSION);
-  fprintf (file, ";\n");
+  if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                "; This is a parameter file for CML_explorer\n") ||
+      ! g_output_stream_printf (output, NULL, NULL, &error,
+                                "; File format version: %1.1f\n", PARAM_FILE_FORMAT_VERSION) ||
+      ! g_output_stream_printf (output, NULL, NULL, &error, ";\n"))
+    {
+      g_message (_("Could not write to '%s': %s"),
+                 g_file_peek_path (file), error->message);
+      g_object_unref (file);
+      g_clear_error (&error);
+      g_object_unref (fstream);
+      return;
+    }
 
   for (channel_id = 0; channel_id < 3; channel_id++)
     {
@@ -2091,52 +2234,103 @@ CML_save_to_file_response (GtkWidget *dialog,
 
       CML_PARAM param = *(CML_PARAM *)(channel_params[channel_id]);
 
-      fprintf (file, "\t%s\n", channel_names[channel_id]);
-      fprintf (file, "Function_type    : %d (%s)\n",
-               param.function, function_names[param.function]);
-      fprintf (file, "Compostion_type  : %d (%s)\n",
-               param.composition, composition_names[param.composition]);
-      fprintf (file, "Arrange          : %d (%s)\n",
-               param.arrange, arrange_names[param.arrange]);
-      fprintf (file, "Cyclic_range     : %d (%s)\n",
-               param.cyclic_range, (param.cyclic_range ? "TRUE" : "FALSE"));
-      fprintf (file, "Mod. rate        : %s\n",
-               g_ascii_dtostr (buf, sizeof (buf), param.mod_rate));
-      fprintf (file, "Env_sensitivtiy  : %s\n",
-               g_ascii_dtostr (buf, sizeof (buf), param.env_sensitivity));
-      fprintf (file, "Diffusion dist.  : %d\n", param.diffusion_dist);
-      fprintf (file, "Ch. sensitivity  : %s\n",
-               g_ascii_dtostr (buf, sizeof (buf), param.ch_sensitivity));
-      fprintf (file, "Num. of Subranges: %d\n", param.range_num);
-      fprintf (file, "Power_factor     : %s\n",
-               g_ascii_dtostr (buf, sizeof (buf), param.power));
-      fprintf (file, "Parameter_k      : %s\n",
-               g_ascii_dtostr (buf, sizeof (buf), param.parameter_k));
-      fprintf (file, "Range_low        : %s\n",
-               g_ascii_dtostr (buf, sizeof (buf), param.range_l));
-      fprintf (file, "Range_high       : %s\n",
-               g_ascii_dtostr (buf, sizeof (buf), param.range_h));
-      fprintf (file, "Mutation_rate    : %s\n",
-               g_ascii_dtostr (buf, sizeof (buf), param.mutation_rate));
-      fprintf (file, "Mutation_distance: %s\n",
-               g_ascii_dtostr (buf, sizeof (buf), param.mutation_dist));
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "\t%s\n", channel_names[channel_id]))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Function_type    : %d (%s)\n",
+                                    param.function, function_names[param.function]))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Compostion_type  : %d (%s)\n",
+                                    param.composition, composition_names[param.composition]))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Arrange          : %d (%s)\n",
+                                    param.arrange, arrange_names[param.arrange]))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Cyclic_range     : %d (%s)\n",
+                                    param.cyclic_range, (param.cyclic_range ? "TRUE" : "FALSE")))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Mod. rate        : %s\n",
+                                    g_ascii_dtostr (buf, sizeof (buf), param.mod_rate)))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Env_sensitivtiy  : %s\n",
+                                    g_ascii_dtostr (buf, sizeof (buf), param.env_sensitivity)))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Diffusion dist.  : %d\n", param.diffusion_dist))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Ch. sensitivity  : %s\n",
+                                    g_ascii_dtostr (buf, sizeof (buf), param.ch_sensitivity)))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Num. of Subranges: %d\n", param.range_num))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Power_factor     : %s\n",
+                                    g_ascii_dtostr (buf, sizeof (buf), param.power)))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Parameter_k      : %s\n",
+                                    g_ascii_dtostr (buf, sizeof (buf), param.parameter_k)))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Range_low        : %s\n",
+                                    g_ascii_dtostr (buf, sizeof (buf), param.range_l)))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Range_high       : %s\n",
+                                    g_ascii_dtostr (buf, sizeof (buf), param.range_h)))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Mutation_rate    : %s\n",
+                                    g_ascii_dtostr (buf, sizeof (buf), param.mutation_rate)))
+        break;
+      if (! g_output_stream_printf (output, NULL, NULL, &error,
+                                    "Mutation_distance: %s\n",
+                                    g_ascii_dtostr (buf, sizeof (buf), param.mutation_dist)))
+        break;
     }
 
-  fprintf (file, "\n");
-  fprintf (file, "Initial value  : %d (%s)\n",
-           VALS.initial_value, initial_value_names[VALS.initial_value]);
-  fprintf (file, "Zoom scale     : %d\n", VALS.scale);
-  fprintf (file, "Start offset   : %d\n", VALS.start_offset);
-  fprintf (file, "Random seed    : %d\n", VALS.seed);
-  fclose(file);
+  if (error != NULL)
+    {
+      g_message (_("Could not write to '%s': %s"),
+                 g_file_peek_path (file), error->message);
+      g_object_unref (file);
+      g_clear_error (&error);
+      g_object_unref (fstream);
+      return;
+    }
 
-  g_message (_("Parameters were saved to '%s'"),
-             gimp_filename_to_utf8 (filename));
+  if (! g_output_stream_printf (output, NULL, NULL, &error, "\n") ||
+      ! g_output_stream_printf (output, NULL, NULL, &error,
+                                "Initial value  : %d (%s)\n", VALS.initial_value, initial_value_names[VALS.initial_value]) ||
+      ! g_output_stream_printf (output, NULL, NULL, &error,
+                                "Zoom scale     : %d\n", VALS.scale) ||
+      ! g_output_stream_printf (output, NULL, NULL, &error,
+                                "Start offset   : %d\n", VALS.start_offset) ||
+      ! g_output_stream_printf (output, NULL, NULL, &error,
+                                "Random seed    : %d\n", VALS.seed))
+    {
+      g_message (_("Could not write to '%s': %s"),
+                 g_file_peek_path (file), error->message);
+      g_object_unref (file);
+      g_clear_error (&error);
+      g_object_unref (fstream);
+      return;
+    }
+  g_object_unref (fstream);
 
-  strncpy (VALS.last_file_name, filename,
-           sizeof (VALS.last_file_name) - 1);
+  g_message (_("Parameters were saved to '%s'"), g_file_peek_path (file));
 
-  g_free (filename);
+  g_object_set (config, "parameter-file", file, NULL);
+
+  g_clear_object (&file);
 
   gtk_widget_hide (dialog);
 }
@@ -2144,10 +2338,11 @@ CML_save_to_file_response (GtkWidget *dialog,
 /*  parameter file loading functions  */
 
 static void
-CML_load_from_file_callback (GtkWidget *widget,
-                             gpointer   data)
+CML_load_from_file_callback (GtkWidget           *widget,
+                             GimpProcedureConfig *config)
 {
   static GtkWidget *dialog = NULL;
+  GFile            *file   = NULL;
 
   if (! dialog)
     {
@@ -2161,7 +2356,7 @@ CML_load_from_file_callback (GtkWidget *widget,
 
                                      NULL);
 
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                                GTK_RESPONSE_OK,
                                                GTK_RESPONSE_CANCEL,
                                                -1);
@@ -2170,36 +2365,50 @@ CML_load_from_file_callback (GtkWidget *widget,
 
       g_signal_connect (dialog, "response",
                         G_CALLBACK (CML_load_from_file_response),
-                        NULL);
+                        config);
       g_signal_connect (dialog, "delete-event",
                         G_CALLBACK (gtk_true),
                         NULL);
     }
 
-  if (strlen (VALS.last_file_name) > 0)
-    gtk_file_chooser_set_filename (GTK_FILE_CHOOSER (dialog),
-                                   VALS.last_file_name);
+  g_object_get (config, "parameter-file", &file, NULL);
+  if (file != NULL)
+    {
+      GError *error = NULL;
+
+      gtk_file_chooser_set_file (GTK_FILE_CHOOSER (dialog), file, &error);
+      if (error != NULL)
+        g_printerr ("%s: failed to set file '%s'.\n", PLUG_IN_PROC,
+                    g_file_peek_path (file));
+      g_clear_error (&error);
+    }
+  g_clear_object (&file);
 
   gtk_window_present (GTK_WINDOW (dialog));
 }
 
 static void
-CML_load_from_file_response (GtkWidget *dialog,
-                             gint       response_id,
-                             gpointer   data)
+CML_load_from_file_response (GtkWidget           *dialog,
+                             gint                 response_id,
+                             GimpProcedureConfig *config)
 {
   if (response_id == GTK_RESPONSE_OK)
     {
-      gchar    *filename;
+      GFile    *file = NULL;
       gint      channel_id;
       gboolean  flag = TRUE;
+      GError   *error = NULL;
 
-      filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
+      file = gtk_file_chooser_get_file (GTK_FILE_CHOOSER (dialog));
 
-      gtk_widget_set_sensitive (dialog, FALSE);
-      flag = CML_load_parameter_file (filename, TRUE);
+      flag = CML_load_parameter_file (file, TRUE, config, &error);
 
-      g_free (filename);
+      if (error != NULL)
+        g_printerr ("%s: loading file '%s' failed: %s\n", PLUG_IN_PROC,
+                    g_file_peek_path (file), error->message);
+
+      g_clear_error (&error);
+      g_clear_object (&file);
 
       if (flag)
         {
@@ -2231,114 +2440,124 @@ CML_load_from_file_response (GtkWidget *dialog,
 }
 
 static gboolean
-CML_load_parameter_file (const gchar *filename,
-                         gboolean     interactive_mode)
+CML_load_parameter_file (GFile                *file,
+                         gboolean              interactive_mode,
+                         GimpProcedureConfig  *config,
+                         GError              **error)
 {
-  FILE      *file;
-  gint       channel_id;
-  gboolean   flag = TRUE;
-  CML_PARAM  ch[3];
-  gint       initial_value = 0;
-  gint       scale = 1;
-  gint       start_offset = 0;
-  gint       seed = 0;
-  gint       old2new_function_id[] = { 3, 4, 5, 6, 7, 9, 10, 11, 1, 2 };
+  GIOStream        *iostream;
+  GDataInputStream *input;
+  gint              channel_id;
+  gboolean          flag = TRUE;
+  CML_PARAM         ch[3];
+  gint              initial_value = 0;
+  gint              scale = 1;
+  gint              start_offset = 0;
+  gint              seed = 0;
+  gint              old2new_function_id[] = { 3, 4, 5, 6, 7, 9, 10, 11, 1, 2 };
+  gdouble           version = 0.99;
 
-  file = g_fopen (filename, "rb");
+  iostream = G_IO_STREAM (g_file_open_readwrite (file, NULL, error));
 
-  if (!file)
+  if (iostream == NULL)
+    return FALSE;
+
+  input = g_data_input_stream_new (g_io_stream_get_input_stream (iostream));
+
+  version = parse_line_to_gdouble (input, &flag, error); /* old format returns 1 */
+  if (version == 1.0)
     {
-      g_message (_("Could not open '%s' for reading: %s"),
-                 gimp_filename_to_utf8 (filename), g_strerror (errno));
+      version = 0.99;
+    }
+  else if (! flag)
+    {
+      flag = TRUE;
+      g_clear_error (error);
+      version = parse_line_to_gdouble (input, &flag, error); /* maybe new format */
+      if (flag)
+        /* one more comment line */
+        g_free (g_data_input_stream_read_line (input, NULL, NULL, NULL));
+    }
+  if (version == 0)
+    {
+      if (interactive_mode)
+        g_message (_("Error: \"%s\" is not a CML parameter file."), g_file_peek_path (file));
+      g_object_unref (iostream);
       return FALSE;
     }
-  else
+  if (interactive_mode)
     {
-      gchar line[CML_LINE_SIZE];
-      gdouble version = 0.99;
+      if (version < PARAM_FILE_FORMAT_VERSION)
+        g_message (_("Warning: '%s' is an old format file."),
+                   g_file_peek_path (file));
 
-      version = parse_line_to_gdouble (file, &flag); /* old format returns 1 */
-      if (version == 1.0)
-        version = 0.99;
-      else if (! flag)
-        {
-          flag = TRUE;
-          version = parse_line_to_gdouble (file, &flag); /* maybe new format */
-          if (flag)
-            fgets (line, CML_LINE_SIZE - 1, file); /* one more comment line */
-        }
-      if (version == 0)
-        {
-          if (interactive_mode)
-            gimp_message (_("Error: it's not CML parameter file."));
-          fclose(file);
-          return FALSE;
-        }
-      if (interactive_mode)
-        {
-          if (version < PARAM_FILE_FORMAT_VERSION)
-            g_message (_("Warning: '%s' is an old format file."),
-                       gimp_filename_to_utf8 (filename));
+      if (PARAM_FILE_FORMAT_VERSION < version)
+        g_message (_("Warning: '%s' is a parameter file for a newer "
+                     "version of CML Explorer."),
+                   g_file_peek_path (file));
+    }
+  for (channel_id = 0; flag && (channel_id < 3); channel_id++)
+    {
+      gchar *line;
 
-          if (PARAM_FILE_FORMAT_VERSION < version)
-            g_message (_("Warning: '%s' is a parameter file for a newer "
-                         "version of CML Explorer."),
-                       gimp_filename_to_utf8 (filename));
-        }
-      for (channel_id = 0; flag && (channel_id < 3); channel_id++)
+      /* patched by Tim Mooney <mooney@dogbert.cc.ndsu.NoDak.edu> */
+      /* skip channel name */
+      line = g_data_input_stream_read_line (input, NULL, NULL, NULL);
+      if (line == NULL)
         {
-          /* patched by Tim Mooney <mooney@dogbert.cc.ndsu.NoDak.edu> */
-          if (fgets (line, CML_LINE_SIZE - 1, file) == NULL) /* skip channel name */
-            {
-              flag = FALSE;
-              break;
-            }
-          ch[channel_id].function = parse_line_to_gint (file, &flag);
-          if (version < 1.0)
-            ch[channel_id].function = old2new_function_id [ch[channel_id].function];
-          if (1.0 <= version)
-            ch[channel_id].composition = parse_line_to_gint (file, &flag);
-          else
-            ch[channel_id].composition = COMP_NONE;
-          ch[channel_id].arrange = parse_line_to_gint (file, &flag);
-          ch[channel_id].cyclic_range = parse_line_to_gint (file, &flag);
-          ch[channel_id].mod_rate = parse_line_to_gdouble (file, &flag);
-          ch[channel_id].env_sensitivity = parse_line_to_gdouble (file, &flag);
-          if (1.0 <= version)
-            ch[channel_id].diffusion_dist = parse_line_to_gint (file, &flag);
-          else
-            ch[channel_id].diffusion_dist = 2;
-          ch[channel_id].ch_sensitivity = parse_line_to_gdouble (file, &flag);
-          ch[channel_id].range_num = parse_line_to_gint (file, &flag);
-          ch[channel_id].power = parse_line_to_gdouble (file, &flag);
-          ch[channel_id].parameter_k = parse_line_to_gdouble (file, &flag);
-          ch[channel_id].range_l = parse_line_to_gdouble (file, &flag);
-          ch[channel_id].range_h = parse_line_to_gdouble (file, &flag);
-          ch[channel_id].mutation_rate = parse_line_to_gdouble (file, &flag);
-          ch[channel_id].mutation_dist = parse_line_to_gdouble (file, &flag);
+          flag = FALSE;
+          break;
         }
-      if (flag)
-        {
-          gint dummy;
+      ch[channel_id].function = parse_line_to_gint (input, &flag, error);
+      if (version < 1.0)
+        ch[channel_id].function = old2new_function_id [ch[channel_id].function];
+      if (1.0 <= version)
+        ch[channel_id].composition = parse_line_to_gint (input, &flag, error);
+      else
+        ch[channel_id].composition = COMP_NONE;
+      ch[channel_id].arrange = parse_line_to_gint (input, &flag, error);
+      ch[channel_id].cyclic_range = parse_line_to_gint (input, &flag, error);
+      ch[channel_id].mod_rate = parse_line_to_gdouble (input, &flag, error);
+      ch[channel_id].env_sensitivity = parse_line_to_gdouble (input, &flag, error);
+      if (1.0 <= version)
+        ch[channel_id].diffusion_dist = parse_line_to_gint (input, &flag, error);
+      else
+        ch[channel_id].diffusion_dist = 2;
+      ch[channel_id].ch_sensitivity = parse_line_to_gdouble (input, &flag, error);
+      ch[channel_id].range_num = parse_line_to_gint (input, &flag, error);
+      ch[channel_id].power = parse_line_to_gdouble (input, &flag, error);
+      ch[channel_id].parameter_k = parse_line_to_gdouble (input, &flag, error);
+      ch[channel_id].range_l = parse_line_to_gdouble (input, &flag, error);
+      ch[channel_id].range_h = parse_line_to_gdouble (input, &flag, error);
+      ch[channel_id].mutation_rate = parse_line_to_gdouble (input, &flag, error);
+      ch[channel_id].mutation_dist = parse_line_to_gdouble (input, &flag, error);
+    }
+  if (flag)
+    {
+      gchar    *line;
+      gboolean  dummy = TRUE;
 
-          if (fgets (line, CML_LINE_SIZE - 1, file) == NULL) /* skip a line */
-            dummy = 1;
-          else
-            {
-              initial_value = parse_line_to_gint (file, &dummy);
-              scale = parse_line_to_gint (file, &dummy);
-              start_offset = parse_line_to_gint (file, &dummy);
-              seed = parse_line_to_gint (file, &dummy);
-            }
-          if (! dummy)
-            {
-              initial_value = 0;
-              scale = 1;
-              start_offset = 0;
-              seed = 0;
-            }
+      /* skip a line */
+      line = g_data_input_stream_read_line (input, NULL, NULL, NULL);
+      if (line == NULL)
+        {
+          dummy = FALSE;
         }
-      fclose (file);
+      else
+        {
+          g_free (line);
+          initial_value = parse_line_to_gint (input, &dummy, error);
+          scale = parse_line_to_gint (input, &dummy, error);
+          start_offset = parse_line_to_gint (input, &dummy, error);
+          seed = parse_line_to_gint (input, &dummy, error);
+        }
+      if (! dummy)
+        {
+          initial_value = 0;
+          scale = 1;
+          start_offset = 0;
+          seed = 0;
+        }
     }
 
   if (! flag)
@@ -2366,69 +2585,103 @@ CML_load_parameter_file (const gchar *filename,
                   sizeof (CML_PARAM));
         }
 
-      strncpy (VALS.last_file_name, filename,
-               sizeof (VALS.last_file_name) - 1);
+      g_object_set (config, "parameter-file", file, NULL);
     }
+
+  g_object_unref (input);
+  g_object_unref (iostream);
   return flag;
 }
 
 static gint
-parse_line_to_gint (FILE     *file,
-                    gboolean *flag)
+parse_line_to_gint (GDataInputStream  *input,
+                    gboolean          *flag,
+                    GError           **error)
 {
-  gchar  line[CML_LINE_SIZE];
+  gint   i;
+  gchar *line;
   gchar *str;
+  gsize  read;
 
   if (! *flag)
     return 0;
-  if (fgets (line, CML_LINE_SIZE - 1, file) == NULL)
-    {
-      *flag = FALSE;            /* set FALSE if fail to parse */
-      return 0;
-    }
-  str = &line[0];
-  while (*str != ':')
-    if (*str == '\000')
-      {
-        *flag = FALSE;
-        return 0;
-      }
-    else
-      {
-        str++;
-      }
 
-  return atoi (str + 1);
+  line = g_data_input_stream_read_line (input, &read, NULL, error);
+  if (line == NULL)
+    {
+      /* set FALSE if fail to parse */
+      *flag = FALSE;
+      return 0.0;
+    }
+
+  line[read] = '\0';
+  str = line;
+  while (read > 1 && *str != ':')
+    {
+      str++;
+      read--;
+    }
+
+  if (read == 1)
+    {
+      g_set_error (error, GIMP_PLUG_IN_ERROR, 0,
+                   "%s: invalid line in the CML file: %s",
+                   PLUG_IN_PROC, line);
+      *flag = FALSE;
+      g_free (line);
+      return 0.0;
+    }
+
+  i = atoi (str + 1);
+  g_free (line);
+
+  return i;
 }
 
 static gdouble
-parse_line_to_gdouble (FILE     *file,
-                       gboolean *flag)
+parse_line_to_gdouble (GDataInputStream  *input,
+                       gboolean          *flag,
+                       GError           **error)
 {
-  gchar    line[CML_LINE_SIZE];
+  gdouble  d;
+  gchar   *line;
   gchar   *str;
+  gsize    read;
 
   if (! *flag)
     return 0.0;
 
-  if (fgets (line, CML_LINE_SIZE - 1, file) == NULL)
+  line = g_data_input_stream_read_line (input, &read, NULL, error);
+
+  if (line == NULL)
     {
-      *flag = FALSE;            /* set FALSE if fail to parse */
+      /* set FALSE if fail to parse */
+      *flag = FALSE;
       return 0.0;
     }
-  str = &line[0];
-  while (*str != ':')
-    if (*str == '\000')
-      {
-        *flag = FALSE;
-        return 0.0;
-      }
-    else
-      {
-        str++;
-      }
 
-  return g_ascii_strtod (str + 1, NULL);
+  line[read] = '\0';
+  str = line;
+  while (read > 1 && *str != ':')
+    {
+      str++;
+      read--;
+    }
+
+  if (read == 1)
+    {
+      g_set_error (error, GIMP_PLUG_IN_ERROR, 0,
+                   "%s: invalid line in the CML file: %s",
+                   PLUG_IN_PROC, line);
+      *flag = FALSE;
+      g_free (line);
+      return 0.0;
+    }
+
+  d = g_ascii_strtod (str + 1, NULL);
+  g_free (line);
+
+  return d;
 }
 
 
@@ -2467,10 +2720,10 @@ CML_explorer_toggle_entry_init (WidgetEntry *widget_entry,
 /*  int adjustment functions  */
 
 static void
-CML_explorer_int_adjustment_update (GtkAdjustment *adjustment,
-                                    gpointer       data)
+CML_explorer_int_adjustment_update (GimpLabelSpin *scale,
+                                    gint          *value)
 {
-  gimp_int_adjustment_update (adjustment, data);
+  *value = (gint) gimp_label_spin_get_value (scale);
 
   preview_update ();
 }
@@ -2478,21 +2731,21 @@ CML_explorer_int_adjustment_update (GtkAdjustment *adjustment,
 static void
 CML_explorer_int_entry_change_value (WidgetEntry *widget_entry)
 {
-  GtkAdjustment *adjustment = (GtkAdjustment *) (widget_entry->widget);
+  GimpLabelSpin *scale = GIMP_LABEL_SPIN (widget_entry->widget);
 
-  gtk_adjustment_set_value (adjustment, *(gint *) (widget_entry->value));
+  gimp_label_spin_set_value (scale, *(gint *) (widget_entry->value));
 }
 
 static void
 CML_explorer_int_entry_init (WidgetEntry *widget_entry,
-                             GtkObject   *adjustment,
+                             GtkWidget   *scale,
                              gpointer     value_ptr)
 {
-  g_signal_connect (adjustment, "value-changed",
+  g_signal_connect (scale, "value-changed",
                     G_CALLBACK (CML_explorer_int_adjustment_update),
                     value_ptr);
 
-  widget_entry->widget  = (GtkWidget *) adjustment;
+  widget_entry->widget  = scale;
   widget_entry->value   = value_ptr;
   widget_entry->updater = CML_explorer_int_entry_change_value;
 }
@@ -2500,10 +2753,10 @@ CML_explorer_int_entry_init (WidgetEntry *widget_entry,
 /*  double adjustment functions  */
 
 static void
-CML_explorer_double_adjustment_update (GtkAdjustment *adjustment,
-                                       gpointer       data)
+CML_explorer_double_adjustment_update (GimpLabelSpin *scale,
+                                       gdouble       *value)
 {
-  gimp_double_adjustment_update (adjustment, data);
+  *value = gimp_label_spin_get_value (scale);
 
   preview_update ();
 }
@@ -2511,21 +2764,21 @@ CML_explorer_double_adjustment_update (GtkAdjustment *adjustment,
 static void
 CML_explorer_double_entry_change_value (WidgetEntry *widget_entry)
 {
-  GtkAdjustment *adjustment = (GtkAdjustment *) (widget_entry->widget);
+  GimpLabelSpin *scale = GIMP_LABEL_SPIN (widget_entry->widget);
 
-  gtk_adjustment_set_value (adjustment, *(gdouble *) (widget_entry->value));
+  gimp_label_spin_set_value (scale, *(gdouble *) (widget_entry->value));
 }
 
 static void
 CML_explorer_double_entry_init (WidgetEntry *widget_entry,
-                                GtkObject   *adjustment,
+                                GtkWidget   *scale,
                                 gpointer     value_ptr)
 {
-  g_signal_connect (adjustment, "value-changed",
+  g_signal_connect (scale, "value-changed",
                     G_CALLBACK (CML_explorer_double_adjustment_update),
                     value_ptr);
 
-  widget_entry->widget  = (GtkWidget *) adjustment;
+  widget_entry->widget  = scale;
   widget_entry->value   = value_ptr;
   widget_entry->updater = CML_explorer_double_entry_change_value;
 }

@@ -72,7 +72,7 @@ static void   gimp_color_picker_tool_picked        (GimpColorTool       *color_t
                                                     GimpColorPickState   pick_state,
                                                     const Babl          *sample_format,
                                                     gpointer             pixel,
-                                                    const GimpRGB       *color);
+                                                    GeglColor           *color);
 
 static void   gimp_color_picker_tool_info_create   (GimpColorPickerTool *picker_tool,
                                                     GimpDisplay         *display);
@@ -84,7 +84,7 @@ static void   gimp_color_picker_tool_info_update   (GimpColorPickerTool *picker_
                                                     gboolean             sample_average,
                                                     const Babl          *sample_format,
                                                     gpointer             pixel,
-                                                    const GimpRGB       *color,
+                                                    GeglColor           *color,
                                                     gint                 x,
                                                     gint                 y);
 
@@ -300,7 +300,7 @@ gimp_color_picker_tool_picked (GimpColorTool      *color_tool,
                                GimpColorPickState  pick_state,
                                const Babl         *sample_format,
                                gpointer            pixel,
-                               const GimpRGB      *color)
+                               GeglColor          *color)
 {
   GimpColorPickerTool    *picker_tool = GIMP_COLOR_PICKER_TOOL (color_tool);
   GimpColorPickerOptions *options;
@@ -330,21 +330,21 @@ static void
 gimp_color_picker_tool_info_create (GimpColorPickerTool *picker_tool,
                                     GimpDisplay         *display)
 {
-  GimpTool         *tool     = GIMP_TOOL (picker_tool);
-  GimpToolOptions  *options  = GIMP_TOOL_GET_OPTIONS (tool);
-  GimpContext      *context  = GIMP_CONTEXT (tool->tool_info->tool_options);
-  GimpDisplayShell *shell    = gimp_display_get_shell (display);
-  GimpImage        *image    = gimp_display_get_image (display);
-  GimpDrawable     *drawable = gimp_image_get_active_drawable (image);
+  Gimp             *gimp      = gimp_display_get_gimp (display);
+  GimpTool         *tool      = GIMP_TOOL (picker_tool);
+  GimpToolOptions  *options   = GIMP_TOOL_GET_OPTIONS (tool);
+  GimpContext      *context   = GIMP_CONTEXT (tool->tool_info->tool_options);
+  GimpDisplayShell *shell     = gimp_display_get_shell (display);
+  GimpImage        *image     = gimp_display_get_image (display);
+  GList            *drawables = gimp_image_get_selected_drawables (image);
   GtkWidget        *hbox;
   GtkWidget        *frame;
-  GimpRGB           color;
+  GeglColor        *color;
 
   picker_tool->gui = gimp_tool_gui_new (tool->tool_info,
                                         NULL,
                                         _("Color Picker Information"),
                                         NULL, NULL,
-                                        gtk_widget_get_screen (GTK_WIDGET (shell)),
                                         gimp_widget_get_monitor (GTK_WIDGET (shell)),
                                         TRUE,
 
@@ -354,7 +354,7 @@ gimp_color_picker_tool_info_create (GimpColorPickerTool *picker_tool,
 
   gimp_tool_gui_set_auto_overlay (picker_tool->gui, TRUE);
   gimp_tool_gui_set_focus_on_map (picker_tool->gui, FALSE);
-  gimp_tool_gui_set_viewable (picker_tool->gui, GIMP_VIEWABLE (drawable));
+  gimp_tool_gui_set_viewables (picker_tool->gui, drawables);
 
   g_signal_connect (picker_tool->gui, "response",
                     G_CALLBACK (gimp_color_picker_tool_info_response),
@@ -365,7 +365,7 @@ gimp_color_picker_tool_info_create (GimpColorPickerTool *picker_tool,
                       hbox, FALSE, FALSE, 0);
   gtk_widget_show (hbox);
 
-  picker_tool->color_frame1 = gimp_color_frame_new ();
+  picker_tool->color_frame1 = gimp_color_frame_new (gimp);
   gimp_color_frame_set_color_config (GIMP_COLOR_FRAME (picker_tool->color_frame1),
                                      context->gimp->config->color_management);
   gimp_color_frame_set_has_coords (GIMP_COLOR_FRAME (picker_tool->color_frame1),
@@ -378,7 +378,7 @@ gimp_color_picker_tool_info_create (GimpColorPickerTool *picker_tool,
                       FALSE, FALSE, 0);
   gtk_widget_show (picker_tool->color_frame1);
 
-  picker_tool->color_frame2 = gimp_color_frame_new ();
+  picker_tool->color_frame2 = gimp_color_frame_new (gimp);
   gimp_color_frame_set_color_config (GIMP_COLOR_FRAME (picker_tool->color_frame2),
                                      context->gimp->config->color_management);
   g_object_bind_property (options,                   "frame2-mode",
@@ -395,10 +395,10 @@ gimp_color_picker_tool_info_create (GimpColorPickerTool *picker_tool,
   gtk_box_pack_start (GTK_BOX (hbox), frame, TRUE, TRUE, 0);
   gtk_widget_show (frame);
 
-  gimp_rgba_set (&color, 0.0, 0.0, 0.0, 0.0);
+  color = gegl_color_new ("transparent");
   picker_tool->color_area =
-    gimp_color_area_new (&color,
-                         gimp_drawable_has_alpha (drawable) ?
+    gimp_color_area_new (color,
+                         drawables && gimp_drawable_has_alpha (drawables->data) ?
                          GIMP_COLOR_AREA_LARGE_CHECKS :
                          GIMP_COLOR_AREA_FLAT,
                          GDK_BUTTON1_MASK | GDK_BUTTON2_MASK);
@@ -408,6 +408,9 @@ gimp_color_picker_tool_info_create (GimpColorPickerTool *picker_tool,
   gtk_drag_dest_unset (picker_tool->color_area);
   gtk_container_add (GTK_CONTAINER (frame), picker_tool->color_area);
   gtk_widget_show (picker_tool->color_area);
+
+  g_list_free (drawables);
+  g_object_unref (color);
 }
 
 static void
@@ -426,30 +429,26 @@ gimp_color_picker_tool_info_update (GimpColorPickerTool *picker_tool,
                                     gboolean             sample_average,
                                     const Babl          *sample_format,
                                     gpointer             pixel,
-                                    const GimpRGB       *color,
+                                    GeglColor           *color,
                                     gint                 x,
                                     gint                 y)
 {
-  GimpTool     *tool     = GIMP_TOOL (picker_tool);
-  GimpImage    *image    = gimp_display_get_image (display);
-  GimpDrawable *drawable = gimp_image_get_active_drawable (image);
+  GimpTool  *tool      = GIMP_TOOL (picker_tool);
+  GimpImage *image     = gimp_display_get_image (display);
+  GList     *drawables = gimp_image_get_selected_drawables (image);
 
   tool->display = display;
 
   gimp_tool_gui_set_shell (picker_tool->gui,
                            gimp_display_get_shell (display));
-  gimp_tool_gui_set_viewable (picker_tool->gui,
-                              GIMP_VIEWABLE (drawable));
+  gimp_tool_gui_set_viewables (picker_tool->gui, drawables);
+  g_list_free (drawables);
 
-  gimp_color_area_set_color (GIMP_COLOR_AREA (picker_tool->color_area),
-                             color);
-
+  gimp_color_area_set_color (GIMP_COLOR_AREA (picker_tool->color_area), color);
   gimp_color_frame_set_color (GIMP_COLOR_FRAME (picker_tool->color_frame1),
-                              sample_average, sample_format, pixel, color,
-                              x, y);
+                              sample_average, color, x, y);
   gimp_color_frame_set_color (GIMP_COLOR_FRAME (picker_tool->color_frame2),
-                              sample_average, sample_format, pixel, color,
-                              x, y);
+                              sample_average, color, x, y);
 
   gimp_tool_gui_show (picker_tool->gui);
 }

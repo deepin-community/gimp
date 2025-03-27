@@ -25,6 +25,8 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpwidgets/gimpwidgets.h"
+
 #include "widgets-types.h"
 
 #include "core/gimpcontainer.h"
@@ -58,11 +60,14 @@ static void     gimp_container_entry_reorder_item (GimpContainerView      *view,
 static void     gimp_container_entry_rename_item  (GimpContainerView      *view,
                                                    GimpViewable           *viewable,
                                                    gpointer                insert_data);
-static gboolean  gimp_container_entry_select_item (GimpContainerView      *view,
-                                                   GimpViewable           *viewable,
-                                                   gpointer                insert_data);
+static gboolean  gimp_container_entry_select_items(GimpContainerView      *view,
+                                                   GList                  *items,
+                                                   GList                  *paths);
 static void     gimp_container_entry_clear_items  (GimpContainerView      *view);
 static void    gimp_container_entry_set_view_size (GimpContainerView      *view);
+static gint     gimp_container_entry_get_selected (GimpContainerView      *view,
+                                                   GList                 **items,
+                                                   GList                 **items_data);
 
 static void     gimp_container_entry_changed      (GtkEntry               *entry,
                                                    GimpContainerView      *view);
@@ -107,9 +112,10 @@ gimp_container_entry_view_iface_init (GimpContainerViewInterface *iface)
   iface->remove_item   = gimp_container_entry_remove_item;
   iface->reorder_item  = gimp_container_entry_reorder_item;
   iface->rename_item   = gimp_container_entry_rename_item;
-  iface->select_item   = gimp_container_entry_select_item;
+  iface->select_items  = gimp_container_entry_select_items;
   iface->clear_items   = gimp_container_entry_clear_items;
   iface->set_view_size = gimp_container_entry_set_view_size;
+  iface->get_selected  = gimp_container_entry_get_selected;
 
   iface->insert_data_free = (GDestroyNotify) gtk_tree_iter_free;
 }
@@ -126,8 +132,8 @@ gimp_container_entry_init (GimpContainerEntry *entry)
   entry->viewable = NULL;
 
   completion = g_object_new (GTK_TYPE_ENTRY_COMPLETION,
-                             "inline-completion",  TRUE,
-                             "popup-single-match", FALSE,
+                             "inline-completion",  FALSE,
+                             "popup-single-match", TRUE,
                              "popup-set-width",    FALSE,
                              NULL);
 
@@ -159,7 +165,7 @@ gimp_container_entry_init (GimpContainerEntry *entry)
                                   NULL);
 
   gimp_container_tree_store_add_renderer_cell (GIMP_CONTAINER_TREE_STORE (model),
-                                               cell);
+                                               cell, -1);
 
   gtk_entry_completion_set_text_column (completion,
                                         GIMP_CONTAINER_TREE_STORE_COLUMN_NAME);
@@ -218,12 +224,7 @@ gimp_container_entry_finalize (GObject *object)
 {
   GimpContainerEntry *entry = GIMP_CONTAINER_ENTRY (object);
 
-  if (entry->viewable)
-    {
-      g_object_remove_weak_pointer (G_OBJECT (entry->viewable),
-                                    (gpointer) &entry->viewable);
-      entry->viewable = NULL;
-    }
+  g_clear_weak_pointer (&entry->viewable);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -309,44 +310,38 @@ gimp_container_entry_rename_item (GimpContainerView *view,
 }
 
 static gboolean
-gimp_container_entry_select_item (GimpContainerView *view,
-                                  GimpViewable      *viewable,
-                                  gpointer           insert_data)
+gimp_container_entry_select_items (GimpContainerView   *view,
+                                   GList               *viewables,
+                                   GList               *paths)
 {
   GimpContainerEntry *container_entry = GIMP_CONTAINER_ENTRY (view);
   GtkEntry           *entry           = GTK_ENTRY (view);
-  GtkTreeIter        *iter            = insert_data;
+  GimpViewable       *viewable        = NULL;
+
+  /* XXX Only support 1 selected viewable for now. */
+  if (viewables)
+    viewable = viewables->data;
 
   g_signal_handlers_block_by_func (entry,
                                    gimp_container_entry_changed,
                                    view);
 
-  if (container_entry->viewable)
-    {
-      g_object_remove_weak_pointer (G_OBJECT (container_entry->viewable),
-                                    (gpointer) &container_entry->viewable);
-      container_entry->viewable = NULL;
-    }
+  g_set_weak_pointer (&container_entry->viewable, viewable);
 
-  if (iter)
+  if (viewable)
     {
-      container_entry->viewable = viewable;
-      g_object_add_weak_pointer (G_OBJECT (container_entry->viewable),
-                                 (gpointer) &container_entry->viewable);
-
-      gtk_widget_modify_text (GTK_WIDGET (entry), GTK_STATE_NORMAL, NULL);
+      gtk_entry_set_icon_from_icon_name (entry,
+                                         GTK_ENTRY_ICON_SECONDARY,
+                                         NULL);
     }
   else
     {
       /* The selected item does not exist. */
-      GdkColor     gdk_red;
-
-      gdk_red.red = 65535;
-      gdk_red.green = 0;
-      gdk_red.blue = 0;
-
-      gtk_widget_modify_text (GTK_WIDGET (entry), GTK_STATE_NORMAL, &gdk_red);
+      gtk_entry_set_icon_from_icon_name (entry,
+                                         GTK_ENTRY_ICON_SECONDARY,
+                                         GIMP_ICON_WILBER_EEK);
     }
+
   gtk_entry_set_text (entry, viewable? gimp_object_get_name (viewable) : "");
 
   g_signal_handlers_unblock_by_func (entry,
@@ -376,6 +371,24 @@ gimp_container_entry_set_view_size (GimpContainerView *view)
   gimp_container_tree_store_set_view_size (GIMP_CONTAINER_TREE_STORE (model));
 }
 
+static gint
+gimp_container_entry_get_selected (GimpContainerView  *view,
+                                   GList             **items,
+                                   GList             **items_data)
+{
+  GimpContainerEntry *container_entry = GIMP_CONTAINER_ENTRY (view);
+
+  if (items)
+    {
+      if (container_entry->viewable != NULL)
+        *items = g_list_prepend (NULL, container_entry->viewable);
+      else
+        *items = NULL;
+    }
+
+  return container_entry->viewable == NULL ? 0 : 1;
+}
+
 static void
 gimp_container_entry_changed (GtkEntry          *entry,
                               GimpContainerView *view)
@@ -388,36 +401,25 @@ gimp_container_entry_changed (GtkEntry          *entry,
   if (! container)
     return;
 
-  if (container_entry->viewable)
-    {
-      g_object_remove_weak_pointer (G_OBJECT (container_entry->viewable),
-                                    (gpointer) &container_entry->viewable);
-      container_entry->viewable = NULL;
-    }
-
   text = gtk_entry_get_text (entry);
-
   object = gimp_container_get_child_by_name (container, text);
 
-  if (object)
-    {
-      container_entry->viewable = GIMP_VIEWABLE (object);
-      g_object_add_weak_pointer (G_OBJECT (container_entry->viewable),
-                                 (gpointer) &container_entry->viewable);
+  g_set_weak_pointer (&container_entry->viewable, GIMP_VIEWABLE (object));
 
-      gtk_widget_modify_text (GTK_WIDGET (entry), GTK_STATE_NORMAL, NULL);
-      gimp_container_view_item_selected (view, GIMP_VIEWABLE (object));
+  if (container_entry->viewable)
+    {
+      gimp_container_view_item_selected (view, container_entry->viewable);
+
+      gtk_entry_set_icon_from_icon_name (entry,
+                                         GTK_ENTRY_ICON_SECONDARY,
+                                         NULL);
     }
   else
     {
-      /* While editing the entry, contents shows in red for non-existent item. */
-      GdkColor     gdk_red;
-
-      gdk_red.red = 65535;
-      gdk_red.green = 0;
-      gdk_red.blue = 0;
-
-      gtk_widget_modify_text (GTK_WIDGET (entry), GTK_STATE_NORMAL, &gdk_red);
+      /* While editing the entry, show EEK for non-existent item. */
+      gtk_entry_set_icon_from_icon_name (entry,
+                                         GTK_ENTRY_ICON_SECONDARY,
+                                         GIMP_ICON_WILBER_EEK);
     }
 }
 

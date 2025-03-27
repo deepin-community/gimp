@@ -37,12 +37,16 @@
 #include "gimp-intl.h"
 
 
-static GimpCanvasItem * gimp_ink_tool_get_outline   (GimpPaintTool *paint_tool,
-                                                     GimpDisplay   *display,
-                                                     gdouble        x,
-                                                     gdouble        y);
-static gboolean         gimp_ink_tool_is_alpha_only (GimpPaintTool *paint_tool,
-                                                     GimpDrawable  *drawable);
+static GimpCanvasItem * gimp_ink_tool_get_outline    (GimpPaintTool    *paint_tool,
+                                                      GimpDisplay      *display,
+                                                      gdouble           x,
+                                                      gdouble           y);
+static gboolean         gimp_ink_tool_is_alpha_only  (GimpPaintTool    *paint_tool,
+                                                      GimpDrawable     *drawable);
+
+static void             gimp_ink_tool_options_notify (GimpTool         *tool,
+                                                      GimpToolOptions  *options,
+                                                      const GParamSpec *pspec);
 
 
 G_DEFINE_TYPE (GimpInkTool, gimp_ink_tool, GIMP_TYPE_PAINT_TOOL)
@@ -60,7 +64,9 @@ gimp_ink_tool_register (GimpToolRegisterCallback  callback,
                 GIMP_CONTEXT_PROP_MASK_FOREGROUND |
                 GIMP_CONTEXT_PROP_MASK_BACKGROUND |
                 GIMP_CONTEXT_PROP_MASK_OPACITY    |
-                GIMP_CONTEXT_PROP_MASK_PAINT_MODE,
+                GIMP_CONTEXT_PROP_MASK_PAINT_MODE |
+                GIMP_CONTEXT_PROP_MASK_PATTERN    |
+                GIMP_CONTEXT_PROP_MASK_EXPAND,
                 "gimp-ink-tool",
                 _("Ink"),
                 _("Ink Tool: Calligraphy-style painting"),
@@ -73,7 +79,10 @@ gimp_ink_tool_register (GimpToolRegisterCallback  callback,
 static void
 gimp_ink_tool_class_init (GimpInkToolClass *klass)
 {
+  GimpToolClass      *tool_class       = GIMP_TOOL_CLASS (klass);
   GimpPaintToolClass *paint_tool_class = GIMP_PAINT_TOOL_CLASS (klass);
+
+  tool_class->options_notify    = gimp_ink_tool_options_notify;
 
   paint_tool_class->get_outline   = gimp_ink_tool_get_outline;
   paint_tool_class->is_alpha_only = gimp_ink_tool_is_alpha_only;
@@ -85,15 +94,35 @@ gimp_ink_tool_init (GimpInkTool *ink_tool)
   GimpTool *tool = GIMP_TOOL (ink_tool);
 
   gimp_tool_control_set_tool_cursor   (tool->control, GIMP_TOOL_CURSOR_INK);
-  gimp_tool_control_set_action_size   (tool->control,
-                                       "tools/tools-ink-blob-size-set");
-  gimp_tool_control_set_action_aspect (tool->control,
-                                       "tools/tools-ink-blob-aspect-set");
-  gimp_tool_control_set_action_angle  (tool->control,
-                                       "tools/tools-ink-blob-angle-set");
+  gimp_tool_control_set_action_pixel_size (tool->control,
+                                           "tools-ink-blob-pixel-size-set");
+  gimp_tool_control_set_action_size       (tool->control,
+                                           "tools-ink-blob-size-set");
+  gimp_tool_control_set_action_aspect     (tool->control,
+                                           "tools-ink-blob-aspect-set");
+  gimp_tool_control_set_action_angle      (tool->control,
+                                           "tools-ink-blob-angle-set");
 
   gimp_paint_tool_enable_color_picker (GIMP_PAINT_TOOL (ink_tool),
                                        GIMP_COLOR_PICK_TARGET_FOREGROUND);
+}
+
+static void
+gimp_ink_tool_options_notify (GimpTool         *tool,
+                              GimpToolOptions  *options,
+                              const GParamSpec *pspec)
+{
+  GIMP_TOOL_CLASS (parent_class)->options_notify (tool, options, pspec);
+
+  if (g_strcmp0 (pspec->name, "size") == 0 &&
+      GIMP_PAINT_TOOL (tool)->draw_brush)
+    {
+      /* This triggers a redraw of the tool pointer, especially useful
+       * here when we change the pen size with on-canvas interaction.
+       */
+      gimp_draw_tool_pause (GIMP_DRAW_TOOL (tool));
+      gimp_draw_tool_resume (GIMP_DRAW_TOOL (tool));
+    }
 }
 
 static GimpCanvasItem *

@@ -36,16 +36,24 @@ typedef struct _GimpStatusbarClass GimpStatusbarClass;
 
 struct _GimpStatusbar
 {
-  GtkStatusbar         parent_instance;
+  GtkFrame             parent_instance;
 
+  Gimp                *gimp;
   GimpDisplayShell    *shell;
+  GimpImage           *image;
 
   GSList              *messages;
   GHashTable          *context_ids;
   guint                seq_context_id;
 
+  guint                statusbar_pos_redraw_idle_id;
+  gchar               *cursor_string_todraw;
+  gchar               *cursor_string_last;
+
   GdkPixbuf           *icon;
   GHashTable          *icon_hash;
+  gint                 icon_space_width;
+  GtkIconSize          icon_size;
 
   guint                temp_context_id;
   guint                temp_timeout_id;
@@ -54,6 +62,10 @@ struct _GimpStatusbar
   gchar                cursor_format_str[CURSOR_FORMAT_LENGTH];
   gchar                cursor_format_str_f[CURSOR_FORMAT_LENGTH];
   gchar                length_format_str[CURSOR_FORMAT_LENGTH];
+  GimpCursorPrecision  cursor_precision;
+  gint                 cursor_w_digits;
+  gint                 cursor_h_digits;
+
 
   GtkWidget           *cursor_label;
   GtkWidget           *unit_combo;
@@ -70,11 +82,24 @@ struct _GimpStatusbar
   gboolean             progress_shown;
   gdouble              progress_value;
   guint64              progress_last_update_time;
+
+  GtkWidget           *soft_proof_button;
+  GtkWidget           *soft_proof_container;
+  GtkWidget           *soft_proof_popover;
+  GtkWidget           *proof_colors_toggle;
+  GtkWidget           *profile_label;
+  GtkWidget           *profile_combo;
+  GtkWidget           *rendering_intent_combo;
+  GtkWidget           *bpc_toggle;
+  GtkWidget           *optimize_combo;
+  GtkWidget           *out_of_gamut_toggle;
+
+  GSList              *size_widgets;
 };
 
 struct _GimpStatusbarClass
 {
-  GtkStatusbarClass parent_class;
+  GtkFrameClass parent_class;
 };
 
 

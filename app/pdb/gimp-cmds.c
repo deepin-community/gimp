@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <gegl.h>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -67,7 +69,7 @@ getpid_invoker (GimpProcedure         *procedure,
                 GError               **error)
 {
   GimpValueArray *return_vals;
-  gint32 pid = 0;
+  gint pid = 0;
 
   pid = gimp_get_pid ();
 
@@ -187,21 +189,18 @@ get_parasite_list_invoker (GimpProcedure         *procedure,
                            GError               **error)
 {
   GimpValueArray *return_vals;
-  gint32 num_parasites = 0;
   gchar **parasites = NULL;
 
-  parasites = gimp_parasite_list (gimp, &num_parasites);
+  parasites = gimp_parasite_list (gimp);
 
   return_vals = gimp_procedure_get_return_values (procedure, TRUE, NULL);
-
-  g_value_set_int (gimp_value_array_index (return_vals, 1), num_parasites);
-  gimp_value_take_stringarray (gimp_value_array_index (return_vals, 2), parasites, num_parasites);
+  g_value_take_boxed (gimp_value_array_index (return_vals, 1), parasites);
 
   return return_vals;
 }
 
 static GimpValueArray *
-temp_name_invoker (GimpProcedure         *procedure,
+temp_file_invoker (GimpProcedure         *procedure,
                    Gimp                  *gimp,
                    GimpContext           *context,
                    GimpProgress          *progress,
@@ -211,24 +210,20 @@ temp_name_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   const gchar *extension;
-  gchar *name = NULL;
+  GFile *file = NULL;
 
   extension = g_value_get_string (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      GFile *file = gimp_get_temp_file (gimp, extension);
-
-      name = g_file_get_path (file);
-
-      g_object_unref (file);
+      file = gimp_get_temp_file (gimp, extension);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    g_value_take_string (gimp_value_array_index (return_vals, 1), name);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), file);
 
   return return_vals;
 }
@@ -241,17 +236,17 @@ register_gimp_procs (GimpPDB *pdb)
   /*
    * gimp-version
    */
-  procedure = gimp_procedure_new (version_invoker);
+  procedure = gimp_procedure_new (version_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-version");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-version",
-                                     "Returns the host GIMP version.",
-                                     "This procedure returns the version number of the currently running GIMP.",
-                                     "Manish Singh",
-                                     "Manish Singh",
-                                     "1999",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the host GIMP version.",
+                                  "This procedure returns the version number of the currently running GIMP.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Manish Singh",
+                                         "Manish Singh",
+                                         "1999");
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("version",
                                                            "version",
@@ -265,40 +260,40 @@ register_gimp_procs (GimpPDB *pdb)
   /*
    * gimp-getpid
    */
-  procedure = gimp_procedure_new (getpid_invoker);
+  procedure = gimp_procedure_new (getpid_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-getpid");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-getpid",
-                                     "Returns the PID of the host GIMP process.",
-                                     "This procedure returns the process ID of the currently running GIMP.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2005",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the PID of the host GIMP process.",
+                                  "This procedure returns the process ID of the currently running GIMP.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2005");
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("pid",
-                                                          "pid",
-                                                          "The PID",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("pid",
+                                                     "pid",
+                                                     "The PID",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-quit
    */
-  procedure = gimp_procedure_new (quit_invoker);
+  procedure = gimp_procedure_new (quit_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-quit");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-quit",
-                                     "Causes GIMP to exit gracefully.",
-                                     "If there are unsaved images in an interactive GIMP session, the user will be asked for confirmation. If force is TRUE, the application is quit without querying the user to save any dirty images.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Causes GIMP to exit gracefully.",
+                                  "If there are unsaved images in an interactive GIMP session, the user will be asked for confirmation. If force is TRUE, the application is quit without querying the user to save any dirty images.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
                                g_param_spec_boolean ("force",
                                                      "force",
@@ -311,17 +306,17 @@ register_gimp_procs (GimpPDB *pdb)
   /*
    * gimp-attach-parasite
    */
-  procedure = gimp_procedure_new (attach_parasite_invoker);
+  procedure = gimp_procedure_new (attach_parasite_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-attach-parasite");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-attach-parasite",
-                                     "Add a global parasite.",
-                                     "This procedure attaches a global parasite. It has no return values.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Add a global parasite.",
+                                  "This procedure attaches a global parasite. It has no return values.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_parasite ("parasite",
                                                          "parasite",
@@ -333,17 +328,17 @@ register_gimp_procs (GimpPDB *pdb)
   /*
    * gimp-detach-parasite
    */
-  procedure = gimp_procedure_new (detach_parasite_invoker);
+  procedure = gimp_procedure_new (detach_parasite_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-detach-parasite");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-detach-parasite",
-                                     "Removes a global parasite.",
-                                     "This procedure detaches a global parasite from. It has no return values.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Removes a global parasite.",
+                                  "This procedure detaches a global parasite from. It has no return values.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("name",
                                                        "name",
@@ -357,17 +352,17 @@ register_gimp_procs (GimpPDB *pdb)
   /*
    * gimp-get-parasite
    */
-  procedure = gimp_procedure_new (get_parasite_invoker);
+  procedure = gimp_procedure_new (get_parasite_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-get-parasite");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-get-parasite",
-                                     "Look up a global parasite.",
-                                     "Finds and returns the global parasite that was previously attached.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Look up a global parasite.",
+                                  "Finds and returns the global parasite that was previously attached.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("name",
                                                        "name",
@@ -386,45 +381,40 @@ register_gimp_procs (GimpPDB *pdb)
   /*
    * gimp-get-parasite-list
    */
-  procedure = gimp_procedure_new (get_parasite_list_invoker);
+  procedure = gimp_procedure_new (get_parasite_list_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-get-parasite-list");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-get-parasite-list",
-                                     "List all parasites.",
-                                     "Returns a list of all currently attached global parasites.",
-                                     "Marc Lehmann",
-                                     "Marc Lehmann",
-                                     "1999",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "List all parasites.",
+                                  "Returns a list of all currently attached global parasites.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Marc Lehmann",
+                                         "Marc Lehmann",
+                                         "1999");
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-parasites",
-                                                          "num parasites",
-                                                          "The number of attached parasites",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_string_array ("parasites",
-                                                                 "parasites",
-                                                                 "The names of currently attached parasites",
-                                                                 GIMP_PARAM_READWRITE));
+                                   g_param_spec_boxed ("parasites",
+                                                       "parasites",
+                                                       "The names of currently attached parasites",
+                                                       G_TYPE_STRV,
+                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-temp-name
+   * gimp-temp-file
    */
-  procedure = gimp_procedure_new (temp_name_invoker);
+  procedure = gimp_procedure_new (temp_file_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-temp-name");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-temp-name",
-                                     "Generates a unique filename.",
-                                     "Generates a unique filename using the temp path supplied in the user's gimprc.",
-                                     "Josh MacDonald",
-                                     "Josh MacDonald",
-                                     "1997",
-                                     NULL);
+                               "gimp-temp-file");
+  gimp_procedure_set_static_help (procedure,
+                                  "Generates a unique temporary file.",
+                                  "Generates a unique file using the temp path supplied in the user's gimprc.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Josh MacDonald",
+                                         "Josh MacDonald",
+                                         "1997");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("extension",
                                                        "extension",
@@ -433,12 +423,11 @@ register_gimp_procs (GimpPDB *pdb)
                                                        NULL,
                                                        GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_string ("name",
-                                                           "name",
-                                                           "The new temp filename",
-                                                           FALSE, FALSE, FALSE,
-                                                           NULL,
-                                                           GIMP_PARAM_READWRITE));
+                                   g_param_spec_object ("file",
+                                                        "file",
+                                                        "The new temp file",
+                                                        G_TYPE_FILE,
+                                                        GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 }

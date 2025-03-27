@@ -89,7 +89,7 @@ image_merge_layers_dialog_new (GimpImage               *image,
   private->callback           = callback;
   private->user_data          = user_data;
 
-  dialog = gimp_viewable_dialog_new (GIMP_VIEWABLE (image), context,
+  dialog = gimp_viewable_dialog_new (g_list_prepend (NULL, image), context,
                                      _("Merge Layers"), "gimp-image-merge-layers",
                                      GIMP_ICON_LAYER_MERGE_DOWN,
                                      _("Layers Merge Options"),
@@ -102,7 +102,7 @@ image_merge_layers_dialog_new (GimpImage               *image,
 
                                      NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
                                            -1);
@@ -128,14 +128,14 @@ image_merge_layers_dialog_new (GimpImage               *image,
                                           GIMP_CLIP_TO_BOTTOM_LAYER,
                                           gtk_label_new (_("Final, Merged Layer should be:")),
                                           G_CALLBACK (gimp_radio_button_update),
-                                          &private->merge_type,
+                                          &private->merge_type, NULL,
                                           &button);
   gimp_int_radio_group_set_active (GTK_RADIO_BUTTON (button),
                                    private->merge_type);
   gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
 
-  button = gtk_check_button_new_with_mnemonic (_("Merge within active _group only"));
+  button = gtk_check_button_new_with_mnemonic (_("Merge within active _groups only"));
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (button),
                                 private->merge_active_group);
   gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);

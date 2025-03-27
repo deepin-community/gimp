@@ -20,6 +20,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
@@ -153,18 +154,16 @@ gimp_color_options_gui (GimpToolOptions *tool_options)
   GtkWidget *scale;
 
   /*  the sample average options  */
-  scale = gimp_prop_spin_scale_new (config, "average-radius", NULL,
+  scale = gimp_prop_spin_scale_new (config, "average-radius",
                                     1.0, 10.0, 0);
 
   frame = gimp_prop_expanding_frame_new (config, "sample-average", NULL,
                                          scale, NULL);
   gtk_box_pack_start (GTK_BOX (vbox), frame, TRUE, TRUE, 0);
-  gtk_widget_show (frame);
 
   /* The Sample merged checkbox. */
   button = gimp_prop_check_button_new (config, "sample-merged", NULL);
   gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   return vbox;
 }

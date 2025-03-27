@@ -26,10 +26,12 @@
 
 #include "gegl/gimp-gegl-loops.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "gimp.h"
 #include "gimpchannel.h"
+#include "gimpdrawable-filters.h"
+#include "gimpdrawablefilter.h"
 #include "gimpguide.h"
 #include "gimpimage.h"
 #include "gimpimage-color-profile.h"
@@ -57,11 +59,11 @@ static void          gimp_image_duplicate_colormap         (GimpImage *image,
                                                             GimpImage *new_image);
 static GimpItem    * gimp_image_duplicate_item             (GimpItem  *item,
                                                             GimpImage *new_image);
-static GimpLayer   * gimp_image_duplicate_layers           (GimpImage *image,
+static GList       * gimp_image_duplicate_layers           (GimpImage *image,
                                                             GimpImage *new_image);
-static GimpChannel * gimp_image_duplicate_channels         (GimpImage *image,
+static GList       * gimp_image_duplicate_channels         (GimpImage *image,
                                                             GimpImage *new_image);
-static GimpVectors * gimp_image_duplicate_vectors          (GimpImage *image,
+static GList       * gimp_image_duplicate_paths            (GimpImage *image,
                                                             GimpImage *new_image);
 static void          gimp_image_duplicate_floating_sel     (GimpImage *image,
                                                             GimpImage *new_image);
@@ -83,15 +85,18 @@ static void          gimp_image_duplicate_parasites        (GimpImage *image,
                                                             GimpImage *new_image);
 static void          gimp_image_duplicate_color_profile    (GimpImage *image,
                                                             GimpImage *new_image);
+static void          gimp_image_duplicate_simulation_profile
+                                                           (GimpImage *image,
+                                                            GimpImage *new_image);
 
 
 GimpImage *
 gimp_image_duplicate (GimpImage *image)
 {
   GimpImage    *new_image;
-  GimpLayer    *active_layer;
-  GimpChannel  *active_channel;
-  GimpVectors  *active_vectors;
+  GList        *active_layers;
+  GList        *active_channels;
+  GList        *active_path;
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
 
@@ -109,9 +114,6 @@ gimp_image_duplicate (GimpImage *image)
   /*  Store the source uri to be used by the save dialog  */
   gimp_image_duplicate_save_source_file (image, new_image);
 
-  /*  Copy the colormap if necessary  */
-  gimp_image_duplicate_colormap (image, new_image);
-
   /*  Copy resolution information  */
   gimp_image_duplicate_resolution (image, new_image);
 
@@ -119,14 +121,20 @@ gimp_image_duplicate (GimpImage *image)
   gimp_image_duplicate_parasites (image, new_image);
   gimp_image_duplicate_color_profile (image, new_image);
 
+  /*  Copy the simulation profile settings */
+  gimp_image_duplicate_simulation_profile (image, new_image);
+
+  /*  Copy the colormap if necessary  */
+  gimp_image_duplicate_colormap (image, new_image);
+
   /*  Copy the layers  */
-  active_layer = gimp_image_duplicate_layers (image, new_image);
+  active_layers = gimp_image_duplicate_layers (image, new_image);
 
   /*  Copy the channels  */
-  active_channel = gimp_image_duplicate_channels (image, new_image);
+  active_channels = gimp_image_duplicate_channels (image, new_image);
 
-  /*  Copy any vectors  */
-  active_vectors = gimp_image_duplicate_vectors (image, new_image);
+  /*  Copy any path  */
+  active_path = gimp_image_duplicate_paths (image, new_image);
 
   /*  Copy floating layer  */
   gimp_image_duplicate_floating_sel (image, new_image);
@@ -134,15 +142,15 @@ gimp_image_duplicate (GimpImage *image)
   /*  Copy the selection mask  */
   gimp_image_duplicate_mask (image, new_image);
 
-  /*  Set active layer, active channel, active vectors  */
-  if (active_layer)
-    gimp_image_set_active_layer (new_image, active_layer);
+  /*  Set active layer, active channel, active path  */
+  if (active_layers)
+    gimp_image_set_selected_layers (new_image, active_layers);
 
-  if (active_channel)
-    gimp_image_set_active_channel (new_image, active_channel);
+  if (active_channels)
+    gimp_image_set_selected_channels (new_image, active_channels);
 
-  if (active_vectors)
-    gimp_image_set_active_vectors (new_image, active_vectors);
+  if (active_path)
+    gimp_image_set_selected_paths (new_image, active_path);
 
   /*  Copy state of all color components  */
   gimp_image_duplicate_components (image, new_image);
@@ -166,6 +174,16 @@ gimp_image_duplicate (GimpImage *image)
 
   /*  Explicitly mark image as dirty, so that its dirty time is set  */
   gimp_image_dirty (new_image, GIMP_DIRTY_ALL);
+
+  /* XXX Without flushing the duplicated image, we had at least one case
+   * where it wouldn't properly render the image (with empty
+   * pass-through groups with layer effects, which I think is because we
+   * have code believing the group is smaller that it really is, because
+   * of the specificity of pass-through groups). See #13057.
+   * So I'm not entirely happy of calling this here, which feels more
+   * like a workaround than a real fix. But it will do for now.
+   */
+  gimp_image_flush (new_image);
 
   return new_image;
 }
@@ -199,10 +217,9 @@ gimp_image_duplicate_colormap (GimpImage *image,
                                GimpImage *new_image)
 {
   if (gimp_image_get_base_type (new_image) == GIMP_INDEXED)
-    gimp_image_set_colormap (new_image,
-                             gimp_image_get_colormap (image),
-                             gimp_image_get_colormap_size (image),
-                             FALSE);
+    gimp_image_set_colormap_palette (new_image,
+                                     gimp_image_get_colormap_palette (image),
+                                     FALSE);
 }
 
 static GimpItem *
@@ -221,20 +238,30 @@ gimp_image_duplicate_item (GimpItem  *item,
   return new_item;
 }
 
-static GimpLayer *
+static GList *
 gimp_image_duplicate_layers (GimpImage *image,
                              GimpImage *new_image)
 {
-  GimpLayer *active_layer = NULL;
-  GList     *list;
-  gint       count;
+  GList         *new_selected_layers = NULL;
+  GList         *selected_paths      = NULL;
+  GList         *selected_layers;
+  GimpItemStack *new_item_stack;
+  GList         *list;
+  gint           count;
+
+  selected_layers = gimp_image_get_selected_layers (image);
+
+  for (list = selected_layers; list; list = list->next)
+    selected_paths = g_list_prepend (selected_paths,
+                                     gimp_item_get_path (list->data));
 
   for (list = gimp_image_get_layer_iter (image), count = 0;
        list;
        list = g_list_next (list))
     {
-      GimpLayer *layer = list->data;
-      GimpLayer *new_layer;
+      GimpLayer     *layer = list->data;
+      GimpLayer     *new_layer;
+      GimpContainer *filters;
 
       if (gimp_layer_is_floating_sel (layer))
         continue;
@@ -249,23 +276,60 @@ gimp_image_duplicate_layers (GimpImage *image,
         gimp_object_set_name (GIMP_OBJECT (new_layer->mask),
                               gimp_object_get_name (layer->mask));
 
-      if (gimp_image_get_active_layer (image) == layer)
-        active_layer = new_layer;
-
       gimp_image_add_layer (new_image, new_layer,
                             NULL, count++, FALSE);
+
+      /* Import any attached layer effects */
+      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (layer));
+      if (gimp_container_get_n_children (filters) > 0)
+        {
+          GList *filter_list;
+
+          for (filter_list = GIMP_LIST (filters)->queue->tail; filter_list;
+               filter_list = g_list_previous (filter_list))
+            {
+              if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                {
+                  GimpDrawableFilter *old_filter = filter_list->data;
+                  GimpDrawableFilter *filter;
+
+                  filter =
+                    gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_layer),
+                                                    old_filter);
+
+                  if (filter != NULL)
+                    {
+                      gimp_drawable_filter_apply (filter, NULL);
+                      gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+
+                      gimp_drawable_filter_layer_mask_freeze (filter);
+                      g_object_unref (filter);
+                    }
+                }
+            }
+        }
     }
 
-  return active_layer;
+  new_item_stack = GIMP_ITEM_STACK (gimp_image_get_layers (new_image));
+  for (list = selected_paths; list; list = list->next)
+    new_selected_layers = g_list_prepend (new_selected_layers,
+                                          gimp_item_stack_get_item_by_path (new_item_stack, list->data));
+
+  g_list_free_full (selected_paths, (GDestroyNotify) g_list_free);
+
+  return new_selected_layers;
 }
 
-static GimpChannel *
+static GList *
 gimp_image_duplicate_channels (GimpImage *image,
                                GimpImage *new_image)
 {
-  GimpChannel *active_channel = NULL;
-  GList       *list;
-  gint         count;
+  GList *new_selected_channels = NULL;
+  GList *selected_channels;
+  GList *list;
+  gint   count;
+
+  selected_channels = gimp_image_get_selected_channels (image);
 
   for (list = gimp_image_get_channel_iter (image), count = 0;
        list;
@@ -277,42 +341,46 @@ gimp_image_duplicate_channels (GimpImage *image,
       new_channel = GIMP_CHANNEL (gimp_image_duplicate_item (GIMP_ITEM (channel),
                                                              new_image));
 
-      if (gimp_image_get_active_channel (image) == channel)
-        active_channel = new_channel;
+      if (g_list_find (selected_channels, channel))
+        new_selected_channels = g_list_prepend (new_selected_channels, new_channel);
 
       gimp_image_add_channel (new_image, new_channel,
                               NULL, count++, FALSE);
     }
 
-  return active_channel;
+  return new_selected_channels;
 }
 
-static GimpVectors *
-gimp_image_duplicate_vectors (GimpImage *image,
-                              GimpImage *new_image)
+static GList *
+gimp_image_duplicate_paths (GimpImage *image,
+                            GimpImage *new_image)
 {
-  GimpVectors *active_vectors = NULL;
-  GList       *list;
-  gint         count;
+  GList *new_selected_path = NULL;
+  GList *selected_path;
+  GList *list;
+  gint   count;
 
-  for (list = gimp_image_get_vectors_iter (image), count = 0;
+  selected_path = gimp_image_get_selected_paths (image);
+
+  for (list = gimp_image_get_path_iter (image), count = 0;
        list;
        list = g_list_next (list))
     {
-      GimpVectors  *vectors = list->data;
-      GimpVectors  *new_vectors;
+      GimpPath *path = list->data;
+      GimpPath *new_path;
 
-      new_vectors = GIMP_VECTORS (gimp_image_duplicate_item (GIMP_ITEM (vectors),
-                                                             new_image));
+      new_path = GIMP_PATH (gimp_image_duplicate_item (GIMP_ITEM (path),
+                                                       new_image));
 
-      if (gimp_image_get_active_vectors (image) == vectors)
-        active_vectors = new_vectors;
+      if (g_list_find (selected_path, path))
+        new_selected_path = g_list_prepend (new_selected_path, new_path);
 
-      gimp_image_add_vectors (new_image, new_vectors,
-                              NULL, count++, FALSE);
+
+      gimp_image_add_path (new_image, new_path,
+                           NULL, count++, FALSE);
     }
 
-  return active_vectors;
+  return new_selected_path;
 }
 
 static void
@@ -506,7 +574,7 @@ gimp_image_duplicate_quick_mask (GimpImage *image,
 
   new_private->quick_mask_state    = private->quick_mask_state;
   new_private->quick_mask_inverted = private->quick_mask_inverted;
-  new_private->quick_mask_color    = private->quick_mask_color;
+  new_private->quick_mask_color    = gegl_color_duplicate (private->quick_mask_color);
 }
 
 static void
@@ -527,9 +595,26 @@ static void
 gimp_image_duplicate_color_profile (GimpImage *image,
                                     GimpImage *new_image)
 {
-  GimpColorProfile *profile          = gimp_image_get_color_profile (image);
-  gboolean          is_color_managed = gimp_image_get_is_color_managed (image);
+  GimpColorProfile *profile = gimp_image_get_color_profile (image);
+  GimpColorProfile *hidden  = _gimp_image_get_hidden_profile (image);
 
-  gimp_image_set_color_profile    (new_image, profile, NULL);
-  gimp_image_set_is_color_managed (new_image, is_color_managed, FALSE);
+  gimp_image_set_color_profile (new_image, profile, NULL);
+  _gimp_image_set_hidden_profile (new_image, hidden, FALSE);
+}
+
+static void
+gimp_image_duplicate_simulation_profile (GimpImage *image,
+                                         GimpImage *new_image)
+{
+  GimpColorProfile         *profile;
+  GimpColorRenderingIntent  intent;
+  gboolean                  bpc;
+
+  profile = gimp_image_get_simulation_profile (image);
+  intent  = gimp_image_get_simulation_intent (image);
+  bpc     = gimp_image_get_simulation_bpc (image);
+
+  gimp_image_set_simulation_profile (new_image, profile);
+  gimp_image_set_simulation_intent (new_image, intent);
+  gimp_image_set_simulation_bpc (new_image, bpc);
 }

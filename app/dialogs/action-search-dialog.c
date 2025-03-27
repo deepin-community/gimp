@@ -40,12 +40,12 @@
 #include "widgets/gimpaction-history.h"
 #include "widgets/gimpdialogfactory.h"
 #include "widgets/gimpsearchpopup.h"
-#include "widgets/gimpuimanager.h"
 
 #include "action-search-dialog.h"
 
 #include "gimp-intl.h"
 
+#define ACTION_SECTION_INACTIVE 7
 
 static void         action_search_history_and_actions      (GimpSearchPopup   *popup,
                                                             const gchar       *keyword,
@@ -78,15 +78,14 @@ action_search_history_and_actions (GimpSearchPopup *popup,
                                    const gchar     *keyword,
                                    gpointer         data)
 {
-  GimpUIManager *manager;
-  GList         *list;
-  GList         *history_actions = NULL;
-  Gimp          *gimp;
+  gchar **actions;
+  GList  *list;
+  GList  *history_actions = NULL;
+  Gimp   *gimp;
 
   g_return_if_fail (GIMP_IS_GIMP (data));
 
   gimp = GIMP (data);
-  manager = gimp_ui_managers_from_name ("<Image>")->data;
 
   if (g_strcmp0 (keyword, "") == 0)
     return;
@@ -95,76 +94,93 @@ action_search_history_and_actions (GimpSearchPopup *popup,
                                                 action_search_match_keyword,
                                                 keyword);
 
-  /* First put on top of the list any matching action of user history. */
+  /* 0. Top result: matching action in run history. */
   for (list = history_actions; list; list = g_list_next (list))
+    gimp_search_popup_add_result (popup, list->data,
+                                  gimp_action_is_sensitive (list->data, NULL) ? 0 : ACTION_SECTION_INACTIVE);
+
+  /* 1. Then other matching actions. */
+  actions = g_action_group_list_actions (G_ACTION_GROUP (gimp->app));
+
+  for (gint i = 0; actions[i] != NULL; i++)
     {
-      gimp_search_popup_add_result (popup, list->data, 0);
+      GAction *action;
+      gint     section;
+
+      /* The action search dialog doesn't show any non-historized
+       * actions, with a few exceptions. See the difference between
+       * gimp_action_history_is_blacklisted_action() and
+       * gimp_action_history_is_excluded_action().
+       */
+      if (gimp_action_history_is_blacklisted_action (actions[i]))
+        continue;
+
+      action = g_action_map_lookup_action (G_ACTION_MAP (gimp->app), actions[i]);
+
+      g_return_if_fail (GIMP_IS_ACTION (action));
+
+      if (! gimp_action_is_visible (GIMP_ACTION (action)))
+        continue;
+
+      if (action_search_match_keyword (GIMP_ACTION (action), keyword, &section, gimp))
+        {
+          GList *redundant;
+
+          /* A matching action. Check if we have not already added
+           * it as an history action.
+           */
+          for (redundant = history_actions; redundant; redundant = g_list_next (redundant))
+            if (strcmp (gimp_action_get_name (redundant->data), actions[i]) == 0)
+              break;
+
+          if (redundant == NULL)
+            gimp_search_popup_add_result (popup, GIMP_ACTION (action), section);
+        }
     }
 
-  /* Now check other actions. */
-  for (list = gimp_ui_manager_get_action_groups (manager);
-       list;
-       list = g_list_next (list))
-    {
-      GList           *list2;
-      GimpActionGroup *group   = list->data;
-      GList           *actions = NULL;
-
-      actions = gimp_action_group_list_actions (group);
-      actions = g_list_sort (actions, (GCompareFunc) gimp_action_name_compare);
-
-      for (list2 = actions; list2; list2 = g_list_next (list2))
-        {
-          const gchar *name;
-          GimpAction  *action       = list2->data;
-          gboolean     is_redundant = FALSE;
-          gint         section;
-
-          name = gimp_action_get_name (action);
-
-          /* The action search dialog doesn't show any non-historized
-           * actions, with a few exceptions.  See the difference between
-           * gimp_action_history_is_blacklisted_action() and
-           * gimp_action_history_is_excluded_action().
-           */
-          if (gimp_action_history_is_blacklisted_action (name))
-            continue;
-
-          if (! gimp_action_is_visible (action)    ||
-              (! gimp_action_is_sensitive (action) &&
-               ! GIMP_GUI_CONFIG (gimp->config)->search_show_unavailable))
-            continue;
-
-          if (action_search_match_keyword (action, keyword, &section, gimp))
-            {
-              GList *list3;
-
-              /* A matching action. Check if we have not already added
-               * it as an history action.
-               */
-              for (list3 = history_actions; list3; list3 = g_list_next (list3))
-                {
-                  if (strcmp (gimp_action_get_name (list3->data),
-                              name) == 0)
-                    {
-                      is_redundant = TRUE;
-                      break;
-                    }
-                }
-
-              if (! is_redundant)
-                {
-                  gimp_search_popup_add_result (popup, action, section);
-                }
-            }
-        }
-
-      g_list_free (actions);
-   }
+  g_strfreev (actions);
 
   g_list_free_full (history_actions, (GDestroyNotify) g_object_unref);
 }
 
+/**
+ * action_search_match_keyword:
+ * @action: a #GimpAction to be matched.
+ * @keyword: free text keyword to match with @action.
+ * @section: relative section telling "how well" @keyword matched
+ *           @action. The smaller the @section, the better the match. In
+ *           particular this value can be used in the call to
+ *           gimp_search_popup_add_result() to show best matches at the
+ *           top of the list.
+ * @gimp: the #Gimp object. This matters because we will tokenize
+ *        keywords, labels and tooltip by language.
+ *
+ * This function will check if some freely typed text @keyword matches
+ * @action's label or tooltip, using a few algorithms to determine the
+ * best matches (order of words, start of match, and so on).
+ * All text (the user-provided @keyword as well as @actions labels and
+ * tooltips) are unicoded normalized, tokenized and case-folded before
+ * being compared. Comparisons with ASCII alternatives are also
+ * performed, providing even better matches, depending on the user
+ * languages (accounting for variant orthography in natural languages).
+ *
+ * @section will be set to:
+ * - 0 for any @action if @keyword is %NULL (match all).
+ * - 1 for a full initialism.
+ * - 4 for a partial initialism.
+ * - 1 if key tokens are found in the same order in the label and match
+ *   the start of the label.
+ * - 2 if key tokens are found in the label order but don't match the
+ *   start of the label.
+ * - 3 if key tokens are found with a different order from label.
+ * - 5 if @keyword matches the tooltip.
+ * - 6  if @keyword is a mix-match on tooltip and label.
+ * In the end, @section is incremented by %ACTION_SECTION_INACTIVE if
+ * the action is non-sensitive.
+ *
+ * Returns: %TRUE is a match was successful (in which case, @section
+ * will be set as well).
+ */
 static gboolean
 action_search_match_keyword (GimpAction  *action,
                              const gchar *keyword,
@@ -183,9 +199,8 @@ action_search_match_keyword (GimpAction  *action,
        * matches.
        */
       if (section)
-        {
-          *section = 0;
-        }
+        *section = gimp_action_is_sensitive (action, NULL) ? 0 : ACTION_SECTION_INACTIVE;
+
       return TRUE;
     }
 
@@ -338,11 +353,11 @@ one_tooltip_matched:
             }
           if (matched && section)
             {
-              /* Matching the tooltip is section 4. We don't go looking
+              /* Matching the tooltip is section 5. We don't go looking
                * for start of string or token order for tooltip match.
                * But if the match is mixed on tooltip and label (there are
                * no match for *only* label or *only* tooltip), this is
-               * section 5. */
+               * section 6. */
               *section = mixed_match ? 6 : 5;
             }
         }
@@ -353,6 +368,9 @@ one_tooltip_matched:
   g_strfreev (key_tokens);
   g_strfreev (label_tokens);
   g_strfreev (label_alternates);
+
+  if (matched && section && ! gimp_action_is_sensitive (action, NULL))
+    *section += ACTION_SECTION_INACTIVE;
 
   return matched;
 }

@@ -46,7 +46,7 @@ struct _GimpFadeOptions
 {
   gboolean        fade_reverse;
   gdouble         fade_length;
-  GimpUnit        fade_unit;
+  GimpUnit       *fade_unit;
   GimpRepeatMode  fade_repeat;
 };
 
@@ -105,9 +105,14 @@ struct _GimpPaintOptions
 
   gboolean                  hard;
 
+  gboolean                  expand_use;
+  gdouble                   expand_amount;
+  GimpFillType              expand_fill_type;
+  GimpAddMaskType           expand_mask_fill_type;
+
   GimpJitterOptions        *jitter_options;
 
-  gboolean                  dynamics_expanded;
+  gboolean                  dynamics_enabled;
   GimpFadeOptions          *fade_options;
   GimpGradientPaintOptions *gradient_options;
   GimpSmoothingOptions     *smoothing_options;
@@ -144,7 +149,7 @@ gboolean gimp_paint_options_get_gradient_color (GimpPaintOptions    *options,
                                                 GimpImage           *image,
                                                 gdouble              grad_point,
                                                 gdouble              pixel_dist,
-                                                GimpRGB             *color);
+                                                GeglColor          **color);
 
 GimpBrushApplicationMode
          gimp_paint_options_get_brush_mode     (GimpPaintOptions    *options);
@@ -165,6 +170,10 @@ void     gimp_paint_options_set_default_brush_spacing
 void     gimp_paint_options_set_default_brush_hardness
                                                (GimpPaintOptions    *options,
                                                 GimpBrush           *brush);
+
+gboolean gimp_paint_options_are_dynamics_enabled (GimpPaintOptions *paint_options);
+void     gimp_paint_options_enable_dynamics      (GimpPaintOptions *paint_options,
+                                                  gboolean          enable);
 
 gboolean gimp_paint_options_is_prop            (const gchar         *prop_name,
                                                 GimpContextPropMask  prop_mask);

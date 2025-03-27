@@ -22,52 +22,59 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
 /**
  * SECTION: gimpgradientselect
  * @title: gimpgradientselect
- * @short_description: Functions providing a gradient selection dialog.
+ * @short_description: Methods of a gradient chooser dialog
  *
- * Functions providing a gradient selection dialog.
+ * A dialog letting a user choose a gradient.  Read more at
+ * gimpfontselect.
  **/
 
 
 /**
  * gimp_gradients_popup:
- * @gradient_callback: The callback PDB proc to call when gradient selection is made.
+ * @gradient_callback: The callback PDB proc to call when user chooses a gradient.
  * @popup_title: Title of the gradient selection dialog.
- * @initial_gradient: The name of the gradient to set as the first selected.
- * @sample_size: Size of the sample to return when the gradient is changed.
+ * @initial_gradient: (nullable): The initial gradient choice.
+ * @parent_window: (nullable): An optional parent window handle for the popup to be set transient to.
  *
- * Invokes the Gimp gradients selection.
+ * Invokes the Gimp gradients selection dialog.
  *
- * This procedure opens the gradient selection dialog.
+ * Opens a dialog letting a user choose a gradient.
  *
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_gradients_popup (const gchar *gradient_callback,
-                      const gchar *popup_title,
-                      const gchar *initial_gradient,
-                      gint         sample_size)
+gimp_gradients_popup (const gchar  *gradient_callback,
+                      const gchar  *popup_title,
+                      GimpGradient *initial_gradient,
+                      GBytes       *parent_window)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-gradients-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, gradient_callback,
-                                    GIMP_PDB_STRING, popup_title,
-                                    GIMP_PDB_STRING, initial_gradient,
-                                    GIMP_PDB_INT32, sample_size,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, gradient_callback,
+                                          G_TYPE_STRING, popup_title,
+                                          GIMP_TYPE_GRADIENT, initial_gradient,
+                                          G_TYPE_BYTES, parent_window,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-gradients-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -78,25 +85,29 @@ gimp_gradients_popup (const gchar *gradient_callback,
  *
  * Close the gradient selection dialog.
  *
- * This procedure closes an opened gradient selection dialog.
+ * Closes an open gradient selection dialog.
  *
  * Returns: TRUE on success.
  **/
 gboolean
 gimp_gradients_close_popup (const gchar *gradient_callback)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-gradients-close-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, gradient_callback,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, gradient_callback,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-gradients-close-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -104,7 +115,7 @@ gimp_gradients_close_popup (const gchar *gradient_callback)
 /**
  * gimp_gradients_set_popup:
  * @gradient_callback: The name of the callback registered for this pop-up.
- * @gradient_name: The name of the gradient to set as selected.
+ * @gradient: The gradient to set as selected.
  *
  * Sets the current gradient in a gradient selection dialog.
  *
@@ -113,22 +124,26 @@ gimp_gradients_close_popup (const gchar *gradient_callback)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_gradients_set_popup (const gchar *gradient_callback,
-                          const gchar *gradient_name)
+gimp_gradients_set_popup (const gchar  *gradient_callback,
+                          GimpGradient *gradient)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-gradients-set-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, gradient_callback,
-                                    GIMP_PDB_STRING, gradient_name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, gradient_callback,
+                                          GIMP_TYPE_GRADIENT, gradient,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-gradients-set-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

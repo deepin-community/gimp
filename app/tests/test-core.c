@@ -137,7 +137,7 @@ rotate_non_overlapping (GimpTestFixture *fixture,
                                  0,
                                  FALSE);
 
-  gimp_item_rotate (GIMP_ITEM (layer), context, GIMP_ROTATE_90, 0., -10., TRUE);
+  gimp_item_rotate (GIMP_ITEM (layer), context, GIMP_ROTATE_DEGREES90, 0., -10., TRUE);
 
   g_assert_cmpint (result, ==, TRUE);
   g_assert_cmpint (gimp_image_get_n_layers (image), ==, 1);
@@ -238,24 +238,29 @@ static void
 white_graypoint_in_red_levels (GimpTestFixture *fixture,
                                gconstpointer    data)
 {
-  GimpRGB              black   = { 0, 0, 0, 0 };
-  GimpRGB              gray    = { 1, 1, 1, 1 };
-  GimpRGB              white   = { 1, 1, 1, 1 };
-  GimpHistogramChannel channel = GIMP_HISTOGRAM_RED;
-  GimpLevelsConfig    *config;
+  GeglColor            *black   = gegl_color_new ("transparent");
+  GeglColor            *gray    = gegl_color_new ("white");
+  GeglColor            *white   = gegl_color_new ("white");
+  GimpHistogramChannel  channel = GIMP_HISTOGRAM_RED;
+  GimpLevelsConfig     *config;
 
   config = g_object_new (GIMP_TYPE_LEVELS_CONFIG, NULL);
 
   gimp_levels_config_adjust_by_colors (config,
                                        channel,
-                                       &black,
-                                       &gray,
-                                       &white);
+                                       NULL,
+                                       black,
+                                       gray,
+                                       white);
 
   /* Make sure we didn't end up with an invalid gamma value */
   g_object_set (config,
                 "gamma", config->gamma[channel],
                 NULL);
+
+  g_clear_object (&black);
+  g_clear_object (&gray);
+  g_clear_object (&white);
 }
 
 int
@@ -267,7 +272,7 @@ main (int    argc,
 
   g_test_init (&argc, &argv, NULL);
 
-  gimp_test_utils_set_gimp2_directory ("GIMP_TESTING_ABS_TOP_SRCDIR",
+  gimp_test_utils_set_gimp3_directory ("GIMP_TESTING_ABS_TOP_SRCDIR",
                                        "app/tests/gimpdir");
 
   /* We share the same application instance across all tests */
@@ -283,7 +288,7 @@ main (int    argc,
   result = g_test_run ();
 
   /* Don't write files to the source dir */
-  gimp_test_utils_set_gimp2_directory ("GIMP_TESTING_ABS_TOP_BUILDDIR",
+  gimp_test_utils_set_gimp3_directory ("GIMP_TESTING_ABS_TOP_BUILDDIR",
                                        "app/tests/gimpdir-output");
 
   /* Exit so we don't break script-fu plug-in wire */

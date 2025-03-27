@@ -32,31 +32,30 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-G_GNUC_INTERNAL gint32 _gimp_channel_new               (gint32           image_ID,
-                                                        gint             width,
-                                                        gint             height,
-                                                        const gchar     *name,
-                                                        gdouble          opacity,
-                                                        const GimpRGB   *color);
-gint32                 gimp_channel_new_from_component (gint32           image_ID,
-                                                        GimpChannelType  component,
-                                                        const gchar     *name);
-gint32                 gimp_channel_copy               (gint32           channel_ID);
-gboolean               gimp_channel_combine_masks      (gint32           channel1_ID,
-                                                        gint32           channel2_ID,
-                                                        GimpChannelOps   operation,
-                                                        gint             offx,
-                                                        gint             offy);
-gboolean               gimp_channel_get_show_masked    (gint32           channel_ID);
-gboolean               gimp_channel_set_show_masked    (gint32           channel_ID,
-                                                        gboolean         show_masked);
-gdouble                gimp_channel_get_opacity        (gint32           channel_ID);
-gboolean               gimp_channel_set_opacity        (gint32           channel_ID,
-                                                        gdouble          opacity);
-gboolean               gimp_channel_get_color          (gint32           channel_ID,
-                                                        GimpRGB         *color);
-gboolean               gimp_channel_set_color          (gint32           channel_ID,
-                                                        const GimpRGB   *color);
+GimpChannel* gimp_channel_new                (GimpImage       *image,
+                                              const gchar     *name,
+                                              gint             width,
+                                              gint             height,
+                                              gdouble          opacity,
+                                              GeglColor       *color);
+GimpChannel* gimp_channel_new_from_component (GimpImage       *image,
+                                              GimpChannelType  component,
+                                              const gchar     *name);
+GimpChannel* gimp_channel_copy               (GimpChannel     *channel);
+gboolean     gimp_channel_combine_masks      (GimpChannel     *channel1,
+                                              GimpChannel     *channel2,
+                                              GimpChannelOps   operation,
+                                              gint             offx,
+                                              gint             offy);
+gboolean     gimp_channel_get_show_masked    (GimpChannel     *channel);
+gboolean     gimp_channel_set_show_masked    (GimpChannel     *channel,
+                                              gboolean         show_masked);
+gdouble      gimp_channel_get_opacity        (GimpChannel     *channel);
+gboolean     gimp_channel_set_opacity        (GimpChannel     *channel,
+                                              gdouble          opacity);
+GeglColor*   gimp_channel_get_color          (GimpChannel     *channel);
+gboolean     gimp_channel_set_color          (GimpChannel     *channel,
+                                              GeglColor       *color);
 
 
 G_END_DECLS

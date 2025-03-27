@@ -80,8 +80,7 @@ data_open_as_image_cmd_callback (GimpAction *action,
 
       image = file_open_with_display (context->gimp, context, NULL,
                                       file, FALSE,
-                                      G_OBJECT (gtk_widget_get_screen (widget)),
-                                      gimp_widget_get_monitor (widget),
+                                      G_OBJECT (gimp_widget_get_monitor (widget)),
                                       &status, &error);
 
       if (! image && status != GIMP_PDB_CANCEL)
@@ -293,16 +292,14 @@ data_edit_cmd_callback (GimpAction *action,
 
   if (data && gimp_data_factory_view_have (view, GIMP_OBJECT (data)))
     {
-      GdkScreen *screen  = gtk_widget_get_screen (GTK_WIDGET (view));
-      gint       monitor = gimp_widget_get_monitor (GTK_WIDGET (view));
-      GtkWidget *dockable;
-      GtkWidget *editor  = NULL;
+      GdkMonitor *monitor = gimp_widget_get_monitor (GTK_WIDGET (view));
+      GtkWidget  *dockable;
+      GtkWidget  *editor  = NULL;
 
       dockable =
         gimp_window_strategy_show_dockable_dialog (GIMP_WINDOW_STRATEGY (gimp_get_window_strategy (context->gimp)),
                                                    context->gimp,
                                                    gimp_dialog_factory_get_singleton (),
-                                                   screen,
                                                    monitor,
                                                    g_variant_get_string (value,
                                                                          NULL));

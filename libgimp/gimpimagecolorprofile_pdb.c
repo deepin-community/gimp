@@ -22,7 +22,7 @@
 
 #include "config.h"
 
-#include <string.h>
+#include "stamp-pdbgen.h"
 
 #include "gimp.h"
 
@@ -38,52 +38,44 @@
 
 /**
  * _gimp_image_get_color_profile:
- * @image_ID: The image.
- * @num_bytes: Number of bytes in the color_profile array.
+ * @image: The image.
  *
  * Returns the image's color profile
  *
  * This procedure returns the image's color profile, or NULL if the
  * image has no color profile assigned.
  *
- * Returns: The image's serialized color profile. The returned value
- * must be freed with g_free().
+ * Returns: (transfer full): The image's serialized color profile.
  *
  * Since: 2.10
  **/
-guint8 *
-_gimp_image_get_color_profile (gint32  image_ID,
-                               gint   *num_bytes)
+GBytes *
+_gimp_image_get_color_profile (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  guint8 *profile_data = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GBytes *profile_data = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-color-profile",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  *num_bytes = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-color-profile",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_bytes = return_vals[1].data.d_int32;
-      profile_data = g_new (guint8, *num_bytes);
-      memcpy (profile_data,
-              return_vals[2].data.d_int8array,
-              *num_bytes * sizeof (guint8));
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    profile_data = GIMP_VALUES_DUP_BYTES (return_vals, 1);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return profile_data;
 }
 
 /**
  * _gimp_image_get_effective_color_profile:
- * @image_ID: The image.
- * @num_bytes: Number of bytes in the color_profile array.
+ * @image: The image.
  *
  * Returns the color profile that is used for the image
  *
@@ -93,119 +85,391 @@ _gimp_image_get_color_profile (gint32  image_ID,
  * or a generated default RGB or grayscale profile, according to the
  * image's type.
  *
- * Returns: The image's serialized color profile. The returned value
- * must be freed with g_free().
+ * Returns: (transfer full): The image's serialized color profile.
  *
  * Since: 2.10
  **/
-guint8 *
-_gimp_image_get_effective_color_profile (gint32  image_ID,
-                                         gint   *num_bytes)
+GBytes *
+_gimp_image_get_effective_color_profile (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  guint8 *profile_data = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GBytes *profile_data = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-effective-color-profile",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  *num_bytes = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-effective-color-profile",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_bytes = return_vals[1].data.d_int32;
-      profile_data = g_new (guint8, *num_bytes);
-      memcpy (profile_data,
-              return_vals[2].data.d_int8array,
-              *num_bytes * sizeof (guint8));
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    profile_data = GIMP_VALUES_DUP_BYTES (return_vals, 1);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return profile_data;
 }
 
 /**
  * _gimp_image_set_color_profile:
- * @image_ID: The image.
- * @num_bytes: Number of bytes in the color_profile array.
+ * @image: The image.
  * @color_profile: The new serialized color profile.
  *
  * Sets the image's color profile
  *
  * This procedure sets the image's color profile, or unsets it if NULL
  * is passed as 'color_profile'. This procedure does no color
- * conversion.
+ * conversion. However, it will change the pixel format of all layers
+ * to contain the babl space matching the profile. You must call this
+ * procedure before adding layers to the image.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.10
  **/
 gboolean
-_gimp_image_set_color_profile (gint32        image_ID,
-                               gint          num_bytes,
-                               const guint8 *color_profile)
+_gimp_image_set_color_profile (GimpImage *image,
+                               GBytes    *color_profile)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-set-color-profile",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, num_bytes,
-                                    GIMP_PDB_INT8ARRAY, color_profile,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_BYTES, color_profile,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-color-profile",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_set_color_profile_from_file:
- * @image_ID: The image.
- * @uri: The URI of the file containing the new color profile.
+ * @image: The image.
+ * @file: The file containing the new color profile.
  *
  * Sets the image's color profile from an ICC file
  *
  * This procedure sets the image's color profile from a file containing
- * an ICC profile, or unsets it if NULL is passed as 'uri'. This
- * procedure does no color conversion.
+ * an ICC profile, or unsets it if NULL is passed as 'file'. This
+ * procedure does no color conversion. However, it will change the
+ * pixel format of all layers to contain the babl space matching the
+ * profile. You must call this procedure before adding layers to the
+ * image.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.10
  **/
 gboolean
-gimp_image_set_color_profile_from_file (gint32       image_ID,
-                                        const gchar *uri)
+gimp_image_set_color_profile_from_file (GimpImage *image,
+                                        GFile     *file)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-set-color-profile-from-file",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_STRING, uri,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_FILE, file,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-color-profile-from-file",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * _gimp_image_get_simulation_profile:
+ * @image: The image.
+ *
+ * Returns the image's simulation color profile
+ *
+ * This procedure returns the image's simulation color profile, or NULL
+ * if the image has no simulation color profile assigned.
+ *
+ * Returns: (transfer full): The image's serialized simulation color profile.
+ *
+ * Since: 3.0
+ **/
+GBytes *
+_gimp_image_get_simulation_profile (GimpImage *image)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GBytes *profile_data = NULL;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-simulation-profile",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    profile_data = GIMP_VALUES_DUP_BYTES (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return profile_data;
+}
+
+/**
+ * _gimp_image_set_simulation_profile:
+ * @image: The image.
+ * @color_profile: The new serialized simulation color profile.
+ *
+ * Sets the image's simulation color profile
+ *
+ * This procedure sets the image's simulation color profile, or unsets
+ * it if NULL is passed as 'color_profile'. This procedure does no
+ * color conversion.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+_gimp_image_set_simulation_profile (GimpImage *image,
+                                    GBytes    *color_profile)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_BYTES, color_profile,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-simulation-profile",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_image_set_simulation_profile_from_file:
+ * @image: The image.
+ * @file: The file containing the new simulation color profile.
+ *
+ * Sets the image's simulation color profile from an ICC file
+ *
+ * This procedure sets the image's simulation color profile from a file
+ * containing an ICC profile, or unsets it if NULL is passed as 'file'.
+ * This procedure does no color conversion.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_image_set_simulation_profile_from_file (GimpImage *image,
+                                             GFile     *file)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_FILE, file,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-simulation-profile-from-file",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_image_get_simulation_intent:
+ * @image: The image.
+ *
+ * Returns the image's simulation rendering intent
+ *
+ * This procedure returns the image's simulation rendering intent.
+ *
+ * Returns: The image's simulation rendering intent.
+ *
+ * Since: 3.0
+ **/
+GimpColorRenderingIntent
+gimp_image_get_simulation_intent (GimpImage *image)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpColorRenderingIntent intent = 0;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-simulation-intent",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    intent = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return intent;
+}
+
+/**
+ * gimp_image_set_simulation_intent:
+ * @image: The image.
+ * @intent: A GimpColorRenderingIntent.
+ *
+ * Sets the image's simulation rendering intent
+ *
+ * This procedure sets the image's simulation rendering intent.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_image_set_simulation_intent (GimpImage                *image,
+                                  GimpColorRenderingIntent  intent)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_COLOR_RENDERING_INTENT, intent,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-simulation-intent",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_image_get_simulation_bpc:
+ * @image: The image.
+ *
+ * Returns whether the image has Black Point Compensation enabled for
+ * its simulation
+ *
+ * This procedure returns whether the image has Black Point
+ * Compensation enabled for its simulation
+ *
+ * Returns: The Black Point Compensation status.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_image_get_simulation_bpc (GimpImage *image)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean bpc = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-simulation-bpc",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    bpc = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return bpc;
+}
+
+/**
+ * gimp_image_set_simulation_bpc:
+ * @image: The image.
+ * @bpc: The Black Point Compensation status.
+ *
+ * Sets whether the image has Black Point Compensation enabled for its
+ * simulation
+ *
+ * This procedure whether the image has Black Point Compensation
+ * enabled for its simulation
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_image_set_simulation_bpc (GimpImage *image,
+                               gboolean   bpc)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_BOOLEAN, bpc,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-simulation-bpc",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * _gimp_image_convert_color_profile:
- * @image_ID: The image.
- * @num_bytes: Number of bytes in the color_profile array.
+ * @image: The image.
  * @color_profile: The serialized color profile.
  * @intent: Rendering intent.
  * @bpc: Black point compensation.
@@ -222,36 +486,38 @@ gimp_image_set_color_profile_from_file (gint32       image_ID,
  * Since: 2.10
  **/
 gboolean
-_gimp_image_convert_color_profile (gint32                    image_ID,
-                                   gint                      num_bytes,
-                                   const guint8             *color_profile,
+_gimp_image_convert_color_profile (GimpImage                *image,
+                                   GBytes                   *color_profile,
                                    GimpColorRenderingIntent  intent,
                                    gboolean                  bpc)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-convert-color-profile",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, num_bytes,
-                                    GIMP_PDB_INT8ARRAY, color_profile,
-                                    GIMP_PDB_INT32, intent,
-                                    GIMP_PDB_INT32, bpc,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_BYTES, color_profile,
+                                          GIMP_TYPE_COLOR_RENDERING_INTENT, intent,
+                                          G_TYPE_BOOLEAN, bpc,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-convert-color-profile",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_convert_color_profile_from_file:
- * @image_ID: The image.
- * @uri: The URI of the file containing the new color profile.
+ * @image: The image.
+ * @file: The file containing the new color profile.
  * @intent: Rendering intent.
  * @bpc: Black point compensation.
  *
@@ -259,7 +525,7 @@ _gimp_image_convert_color_profile (gint32                    image_ID,
  *
  * This procedure converts from the image's color profile (or the
  * default RGB or grayscale profile if none is set) to an ICC profile
- * specified by 'uri'. Only RGB and grayscale color profiles are
+ * specified by 'file'. Only RGB and grayscale color profiles are
  * accepted, according to the image's type.
  *
  * Returns: TRUE on success.
@@ -267,26 +533,30 @@ _gimp_image_convert_color_profile (gint32                    image_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_image_convert_color_profile_from_file (gint32                    image_ID,
-                                            const gchar              *uri,
+gimp_image_convert_color_profile_from_file (GimpImage                *image,
+                                            GFile                    *file,
                                             GimpColorRenderingIntent  intent,
                                             gboolean                  bpc)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-convert-color-profile-from-file",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_STRING, uri,
-                                    GIMP_PDB_INT32, intent,
-                                    GIMP_PDB_INT32, bpc,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_FILE, file,
+                                          GIMP_TYPE_COLOR_RENDERING_INTENT, intent,
+                                          G_TYPE_BOOLEAN, bpc,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-convert-color-profile-from-file",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

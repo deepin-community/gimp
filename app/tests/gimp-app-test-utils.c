@@ -20,11 +20,15 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "display/display-types.h"
 
 #include "display/gimpdisplay.h"
 #include "display/gimpdisplayshell.h"
 #include "display/gimpimagewindow.h"
+
+#include "menus/menus.h"
 
 #include "widgets/gimpuimanager.h"
 #include "widgets/gimpdialogfactory.h"
@@ -38,16 +42,6 @@
 
 #include "gimp-app-test-utils.h"
 
-#ifdef G_OS_WIN32
-/* SendInput() requirement is Windows 2000 pro or over.
- * We may need to set WINVER to make sure the compiler does not try to
- * compile for on older version of win32, thus breaking the build.
- * See
- * http://msdn.microsoft.com/en-us/library/aa383745%28v=vs.85%29.aspx#setting_winver_or__win32_winnt
- */
-#define WINVER 0x0500
-#include <windows.h>
-#endif /* G_OS_WIN32 */
 
 #ifdef GDK_WINDOWING_QUARTZ
 // only to get keycode definitions from HIToolbox/Events.h
@@ -132,21 +126,21 @@ gimp_test_utils_set_env_to_subpath (const gchar *root_env_var1,
 
 
 /**
- * gimp_test_utils_set_gimp2_directory:
+ * gimp_test_utils_set_gimp3_directory:
  * @root_env_var: Either "GIMP_TESTING_ABS_TOP_SRCDIR" or
  *                "GIMP_TESTING_ABS_TOP_BUILDDIR"
  * @subdir:       Subdir, may be %NULL
  *
- * Sets GIMP2_DIRECTORY to the source dir @root_env_var/@subdir. The
+ * Sets GIMP3_DIRECTORY to the source dir @root_env_var/@subdir. The
  * environment variables is set up by the test runner, see Makefile.am
  **/
 void
-gimp_test_utils_set_gimp2_directory (const gchar *root_env_var,
+gimp_test_utils_set_gimp3_directory (const gchar *root_env_var,
                                      const gchar *subdir)
 {
   gimp_test_utils_set_env_to_subdir (root_env_var,
                                      subdir,
-                                     "GIMP2_DIRECTORY" /*target_env_var*/);
+                                     "GIMP3_DIRECTORY" /*target_env_var*/);
 }
 
 /**
@@ -186,7 +180,7 @@ gimp_test_utils_create_image (Gimp *gimp,
   GimpLayer *layer;
 
   image = gimp_image_new (gimp, width, height,
-                          GIMP_RGB, GIMP_PRECISION_U8_GAMMA);
+                          GIMP_RGB, GIMP_PRECISION_U8_NON_LINEAR);
 
   layer = gimp_layer_new (image,
                           width,
@@ -204,9 +198,9 @@ gimp_test_utils_create_image (Gimp *gimp,
 
   gimp_create_display (gimp,
                        image,
-                       GIMP_UNIT_PIXEL,
+                       gimp_unit_pixel (),
                        1.0 /*scale*/,
-                       NULL, 0);
+                       NULL);
 }
 
 /**
@@ -220,72 +214,7 @@ void
 gimp_test_utils_synthesize_key_event (GtkWidget *widget,
                                       guint      keyval)
 {
-#if defined G_OS_WIN32 && ! GTK_CHECK_VERSION (2, 24, 25)
-  /* gdk_test_simulate_key() has no implementation for win32 until
-   * GTK+ 2.24.25.
-   * TODO: remove the below hack when our GTK+ requirement is over 2.24.25. */
-  GdkKeymapKey *keys   = NULL;
-  gint          n_keys = 0;
-  INPUT         ip;
-  gint          i;
-
-  ip.type = INPUT_KEYBOARD;
-  ip.ki.wScan = 0;
-  ip.ki.time = 0;
-  ip.ki.dwExtraInfo = 0;
-  if (gdk_keymap_get_entries_for_keyval (gdk_keymap_get_default (), keyval, &keys, &n_keys))
-    {
-      for (i = 0; i < n_keys; i++)
-        {
-          ip.ki.dwFlags = 0;
-          /* AltGr press. */
-          if (keys[i].group)
-            {
-              /* According to some virtualbox code I found, AltGr is
-               * simulated on win32 with LCtrl+RAlt */
-              ip.ki.wVk = VK_CONTROL;
-              SendInput(1, &ip, sizeof(INPUT));
-              ip.ki.wVk = VK_MENU;
-              SendInput(1, &ip, sizeof(INPUT));
-            }
-          /* Shift press. */
-          if (keys[i].level)
-            {
-              ip.ki.wVk = VK_SHIFT;
-              SendInput(1, &ip, sizeof(INPUT));
-            }
-          /* Key pressed. */
-          ip.ki.wVk = keys[i].keycode;
-          SendInput(1, &ip, sizeof(INPUT));
-
-          ip.ki.dwFlags = KEYEVENTF_KEYUP;
-          /* Key released. */
-          SendInput(1, &ip, sizeof(INPUT));
-          /* Shift release. */
-          if (keys[i].level)
-            {
-              ip.ki.wVk = VK_SHIFT;
-              SendInput(1, &ip, sizeof(INPUT));
-            }
-          /* AltrGr release. */
-          if (keys[i].group)
-            {
-              ip.ki.wVk = VK_MENU;
-              SendInput(1, &ip, sizeof(INPUT));
-              ip.ki.wVk = VK_CONTROL;
-              SendInput(1, &ip, sizeof(INPUT));
-            }
-          /* No need to loop for alternative keycodes. We want only one
-           * key generated. */
-          break;
-        }
-      g_free (keys);
-    }
-  else
-    {
-      g_warning ("%s: no win32 key mapping found for keyval %d.", G_STRFUNC, keyval);
-    }
-#elif defined(GDK_WINDOWING_QUARTZ)
+#if defined(GDK_WINDOWING_QUARTZ)
 
 GdkKeymapKey *keys   = NULL;
 gint          n_keys = 0;
@@ -354,18 +283,11 @@ else
     g_warning ("%s: no macOS key mapping found for keyval %d.", G_STRFUNC, keyval);
   }
 
-#else /* G_OS_WIN32  && ! GTK_CHECK_VERSION (2, 24, 25) && ! GDK_WINDOWING_QUARTZ */
-  gdk_test_simulate_key (gtk_widget_get_window (widget),
-                         -1, -1, /*x, y*/
-                         keyval,
-                         0 /*modifiers*/,
-                         GDK_KEY_PRESS);
-  gdk_test_simulate_key (gtk_widget_get_window (widget),
-                         -1, -1, /*x, y*/
-                         keyval,
-                         0 /*modifiers*/,
-                         GDK_KEY_RELEASE);
-#endif /* G_OS_WIN32  && ! GTK_CHECK_VERSION (2, 24, 25) */
+#else /* ! GDK_WINDOWING_QUARTZ */
+
+  gtk_test_widget_send_key(widget, keyval, 0);
+
+#endif /* ! GDK_WINDOWING_QUARTZ */
 }
 
 /**
@@ -381,26 +303,7 @@ else
 GimpUIManager *
 gimp_test_utils_get_ui_manager (Gimp *gimp)
 {
-  GimpDisplay       *display      = NULL;
-  GimpDisplayShell  *shell        = NULL;
-  GtkWidget         *toplevel     = NULL;
-  GimpImageWindow   *image_window = NULL;
-  GimpUIManager     *ui_manager   = NULL;
-
-  display = GIMP_DISPLAY (gimp_get_empty_display (gimp));
-
-  /* If there were not empty display, assume that there is at least
-   * one image display and use that
-   */
-  if (! display)
-    display = GIMP_DISPLAY (gimp_get_display_iter (gimp)->data);
-
-  shell            = gimp_display_get_shell (display);
-  toplevel         = gtk_widget_get_toplevel (GTK_WIDGET (shell));
-  image_window     = GIMP_IMAGE_WINDOW (toplevel);
-  ui_manager       = gimp_image_window_get_ui_manager (image_window);
-
-  return ui_manager;
+  return menus_get_image_manager_singleton (gimp);
 }
 
 /**
@@ -431,14 +334,15 @@ gimp_test_utils_create_image_from_dialog (Gimp *gimp)
   /* Get the GtkWindow of the dialog */
   new_image_dialog =
     gimp_dialog_factory_dialog_raise (gimp_dialog_factory_get_singleton (),
-                                      gdk_screen_get_default (), 0,
+                                      gdk_display_get_monitor (gdk_display_get_default (), 0),
+                                      NULL,
                                       "gimp-image-new-dialog",
                                       -1 /*view_size*/);
 
-  /* Press the focused widget, it should be the Ok button. It will
-   * take a while for the image to be created so loop for a while
+  /* Press the OK button. It will take a while for the image to be
+   * created so loop for a while
    */
-  gtk_widget_activate (gtk_window_get_focus (GTK_WINDOW (new_image_dialog)));
+  gtk_dialog_response (GTK_DIALOG (new_image_dialog), GTK_RESPONSE_OK);
   do
     {
       g_usleep (20 * 1000);

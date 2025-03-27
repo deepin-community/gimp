@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -36,7 +38,7 @@
 
 /**
  * gimp_image_resize:
- * @image_ID: The image.
+ * @image: The image.
  * @new_width: New image width.
  * @new_height: New image height.
  * @offx: x offset between upper left corner of old and new images: (new - old).
@@ -55,35 +57,39 @@
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_resize (gint32 image_ID,
-                   gint   new_width,
-                   gint   new_height,
-                   gint   offx,
-                   gint   offy)
+gimp_image_resize (GimpImage *image,
+                   gint       new_width,
+                   gint       new_height,
+                   gint       offx,
+                   gint       offy)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-resize",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, new_width,
-                                    GIMP_PDB_INT32, new_height,
-                                    GIMP_PDB_INT32, offx,
-                                    GIMP_PDB_INT32, offy,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_INT, new_width,
+                                          G_TYPE_INT, new_height,
+                                          G_TYPE_INT, offx,
+                                          G_TYPE_INT, offy,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-resize",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_resize_to_layers:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Resize the image to fit all layers.
  *
@@ -97,27 +103,31 @@ gimp_image_resize (gint32 image_ID,
  * Since: 2.2
  **/
 gboolean
-gimp_image_resize_to_layers (gint32 image_ID)
+gimp_image_resize_to_layers (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-resize-to-layers",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-resize-to-layers",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_scale:
- * @image_ID: The image.
+ * @image: The image.
  * @new_width: New image width.
  * @new_height: New image height.
  *
@@ -132,69 +142,35 @@ gimp_image_resize_to_layers (gint32 image_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_scale (gint32 image_ID,
-                  gint   new_width,
-                  gint   new_height)
+gimp_image_scale (GimpImage *image,
+                  gint       new_width,
+                  gint       new_height)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-scale",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, new_width,
-                                    GIMP_PDB_INT32, new_height,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_INT, new_width,
+                                          G_TYPE_INT, new_height,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-scale",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
-  return success;
-}
-
-/**
- * gimp_image_scale_full:
- * @image_ID: The image.
- * @new_width: New image width.
- * @new_height: New image height.
- * @interpolation: Type of interpolation.
- *
- * Deprecated: Use gimp_image_scale() instead.
- *
- * Returns: TRUE on success.
- *
- * Since: 2.6
- **/
-gboolean
-gimp_image_scale_full (gint32                image_ID,
-                       gint                  new_width,
-                       gint                  new_height,
-                       GimpInterpolationType interpolation)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
-
-  return_vals = gimp_run_procedure ("gimp-image-scale-full",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, new_width,
-                                    GIMP_PDB_INT32, new_height,
-                                    GIMP_PDB_INT32, interpolation,
-                                    GIMP_PDB_END);
-
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_crop:
- * @image_ID: The image.
+ * @image: The image.
  * @new_width: New image width: (0 < new_width <= width).
  * @new_height: New image height: (0 < new_height <= height).
  * @offx: X offset: (0 <= offx <= (width - new_width)).
@@ -212,35 +188,39 @@ gimp_image_scale_full (gint32                image_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_crop (gint32 image_ID,
-                 gint   new_width,
-                 gint   new_height,
-                 gint   offx,
-                 gint   offy)
+gimp_image_crop (GimpImage *image,
+                 gint       new_width,
+                 gint       new_height,
+                 gint       offx,
+                 gint       offy)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-crop",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, new_width,
-                                    GIMP_PDB_INT32, new_height,
-                                    GIMP_PDB_INT32, offx,
-                                    GIMP_PDB_INT32, offy,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_INT, new_width,
+                                          G_TYPE_INT, new_height,
+                                          G_TYPE_INT, offx,
+                                          G_TYPE_INT, offy,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-crop",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_flip:
- * @image_ID: The image.
+ * @image: The image.
  * @flip_type: Type of flip.
  *
  * Flips the image horizontally or vertically.
@@ -250,29 +230,33 @@ gimp_image_crop (gint32 image_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_flip (gint32              image_ID,
-                 GimpOrientationType flip_type)
+gimp_image_flip (GimpImage           *image,
+                 GimpOrientationType  flip_type)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-flip",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, flip_type,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_ORIENTATION_TYPE, flip_type,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-flip",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_rotate:
- * @image_ID: The image.
+ * @image: The image.
  * @rotate_type: Angle of rotation.
  *
  * Rotates the image by the specified degrees.
@@ -282,22 +266,26 @@ gimp_image_flip (gint32              image_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_rotate (gint32           image_ID,
-                   GimpRotationType rotate_type)
+gimp_image_rotate (GimpImage        *image,
+                   GimpRotationType  rotate_type)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-rotate",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, rotate_type,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_ROTATION_TYPE, rotate_type,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-rotate",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

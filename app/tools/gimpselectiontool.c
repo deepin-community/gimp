@@ -78,9 +78,6 @@ static gboolean   gimp_selection_tool_check               (GimpSelectionTool  *s
 static gboolean   gimp_selection_tool_have_selection      (GimpSelectionTool  *sel_tool,
                                                            GimpDisplay        *display);
 
-static void       gimp_selection_tool_set_undo_ptr        (GimpUndo          **undo_ptr,
-                                                           GimpUndo           *undo);
-
 
 G_DEFINE_TYPE (GimpSelectionTool, gimp_selection_tool, GIMP_TYPE_DRAW_TOOL)
 
@@ -225,7 +222,7 @@ gimp_selection_tool_oper_update (GimpTool         *tool,
   GimpSelectionTool    *selection_tool = GIMP_SELECTION_TOOL (tool);
   GimpSelectionOptions *options        = GIMP_SELECTION_TOOL_GET_OPTIONS (tool);
   GimpImage            *image;
-  GimpDrawable         *drawable;
+  GList                *drawables;
   GimpLayer            *layer;
   GimpLayer            *floating_sel;
   GdkModifierType       extend_mask;
@@ -235,7 +232,7 @@ gimp_selection_tool_oper_update (GimpTool         *tool,
   gboolean              move_floating_sel = FALSE;
 
   image        = gimp_display_get_image (display);
-  drawable     = gimp_image_get_active_drawable (image);
+  drawables    = gimp_image_get_selected_drawables (image);
   layer        = gimp_image_pick_layer (image, coords->x, coords->y, NULL);
   floating_sel = gimp_image_get_floating_selection (image);
 
@@ -244,19 +241,29 @@ gimp_selection_tool_oper_update (GimpTool         *tool,
 
   have_selection = gimp_selection_tool_have_selection (selection_tool, display);
 
-  if (drawable)
+  if (drawables)
     {
       if (floating_sel)
         {
           if (layer == floating_sel)
             move_floating_sel = TRUE;
         }
-      else if (have_selection &&
-               gimp_item_mask_intersect (GIMP_ITEM (drawable),
-                                         NULL, NULL, NULL, NULL))
+      else if (have_selection)
         {
-          move_layer = TRUE;
+          GList *iter;
+
+          for (iter = drawables; iter; iter = iter->next)
+            {
+              if (gimp_item_mask_intersect (GIMP_ITEM (iter->data),
+                                            NULL, NULL, NULL, NULL))
+                {
+                  move_layer = TRUE;
+                  break;
+                }
+            }
         }
+
+      g_list_free (drawables);
     }
 
   selection_tool->function = SELECTION_SELECT;
@@ -467,7 +474,7 @@ static void
 gimp_selection_tool_commit (GimpSelectionTool *sel_tool)
 {
   /* make sure gimp_selection_tool_halt() doesn't undo the change, if any */
-  gimp_selection_tool_set_undo_ptr (&sel_tool->undo, NULL);
+  g_clear_weak_pointer (&sel_tool->undo);
 }
 
 static void
@@ -499,8 +506,8 @@ gimp_selection_tool_halt (GimpSelectionTool *sel_tool,
         }
 
       /* reset the automatic undo/redo mechanism */
-      gimp_selection_tool_set_undo_ptr (&sel_tool->undo, NULL);
-      gimp_selection_tool_set_undo_ptr (&sel_tool->redo, NULL);
+      g_clear_weak_pointer (&sel_tool->undo);
+      g_clear_weak_pointer (&sel_tool->redo);
     }
 }
 
@@ -509,9 +516,8 @@ gimp_selection_tool_check (GimpSelectionTool  *sel_tool,
                            GimpDisplay        *display,
                            GError            **error)
 {
-  GimpSelectionOptions *options  = GIMP_SELECTION_TOOL_GET_OPTIONS (sel_tool);
-  GimpImage            *image    = gimp_display_get_image (display);
-  GimpDrawable         *drawable = gimp_image_get_active_drawable (image);
+  GimpSelectionOptions *options   = GIMP_SELECTION_TOOL_GET_OPTIONS (sel_tool);
+  GimpImage            *image     = gimp_display_get_image (display);
 
   switch (sel_tool->function)
     {
@@ -548,22 +554,35 @@ gimp_selection_tool_check (GimpSelectionTool  *sel_tool,
 
     case SELECTION_MOVE:
     case SELECTION_MOVE_COPY:
-      if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)))
         {
-          g_set_error (error, GIMP_ERROR, GIMP_FAILED,
-                       _("Cannot modify the pixels of layer groups."));
+          GList    *drawables   = gimp_image_get_selected_drawables (image);
+          GimpItem *locked_item = NULL;
+          GList    *iter;
 
-          return FALSE;
-        }
-      else if (gimp_item_is_content_locked (GIMP_ITEM (drawable)))
-        {
-          g_set_error (error, GIMP_ERROR, GIMP_FAILED,
-                       _("The active layer's pixels are locked."));
+          for (iter = drawables; iter; iter = iter->next)
+            {
+              if (gimp_viewable_get_children (iter->data))
+                {
+                  g_set_error (error, GIMP_ERROR, GIMP_FAILED,
+                               _("Cannot modify the pixels of layer groups."));
 
-          if (error)
-            gimp_tools_blink_lock_box (display->gimp, GIMP_ITEM (drawable));
+                  g_list_free (drawables);
+                  return FALSE;
+                }
+              else if (gimp_item_is_content_locked (iter->data, &locked_item))
+                {
+                  g_set_error (error, GIMP_ERROR, GIMP_FAILED,
+                               _("A selected item's pixels are locked."));
 
-          return FALSE;
+                  if (error)
+                    gimp_tools_blink_lock_box (display->gimp, locked_item);
+
+                  g_list_free (drawables);
+                  return FALSE;
+                }
+            }
+
+          g_list_free (drawables);
         }
       break;
 
@@ -580,25 +599,6 @@ gimp_selection_tool_have_selection (GimpSelectionTool *sel_tool,
 {
   return GIMP_SELECTION_TOOL_GET_CLASS (sel_tool)->have_selection (sel_tool,
                                                                    display);
-}
-
-static void
-gimp_selection_tool_set_undo_ptr (GimpUndo **undo_ptr,
-                                  GimpUndo  *undo)
-{
-  if (*undo_ptr)
-    {
-      g_object_remove_weak_pointer (G_OBJECT (*undo_ptr),
-                                    (gpointer *) undo_ptr);
-    }
-
-  *undo_ptr = undo;
-
-  if (*undo_ptr)
-    {
-      g_object_add_weak_pointer (G_OBJECT (*undo_ptr),
-                                 (gpointer *) undo_ptr);
-    }
 }
 
 
@@ -627,6 +627,7 @@ gimp_selection_tool_start_edit (GimpSelectionTool *sel_tool,
     {
       gimp_tool_message_literal (tool, display, error->message);
 
+      gimp_tools_show_tool_options (display->gimp);
       gimp_widget_blink (options->mode_box);
 
       g_clear_error (&error);
@@ -707,7 +708,7 @@ gimp_selection_tool_start_change (GimpSelectionTool *sel_tool,
 
   if (create)
     {
-      gimp_selection_tool_set_undo_ptr (&sel_tool->undo, NULL);
+      g_clear_weak_pointer (&sel_tool->undo);
     }
   else
     {
@@ -725,12 +726,11 @@ gimp_selection_tool_start_change (GimpSelectionTool *sel_tool,
 
           gimp_tool_control_pop_preserve (tool->control);
 
-          gimp_selection_tool_set_undo_ptr (&sel_tool->undo, NULL);
+          g_clear_weak_pointer (&sel_tool->undo);
 
           /* we will need to redo if the user cancels or executes */
-          gimp_selection_tool_set_undo_ptr (
-            &sel_tool->redo,
-            gimp_undo_stack_peek (redo_stack));
+          g_set_weak_pointer (&sel_tool->redo,
+                              gimp_undo_stack_peek (redo_stack));
         }
 
       /* if the operation is "Replace", turn off the marching ants,
@@ -749,9 +749,8 @@ gimp_selection_tool_start_change (GimpSelectionTool *sel_tool,
         }
     }
 
-  gimp_selection_tool_set_undo_ptr (
-    &sel_tool->undo,
-    gimp_undo_stack_peek (undo_stack));
+  g_set_weak_pointer (&sel_tool->undo,
+                      gimp_undo_stack_peek (undo_stack));
 }
 
 void
@@ -791,13 +790,12 @@ gimp_selection_tool_end_change (GimpSelectionTool *sel_tool,
 
           gimp_tool_control_pop_preserve (tool->control);
 
-          gimp_selection_tool_set_undo_ptr (
-            &sel_tool->undo,
-            gimp_undo_stack_peek (undo_stack));
+          g_set_weak_pointer (&sel_tool->undo,
+                              gimp_undo_stack_peek (undo_stack));
         }
       else
         {
-          gimp_selection_tool_set_undo_ptr (&sel_tool->undo, NULL);
+          g_clear_weak_pointer (&sel_tool->undo);
         }
     }
   else
@@ -808,12 +806,12 @@ gimp_selection_tool_end_change (GimpSelectionTool *sel_tool,
        * we actually selected something
        */
       if (undo && undo != sel_tool->undo)
-        gimp_selection_tool_set_undo_ptr (&sel_tool->undo, undo);
+        g_set_weak_pointer (&sel_tool->undo, undo);
       else
-        gimp_selection_tool_set_undo_ptr (&sel_tool->undo, NULL);
+        g_clear_weak_pointer (&sel_tool->undo);
     }
 
-  gimp_selection_tool_set_undo_ptr (&sel_tool->redo, NULL);
+  g_clear_weak_pointer (&sel_tool->redo);
 
   if (sel_tool->idle_id)
     {

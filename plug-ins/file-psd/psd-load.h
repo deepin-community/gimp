@@ -22,11 +22,24 @@
 #define __PSD_LOAD_H__
 
 
-gint32  load_image (const gchar  *filename,
-                    gboolean      merged_image_only,
-                    gboolean     *resolution_loaded,
-                    gboolean     *profile_loaded,
-                    GError      **error);
+GimpImage * load_image  (GFile        *file,
+                         gboolean      merged_image_only,
+                         gboolean     *resolution_loaded,
+                         gboolean     *profile_loaded,
+                         PSDSupport   *unsupported_features,
+                         GError      **error);
+
+GimpImage * load_image_metadata
+                        (GFile        *file,
+                         gint          data_length,
+                         GimpImage    *image,
+                         gboolean      for_layers,
+                         gboolean      is_cmyk,
+                         PSDSupport   *unsupported_features,
+                         GError      **error);
+
+void        load_dialog (const gchar  *title,
+                         PSDSupport   *unsupported_features);
 
 
 #endif /* __PSD_LOAD_H__ */

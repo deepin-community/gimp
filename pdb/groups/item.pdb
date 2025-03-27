@@ -16,19 +16,24 @@
 
 # "Perlized" from C source by Manish Singh <yosh@gimp.org>
 
-sub item_is_valid {
-    $blurb = 'Returns TRUE if the item is valid.';
+sub item_id_is_valid {
+    $blurb = 'Returns %TRUE if the item ID is valid.';
 
     $help = <<'HELP';
 This procedure checks if the given item ID is valid and refers to an
 existing item.
+
+
+*Note*: in most use cases, you should not use this function. If you got a
+[class@Gimp.Item] from the API, you should trust it is valid. This
+function is mostly for internal usage.
 HELP
 
-    &neo_pdb_misc('2007', '2.8');
+    &neo_pdb_misc('2007', '3.0');
 
     @inargs = (
-	{ name => 'item', type => 'item', no_validate => 1,
-	  desc => 'The item to check' }
+	{ name => 'item_id', type => 'int32',
+	  desc => 'The item ID to check' }
     );
 
     @outargs = (
@@ -39,8 +44,313 @@ HELP
     %invoke = (
 	code => <<'CODE'
 {
+  GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
   valid = (GIMP_IS_ITEM (item) &&
            ! gimp_item_is_removed (GIMP_ITEM (item)));
+}
+CODE
+    );
+}
+
+sub item_id_is_drawable {
+    $blurb = 'Returns whether the item ID is a drawable.';
+
+    $help = <<'HELP';
+This procedure returns %TRUE if the specified item ID is a drawable.
+
+
+*Note*: in most use cases, you should not use this function. See
+[func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+HELP
+
+    &std_pdb_misc;
+    $since = '3.0';
+
+    @inargs = (
+	{ name => 'item_id', type => 'int32',
+	  desc => 'The item ID' }
+    );
+
+    @outargs = (
+	{ name => 'drawable', type => 'boolean',
+	  desc => 'TRUE if the item ID is a drawable, FALSE otherwise' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+  drawable = (GIMP_IS_DRAWABLE (item) &&
+              ! gimp_item_is_removed (item));
+}
+CODE
+    );
+}
+
+sub item_id_is_layer {
+    $blurb = 'Returns whether the item ID is a layer.';
+
+    $help = <<'HELP';
+This procedure returns %TRUE if the specified item ID is a layer.
+
+
+*Note*: in most use cases, you should not use this function. If the goal
+is to verify the accurate type for a [class@Gimp.Item], you should
+either use [method@Gimp.Item.is_layer] or the specific type-checking
+methods for the used language.
+
+
+For instance, in C:
+
+```C
+if (GIMP_IS_LAYER (item))
+  do_something ();
+```
+
+Or in the Python binding, you could run:
+
+```py3
+if isinstance(item, Gimp.Layer):
+  do_something()
+```
+HELP
+
+    &std_pdb_misc;
+    $since = '3.0';
+
+    @inargs = (
+	{ name => 'item_id', type => 'int32',
+	  desc => 'The item ID' }
+    );
+
+    @outargs = (
+	{ name => 'layer', type => 'boolean',
+	  desc => 'TRUE if the item is a layer, FALSE otherwise' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+  layer = (GIMP_IS_LAYER (item) &&
+           ! gimp_item_is_removed (item));
+}
+CODE
+    );
+}
+
+sub item_id_is_text_layer {
+    $blurb = 'Returns whether the item ID is a text layer.';
+
+    $help = <<'HELP';
+This procedure returns %TRUE if the specified item ID is a text layer.
+
+
+*Note*: in most use cases, you should not use this function. See
+[func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+HELP
+
+    &mitch_pdb_misc('2010', '3.0');
+
+    @inargs = (
+        { name => 'item_id', type => 'int32',
+	  desc => 'The item ID' }
+    );
+
+    @outargs = (
+        { name => 'text_layer', type => 'boolean',
+	  desc => 'TRUE if the item is a text layer, FALSE otherwise.' }
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+  text_layer = (GIMP_IS_LAYER (item) &&
+                ! gimp_item_is_removed (item) &&
+                gimp_item_is_text_layer (item));
+}
+CODE
+    );
+}
+
+sub item_id_is_group_layer {
+    $blurb = 'Returns whether the item ID is a group layer.';
+
+    $help = <<'HELP';
+This procedure returns %TRUE if the specified item ID is a group layer.
+
+
+*Note*: in most use cases, you should not use this function. See
+[func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+HELP
+
+    &jehan_pdb_misc('2024', '3.0');
+
+    @inargs = (
+        { name => 'item_id', type => 'int32',
+	  desc => 'The item ID' }
+    );
+
+    @outargs = (
+        { name => 'group_layer', type => 'boolean',
+	  desc => 'TRUE if the item is a group layer, FALSE otherwise.' }
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+  group_layer = (GIMP_IS_GROUP_LAYER (item) && ! gimp_item_is_removed (item));
+}
+CODE
+    );
+}
+
+sub item_id_is_channel {
+    $blurb = 'Returns whether the item ID is a channel.';
+
+    $help = <<'HELP';
+This procedure returns %TRUE if the specified item ID is a channel.
+
+
+*Note*: in most use cases, you should not use this function. See
+[func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+HELP
+
+    &std_pdb_misc;
+    $since = '3.0';
+
+    @inargs = (
+	{ name => 'item_id', type => 'int32',
+	  desc => 'The item ID' }
+    );
+
+    @outargs = (
+	{ name => 'channel', type => 'boolean',
+	  desc => 'TRUE if the item ID is a channel, FALSE otherwise' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+  channel = (GIMP_IS_CHANNEL (item) &&
+             ! gimp_item_is_removed (item));
+}
+CODE
+    );
+}
+
+sub item_id_is_layer_mask {
+    $blurb = 'Returns whether the item ID is a layer mask.';
+
+    $help = <<'HELP';
+This procedure returns %TRUE if the specified item ID is a layer mask.
+
+
+*Note*: in most use cases, you should not use this function. See
+[func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+HELP
+
+    &std_pdb_misc;
+    $since = '3.0';
+
+    @inargs = (
+	{ name => 'item_id', type => 'int32',
+	  desc => 'The item' }
+    );
+
+    @outargs = (
+	{ name => 'layer_mask', type => 'boolean',
+	  desc => 'TRUE if the item ID is a layer mask, FALSE otherwise' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+  layer_mask = (GIMP_IS_LAYER_MASK (item) &&
+                ! gimp_item_is_removed (item));
+}
+CODE
+    );
+}
+
+sub item_id_is_selection {
+    $blurb = 'Returns whether the item ID is a selection.';
+
+    $help = <<'HELP';
+This procedure returns %TRUE if the specified item ID is a selection.
+
+
+*Note*: in most use cases, you should not use this function. See
+[func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+HELP
+
+    &std_pdb_misc;
+    $since = '3.0';
+
+    @inargs = (
+	{ name => 'item_id', type => 'int32',
+	  desc => 'The item ID' }
+    );
+
+    @outargs = (
+	{ name => 'selection', type => 'boolean',
+	  desc => 'TRUE if the item ID is a selection, FALSE otherwise' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+  selection = (GIMP_IS_SELECTION (item) &&
+               ! gimp_item_is_removed (item));
+}
+CODE
+    );
+}
+
+sub item_id_is_path {
+    $blurb = 'Returns whether the item ID is a path.';
+
+    $help = <<'HELP';
+This procedure returns %TRUE if the specified item ID is a path.
+
+
+*Note*: in most use cases, you should not use this function. See
+[func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+HELP
+
+    &std_pdb_misc;
+    $since = '3.0';
+
+    @inargs = (
+	{ name => 'item_id', type => 'int32',
+	  desc => 'The item ID' }
+    );
+
+    @outargs = (
+	{ name => 'path', type => 'boolean',
+	  desc => 'TRUE if the item ID is a path, FALSE otherwise' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+  path = (GIMP_IS_PATH (item) &&
+          ! gimp_item_is_removed (item));
 }
 CODE
     );
@@ -107,213 +417,11 @@ CODE
     );
 }
 
-sub item_is_drawable {
-    $blurb = 'Returns whether the item is a drawable.';
-
-    $help = <<HELP;
-This procedure returns TRUE if the specified item is a drawable.
-HELP
-
-    &std_pdb_misc;
-    $since = '2.8';
-
-    @inargs = (
-	{ name => 'item', type => 'item',
-	  desc => 'The item' }
-    );
-
-    @outargs = (
-	{ name => 'drawable', type => 'boolean',
-	  desc => 'TRUE if the item is a drawable, FALSE otherwise' }
-    );
-
-    %invoke = (
-	code => <<'CODE'
-{
-  drawable = GIMP_IS_DRAWABLE (item);
-}
-CODE
-    );
-}
-
-sub item_is_layer {
-    $blurb = 'Returns whether the item is a layer.';
-
-    $help = <<HELP;
-This procedure returns TRUE if the specified item is a layer.
-HELP
-
-    &std_pdb_misc;
-    $since = '2.8';
-
-    @inargs = (
-	{ name => 'item', type => 'item',
-	  desc => 'The item' }
-    );
-
-    @outargs = (
-	{ name => 'layer', type => 'boolean',
-	  desc => 'TRUE if the item is a layer, FALSE otherwise' }
-    );
-
-    %invoke = (
-	code => <<'CODE'
-{
-  layer = GIMP_IS_LAYER (item);
-}
-CODE
-    );
-}
-
-sub item_is_text_layer {
-    $blurb = 'Returns whether the item is a text layer.';
-
-    $help = <<'HELP';
-This procedure returns TRUE if the specified item is a text layer.
-HELP
-
-    &mitch_pdb_misc('2010', '2.8');
-
-    @inargs = (
-        { name => 'item', type => 'item',
-	  desc => 'The item' }
-    );
-
-    @outargs = (
-        { name => 'text_layer', type => 'boolean',
-	  desc => 'TRUE if the item is a text layer, FALSE otherwise.' }
-    );
-
-    %invoke = (
-        code => <<'CODE'
-{
-  text_layer = gimp_item_is_text_layer (item);
-}
-CODE
-    );
-}
-
-sub item_is_channel {
-    $blurb = 'Returns whether the item is a channel.';
-
-    $help = <<HELP;
-This procedure returns TRUE if the specified item is a channel.
-HELP
-
-    &std_pdb_misc;
-    $since = '2.8';
-
-    @inargs = (
-	{ name => 'item', type => 'item',
-	  desc => 'The item' }
-    );
-
-    @outargs = (
-	{ name => 'channel', type => 'boolean',
-	  desc => 'TRUE if the item is a channel, FALSE otherwise' }
-    );
-
-    %invoke = (
-	code => <<'CODE'
-{
-  channel = GIMP_IS_CHANNEL (item);
-}
-CODE
-    );
-}
-
-sub item_is_layer_mask {
-    $blurb = 'Returns whether the item is a layer mask.';
-
-    $help = <<HELP;
-This procedure returns TRUE if the specified item is a layer mask.
-HELP
-
-    &std_pdb_misc;
-    $since = '2.8';
-
-    @inargs = (
-	{ name => 'item', type => 'item',
-	  desc => 'The item' }
-    );
-
-    @outargs = (
-	{ name => 'layer_mask', type => 'boolean',
-	  desc => 'TRUE if the item is a layer mask, FALSE otherwise' }
-    );
-
-    %invoke = (
-	code => <<'CODE'
-{
-  layer_mask = GIMP_IS_LAYER_MASK (item);
-}
-CODE
-    );
-}
-
-sub item_is_selection {
-    $blurb = 'Returns whether the item is a selection.';
-
-    $help = <<HELP;
-This procedure returns TRUE if the specified item is a selection.
-HELP
-
-    &std_pdb_misc;
-    $since = '2.8';
-
-    @inargs = (
-	{ name => 'item', type => 'item',
-	  desc => 'The item' }
-    );
-
-    @outargs = (
-	{ name => 'selection', type => 'boolean',
-	  desc => 'TRUE if the item is a selection, FALSE otherwise' }
-    );
-
-    %invoke = (
-	code => <<'CODE'
-{
-  selection = GIMP_IS_SELECTION (item);
-}
-CODE
-    );
-}
-
-sub item_is_vectors {
-    $blurb = 'Returns whether the item is a vectors.';
-
-    $help = <<HELP;
-This procedure returns TRUE if the specified item is a vectors.
-HELP
-
-    &std_pdb_misc;
-    $since = '2.8';
-
-    @inargs = (
-	{ name => 'item', type => 'item',
-	  desc => 'The item' }
-    );
-
-    @outargs = (
-	{ name => 'vectors', type => 'boolean',
-	  desc => 'TRUE if the item is a vectors, FALSE otherwise' }
-    );
-
-    %invoke = (
-	code => <<'CODE'
-{
-  vectors = GIMP_IS_VECTORS (item);
-}
-CODE
-    );
-}
-
 sub item_is_group {
     $blurb = 'Returns whether the item is a group item.';
 
-    $help = <<HELP;
-This procedure returns TRUE if the specified item is a group item which
+    $help = <<'HELP';
+This procedure returns %TRUE if the specified item is a group item which
 can have children.
 HELP
 
@@ -341,7 +449,7 @@ CODE
 sub item_get_parent {
     $blurb = "Returns the item's parent item.";
 
-    $help = <<HELP;
+    $help = <<'HELP';
 This procedure returns the item's parent item, if any.
 HELP
 
@@ -369,7 +477,7 @@ CODE
 sub item_get_children {
     $blurb = "Returns the item's list of children.";
 
-    $help = <<HELP;
+    $help = <<'HELP';
 This procedure returns the list of items which are children of the specified
 item. The order is topmost to bottommost.
 HELP
@@ -382,39 +490,33 @@ HELP
     );
 
     @outargs = (
-	{ name => 'child_ids', type => 'int32array',
-	  desc => "The item's list of children",
-	  array => { name => 'num_children',
-		     desc => "The item's number of children" } }
+	{ name => 'children', type => 'itemarray',
+	  desc => "The item's list of children" }
     );
 
     %invoke = (
 	code => <<'CODE'
 {
-  GimpContainer *children = gimp_viewable_get_children (GIMP_VIEWABLE (item));
+  GimpContainer *container = gimp_viewable_get_children (GIMP_VIEWABLE (item));
 
-  if (children)
+  if (container)
     {
-      num_children = gimp_container_get_n_children (children);
+      gsize  num_children = gimp_container_get_n_children (container);
+      GList *list;
+      gint   i;
 
-      if (num_children)
+      children = g_new0 (GimpItem *, num_children + 1);
+
+      for (list = GIMP_LIST (container)->queue->head, i = 0;
+           list; list = g_list_next (list), i++)
         {
-          GList *list;
-          gint   i;
-
-          child_ids = g_new (gint32, num_children);
-
-          for (list = GIMP_LIST (children)->queue->head, i = 0;
-               list;
-               list = g_list_next (list), i++)
-            {
-              child_ids[i] = gimp_item_get_ID (GIMP_ITEM (list->data));
-            }
+          children[i] = list->data;
         }
     }
   else
-    success = FALSE;
-
+    {
+      success = FALSE;
+    }
 }
 CODE
     );
@@ -423,8 +525,8 @@ CODE
 sub item_get_expanded {
     $blurb = 'Returns whether the item is expanded.';
 
-    $help = <<HELP;
-This procedure returns TRUE if the specified item is expanded.
+    $help = <<'HELP';
+This procedure returns %TRUE if the specified item is expanded.
 HELP
 
     &ell_pdb_misc('2017', '2.10');
@@ -451,7 +553,7 @@ CODE
 sub item_set_expanded {
     $blurb = 'Sets the expanded state of the item.';
 
-    $help = <<HELP;
+    $help = <<'HELP';
 This procedure expands or collapses the item.
 HELP
 
@@ -575,55 +677,6 @@ CODE
     );
 }
 
-sub item_get_linked {
-    $blurb = "Get the linked state of the specified item.";
-
-    $help = "This procedure returns the specified item's linked state.";
-
-    &wolfgang_pdb_misc('1998', '2.8');
-
-    @inargs = (
-	{ name => 'item', type => 'item',
-	  desc => 'The item' }
-    );
-
-    @outargs = (
-	{ name => 'linked', type => 'boolean',
-	  desc => "The item linked state (for moves)" }
-    );
-
-    %invoke = (
-	code => <<'CODE'
-{
-  linked = gimp_item_get_linked (GIMP_ITEM (item));
-}
-CODE
-    );
-}
-
-sub item_set_linked {
-    $blurb = "Set the linked state of the specified item.";
-
-    $help = "This procedure sets the specified item's linked state.";
-
-    &wolfgang_pdb_misc('1998', '2.8');
-
-    @inargs = (
-	{ name => 'item', type => 'item',
-	  desc => 'The item' },
-	{ name => 'linked', type => 'boolean',
-	  desc => "The new item linked state" }
-    );
-
-    %invoke = (
-	code => <<'CODE'
-{
-  gimp_item_set_linked (GIMP_ITEM (item), linked, TRUE);
-}
-CODE
-    );
-}
-
 sub item_get_lock_content {
     $blurb = "Get the 'lock content' state of the specified item.";
 
@@ -721,6 +774,58 @@ sub item_set_lock_position {
 {
   if (gimp_item_can_lock_position (GIMP_ITEM (item)))
     gimp_item_set_lock_position (GIMP_ITEM (item), lock_position, TRUE);
+  else
+    success = FALSE;
+}
+CODE
+    );
+}
+
+sub item_get_lock_visibility {
+    $blurb = "Get the 'lock visibility' state of the specified item.";
+
+    $help = "This procedure returns the specified item's lock visibility state.";
+
+    &jehan_pdb_misc('2021', '3.0');
+
+    @inargs = (
+	{ name => 'item', type => 'item',
+	  desc => 'The item' }
+    );
+
+    @outargs = (
+	{ name => 'lock_visibility', type => 'boolean',
+	  desc => "Whether the item's visibility is locked" }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  lock_visibility = gimp_item_get_lock_visibility (GIMP_ITEM (item));
+}
+CODE
+    );
+}
+
+sub item_set_lock_visibility {
+    $blurb = "Set the 'lock visibility' state of the specified item.";
+
+    $help = "This procedure sets the specified item's lock visibility state.";
+
+    &jehan_pdb_misc('2021', '3.0');
+
+    @inargs = (
+	{ name => 'item', type => 'item',
+	  desc => 'The item' },
+	{ name => 'lock_visibility', type => 'boolean',
+	  desc => "The new item 'lock visibility' state" }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  if (gimp_item_can_lock_visibility (GIMP_ITEM (item)))
+    gimp_item_set_lock_visibility (GIMP_ITEM (item), lock_visibility, TRUE);
   else
     success = FALSE;
 }
@@ -934,53 +1039,54 @@ sub item_get_parasite_list {
     );
 
     @outargs = (
-	{ name => 'parasites', type => 'stringarray',
-	  desc => 'The names of currently attached parasites',
-	  array => { desc => 'The number of attached parasites' } }
+	{ name => 'parasites', type => 'strv',
+	  desc => 'The names of currently attached parasites' }
     );
 
     %invoke = (
 	code => <<'CODE'
 {
-  parasites = gimp_item_parasite_list (item, &num_parasites);
+  parasites = gimp_item_parasite_list (item);
 }
 CODE
     );
 }
 
-@headers = qw("core/gimplayermask.h"
+@headers = qw("core/gimpgrouplayer.h"
+              "core/gimplayermask.h"
               "core/gimplist.h"
               "core/gimpselection.h"
               "text/gimptextlayer.h"
-	      "vectors/gimpvectors.h"
+              "vectors/gimppath.h" 
               "gimppdb-utils.h"
               "gimppdbcontext.h"
               "gimp-intl.h");
 
-@procs = qw(item_is_valid
+@procs = qw(item_id_is_valid
+            item_id_is_drawable
+            item_id_is_layer
+            item_id_is_text_layer
+            item_id_is_group_layer
+            item_id_is_channel
+            item_id_is_layer_mask
+            item_id_is_path
+            item_id_is_selection
             item_get_image
             item_delete
-            item_is_drawable
-            item_is_layer
-            item_is_text_layer
-	    item_is_channel
-	    item_is_layer_mask
-	    item_is_selection
-	    item_is_vectors
-	    item_is_group
+            item_is_group
             item_get_parent
-	    item_get_children
+            item_get_children
             item_get_expanded item_set_expanded
             item_get_name item_set_name
             item_get_visible item_set_visible
-            item_get_linked item_set_linked
             item_get_lock_content item_set_lock_content
             item_get_lock_position item_set_lock_position
+            item_get_lock_visibility item_set_lock_visibility
             item_get_color_tag item_set_color_tag
             item_get_tattoo item_set_tattoo
-	    item_attach_parasite item_detach_parasite
-	    item_get_parasite
-	    item_get_parasite_list);
+            item_attach_parasite item_detach_parasite
+            item_get_parasite
+            item_get_parasite_list);
 
 %exports = (app => [@procs], lib => [@procs]);
 

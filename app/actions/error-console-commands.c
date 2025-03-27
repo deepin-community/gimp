@@ -30,6 +30,7 @@
 #include "widgets/gimperrorconsole.h"
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimptextbuffer.h"
+#include "widgets/gimpwidgets-utils.h"
 
 #include "error-console-commands.h"
 
@@ -103,15 +104,14 @@ error_console_save_cmd_callback (GimpAction *action,
                                      NULL);
 
       gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                               GTK_RESPONSE_OK,
-                                               GTK_RESPONSE_CANCEL,
-                                               -1);
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+                                                GTK_RESPONSE_OK,
+                                                GTK_RESPONSE_CANCEL,
+                                                -1);
 
       console->save_selection = selection;
 
-      g_object_add_weak_pointer (G_OBJECT (dialog),
-                                 (gpointer) &console->file_dialog);
+      g_set_weak_pointer (&console->file_dialog, dialog);
 
       gtk_window_set_screen (GTK_WINDOW (dialog),
                              gtk_widget_get_screen (GTK_WIDGET (console)));
@@ -128,11 +128,15 @@ error_console_save_cmd_callback (GimpAction *action,
                         G_CALLBACK (gtk_true),
                         NULL);
 
-      gimp_help_connect (dialog, gimp_standard_help_func,
-                         GIMP_HELP_ERRORS_DIALOG, NULL);
+      gimp_help_connect (dialog, NULL, gimp_standard_help_func,
+                         GIMP_HELP_ERRORS_DIALOG, NULL, NULL);
     }
 
   gtk_window_present (GTK_WINDOW (console->file_dialog));
+
+#ifdef G_OS_WIN32
+  gimp_window_set_title_bar_theme (console->gimp, console->file_dialog);
+#endif
 }
 
 void

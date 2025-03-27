@@ -20,6 +20,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
@@ -91,8 +92,8 @@ gimp_crop_options_class_init (GimpCropOptionsClass *klass)
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_LAYER_ONLY,
                             "layer-only",
-                            _("Current layer only"),
-                            _("Crop only currently selected layer"),
+                            _("Selected layers only"),
+                            _("Crop only currently selected layers"),
                             FALSE,
                             GIMP_PARAM_STATIC_STRINGS);
 
@@ -203,21 +204,20 @@ gimp_crop_options_gui (GimpToolOptions *tool_options)
   GtkWidget *vbox   = gimp_tool_options_gui (tool_options);
   GtkWidget *vbox_rectangle;
   GtkWidget *button;
+  GtkWidget *button2;
   GtkWidget *combo;
   GtkWidget *frame;
 
   /*  layer toggle  */
   button = gimp_prop_check_button_new (config, "layer-only", NULL);
   gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   /*  delete pixels toggle  */
-  button = gimp_prop_check_button_new (config, "delete-pixels", NULL);
-  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
+  button2 = gimp_prop_check_button_new (config, "delete-pixels", NULL);
+  gtk_box_pack_start (GTK_BOX (vbox), button2, FALSE, FALSE, 0);
 
   g_object_bind_property (G_OBJECT (config),  "layer-only",
-                          G_OBJECT (button), "sensitive",
+                          G_OBJECT (button2), "sensitive",
                           G_BINDING_SYNC_CREATE |
                           G_BINDING_INVERT_BOOLEAN);
 
@@ -229,7 +229,6 @@ gimp_crop_options_gui (GimpToolOptions *tool_options)
   frame = gimp_prop_expanding_frame_new (config, "allow-growing", NULL,
                                          combo, NULL);
   gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
 
   /*  rectangle options  */
   vbox_rectangle = gimp_rectangle_options_gui (tool_options);

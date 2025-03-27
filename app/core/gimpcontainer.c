@@ -23,6 +23,7 @@
 #include <gio/gio.h>
 #include <gegl.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 
 #include "core-types.h"
@@ -139,8 +140,7 @@ gimp_container_class_init (GimpContainerClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContainerClass, add),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_OBJECT);
 
@@ -149,8 +149,7 @@ gimp_container_class_init (GimpContainerClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContainerClass, remove),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_OBJECT);
 
@@ -170,8 +169,7 @@ gimp_container_class_init (GimpContainerClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpContainerClass, freeze),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   container_signals[THAW] =
@@ -179,8 +177,7 @@ gimp_container_class_init (GimpContainerClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpContainerClass, thaw),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->dispose          = gimp_container_dispose;
@@ -201,6 +198,7 @@ gimp_container_class_init (GimpContainerClass *klass)
   klass->search                  = NULL;
   klass->get_unique_names        = NULL;
   klass->get_child_by_name       = NULL;
+  klass->get_children_by_name    = NULL;
   klass->get_child_by_index      = NULL;
   klass->get_child_index         = NULL;
 
@@ -355,7 +353,7 @@ gimp_container_serialize_foreach (GObject       *object,
   GimpConfigInterface *config_iface;
   const gchar         *name;
 
-  config_iface = GIMP_CONFIG_GET_INTERFACE (object);
+  config_iface = GIMP_CONFIG_GET_IFACE (object);
 
   if (! config_iface)
     serialize_data->success = FALSE;
@@ -481,10 +479,10 @@ gimp_container_deserialize (GimpConfig *config,
              */
             gimp_object_take_name (child, name);
 
-            if (! GIMP_CONFIG_GET_INTERFACE (child)->deserialize (GIMP_CONFIG (child),
-                                                                  scanner,
-                                                                  nest_level + 1,
-                                                                  NULL))
+            if (! GIMP_CONFIG_GET_IFACE (child)->deserialize (GIMP_CONFIG (child),
+                                                              scanner,
+                                                              nest_level + 1,
+                                                              NULL))
               {
                 if (add_child)
                   g_object_unref (child);
@@ -884,6 +882,34 @@ gimp_container_get_unique_names (GimpContainer *container)
   return FALSE;
 }
 
+GList *
+gimp_container_get_children_by_name (GimpContainer *container,
+                                     const gchar   *name)
+{
+  g_return_val_if_fail (GIMP_IS_CONTAINER (container), NULL);
+
+  if (!name)
+    return NULL;
+
+  if (GIMP_CONTAINER_GET_CLASS (container)->get_children_by_name != NULL &&
+      ! gimp_container_get_unique_names (container))
+    {
+      return GIMP_CONTAINER_GET_CLASS (container)->get_children_by_name (container,
+                                                                         name);
+    }
+  else
+    {
+      GimpObject *child;
+
+      child = GIMP_CONTAINER_GET_CLASS (container)->get_child_by_name (container, name);
+
+      if (child != NULL)
+        return g_list_prepend (NULL, child);
+      else
+        return NULL;
+    }
+}
+
 GimpObject *
 gimp_container_get_child_by_name (GimpContainer *container,
                                   const gchar   *name)
@@ -914,8 +940,8 @@ gimp_container_get_child_by_index (GimpContainer *container,
  * gimp_container_get_first_child:
  * @container: a #GimpContainer
  *
- * Return value: the first child object stored in @container or %NULL if the
- *               container is empty
+ * Returns: (nullable) (transfer none): the first child object stored in
+ *          @container or %NULL if the container is empty.
  */
 GimpObject *
 gimp_container_get_first_child (GimpContainer *container)
@@ -933,8 +959,8 @@ gimp_container_get_first_child (GimpContainer *container)
  * gimp_container_get_last_child:
  * @container: a #GimpContainer
  *
- * Return value: the last child object stored in @container or %NULL if the
- *               container is empty
+ * Returns: (nullable) (transfer none): the last child object stored in
+ *          @container or %NULL if the container is empty
  */
 GimpObject *
 gimp_container_get_last_child (GimpContainer *container)
@@ -999,20 +1025,17 @@ gimp_container_get_name_array_foreach_func (GimpObject   *object,
 }
 
 gchar **
-gimp_container_get_name_array (GimpContainer *container,
-                               gint          *length)
+gimp_container_get_name_array (GimpContainer *container)
 {
   gchar **names;
   gchar **iter;
+  gint    length;
 
   g_return_val_if_fail (GIMP_IS_CONTAINER (container), NULL);
-  g_return_val_if_fail (length != NULL, NULL);
 
-  *length = gimp_container_get_n_children (container);
-  if (*length == 0)
-    return NULL;
+  length = gimp_container_get_n_children (container);
 
-  names = iter = g_new (gchar *, *length);
+  names = iter = g_new0 (gchar *, length + 1);
 
   gimp_container_foreach (container,
                           (GFunc) gimp_container_get_name_array_foreach_func,

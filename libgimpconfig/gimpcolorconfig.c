@@ -73,7 +73,7 @@
 #define SIMULATION_PROFILE_BLURB \
   _("The color profile to use for soft-proofing from your image's " \
     "color space to some other color space, including " \
-    "soft-proofing to a printer or other output device profile. ")
+    "soft-proofing to a printer or other output device profile.")
 
 #define DISPLAY_RENDERING_INTENT_BLURB \
   _("How colors are converted from your image's color space to your " \
@@ -93,11 +93,11 @@
 #define SIMULATION_RENDERING_INTENT_BLURB \
   _("How colors are converted from your image's color space to the "  \
     "output simulation device (usually your monitor). " \
-    "Try them all and choose what looks the best. ")
+    "Try them all and choose what looks the best.")
 
 #define SIMULATION_USE_BPC_BLURB \
   _("Try with and without black point compensation "\
-    "and choose what looks best. ")
+    "and choose what looks best.")
 
 #define SIMULATION_OPTIMIZE_BLURB \
   _("When disabled, soft-proofing might be of better quality " \
@@ -137,24 +137,36 @@ enum
   PROP_SIMULATION_GAMUT_CHECK,
   PROP_OUT_OF_GAMUT_COLOR,
   PROP_SHOW_RGB_U8,
-  PROP_SHOW_HSV,
-  PROP_DISPLAY_MODULE
+  PROP_SHOW_HSV
 };
 
 
-typedef struct _GimpColorConfigPrivate GimpColorConfigPrivate;
-
-struct _GimpColorConfigPrivate
+struct _GimpColorConfig
 {
-  gboolean display_optimize;
-  gboolean simulation_optimize;
+  GObject                   parent_instance;
 
-  gboolean show_rgb_u8;
-  gboolean show_hsv;
+  GimpColorManagementMode   mode;
+
+  gchar                    *rgb_profile;
+  gchar                    *gray_profile;
+  gchar                    *cmyk_profile;
+  gchar                    *display_profile;
+  gboolean                  display_profile_from_gdk;
+  gchar                    *printer_profile;
+
+  GimpColorRenderingIntent  display_intent;
+  gboolean                  display_use_black_point_compensation;
+  gboolean                  display_optimize;
+
+  GimpColorRenderingIntent  simulation_intent;
+  gboolean                  simulation_use_black_point_compensation;
+  gboolean                  simulation_optimize;
+  gboolean                  simulation_gamut_check;
+  GeglColor                *out_of_gamut_color;
+
+  gboolean                  show_rgb_u8;
+  gboolean                  show_hsv;
 };
-
-#define GET_PRIVATE(obj) \
-        ((GimpColorConfigPrivate *) gimp_color_config_get_instance_private ((GimpColorConfig *) (obj)))
 
 
 static void  gimp_color_config_finalize               (GObject          *object);
@@ -185,7 +197,6 @@ static void  gimp_color_config_set_simulation_profile (GimpColorConfig  *config,
 
 
 G_DEFINE_TYPE_WITH_CODE (GimpColorConfig, gimp_color_config, G_TYPE_OBJECT,
-                         G_ADD_PRIVATE (GimpColorConfig)
                          G_IMPLEMENT_INTERFACE (GIMP_TYPE_CONFIG, NULL)
                          gimp_type_set_translation_domain (g_define_type_id,
                                                            GETTEXT_PACKAGE "-libgimp"))
@@ -197,9 +208,13 @@ static void
 gimp_color_config_class_init (GimpColorConfigClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
-  GimpRGB       color;
+  GeglColor    *magenta;
 
-  gimp_rgba_set (&color, 1.0, 0.0, 1.0, 1.0); /* magenta */
+  babl_init ();
+
+  /* Magenta (sRGB space). */
+  magenta = gegl_color_new (NULL);
+  gegl_color_set_rgba (magenta, 1.0, 0.0, 1.0, 1.0);
 
   object_class->finalize     = gimp_color_config_finalize;
   object_class->set_property = gimp_color_config_set_property;
@@ -249,8 +264,7 @@ gimp_color_config_class_init (GimpColorConfigClass *klass)
                             GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_PATH (object_class, PROP_SIMULATION_PROFILE,
-                         /* FIXME: 3.0: change to simulation-profile */
-                         "printer-profile",
+                         "simulation-profile",
                          _("Simulation profile for soft-proofing"),
                          SIMULATION_PROFILE_BLURB,
                          GIMP_CONFIG_PATH_FILE, NULL,
@@ -307,12 +321,12 @@ gimp_color_config_class_init (GimpColorConfigClass *klass)
                             FALSE,
                             GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_RGB (object_class, PROP_OUT_OF_GAMUT_COLOR,
-                        "out-of-gamut-color",
-                        _("Out of gamut warning color"),
-                        OUT_OF_GAMUT_COLOR_BLURB,
-                        FALSE, &color,
-                        GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_COLOR (object_class, PROP_OUT_OF_GAMUT_COLOR,
+                          "out-of-gamut-color",
+                          _("Out of gamut warning color"),
+                          OUT_OF_GAMUT_COLOR_BLURB,
+                          FALSE, magenta,
+                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_SHOW_RGB_U8,
                             "show-rgb-u8",
@@ -328,41 +342,29 @@ gimp_color_config_class_init (GimpColorConfigClass *klass)
                             FALSE,
                             GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_STRING (object_class, PROP_DISPLAY_MODULE,
-                           "display-module",
-                           "Display module",
-                           "This property is deprecated and its value ignored",
-                           "CdisplayLcms",
-                           GIMP_PARAM_STATIC_STRINGS);
+  g_object_unref (magenta);
 }
 
 static void
 gimp_color_config_init (GimpColorConfig *config)
 {
+  GeglColor *magenta = gegl_color_new (NULL);
+
+  /* Magenta (sRGB space). */
+  gegl_color_set_rgba (magenta, 1.0, 0.0, 1.0, 1.0);
+  config->out_of_gamut_color = magenta;
 }
 
 static void
 gimp_color_config_finalize (GObject *object)
 {
-  GimpColorConfig *color_config = GIMP_COLOR_CONFIG (object);
+  GimpColorConfig *config = GIMP_COLOR_CONFIG (object);
 
-  if (color_config->rgb_profile)
-    g_free (color_config->rgb_profile);
-
-  if (color_config->gray_profile)
-    g_free (color_config->gray_profile);
-
-  if (color_config->cmyk_profile)
-    g_free (color_config->cmyk_profile);
-
-  if (color_config->display_profile)
-    g_free (color_config->display_profile);
-
-  if (color_config->printer_profile)
-    g_free (color_config->printer_profile);
-
-  if (color_config->display_module)
-    g_free (color_config->display_module);
+  g_clear_pointer (&config->rgb_profile,     g_free);
+  g_clear_pointer (&config->gray_profile,    g_free);
+  g_clear_pointer (&config->cmyk_profile,    g_free);
+  g_clear_pointer (&config->display_profile, g_free);
+  g_clear_pointer (&config->printer_profile, g_free);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -373,76 +375,72 @@ gimp_color_config_set_property (GObject      *object,
                                 const GValue *value,
                                 GParamSpec   *pspec)
 {
-  GimpColorConfig        *color_config = GIMP_COLOR_CONFIG (object);
-  GimpColorConfigPrivate *priv         = GET_PRIVATE (object);
-  GError                 *error        = NULL;
+  GimpColorConfig *config = GIMP_COLOR_CONFIG (object);
+  GError          *error  = NULL;
 
   switch (property_id)
     {
     case PROP_MODE:
-      color_config->mode = g_value_get_enum (value);
+      config->mode = g_value_get_enum (value);
       break;
     case PROP_RGB_PROFILE:
-      gimp_color_config_set_rgb_profile (color_config,
+      gimp_color_config_set_rgb_profile (config,
                                          g_value_get_string (value),
                                          &error);
       break;
     case PROP_GRAY_PROFILE:
-      gimp_color_config_set_gray_profile (color_config,
+      gimp_color_config_set_gray_profile (config,
                                           g_value_get_string (value),
                                           &error);
       break;
     case PROP_CMYK_PROFILE:
-      gimp_color_config_set_cmyk_profile (color_config,
+      gimp_color_config_set_cmyk_profile (config,
                                           g_value_get_string (value),
                                           &error);
       break;
     case PROP_DISPLAY_PROFILE:
-      gimp_color_config_set_display_profile (color_config,
+      gimp_color_config_set_display_profile (config,
                                              g_value_get_string (value),
                                              &error);
       break;
     case PROP_DISPLAY_PROFILE_FROM_GDK:
-      color_config->display_profile_from_gdk = g_value_get_boolean (value);
+      config->display_profile_from_gdk = g_value_get_boolean (value);
       break;
     case PROP_SIMULATION_PROFILE:
-      gimp_color_config_set_simulation_profile (color_config,
+      gimp_color_config_set_simulation_profile (config,
                                                 g_value_get_string (value),
                                                 &error);
       break;
     case PROP_DISPLAY_RENDERING_INTENT:
-      color_config->display_intent = g_value_get_enum (value);
+      config->display_intent = g_value_get_enum (value);
       break;
     case PROP_DISPLAY_USE_BPC:
-      color_config->display_use_black_point_compensation = g_value_get_boolean (value);
+      config->display_use_black_point_compensation = g_value_get_boolean (value);
       break;
     case PROP_DISPLAY_OPTIMIZE:
-      priv->display_optimize = g_value_get_boolean (value);
+      config->display_optimize = g_value_get_boolean (value);
       break;
     case PROP_SIMULATION_RENDERING_INTENT:
-      color_config->simulation_intent = g_value_get_enum (value);
+      config->simulation_intent = g_value_get_enum (value);
       break;
     case PROP_SIMULATION_USE_BPC:
-      color_config->simulation_use_black_point_compensation = g_value_get_boolean (value);
+      config->simulation_use_black_point_compensation = g_value_get_boolean (value);
       break;
     case PROP_SIMULATION_OPTIMIZE:
-      priv->simulation_optimize = g_value_get_boolean (value);
+      config->simulation_optimize = g_value_get_boolean (value);
       break;
     case PROP_SIMULATION_GAMUT_CHECK:
-      color_config->simulation_gamut_check = g_value_get_boolean (value);
+      config->simulation_gamut_check = g_value_get_boolean (value);
       break;
     case PROP_OUT_OF_GAMUT_COLOR:
-      color_config->out_of_gamut_color = *(GimpRGB *) g_value_get_boxed (value);
+      g_clear_object (&config->out_of_gamut_color);
+      config->out_of_gamut_color = gegl_color_duplicate (g_value_get_object (value));
       break;
     case PROP_SHOW_RGB_U8:
-      priv->show_rgb_u8 = g_value_get_boolean (value);
+      config->show_rgb_u8 = g_value_get_boolean (value);
       break;
     case PROP_SHOW_HSV:
-      priv->show_hsv = g_value_get_boolean (value);
-      break;
-    case PROP_DISPLAY_MODULE:
-      g_free (color_config->display_module);
-      color_config->display_module = g_value_dup_string (value);
+      config->show_hsv = g_value_get_boolean (value);
       break;
 
     default:
@@ -463,64 +461,60 @@ gimp_color_config_get_property (GObject    *object,
                                 GValue     *value,
                                 GParamSpec *pspec)
 {
-  GimpColorConfig        *color_config = GIMP_COLOR_CONFIG (object);
-  GimpColorConfigPrivate *priv         = GET_PRIVATE (object);
+  GimpColorConfig *config = GIMP_COLOR_CONFIG (object);
 
   switch (property_id)
     {
     case PROP_MODE:
-      g_value_set_enum (value, color_config->mode);
+      g_value_set_enum (value, config->mode);
       break;
     case PROP_RGB_PROFILE:
-      g_value_set_string (value, color_config->rgb_profile);
+      g_value_set_string (value, config->rgb_profile);
       break;
     case PROP_GRAY_PROFILE:
-      g_value_set_string (value, color_config->gray_profile);
+      g_value_set_string (value, config->gray_profile);
       break;
     case PROP_CMYK_PROFILE:
-      g_value_set_string (value, color_config->cmyk_profile);
+      g_value_set_string (value, config->cmyk_profile);
       break;
     case PROP_DISPLAY_PROFILE:
-      g_value_set_string (value, color_config->display_profile);
+      g_value_set_string (value, config->display_profile);
       break;
     case PROP_DISPLAY_PROFILE_FROM_GDK:
-      g_value_set_boolean (value, color_config->display_profile_from_gdk);
+      g_value_set_boolean (value, config->display_profile_from_gdk);
       break;
     case PROP_SIMULATION_PROFILE:
-      g_value_set_string (value, color_config->printer_profile);
+      g_value_set_string (value, config->printer_profile);
       break;
     case PROP_DISPLAY_RENDERING_INTENT:
-      g_value_set_enum (value, color_config->display_intent);
+      g_value_set_enum (value, config->display_intent);
       break;
     case PROP_DISPLAY_USE_BPC:
-      g_value_set_boolean (value, color_config->display_use_black_point_compensation);
+      g_value_set_boolean (value, config->display_use_black_point_compensation);
       break;
     case PROP_DISPLAY_OPTIMIZE:
-      g_value_set_boolean (value, priv->display_optimize);
+      g_value_set_boolean (value, config->display_optimize);
       break;
     case PROP_SIMULATION_RENDERING_INTENT:
-      g_value_set_enum (value, color_config->simulation_intent);
+      g_value_set_enum (value, config->simulation_intent);
       break;
     case PROP_SIMULATION_USE_BPC:
-      g_value_set_boolean (value, color_config->simulation_use_black_point_compensation);
+      g_value_set_boolean (value, config->simulation_use_black_point_compensation);
       break;
     case PROP_SIMULATION_OPTIMIZE:
-      g_value_set_boolean (value, priv->simulation_optimize);
+      g_value_set_boolean (value, config->simulation_optimize);
       break;
     case PROP_SIMULATION_GAMUT_CHECK:
-      g_value_set_boolean (value, color_config->simulation_gamut_check);
+      g_value_set_boolean (value, config->simulation_gamut_check);
       break;
     case PROP_OUT_OF_GAMUT_COLOR:
-      g_value_set_boxed (value, &color_config->out_of_gamut_color);
+      g_value_set_object (value, config->out_of_gamut_color);
       break;
     case PROP_SHOW_RGB_U8:
-      g_value_set_boolean (value, priv->show_rgb_u8);
+      g_value_set_boolean (value, config->show_rgb_u8);
       break;
     case PROP_SHOW_HSV:
-      g_value_set_boolean (value, priv->show_hsv);
-      break;
-    case PROP_DISPLAY_MODULE:
-      g_value_set_string (value, color_config->display_module);
+      g_value_set_boolean (value, config->show_hsv);
       break;
 
     default:
@@ -587,7 +581,7 @@ gimp_color_config_get_display_optimize (GimpColorConfig *config)
 {
   g_return_val_if_fail (GIMP_IS_COLOR_CONFIG (config), FALSE);
 
-  return GET_PRIVATE (config)->display_optimize;
+  return config->display_optimize;
 }
 
 /**
@@ -644,7 +638,7 @@ gimp_color_config_get_simulation_optimize (GimpColorConfig *config)
 {
   g_return_val_if_fail (GIMP_IS_COLOR_CONFIG (config), FALSE);
 
-  return GET_PRIVATE (config)->simulation_optimize;
+  return config->simulation_optimize;
 }
 
 /**
@@ -662,9 +656,27 @@ gimp_color_config_get_simulation_gamut_check (GimpColorConfig *config)
 }
 
 /**
+ * gimp_color_config_get_out_of_gamut_color:
+ * @config: a #GimpColorConfig
+ *
+ * Returns: (transfer full): the [class@Gegl.Color] to use to represent
+ *                           out-of-gamut pixels.
+ * Since: 3.0
+ **/
+GeglColor *
+gimp_color_config_get_out_of_gamut_color (GimpColorConfig *config)
+{
+  g_return_val_if_fail (GIMP_IS_COLOR_CONFIG (config), NULL);
+
+  return gegl_color_duplicate (config->out_of_gamut_color);
+}
+
+/**
  * gimp_color_config_get_rgb_color_profile:
  * @config: a #GimpColorConfig
  * @error:  return location for a #GError
+ *
+ * Returns: (transfer full): the default RGB color profile.
  *
  * Since: 2.10
  **/
@@ -679,8 +691,7 @@ gimp_color_config_get_rgb_color_profile (GimpColorConfig  *config,
 
   if (config->rgb_profile)
     {
-      GFile *file = gimp_file_new_for_config_path (config->rgb_profile,
-                                                   error);
+      GFile *file = gimp_file_new_for_config_path (config->rgb_profile, error);
 
       if (file)
         {
@@ -708,6 +719,8 @@ gimp_color_config_get_rgb_color_profile (GimpColorConfig  *config,
  * @config: a #GimpColorConfig
  * @error:  return location for a #GError
  *
+ * Returns: (transfer full): the default grayscale color profile.
+ *
  * Since: 2.10
  **/
 GimpColorProfile *
@@ -721,8 +734,7 @@ gimp_color_config_get_gray_color_profile (GimpColorConfig  *config,
 
   if (config->gray_profile)
     {
-      GFile *file = gimp_file_new_for_config_path (config->gray_profile,
-                                                   error);
+      GFile *file = gimp_file_new_for_config_path (config->gray_profile, error);
 
       if (file)
         {
@@ -750,6 +762,8 @@ gimp_color_config_get_gray_color_profile (GimpColorConfig  *config,
  * @config: a #GimpColorConfig
  * @error:  return location for a #GError
  *
+ * Returns: (transfer full): the default CMYK color profile.
+ *
  * Since: 2.10
  **/
 GimpColorProfile *
@@ -763,8 +777,7 @@ gimp_color_config_get_cmyk_color_profile (GimpColorConfig  *config,
 
   if (config->cmyk_profile)
     {
-      GFile *file = gimp_file_new_for_config_path (config->cmyk_profile,
-                                                   error);
+      GFile *file = gimp_file_new_for_config_path (config->cmyk_profile, error);
 
       if (file)
         {
@@ -792,6 +805,8 @@ gimp_color_config_get_cmyk_color_profile (GimpColorConfig  *config,
  * @config: a #GimpColorConfig
  * @error:  return location for a #GError
  *
+ * Returns: (transfer full): the default display color profile.
+ *
  * Since: 2.10
  **/
 GimpColorProfile *
@@ -805,8 +820,7 @@ gimp_color_config_get_display_color_profile (GimpColorConfig  *config,
 
   if (config->display_profile)
     {
-      GFile *file = gimp_file_new_for_config_path (config->display_profile,
-                                                   error);
+      GFile *file = gimp_file_new_for_config_path (config->display_profile, error);
 
       if (file)
         {
@@ -824,6 +838,9 @@ gimp_color_config_get_display_color_profile (GimpColorConfig  *config,
  * @config: a #GimpColorConfig
  * @error:  return location for a #GError
  *
+ * Returns: (transfer full): the default soft-proofing color
+ *                                profile.
+ *
  * Since: 2.10
  **/
 GimpColorProfile *
@@ -837,8 +854,7 @@ gimp_color_config_get_simulation_color_profile (GimpColorConfig  *config,
 
   if (config->printer_profile)
     {
-      GFile *file = gimp_file_new_for_config_path (config->printer_profile,
-                                                   error);
+      GFile *file = gimp_file_new_for_config_path (config->printer_profile, error);
 
       if (file)
         {

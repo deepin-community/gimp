@@ -22,6 +22,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 
 #include "pdb-types.h"
@@ -499,6 +500,11 @@ gimp_pdb_context_new (Gimp        *gimp,
    *  the pdb context as parent
    */
   gimp_config_sync (G_OBJECT (parent), G_OBJECT (context), 0);
+
+  /* Reset the proper init name after syncing. */
+  g_object_set (G_OBJECT (context),
+                "name", "PDB Context",
+                NULL);
 
   return GIMP_CONTEXT (context);
 }

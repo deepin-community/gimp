@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -35,59 +37,67 @@
 
 
 /**
- * _gimp_channel_new:
- * @image_ID: The image to which to add the channel.
+ * gimp_channel_new:
+ * @image: The image to which to add the channel.
+ * @name: The channel name.
  * @width: The channel width.
  * @height: The channel height.
- * @name: The channel name.
  * @opacity: The channel opacity.
  * @color: The channel compositing color.
  *
  * Create a new channel.
  *
- * This procedure creates a new channel with the specified width,
- * height, name, opacity and color.
- * The new channel still needs to be added to the image, as this is not
- * automatic. Add the new channel with gimp_image_insert_channel().
+ * This procedure creates a new channel with the specified @width,
+ * @height, @name, @opacity and @color.
+ *
  * Other attributes, such as channel visibility, should be set with
  * explicit procedure calls.
+ *
+ * The new channel still needs to be added to the image, as this is not
+ * automatic. Add the new channel with
+ * [method@Gimp.Image.insert_channel].
+ *
  * The channel's contents are undefined initially.
  *
- * Returns: The newly created channel.
+ * Returns: (transfer none): The newly created channel.
  **/
-gint32
-_gimp_channel_new (gint32         image_ID,
-                   gint           width,
-                   gint           height,
-                   const gchar   *name,
-                   gdouble        opacity,
-                   const GimpRGB *color)
+GimpChannel *
+gimp_channel_new (GimpImage   *image,
+                  const gchar *name,
+                  gint         width,
+                  gint         height,
+                  gdouble      opacity,
+                  GeglColor   *color)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 channel_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpChannel *channel = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-channel-new",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, width,
-                                    GIMP_PDB_INT32, height,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_FLOAT, opacity,
-                                    GIMP_PDB_COLOR, color,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_INT, width,
+                                          G_TYPE_INT, height,
+                                          G_TYPE_DOUBLE, opacity,
+                                          GEGL_TYPE_COLOR, color,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    channel_ID = return_vals[1].data.d_channel;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-channel-new",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    channel = GIMP_VALUES_GET_CHANNEL (return_vals, 1);
 
-  return channel_ID;
+  gimp_value_array_unref (return_vals);
+
+  return channel;
 }
 
 /**
  * gimp_channel_new_from_component:
- * @image_ID: The image to which to add the channel.
+ * @image: The image to which to add the channel.
  * @component: The image component.
  * @name: The channel name.
  *
@@ -99,37 +109,41 @@ _gimp_channel_new (gint32         image_ID,
  * Other attributes, such as channel visibility, should be set with
  * explicit procedure calls.
  *
- * Returns: The newly created channel.
+ * Returns: (transfer none): The newly created channel.
  *
  * Since: 2.4
  **/
-gint32
-gimp_channel_new_from_component (gint32           image_ID,
+GimpChannel *
+gimp_channel_new_from_component (GimpImage       *image,
                                  GimpChannelType  component,
                                  const gchar     *name)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 channel_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpChannel *channel = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-channel-new-from-component",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, component,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL_TYPE, component,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    channel_ID = return_vals[1].data.d_channel;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-channel-new-from-component",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    channel = GIMP_VALUES_GET_CHANNEL (return_vals, 1);
 
-  return channel_ID;
+  gimp_value_array_unref (return_vals);
+
+  return channel;
 }
 
 /**
  * gimp_channel_copy:
- * @channel_ID: The channel to copy.
+ * @channel: The channel to copy.
  *
  * Copy a channel.
  *
@@ -137,32 +151,36 @@ gimp_channel_new_from_component (gint32           image_ID,
  * The new channel still needs to be added to the image, as this is not
  * automatic. Add the new channel with gimp_image_insert_channel().
  *
- * Returns: The newly copied channel.
+ * Returns: (transfer none): The newly copied channel.
  **/
-gint32
-gimp_channel_copy (gint32 channel_ID)
+GimpChannel *
+gimp_channel_copy (GimpChannel *channel)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 channel_copy_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpChannel *channel_copy = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-channel-copy",
-                                    &nreturn_vals,
-                                    GIMP_PDB_CHANNEL, channel_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_CHANNEL, channel,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    channel_copy_ID = return_vals[1].data.d_channel;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-channel-copy",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    channel_copy = GIMP_VALUES_GET_CHANNEL (return_vals, 1);
 
-  return channel_copy_ID;
+  gimp_value_array_unref (return_vals);
+
+  return channel_copy;
 }
 
 /**
  * gimp_channel_combine_masks:
- * @channel1_ID: The channel1.
- * @channel2_ID: The channel2.
+ * @channel1: The channel1.
+ * @channel2: The channel2.
  * @operation: The selection operation.
  * @offx: x offset between upper left corner of channels: (second - first).
  * @offy: y offset between upper left corner of channels: (second - first).
@@ -175,35 +193,39 @@ gimp_channel_copy (gint32 channel_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_channel_combine_masks (gint32         channel1_ID,
-                            gint32         channel2_ID,
-                            GimpChannelOps operation,
-                            gint           offx,
-                            gint           offy)
+gimp_channel_combine_masks (GimpChannel    *channel1,
+                            GimpChannel    *channel2,
+                            GimpChannelOps  operation,
+                            gint            offx,
+                            gint            offy)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-channel-combine-masks",
-                                    &nreturn_vals,
-                                    GIMP_PDB_CHANNEL, channel1_ID,
-                                    GIMP_PDB_CHANNEL, channel2_ID,
-                                    GIMP_PDB_INT32, operation,
-                                    GIMP_PDB_INT32, offx,
-                                    GIMP_PDB_INT32, offy,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_CHANNEL, channel1,
+                                          GIMP_TYPE_CHANNEL, channel2,
+                                          GIMP_TYPE_CHANNEL_OPS, operation,
+                                          G_TYPE_INT, offx,
+                                          G_TYPE_INT, offy,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-channel-combine-masks",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_channel_get_show_masked:
- * @channel_ID: The channel.
+ * @channel: The channel.
  *
  * Get the composite method of the specified channel.
  *
@@ -214,28 +236,32 @@ gimp_channel_combine_masks (gint32         channel1_ID,
  * Returns: The channel composite method.
  **/
 gboolean
-gimp_channel_get_show_masked (gint32 channel_ID)
+gimp_channel_get_show_masked (GimpChannel *channel)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean show_masked = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-channel-get-show-masked",
-                                    &nreturn_vals,
-                                    GIMP_PDB_CHANNEL, channel_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_CHANNEL, channel,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    show_masked = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-channel-get-show-masked",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    show_masked = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return show_masked;
 }
 
 /**
  * gimp_channel_set_show_masked:
- * @channel_ID: The channel.
+ * @channel: The channel.
  * @show_masked: The new channel composite method.
  *
  * Set the composite method of the specified channel.
@@ -247,29 +273,33 @@ gimp_channel_get_show_masked (gint32 channel_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_channel_set_show_masked (gint32   channel_ID,
-                              gboolean show_masked)
+gimp_channel_set_show_masked (GimpChannel *channel,
+                              gboolean     show_masked)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-channel-set-show-masked",
-                                    &nreturn_vals,
-                                    GIMP_PDB_CHANNEL, channel_ID,
-                                    GIMP_PDB_INT32, show_masked,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_CHANNEL, channel,
+                                          G_TYPE_BOOLEAN, show_masked,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-channel-set-show-masked",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_channel_get_opacity:
- * @channel_ID: The channel.
+ * @channel: The channel.
  *
  * Get the opacity of the specified channel.
  *
@@ -278,28 +308,32 @@ gimp_channel_set_show_masked (gint32   channel_ID,
  * Returns: The channel opacity.
  **/
 gdouble
-gimp_channel_get_opacity (gint32 channel_ID)
+gimp_channel_get_opacity (GimpChannel *channel)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble opacity = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-channel-get-opacity",
-                                    &nreturn_vals,
-                                    GIMP_PDB_CHANNEL, channel_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_CHANNEL, channel,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    opacity = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-channel-get-opacity",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    opacity = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return opacity;
 }
 
 /**
  * gimp_channel_set_opacity:
- * @channel_ID: The channel.
+ * @channel: The channel.
  * @opacity: The new channel opacity.
  *
  * Set the opacity of the specified channel.
@@ -309,63 +343,67 @@ gimp_channel_get_opacity (gint32 channel_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_channel_set_opacity (gint32  channel_ID,
-                          gdouble opacity)
+gimp_channel_set_opacity (GimpChannel *channel,
+                          gdouble      opacity)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-channel-set-opacity",
-                                    &nreturn_vals,
-                                    GIMP_PDB_CHANNEL, channel_ID,
-                                    GIMP_PDB_FLOAT, opacity,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_CHANNEL, channel,
+                                          G_TYPE_DOUBLE, opacity,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-channel-set-opacity",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_channel_get_color:
- * @channel_ID: The channel.
- * @color: The channel compositing color.
+ * @channel: The channel.
  *
  * Get the compositing color of the specified channel.
  *
  * This procedure returns the specified channel's compositing color.
  *
- * Returns: TRUE on success.
+ * Returns: (transfer full): The channel compositing color.
  **/
-gboolean
-gimp_channel_get_color (gint32   channel_ID,
-                        GimpRGB *color)
+GeglColor *
+gimp_channel_get_color (GimpChannel *channel)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GeglColor *color = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-channel-get-color",
-                                    &nreturn_vals,
-                                    GIMP_PDB_CHANNEL, channel_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_CHANNEL, channel,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-channel-get-color",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (success)
-    *color = return_vals[1].data.d_color;
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    color = g_value_dup_object (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
-  return success;
+  return color;
 }
 
 /**
  * gimp_channel_set_color:
- * @channel_ID: The channel.
+ * @channel: The channel.
  * @color: The new channel compositing color.
  *
  * Set the compositing color of the specified channel.
@@ -375,22 +413,26 @@ gimp_channel_get_color (gint32   channel_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_channel_set_color (gint32         channel_ID,
-                        const GimpRGB *color)
+gimp_channel_set_color (GimpChannel *channel,
+                        GeglColor   *color)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-channel-set-color",
-                                    &nreturn_vals,
-                                    GIMP_PDB_CHANNEL, channel_ID,
-                                    GIMP_PDB_COLOR, color,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_CHANNEL, channel,
+                                          GEGL_TYPE_COLOR, color,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-channel-set-color",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

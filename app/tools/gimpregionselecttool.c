@@ -205,9 +205,12 @@ gimp_region_select_tool_button_release (GimpTool              *tool,
 
           if (! options->sample_merged)
             {
-              GimpDrawable *drawable = gimp_image_get_active_drawable (image);
+              GList *drawables = gimp_image_get_selected_drawables (image);
 
-              gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
+              if (g_list_length (drawables) == 1)
+                gimp_item_get_offset (drawables->data, &off_x, &off_y);
+
+              g_list_free (drawables);
             }
 
           gimp_channel_select_buffer (gimp_image_get_mask (image),
@@ -323,10 +326,13 @@ gimp_region_select_tool_draw (GimpDrawTool *draw_tool)
 
           if (! options->sample_merged)
             {
-              GimpImage    *image    = gimp_display_get_image (draw_tool->display);
-              GimpDrawable *drawable = gimp_image_get_active_drawable (image);
+              GimpImage *image     = gimp_display_get_image (draw_tool->display);
+              GList     *drawables = gimp_image_get_selected_drawables (image);
 
-              gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
+              if (g_list_length (drawables) == 1)
+                gimp_item_get_offset (drawables->data, &off_x, &off_y);
+
+              g_list_free (drawables);
             }
 
           gimp_draw_tool_add_boundary (draw_tool,
@@ -361,20 +367,24 @@ gimp_region_select_tool_get_mask (GimpRegionSelectTool *region_sel,
     {
       if (region_sel->region_mask)
         {
-          GimpRGB color = { 1.0, 0.0, 1.0, 1.0 };
-          gint    off_x = 0;
-          gint    off_y = 0;
+          GeglColor *color = gegl_color_new ("fuchsia");
+          gint       off_x = 0;
+          gint       off_y = 0;
 
           if (! options->sample_merged)
             {
-              GimpImage    *image    = gimp_display_get_image (display);
-              GimpDrawable *drawable = gimp_image_get_active_drawable (image);
+              GimpImage *image     = gimp_display_get_image (display);
+              GList     *drawables = gimp_image_get_selected_drawables (image);
 
-              gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
+              if (g_list_length (drawables) == 1)
+                gimp_item_get_offset (drawables->data, &off_x, &off_y);
+
+              g_list_free (drawables);
             }
 
           gimp_display_shell_set_mask (shell, region_sel->region_mask,
-                                       off_x, off_y, &color, FALSE);
+                                       off_x, off_y, color, FALSE);
+          g_object_unref (color);
         }
       else
         {

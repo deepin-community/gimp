@@ -49,27 +49,27 @@ hue_saturation_config_notify (GObject          *object,
                               GtkWidget        *color_area)
 {
   GimpHueSaturationConfig *config = GIMP_HUE_SATURATION_CONFIG (object);
+  GeglColor               *color;
   GimpHueRange             range;
-  GimpRGB                  color;
 
-  static const GimpRGB default_colors[7] =
+  static const gchar      *default_colors[7] =
   {
-    {   0,   0,   0, },
-    { 1.0,   0,   0, },
-    { 1.0, 1.0,   0, },
-    {   0, 1.0,   0, },
-    {   0, 1.0, 1.0, },
-    {   0,   0, 1.0, },
-    { 1.0,   0, 1.0, }
+    "black",   /* (0, 0, 0) */
+    "red",     /* (1, 0, 0) */
+    "yellow",  /* (1, 1, 0) */
+    "lime",    /* (0, 1, 0) */
+    "aqua",    /* (0, 1, 1) */
+    "blue",    /* (0, 0, 1) */
+    "fuchsia", /* (1, 0, 1) */
   };
 
-  range = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (color_area),
-                                              "hue-range"));
-  color = default_colors[range];
+  range = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (color_area), "hue-range"));
+  color = gegl_color_new (default_colors[range]);
 
-  gimp_operation_hue_saturation_map (config, &color, range, &color);
+  gimp_operation_hue_saturation_map (config, color, range);
+  gimp_color_area_set_color (GIMP_COLOR_AREA (color_area), color);
 
-  gimp_color_area_set_color (GIMP_COLOR_AREA (color_area), &color);
+  g_object_unref (color);
 }
 
 static void
@@ -111,8 +111,7 @@ _gimp_prop_gui_new_hue_saturation (GObject                  *config,
   GtkWidget *main_vbox;
   GtkWidget *frame;
   GtkWidget *vbox;
-  GtkWidget *abox;
-  GtkWidget *table;
+  GtkWidget *grid;
   GtkWidget *scale;
   GtkWidget *button;
   GtkWidget *hbox;
@@ -129,7 +128,7 @@ _gimp_prop_gui_new_hue_saturation (GObject                  *config,
     gint         frame_col;
     gint         frame_row;
   }
-  hue_range_table[] =
+  hue_range_grid[] =
   {
     { N_("M_aster"), N_("Adjust all colors"), 2, 3, 0, 0 },
     { N_("_R"),      N_("Red"),               2, 1, 2, 0 },
@@ -155,29 +154,24 @@ _gimp_prop_gui_new_hue_saturation (GObject                  *config,
   gtk_container_add (GTK_CONTAINER (frame), vbox);
   gtk_widget_show (vbox);
 
-  abox = gtk_alignment_new (0.5, 0.5, 0.0, 0.0);
-  gtk_box_pack_start (GTK_BOX (vbox), abox, TRUE, TRUE, 0);
-  gtk_widget_show (abox);
-
-  /*  The table containing hue ranges  */
-  table = gtk_table_new (7, 5, FALSE);
-  gtk_table_set_col_spacing (GTK_TABLE (table), 0, 4);
-  gtk_table_set_col_spacing (GTK_TABLE (table), 3, 4);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 0, 2);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 5, 2);
-  gtk_container_add (GTK_CONTAINER (abox), table);
+  /*  The grid containing hue ranges  */
+  grid = gtk_grid_new ();
+  gtk_widget_set_halign (grid, GTK_ALIGN_CENTER);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 4);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 2);
+  gtk_box_pack_start (GTK_BOX (vbox), grid, FALSE, FALSE, 0);
 
   /*  the radio buttons for hue ranges  */
-  for (i = 0; i < G_N_ELEMENTS (hue_range_table); i++)
+  for (i = 0; i < G_N_ELEMENTS (hue_range_grid); i++)
     {
       button = gtk_radio_button_new_with_mnemonic (group,
-                                                   gettext (hue_range_table[i].label));
+                                                   gettext (hue_range_grid[i].label));
       group = gtk_radio_button_get_group (GTK_RADIO_BUTTON (button));
       g_object_set_data (G_OBJECT (button), "gimp-item-data",
                          GINT_TO_POINTER (i));
 
       gimp_help_set_help_data (button,
-                               gettext (hue_range_table[i].tooltip),
+                               gettext (hue_range_grid[i].tooltip),
                                NULL);
 
       if (i == 0)
@@ -187,29 +181,25 @@ _gimp_prop_gui_new_hue_saturation (GObject                  *config,
           range_radio = button;
         }
 
-      gtk_table_attach (GTK_TABLE (table), button,
-                        hue_range_table[i].label_col,
-                        hue_range_table[i].label_col + 1,
-                        hue_range_table[i].label_row,
-                        hue_range_table[i].label_row + 1,
-                        GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
+      gtk_grid_attach (GTK_GRID (grid), button,
+                       hue_range_grid[i].label_col,
+                       hue_range_grid[i].label_row,
+                       1, 1);
 
       if (i > 0)
         {
           GtkWidget *color_area;
-          GimpRGB    color = { 0, };
+          GeglColor *color = gegl_color_new ("transparent");
 
           frame = gtk_frame_new (NULL);
           gtk_frame_set_shadow_type (GTK_FRAME (frame), GTK_SHADOW_IN);
-          gtk_table_attach (GTK_TABLE (table), frame,
-                            hue_range_table[i].frame_col,
-                            hue_range_table[i].frame_col + 1,
-                            hue_range_table[i].frame_row,
-                            hue_range_table[i].frame_row + 1,
-                            GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
+          gtk_grid_attach (GTK_GRID (grid), frame,
+                           hue_range_grid[i].frame_col,
+                           hue_range_grid[i].frame_row,
+                           1, 1);
           gtk_widget_show (frame);
 
-          color_area = gimp_color_area_new (&color, GIMP_COLOR_AREA_FLAT, 0);
+          color_area = gimp_color_area_new (color, GIMP_COLOR_AREA_FLAT, 0);
           gtk_widget_set_size_request (color_area, COLOR_WIDTH, COLOR_HEIGHT);
           gtk_container_add (GTK_CONTAINER (frame), color_area);
           gtk_widget_show (color_area);
@@ -220,6 +210,8 @@ _gimp_prop_gui_new_hue_saturation (GObject                  *config,
                                    G_CALLBACK (hue_saturation_config_notify),
                                    color_area, 0);
           hue_saturation_config_notify (config, NULL, color_area);
+
+          g_object_unref (color);
         }
 
       g_signal_connect (button, "toggled",
@@ -229,14 +221,13 @@ _gimp_prop_gui_new_hue_saturation (GObject                  *config,
       gtk_widget_show (button);
     }
 
-  gtk_widget_show (table);
+  gtk_widget_show (grid);
 
   /* Create the 'Overlap' option slider */
-  scale = gimp_prop_spin_scale_new (config, "overlap",
-                                    _("_Overlap"), 0.01, 0.1, 0);
-  gimp_prop_widget_set_factor (scale, 100.0, 0.0, 0.0, 1);
+  scale = gimp_prop_spin_scale_new (config, "overlap", 0.01, 0.1, 0);
+  gimp_prop_widget_set_factor (scale, 100.0, 1.0, 10.0, 1);
+  gimp_spin_scale_set_label (GIMP_SPIN_SCALE (scale), _("_Overlap"));
   gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   frame = gimp_frame_new (_("Adjust Selected Color"));
   gtk_box_pack_start (GTK_BOX (main_vbox), frame, FALSE, FALSE, 0);
@@ -248,24 +239,22 @@ _gimp_prop_gui_new_hue_saturation (GObject                  *config,
 
   /*  Create the hue scale widget  */
   scale = gimp_prop_spin_scale_new (config, "hue",
-                                    _("_Hue"), 1.0 / 180.0, 15.0 / 180.0, 0);
-  gimp_prop_widget_set_factor (scale, 180.0, 0.0, 0.0, 1);
+                                    1.0 / 180.0, 15.0 / 180.0, 0);
+  gimp_prop_widget_set_factor (scale, 180.0, 1.0, 15.0, 1);
+  gimp_spin_scale_set_label (GIMP_SPIN_SCALE (scale), _("_Hue"));
   gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   /*  Create the lightness scale widget  */
-  scale = gimp_prop_spin_scale_new (config, "lightness",
-                                    _("_Lightness"), 0.01, 0.1, 0);
-  gimp_prop_widget_set_factor (scale, 100.0, 0.0, 0.0, 1);
+  scale = gimp_prop_spin_scale_new (config, "lightness", 0.01, 0.1, 0);
+  gimp_prop_widget_set_factor (scale, 100.0, 1.0, 10.0, 1);
+  gimp_spin_scale_set_label (GIMP_SPIN_SCALE (scale), _("_Lightness"));
   gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   /*  Create the saturation scale widget  */
-  scale = gimp_prop_spin_scale_new (config, "saturation",
-                                    _("_Saturation"), 0.01, 0.1, 0);
-  gimp_prop_widget_set_factor (scale, 100.0, 0.0, 0.0, 1);
+  scale = gimp_prop_spin_scale_new (config, "saturation", 0.01, 0.1, 0);
+  gimp_prop_widget_set_factor (scale, 100.0, 1.0, 10.0, 1);
+  gimp_spin_scale_set_label (GIMP_SPIN_SCALE (scale), _("_Saturation"));
   gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
   gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);

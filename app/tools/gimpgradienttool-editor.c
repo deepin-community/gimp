@@ -22,6 +22,7 @@
 #include <gdk/gdkkeysyms.h>
 
 #include "libgimpbase/gimpbase.h"
+#include "libgimpcolor/gimpcolor.h"
 #include "libgimpmath/gimpmath.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
@@ -331,10 +332,7 @@ gimp_gradient_tool_editor_line_selection_changed (GimpToolLine     *line,
           seg = gimp_gradient_tool_editor_handle_get_segment (gradient_tool,
                                                               selection);
 
-          homogeneous = seg->right_color.r    == seg->next->left_color.r &&
-                        seg->right_color.g    == seg->next->left_color.g &&
-                        seg->right_color.b    == seg->next->left_color.b &&
-                        seg->right_color.a    == seg->next->left_color.a &&
+          homogeneous = gimp_color_is_perceptually_identical (seg->right_color, seg->next->left_color) &&
                         seg->right_color_type == seg->next->left_color_type;
 
           gimp_chain_button_set_active (
@@ -400,7 +398,7 @@ gimp_gradient_tool_editor_color_entry_color_changed (GimpColorButton  *button,
   GimpGradientOptions *options       = GIMP_GRADIENT_TOOL_GET_OPTIONS (gradient_tool);
   GimpPaintOptions    *paint_options = GIMP_PAINT_OPTIONS (options);
   gint                 selection;
-  GimpRGB              color;
+  GeglColor           *color;
   Direction            direction;
   GtkWidget           *chain_button;
   GimpGradientSegment *seg;
@@ -411,7 +409,7 @@ gimp_gradient_tool_editor_color_entry_color_changed (GimpColorButton  *button,
   selection =
     gimp_tool_line_get_selection (GIMP_TOOL_LINE (gradient_tool->widget));
 
-  gimp_color_button_get_color (button, &color);
+  color = gimp_color_button_get_color (button);
 
   direction =
     GPOINTER_TO_INT (g_object_get_data (G_OBJECT (button),
@@ -442,12 +440,14 @@ gimp_gradient_tool_editor_color_entry_color_changed (GimpColorButton  *button,
   switch (selection)
     {
     case GIMP_TOOL_LINE_HANDLE_START:
-      seg->left_color      = color;
+      g_clear_object (&seg->left_color);
+      seg->left_color      = g_object_ref (color);
       seg->left_color_type = GIMP_GRADIENT_COLOR_FIXED;
       break;
 
     case GIMP_TOOL_LINE_HANDLE_END:
-      seg->right_color      = color;
+      g_clear_object (&seg->right_color);
+      seg->right_color      = g_object_ref (color);
       seg->right_color_type = GIMP_GRADIENT_COLOR_FIXED;
       break;
 
@@ -456,7 +456,8 @@ gimp_gradient_tool_editor_color_entry_color_changed (GimpColorButton  *button,
           (chain_button               &&
            gimp_chain_button_get_active (GIMP_CHAIN_BUTTON (chain_button))))
         {
-          seg->right_color      = color;
+          g_clear_object (&seg->right_color);
+          seg->right_color      = gegl_color_duplicate (color);
           seg->right_color_type = GIMP_GRADIENT_COLOR_FIXED;
         }
 
@@ -464,13 +465,16 @@ gimp_gradient_tool_editor_color_entry_color_changed (GimpColorButton  *button,
           (chain_button                &&
            gimp_chain_button_get_active (GIMP_CHAIN_BUTTON (chain_button))))
         {
-          seg->next->left_color      = color;
+          g_clear_object (&seg->next->left_color);
+          seg->next->left_color      = g_object_ref (color);
           seg->next->left_color_type = GIMP_GRADIENT_COLOR_FIXED;
         }
     }
 
   gimp_gradient_tool_editor_thaw_gradient (gradient_tool);
   gimp_gradient_tool_editor_end_edit (gradient_tool, FALSE);
+
+  g_object_unref (color);
 }
 
 static void
@@ -1202,14 +1206,15 @@ gimp_gradient_tool_editor_color_entry_new (GimpGradientTool  *gradient_tool,
   GtkWidget   *hbox;
   GtkWidget   *button;
   GtkWidget   *combo;
-  GimpRGB      color   = {};
+  GeglColor   *color   = gegl_color_new ("transparent");
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 2);
 
   /* the color panel */
-  *color_panel = button = gimp_color_panel_new (title, &color,
+  *color_panel = button = gimp_color_panel_new (title, color,
                                                 GIMP_COLOR_AREA_SMALL_CHECKS,
                                                 24, 24);
+  g_object_unref (color);
   gimp_color_button_set_update (GIMP_COLOR_BUTTON (button), TRUE);
   gimp_color_panel_set_context (GIMP_COLOR_PANEL (button), context);
   gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
@@ -1260,7 +1265,7 @@ gimp_gradient_tool_editor_init_endpoint_gui (GimpGradientTool *gradient_tool)
   gdouble           xres;
   gdouble           yres;
   GtkWidget        *editor;
-  GtkWidget        *table;
+  GtkWidget        *grid;
   GtkWidget        *label;
   GtkWidget        *spinbutton;
   GtkWidget        *se;
@@ -1275,24 +1280,22 @@ gimp_gradient_tool_editor_init_endpoint_gui (GimpGradientTool *gradient_tool)
   gtk_box_pack_start (GTK_BOX (gimp_tool_gui_get_vbox (gradient_tool->gui)),
                       editor, FALSE, TRUE, 0);
 
-  /* the main table */
-  table = gtk_table_new (1, 2, FALSE);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 4);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 4);
-  gtk_box_pack_start (GTK_BOX (editor), table, FALSE, TRUE, 0);
-  gtk_widget_show (table);
+  /* the main grid */
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 4);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 4);
+  gtk_box_pack_start (GTK_BOX (editor), grid, FALSE, TRUE, 0);
+  gtk_widget_show (grid);
 
   /* the position labels */
   label = gtk_label_new (_("X:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, row, row + 1,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
   gtk_widget_show (label);
 
   label = gtk_label_new (_("Y:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, row + 1, row + 2,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row + 1, 1, 1);
   gtk_widget_show (label);
 
   /* the position size entry */
@@ -1301,21 +1304,18 @@ gimp_gradient_tool_editor_init_endpoint_gui (GimpGradientTool *gradient_tool)
   gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 6);
 
   gradient_tool->endpoint_se =
-  se                         = gimp_size_entry_new (1, GIMP_UNIT_PIXEL, "%a",
+  se                         = gimp_size_entry_new (1, gimp_unit_pixel (), "%a",
                                                     TRUE, TRUE, FALSE, 6,
                                                     GIMP_SIZE_ENTRY_UPDATE_SIZE);
-  gtk_table_set_row_spacings (GTK_TABLE (se), 4);
-  gtk_table_set_col_spacings (GTK_TABLE (se), 2);
+  gtk_grid_set_row_spacing (GTK_GRID (se), 4);
+  gtk_grid_set_column_spacing (GTK_GRID (se), 2);
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (se),
                              GTK_SPIN_BUTTON (spinbutton), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (se), spinbutton, 1, 2, 0, 1);
+  gtk_grid_attach (GTK_GRID (se), spinbutton, 1, 0, 1, 1);
   gtk_widget_show (spinbutton);
 
-  gtk_table_attach (GTK_TABLE (table), se, 1, 2, row, row + 2,
-                    GTK_SHRINK | GTK_FILL | GTK_EXPAND,
-                    GTK_SHRINK | GTK_FILL,
-                    0, 0);
+  gtk_grid_attach (GTK_GRID (grid), se, 1, row, 1, 2);
   gtk_widget_show (se);
 
   gimp_size_entry_set_unit (GIMP_SIZE_ENTRY (se), shell->unit);
@@ -1344,18 +1344,14 @@ gimp_gradient_tool_editor_init_endpoint_gui (GimpGradientTool *gradient_tool)
   /* the color label */
   label = gtk_label_new (_("Color:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, row, row + 1,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
   gtk_widget_show (label);
 
   /* the color entry */
   hbox = gimp_gradient_tool_editor_color_entry_new (
     gradient_tool, _("Change Endpoint Color"), DIRECTION_NONE, NULL,
     &gradient_tool->endpoint_color_panel, &gradient_tool->endpoint_type_combo);
-  gtk_table_attach (GTK_TABLE (table), hbox, 1, 2, row, row + 1,
-                    GTK_SHRINK | GTK_FILL | GTK_EXPAND,
-                    GTK_SHRINK | GTK_FILL,
-                    0, 0);
+  gtk_grid_attach (GTK_GRID (grid), hbox, 1, row, 1, 1);
   gtk_widget_show (hbox);
 
   row++;
@@ -1365,10 +1361,10 @@ static void
 gimp_gradient_tool_editor_init_stop_gui (GimpGradientTool *gradient_tool)
 {
   GtkWidget *editor;
-  GtkWidget *table;
+  GtkWidget *grid;
   GtkWidget *label;
   GtkWidget *se;
-  GtkWidget *table2;
+  GtkWidget *grid2;
   GtkWidget *button;
   GtkWidget *hbox;
   GtkWidget *separator;
@@ -1380,30 +1376,26 @@ gimp_gradient_tool_editor_init_stop_gui (GimpGradientTool *gradient_tool)
   gtk_box_pack_start (GTK_BOX (gimp_tool_gui_get_vbox (gradient_tool->gui)),
                       editor, FALSE, TRUE, 0);
 
-  /* the main table */
-  table = gtk_table_new (1, 2, FALSE);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 4);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 4);
-  gtk_box_pack_start (GTK_BOX (editor), table, FALSE, TRUE, 0);
-  gtk_widget_show (table);
+  /* the main grid */
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 4);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 4);
+  gtk_box_pack_start (GTK_BOX (editor), grid, FALSE, TRUE, 0);
+  gtk_widget_show (grid);
 
   /* the position label */
   label = gtk_label_new (_("Position:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, row, row + 1,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
   gtk_widget_show (label);
 
   /* the position size entry */
   gradient_tool->stop_se =
-  se                     = gimp_size_entry_new (1, GIMP_UNIT_PERCENT, "%a",
+  se                     = gimp_size_entry_new (1, gimp_unit_percent (), "%a",
                                                 FALSE, TRUE, FALSE, 6,
                                                 GIMP_SIZE_ENTRY_UPDATE_SIZE);
   gimp_size_entry_show_unit_menu (GIMP_SIZE_ENTRY (se), FALSE);
-  gtk_table_attach (GTK_TABLE (table), se, 1, 2, row, row + 1,
-                    GTK_SHRINK | GTK_FILL | GTK_EXPAND,
-                    GTK_SHRINK | GTK_FILL,
-                    0, 0);
+  gtk_grid_attach (GTK_GRID (grid), se, 1, row, 1, 1);
   gtk_widget_show (se);
 
   g_signal_connect (se, "value-changed",
@@ -1415,62 +1407,45 @@ gimp_gradient_tool_editor_init_stop_gui (GimpGradientTool *gradient_tool)
   /* the color labels */
   label = gtk_label_new (_("Left color:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, row, row + 1,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
   gtk_widget_show (label);
 
   label = gtk_label_new (_("Right color:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, row + 1, row + 2,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row + 1, 1, 1);
   gtk_widget_show (label);
 
-  /* the color entries table */
-  table2 = gtk_table_new (1, 2, FALSE);
-  gtk_table_set_row_spacings (GTK_TABLE (table2), 4);
-  gtk_table_set_col_spacings (GTK_TABLE (table2), 2);
-  gtk_table_attach (GTK_TABLE (table), table2, 1, 2, row, row + 2,
-                    GTK_SHRINK | GTK_FILL | GTK_EXPAND,
-                    GTK_SHRINK | GTK_FILL,
-                    0, 0);
-  gtk_widget_show (table2);
+  /* the color entries grid */
+  grid2 = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid2), 4);
+  gtk_grid_set_column_spacing (GTK_GRID (grid2), 2);
+  gtk_grid_attach (GTK_GRID (grid), grid2, 1, row, 1, 2);
+  gtk_widget_show (grid2);
 
   /* the color entries chain button */
   gradient_tool->stop_chain_button =
   button                           = gimp_chain_button_new (GIMP_CHAIN_RIGHT);
-  gtk_table_attach (GTK_TABLE (table2), button, 1, 2, 0, 2,
-                    GTK_SHRINK | GTK_FILL,
-                    GTK_SHRINK | GTK_FILL | GTK_EXPAND,
-                    0, 0);
+  gtk_grid_attach (GTK_GRID (grid2), button, 1, 0, 1, 2);
   gtk_widget_show (button);
 
   /* the color entries */
   hbox = gimp_gradient_tool_editor_color_entry_new (
     gradient_tool, _("Change Stop Color"), DIRECTION_LEFT, button,
     &gradient_tool->stop_left_color_panel, &gradient_tool->stop_left_type_combo);
-  gtk_table_attach (GTK_TABLE (table2), hbox, 0, 1, 0, 1,
-                    GTK_SHRINK | GTK_FILL | GTK_EXPAND,
-                    GTK_SHRINK | GTK_FILL,
-                    0, 0);
+  gtk_grid_attach (GTK_GRID (grid2), hbox, 0, 0, 1, 1);
   gtk_widget_show (hbox);
 
   hbox = gimp_gradient_tool_editor_color_entry_new (
     gradient_tool, _("Change Stop Color"), DIRECTION_RIGHT, button,
     &gradient_tool->stop_right_color_panel, &gradient_tool->stop_right_type_combo);
-  gtk_table_attach (GTK_TABLE (table2), hbox, 0, 1, 1, 2,
-                    GTK_SHRINK | GTK_FILL | GTK_EXPAND,
-                    GTK_SHRINK | GTK_FILL,
-                    0, 0);
+  gtk_grid_attach (GTK_GRID (grid2), hbox, 0, 1, 1, 1);
   gtk_widget_show (hbox);
 
   row += 2;
 
   /* the action buttons separator */
-  separator = gtk_hseparator_new ();
-  gtk_table_attach (GTK_TABLE (table), separator, 0, 2, row, row + 1,
-                    GTK_SHRINK | GTK_FILL | GTK_EXPAND,
-                    GTK_SHRINK | GTK_FILL,
-                    0, 0);
+  separator = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
+  gtk_grid_attach (GTK_GRID (grid), separator, 0, row, 2, 1);
   gtk_widget_show (separator);
 
   row++;
@@ -1487,7 +1462,7 @@ static void
 gimp_gradient_tool_editor_init_midpoint_gui (GimpGradientTool *gradient_tool)
 {
   GtkWidget *editor;
-  GtkWidget *table;
+  GtkWidget *grid;
   GtkWidget *label;
   GtkWidget *se;
   GtkWidget *combo;
@@ -1500,30 +1475,26 @@ gimp_gradient_tool_editor_init_midpoint_gui (GimpGradientTool *gradient_tool)
   gtk_box_pack_start (GTK_BOX (gimp_tool_gui_get_vbox (gradient_tool->gui)),
                       editor, FALSE, TRUE, 0);
 
-  /* the main table */
-  table = gtk_table_new (1, 2, FALSE);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 4);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 4);
-  gtk_box_pack_start (GTK_BOX (editor), table, FALSE, TRUE, 0);
-  gtk_widget_show (table);
+  /* the main grid */
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 4);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 4);
+  gtk_box_pack_start (GTK_BOX (editor), grid, FALSE, TRUE, 0);
+  gtk_widget_show (grid);
 
   /* the position label */
   label = gtk_label_new (_("Position:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, row, row + 1,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
   gtk_widget_show (label);
 
   /* the position size entry */
   gradient_tool->midpoint_se =
-  se                         = gimp_size_entry_new (1, GIMP_UNIT_PERCENT, "%a",
+  se                         = gimp_size_entry_new (1, gimp_unit_percent (), "%a",
                                                     FALSE, TRUE, FALSE, 6,
                                                     GIMP_SIZE_ENTRY_UPDATE_SIZE);
   gimp_size_entry_show_unit_menu (GIMP_SIZE_ENTRY (se), FALSE);
-  gtk_table_attach (GTK_TABLE (table), se, 1, 2, row, row + 1,
-                    GTK_SHRINK | GTK_FILL | GTK_EXPAND,
-                    GTK_SHRINK | GTK_FILL,
-                    0, 0);
+  gtk_grid_attach (GTK_GRID (grid), se, 1, row, 1, 1);
   gtk_widget_show (se);
 
   g_signal_connect (se, "value-changed",
@@ -1535,17 +1506,13 @@ gimp_gradient_tool_editor_init_midpoint_gui (GimpGradientTool *gradient_tool)
   /* the type label */
   label = gtk_label_new (_("Blending:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, row, row + 1,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
   gtk_widget_show (label);
 
   /* the type combo */
   gradient_tool->midpoint_type_combo =
   combo                              = gimp_enum_combo_box_new (GIMP_TYPE_GRADIENT_SEGMENT_TYPE);
-  gtk_table_attach (GTK_TABLE (table), combo, 1, 2, row, row + 1,
-                    GTK_SHRINK | GTK_FILL | GTK_EXPAND,
-                    GTK_SHRINK | GTK_FILL,
-                    0, 0);
+  gtk_grid_attach (GTK_GRID (grid), combo, 1, row, 1, 1);
   gtk_widget_show (combo);
 
   g_signal_connect (combo, "changed",
@@ -1557,17 +1524,13 @@ gimp_gradient_tool_editor_init_midpoint_gui (GimpGradientTool *gradient_tool)
   /* the color label */
   label = gtk_label_new (_("Coloring:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, row, row + 1,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, row, 1, 1);
   gtk_widget_show (label);
 
   /* the color combo */
   gradient_tool->midpoint_color_combo =
   combo                              = gimp_enum_combo_box_new (GIMP_TYPE_GRADIENT_SEGMENT_COLOR);
-  gtk_table_attach (GTK_TABLE (table), combo, 1, 2, row, row + 1,
-                    GTK_SHRINK | GTK_FILL | GTK_EXPAND,
-                    GTK_SHRINK | GTK_FILL,
-                    0, 0);
+  gtk_grid_attach (GTK_GRID (grid), combo, 1, row, 1, 1);
   gtk_widget_show (combo);
 
   g_signal_connect (combo, "changed",
@@ -1577,11 +1540,8 @@ gimp_gradient_tool_editor_init_midpoint_gui (GimpGradientTool *gradient_tool)
   row++;
 
   /* the action buttons separator */
-  separator = gtk_hseparator_new ();
-  gtk_table_attach (GTK_TABLE (table), separator, 0, 2, row, row + 1,
-                    GTK_SHRINK | GTK_FILL | GTK_EXPAND,
-                    GTK_SHRINK | GTK_FILL,
-                    0, 0);
+  separator = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
+  gtk_grid_attach (GTK_GRID (grid), separator, 0, row, 2, 1);
   gtk_widget_show (separator);
 
   row++;
@@ -1615,7 +1575,7 @@ gimp_gradient_tool_editor_update_endpoint_gui (GimpGradientTool *gradient_tool,
   const gchar         *title;
   gdouble              x;
   gdouble              y;
-  GimpRGB              color;
+  GeglColor           *color = NULL;
   GimpGradientColor    color_type;
 
   editable = gimp_gradient_tool_editor_is_gradient_editable (gradient_tool);
@@ -1662,16 +1622,16 @@ gimp_gradient_tool_editor_update_endpoint_gui (GimpGradientTool *gradient_tool,
     case GIMP_TOOL_LINE_HANDLE_START:
       title = _("Start Endpoint");
 
-      gimp_gradient_segment_get_left_flat_color (gradient_tool->gradient, context,
-                                                 seg, &color);
+      color = gimp_gradient_segment_get_left_flat_color (gradient_tool->gradient, context,
+                                                         seg);
       color_type = seg->left_color_type;
       break;
 
     case GIMP_TOOL_LINE_HANDLE_END:
       title = _("End Endpoint");
 
-      gimp_gradient_segment_get_right_flat_color (gradient_tool->gradient, context,
-                                                  seg, &color);
+      color = gimp_gradient_segment_get_right_flat_color (gradient_tool->gradient, context,
+                                                          seg);
       color_type = seg->right_color_type;
       break;
 
@@ -1684,8 +1644,7 @@ gimp_gradient_tool_editor_update_endpoint_gui (GimpGradientTool *gradient_tool,
   gimp_size_entry_set_refval (GIMP_SIZE_ENTRY (gradient_tool->endpoint_se), 0, x);
   gimp_size_entry_set_refval (GIMP_SIZE_ENTRY (gradient_tool->endpoint_se), 1, y);
 
-  gimp_color_button_set_color (
-    GIMP_COLOR_BUTTON (gradient_tool->endpoint_color_panel), &color);
+  gimp_color_button_set_color (GIMP_COLOR_BUTTON (gradient_tool->endpoint_color_panel), color);
   gimp_int_combo_box_set_active (
     GIMP_INT_COMBO_BOX (gradient_tool->endpoint_type_combo), color_type);
 
@@ -1693,6 +1652,8 @@ gimp_gradient_tool_editor_update_endpoint_gui (GimpGradientTool *gradient_tool,
   gtk_widget_set_sensitive (gradient_tool->endpoint_type_combo,  editable);
 
   gtk_widget_show (gradient_tool->endpoint_editor);
+
+  g_object_unref (color);
 }
 
 static void
@@ -1708,9 +1669,9 @@ gimp_gradient_tool_editor_update_stop_gui (GimpGradientTool *gradient_tool,
   gdouble              min;
   gdouble              max;
   gdouble              value;
-  GimpRGB              left_color;
+  GeglColor           *left_color;
   GimpGradientColor    left_color_type;
-  GimpRGB              right_color;
+  GeglColor           *right_color;
   GimpGradientColor    right_color_type;
 
   editable = gimp_gradient_tool_editor_is_gradient_editable (gradient_tool);
@@ -1727,12 +1688,11 @@ gimp_gradient_tool_editor_update_stop_gui (GimpGradientTool *gradient_tool,
   max   = seg->next->right;
   value = seg->right;
 
-  gimp_gradient_segment_get_right_flat_color (gradient_tool->gradient, context,
-                                              seg, &left_color);
+  left_color = gimp_gradient_segment_get_right_flat_color (gradient_tool->gradient, context, seg);
   left_color_type = seg->right_color_type;
 
-  gimp_gradient_segment_get_left_flat_color (gradient_tool->gradient, context,
-                                             seg->next, &right_color);
+  right_color = gimp_gradient_segment_get_left_flat_color (gradient_tool->gradient, context,
+                                                           seg->next);
   right_color_type = seg->next->left_color_type;
 
   gimp_tool_gui_set_title (gradient_tool->gui, title);
@@ -1743,12 +1703,12 @@ gimp_gradient_tool_editor_update_stop_gui (GimpGradientTool *gradient_tool,
                               0, 100.0 * value);
 
   gimp_color_button_set_color (
-    GIMP_COLOR_BUTTON (gradient_tool->stop_left_color_panel), &left_color);
+    GIMP_COLOR_BUTTON (gradient_tool->stop_left_color_panel), left_color);
   gimp_int_combo_box_set_active (
     GIMP_INT_COMBO_BOX (gradient_tool->stop_left_type_combo), left_color_type);
 
   gimp_color_button_set_color (
-    GIMP_COLOR_BUTTON (gradient_tool->stop_right_color_panel), &right_color);
+    GIMP_COLOR_BUTTON (gradient_tool->stop_right_color_panel), right_color);
   gimp_int_combo_box_set_active (
     GIMP_INT_COMBO_BOX (gradient_tool->stop_right_type_combo), right_color_type);
 
@@ -1763,6 +1723,8 @@ gimp_gradient_tool_editor_update_stop_gui (GimpGradientTool *gradient_tool,
     editable);
 
   g_free (title);
+  g_object_unref (left_color);
+  g_object_unref (right_color);
 
   gtk_widget_show (gradient_tool->stop_editor);
 }
@@ -1850,7 +1812,6 @@ gimp_gradient_tool_editor_update_gui (GimpGradientTool *gradient_tool)
               gradient_tool->gui =
                 gimp_tool_gui_new (GIMP_TOOL (gradient_tool)->tool_info,
                                    NULL, NULL, NULL, NULL,
-                                   gtk_widget_get_screen (GTK_WIDGET (shell)),
                                    gimp_widget_get_monitor (GTK_WIDGET (shell)),
                                    TRUE,
 

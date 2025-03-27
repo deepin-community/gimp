@@ -39,7 +39,7 @@ struct _GimpLevelsConfig
 {
   GimpOperationSettings  parent_instance;
 
-  gboolean               linear;
+  GimpTRCType            trc;
 
   GimpHistogramChannel   channel;
 
@@ -74,9 +74,10 @@ void       gimp_levels_config_stretch_channel  (GimpLevelsConfig      *config,
                                                 GimpHistogramChannel   channel);
 void       gimp_levels_config_adjust_by_colors (GimpLevelsConfig      *config,
                                                 GimpHistogramChannel   channel,
-                                                const GimpRGB         *black,
-                                                const GimpRGB         *gray,
-                                                const GimpRGB         *white);
+                                                const Babl            *target_space,
+                                                GeglColor             *black,
+                                                GeglColor             *gray,
+                                                GeglColor             *white);
 
 GimpCurvesConfig *
            gimp_levels_config_to_curves_config (GimpLevelsConfig      *config);

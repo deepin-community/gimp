@@ -24,6 +24,8 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "gimpwidgets.h"
 
 
@@ -40,14 +42,14 @@ enum
 {
   PROP_0,
   PROP_ICON_NAME,
-  PROP_STOCK_ID,
   PROP_HINT
 };
 
-struct _GimpHintBoxPrivate
+struct _GimpHintBox
 {
+  GtkBox parent_instance;
+
   gchar *icon_name;
-  gchar *stock_id;
   gchar *hint;
 };
 
@@ -64,7 +66,7 @@ static void   gimp_hint_box_get_property (GObject      *object,
                                           GParamSpec   *pspec);
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpHintBox, gimp_hint_box, GTK_TYPE_BOX)
+G_DEFINE_TYPE (GimpHintBox, gimp_hint_box, GTK_TYPE_BOX)
 
 #define parent_class gimp_hint_box_parent_class
 
@@ -87,14 +89,6 @@ gimp_hint_box_class_init (GimpHintBoxClass *klass)
                                                         G_PARAM_CONSTRUCT_ONLY |
                                                         GIMP_PARAM_READWRITE));
 
-  g_object_class_install_property (object_class, PROP_STOCK_ID,
-                                   g_param_spec_string ("stock-id",
-                                                        "Stock ID",
-                                                        "Deprecated: use icon-name instead",
-                                                        GIMP_ICON_DIALOG_INFORMATION,
-                                                        G_PARAM_CONSTRUCT_ONLY |
-                                                        GIMP_PARAM_READWRITE));
-
   g_object_class_install_property (object_class, PROP_HINT,
                                    g_param_spec_string ("hint",
                                                         "Hint",
@@ -107,8 +101,6 @@ gimp_hint_box_class_init (GimpHintBoxClass *klass)
 static void
 gimp_hint_box_init (GimpHintBox *box)
 {
-  box->priv = gimp_hint_box_get_instance_private (box);
-
   gtk_orientable_set_orientation (GTK_ORIENTABLE (box),
                                   GTK_ORIENTATION_HORIZONTAL);
 }
@@ -124,25 +116,20 @@ gimp_hint_box_constructed (GObject *object)
 
   gtk_box_set_spacing (GTK_BOX (box), 12);
 
-  if (box->priv->icon_name)
+  if (box->icon_name)
     {
-      image = gtk_image_new_from_icon_name (box->priv->icon_name,
+      image = gtk_image_new_from_icon_name (box->icon_name,
                                             GTK_ICON_SIZE_DIALOG);
-    }
-  else if (box->priv->stock_id)
-    {
-      image = gtk_image_new_from_stock (box->priv->stock_id,
-                                        GTK_ICON_SIZE_DIALOG);
     }
 
   if (image)
     {
       gtk_box_pack_start (GTK_BOX (box), image, FALSE, FALSE, 0);
-      gtk_widget_show (image);
+      gtk_widget_set_visible (image, TRUE);
     }
 
   label = g_object_new (GTK_TYPE_LABEL,
-                        "label",   box->priv->hint,
+                        "label",   box->hint,
                         "wrap",    TRUE,
                         "justify", GTK_JUSTIFY_LEFT,
                         "xalign",  0.0,
@@ -153,7 +140,7 @@ gimp_hint_box_constructed (GObject *object)
                              PANGO_ATTR_STYLE, PANGO_STYLE_ITALIC,
                              -1);
   gtk_box_pack_start (GTK_BOX (box), label, FALSE, FALSE, 0);
-  gtk_widget_show (label);
+  gtk_widget_set_visible (label, TRUE);
 }
 
 static void
@@ -161,9 +148,8 @@ gimp_hint_box_finalize (GObject *object)
 {
   GimpHintBox *box = GIMP_HINT_BOX (object);
 
-  g_clear_pointer (&box->priv->icon_name, g_free);
-  g_clear_pointer (&box->priv->stock_id,  g_free);
-  g_clear_pointer (&box->priv->hint,      g_free);
+  g_clear_pointer (&box->icon_name, g_free);
+  g_clear_pointer (&box->hint,      g_free);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -179,15 +165,11 @@ gimp_hint_box_set_property (GObject      *object,
   switch (property_id)
     {
     case PROP_ICON_NAME:
-      box->priv->icon_name = g_value_dup_string (value);
-      break;
-
-    case PROP_STOCK_ID:
-      box->priv->stock_id = g_value_dup_string (value);
+      box->icon_name = g_value_dup_string (value);
       break;
 
     case PROP_HINT:
-      box->priv->hint = g_value_dup_string (value);
+      box->hint = g_value_dup_string (value);
       break;
 
     default:
@@ -207,15 +189,11 @@ gimp_hint_box_get_property (GObject    *object,
   switch (property_id)
     {
     case PROP_ICON_NAME:
-      g_value_set_string (value, box->priv->icon_name);
-      break;
-
-    case PROP_STOCK_ID:
-      g_value_set_string (value, box->priv->stock_id);
+      g_value_set_string (value, box->icon_name);
       break;
 
     case PROP_HINT:
-      g_value_set_string (value, box->priv->hint);
+      g_value_set_string (value, box->hint);
       break;
 
     default:
@@ -229,9 +207,9 @@ gimp_hint_box_get_property (GObject    *object,
  * @hint: text to display as a user hint
  *
  * Creates a new widget that shows a text label showing @hint,
- * decorated with a GIMP_ICON_DIALOG_INFORMATION wilber icon.
+ * decorated with a GIMP_ICON_INFO wilber icon.
  *
- * Return value: a new widget
+ * Returns: a new widget
  *
  * Since GIMP 2.4
  **/

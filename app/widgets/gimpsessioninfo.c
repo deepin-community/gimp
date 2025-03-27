@@ -63,16 +63,14 @@ enum
   SESSION_INFO_GIMP_TOOLBOX
 };
 
-#define DEFAULT_SCREEN  -1
-#define DEFAULT_MONITOR -1
+#define DEFAULT_MONITOR NULL
 
 
 typedef struct
 {
   GimpSessionInfo   *info;
   GimpDialogFactory *factory;
-  GdkScreen         *screen;
-  gint               monitor;
+  GdkMonitor        *monitor;
   GtkWidget         *dialog;
 } GimpRestoreDocksData;
 
@@ -119,7 +117,6 @@ gimp_session_info_init (GimpSessionInfo *info)
   info->p = gimp_session_info_get_instance_private (info);
 
   info->p->monitor = DEFAULT_MONITOR;
-  info->p->screen  = DEFAULT_SCREEN;
 }
 
 static void
@@ -152,6 +149,20 @@ gimp_session_info_get_memsize (GimpObject *object,
 
   return memsize + GIMP_OBJECT_CLASS (parent_class)->get_memsize (object,
                                                                   gui_size);
+}
+
+static gint
+monitor_number (GdkMonitor *monitor)
+{
+  GdkDisplay *display    = gdk_monitor_get_display (monitor);
+  gint        n_monitors = gdk_display_get_n_monitors (display);
+  gint        i;
+
+  for (i = 0; i < n_monitors; i++)
+    if (gdk_display_get_monitor (display, i) == monitor)
+      return i;
+
+  return 0;
 }
 
 static gboolean
@@ -192,17 +203,13 @@ gimp_session_info_serialize (GimpConfig       *config,
   if (info->p->monitor != DEFAULT_MONITOR)
     {
       gimp_config_writer_open (writer, "monitor");
-      gimp_config_writer_printf (writer, "%d", info->p->monitor);
+      gimp_config_writer_printf (writer, "%d", monitor_number (info->p->monitor));
       gimp_config_writer_close (writer);
     }
 
   if (info->p->open)
     {
       gimp_config_writer_open (writer, "open-on-exit");
-
-      if (info->p->screen != DEFAULT_SCREEN)
-        gimp_config_writer_printf (writer, "%d", info->p->screen);
-
       gimp_config_writer_close (writer);
     }
 
@@ -290,6 +297,8 @@ gimp_session_info_deserialize (GimpConfig *config,
 
       switch (token)
         {
+          gint dummy;
+
         case G_TOKEN_LEFT_PAREN:
           token = G_TOKEN_SYMBOL;
           break;
@@ -339,19 +348,24 @@ gimp_session_info_deserialize (GimpConfig *config,
 
             case SESSION_INFO_MONITOR:
               token = G_TOKEN_INT;
-              if (! gimp_scanner_parse_int (scanner, &info->p->monitor))
+              if (gimp_scanner_parse_int (scanner, &dummy))
+                {
+                  info->p->monitor =
+                    gdk_display_get_monitor (gdk_display_get_default (), dummy);
+                }
+              else
                 goto error;
               break;
 
             case SESSION_INFO_OPEN:
               info->p->open = TRUE;
 
-              /*  the screen number is optional  */
+              /*  the screen number is optional, and obsolete  */
               if (g_scanner_peek_next_token (scanner) == G_TOKEN_RIGHT_PAREN)
                 break;
 
               token = G_TOKEN_INT;
-              if (! gimp_scanner_parse_int (scanner, &info->p->screen))
+              if (! gimp_scanner_parse_int (scanner, &dummy))
                 goto error;
               break;
 
@@ -471,6 +485,14 @@ gimp_session_info_dialog_show (GtkWidget       *widget,
 {
   gtk_window_move (GTK_WINDOW (widget),
                    info->p->x, info->p->y);
+
+  if (gimp_session_info_get_remember_size (info) &&
+      info->p->width  > 0 &&
+      info->p->height > 0)
+    {
+      gtk_window_resize (GTK_WINDOW (info->p->widget),
+                         info->p->width, info->p->height);
+    }
 }
 
 static gboolean
@@ -478,8 +500,7 @@ gimp_session_info_restore_docks (GimpRestoreDocksData *data)
 {
   GimpSessionInfo     *info    = data->info;
   GimpDialogFactory   *factory = data->factory;
-  GdkScreen           *screen  = data->screen;
-  gint                 monitor = data->monitor;
+  GdkMonitor          *monitor = data->monitor;
   GtkWidget           *dialog  = data->dialog;
   GList               *iter;
 
@@ -497,7 +518,6 @@ gimp_session_info_restore_docks (GimpRestoreDocksData *data)
           dock =
             GTK_WIDGET (gimp_session_info_dock_restore (dock_info,
                                                         factory,
-                                                        screen,
                                                         monitor,
                                                         GIMP_DOCK_CONTAINER (dialog)));
 
@@ -519,7 +539,7 @@ gimp_session_info_restore_docks (GimpRestoreDocksData *data)
   gimp_session_info_clear_info (info);
 
   g_object_unref (dialog);
-  g_object_unref (screen);
+  g_object_unref (monitor);
   g_object_unref (factory);
   g_object_unref (info);
 
@@ -540,38 +560,23 @@ gimp_session_info_new (void)
 void
 gimp_session_info_restore (GimpSessionInfo   *info,
                            GimpDialogFactory *factory,
-                           GdkScreen         *screen,
-                           gint               monitor)
+                           GdkMonitor        *monitor)
 {
   GtkWidget            *dialog = NULL;
   GimpRestoreDocksData *data;
 
   g_return_if_fail (GIMP_IS_SESSION_INFO (info));
   g_return_if_fail (GIMP_IS_DIALOG_FACTORY (factory));
-  g_return_if_fail (GDK_IS_SCREEN (screen));
+  g_return_if_fail (GDK_IS_MONITOR (monitor));
 
   g_object_ref (info);
 
-  if (info->p->screen != DEFAULT_SCREEN)
-    {
-      GdkDisplay *display;
-      GdkScreen  *info_screen;
-
-      display = gdk_display_get_default ();
-      info_screen = gdk_display_get_screen (display, info->p->screen);
-
-      if (info_screen)
-        screen = info_screen;
-    }
-
-  info->p->open   = FALSE;
-  info->p->screen = DEFAULT_SCREEN;
+  info->p->open = FALSE;
 
   if (info->p->factory_entry &&
       info->p->factory_entry->restore_func)
     {
       dialog = info->p->factory_entry->restore_func (factory,
-                                                     screen,
                                                      monitor,
                                                      info);
     }
@@ -593,8 +598,7 @@ gimp_session_info_restore (GimpSessionInfo   *info,
   data = g_slice_new0 (GimpRestoreDocksData);
   data->info    = g_object_ref (info);
   data->factory = g_object_ref (factory);
-  data->screen  = g_object_ref (screen);
-  data->monitor = monitor;
+  data->monitor = g_object_ref (monitor);
   data->dialog  = dialog ? g_object_ref (dialog) : NULL;
 
   g_idle_add ((GSourceFunc) gimp_session_info_restore_docks, data);
@@ -605,7 +609,7 @@ gimp_session_info_restore (GimpSessionInfo   *info,
 /**
  * gimp_session_info_apply_geometry:
  * @info:
- * @screen:
+ * @monitor:
  * @current_monitor:
  *
  * Apply the geometry stored in the session info object to the
@@ -613,42 +617,43 @@ gimp_session_info_restore (GimpSessionInfo   *info,
  **/
 void
 gimp_session_info_apply_geometry (GimpSessionInfo *info,
-                                  GdkScreen       *screen,
-                                  gint             current_monitor,
+                                  GdkMonitor      *current_monitor,
                                   gboolean         apply_stored_monitor)
 {
-  GdkRectangle rect;
-  GdkRectangle work_rect;
-  gchar        geom[32];
-  gint         monitor;
-  gint         width;
-  gint         height;
+  GdkMonitor     *monitor;
+  GdkRectangle    rect;
+  GdkRectangle    work_rect;
+  GdkGravity      gravity;
+  GdkWindowHints  hints;
+  gint            width;
+  gint            height;
 
   g_return_if_fail (GIMP_IS_SESSION_INFO (info));
   g_return_if_fail (GTK_IS_WINDOW (info->p->widget));
-  g_return_if_fail (GDK_IS_SCREEN (screen));
+  g_return_if_fail (GDK_IS_MONITOR (current_monitor));
 
   monitor = current_monitor;
 
   if (apply_stored_monitor)
     {
-      gint n_monitors;
+      GdkDisplay *display = gdk_monitor_get_display (current_monitor);
+      gint        n_monitors;
 
-      n_monitors = gdk_screen_get_n_monitors (screen);
+      n_monitors = gdk_display_get_n_monitors (display);
 
-      if (info->p->monitor != DEFAULT_MONITOR &&
-          info->p->monitor < n_monitors)
+      if (info->p->monitor                  != DEFAULT_MONITOR &&
+          monitor_number (info->p->monitor) <  n_monitors)
         {
           monitor = info->p->monitor;
         }
       else
         {
-          monitor = gdk_screen_get_primary_monitor (screen);
+          monitor = gdk_display_get_primary_monitor (display);
         }
     }
 
-  gdk_screen_get_monitor_geometry (screen, monitor, &rect);
-  gdk_screen_get_monitor_workarea (screen, monitor, &work_rect);
+  gdk_monitor_get_geometry (monitor, &rect);
+  gdk_monitor_get_workarea (monitor, &work_rect);
 
   info->p->x += rect.x;
   info->p->y += rect.y;
@@ -664,7 +669,7 @@ gimp_session_info_apply_geometry (GimpSessionInfo *info,
     {
       GtkRequisition requisition;
 
-      gtk_widget_size_request (info->p->widget, &requisition);
+      gtk_widget_get_preferred_size (info->p->widget, NULL, &requisition);
 
       width  = requisition.width;
       height = requisition.height;
@@ -677,32 +682,64 @@ gimp_session_info_apply_geometry (GimpSessionInfo *info,
                       work_rect.y,
                       work_rect.y + work_rect.height - height);
 
-  if (info->p->right_align && info->p->bottom_align)
-    {
-      g_strlcpy (geom, "-0-0", sizeof (geom));
-    }
-  else if (info->p->right_align)
-    {
-      g_snprintf (geom, sizeof (geom), "-0%+d", info->p->y);
-    }
-  else if (info->p->bottom_align)
-    {
-      g_snprintf (geom, sizeof (geom), "%+d-0", info->p->x);
-    }
-  else
-    {
-      g_snprintf (geom, sizeof (geom), "%+d%+d", info->p->x, info->p->y);
-    }
-
-  gtk_window_parse_geometry (GTK_WINDOW (info->p->widget), geom);
-
   if (gimp_session_info_get_remember_size (info) &&
       info->p->width  > 0 &&
       info->p->height > 0)
     {
+      /*  This used to call gtk_window_set_default_size() which worked
+       *  fine in gtk2 and should continue to work, but doesn't for
+       *  dock windows. gtk_window_resize() seems to work fine for all
+       *  windows. Leave this comment here until we figured what's
+       *  going on...
+       *
+       *  XXX If we end up updating this code, also do the same to the
+       *  gtk_window_resize() call in gimp_session_info_dialog_show()
+       *  signal handler.
+       */
+#if 1
+      gtk_window_resize (GTK_WINDOW (info->p->widget),
+                         info->p->width, info->p->height);
+#else
       gtk_window_set_default_size (GTK_WINDOW (info->p->widget),
                                    info->p->width, info->p->height);
+#endif
+   }
+
+  gtk_window_get_size (GTK_WINDOW (info->p->widget), &width, &height);
+
+  gravity = GDK_GRAVITY_NORTH_WEST;
+
+  if (info->p->right_align && info->p->bottom_align)
+    {
+      gravity = GDK_GRAVITY_SOUTH_EAST;
     }
+  else if (info->p->right_align)
+    {
+      gravity = GDK_GRAVITY_NORTH_EAST;
+    }
+  else if (info->p->bottom_align)
+    {
+      gravity = GDK_GRAVITY_SOUTH_WEST;
+    }
+
+  if (gravity == GDK_GRAVITY_SOUTH_EAST ||
+      gravity == GDK_GRAVITY_NORTH_EAST)
+    info->p->x = work_rect.x + work_rect.width - width;
+
+  if (gravity == GDK_GRAVITY_SOUTH_WEST ||
+      gravity == GDK_GRAVITY_SOUTH_EAST)
+    info->p->y = work_rect.y + work_rect.height - height;
+
+  gtk_window_set_gravity (GTK_WINDOW (info->p->widget), gravity);
+  gtk_window_move (GTK_WINDOW (info->p->widget),
+                   info->p->x, info->p->y);
+
+  hints = GDK_HINT_USER_POS;
+  if (gimp_session_info_get_remember_size (info))
+    hints |= GDK_HINT_USER_SIZE;
+
+  gtk_window_set_geometry_hints (GTK_WINDOW (info->p->widget),
+                                 NULL, NULL, hints);
 
   /*  Window managers and windowing systems suck. They have their own
    *  ideas about WM standards and when it's appropriate to honor
@@ -711,7 +748,7 @@ gimp_session_info_apply_geometry (GimpSessionInfo *info,
    *  are shown. This is important especially for transient dialogs,
    *  because window managers behave even "smarter" then...
    */
-  if (GTK_IS_DIALOG (info->p->widget))
+  if (GTK_IS_WINDOW (info->p->widget))
     g_signal_connect (info->p->widget, "show",
                       G_CALLBACK (gimp_session_info_dialog_show),
                       info);
@@ -729,33 +766,33 @@ void
 gimp_session_info_read_geometry (GimpSessionInfo   *info,
                                  GdkEventConfigure *cevent)
 {
-  GdkWindow *window;
-  GdkScreen *screen;
+  GdkWindow  *window;
+  GdkDisplay *display;
 
   g_return_if_fail (GIMP_IS_SESSION_INFO (info));
   g_return_if_fail (GTK_IS_WINDOW (info->p->widget));
 
-  window = gtk_widget_get_window (info->p->widget);
-  screen = gtk_widget_get_screen (info->p->widget);
+  window  = gtk_widget_get_window (info->p->widget);
+  display = gtk_widget_get_display (info->p->widget);
 
   if (window)
     {
-      gint         x, y;
-      gint         monitor;
-      GdkRectangle geometry;
+      gint          x, y;
+      GdkMonitor   *monitor;
+      GdkRectangle  geometry;
 
-      gdk_window_get_root_origin (window, &x, &y);
+      gtk_window_get_position (GTK_WINDOW (info->p->widget), &x, &y);
 
       /* Don't write negative values to the sessionrc, they are
        * interpreted as relative to the right, respective bottom edge
-       * of the screen.
+       * of the display.
        */
       info->p->x = MAX (0, x);
       info->p->y = MAX (0, y);
 
-      monitor = gdk_screen_get_monitor_at_point (screen,
-                                                 info->p->x, info->p->y);
-      gdk_screen_get_monitor_geometry (screen, monitor, &geometry);
+      monitor = gdk_display_get_monitor_at_point (display,
+                                                  info->p->x, info->p->y);
+      gdk_monitor_get_geometry (monitor, &geometry);
 
       /* Always store window coordinates relative to the monitor */
       info->p->x -= geometry.x;
@@ -763,26 +800,8 @@ gimp_session_info_read_geometry (GimpSessionInfo   *info,
 
       if (gimp_session_info_get_remember_size (info))
         {
-          int width;
-          int height;
-
-          if (cevent)
-            {
-              width  = cevent->width;
-              height = cevent->height;
-            }
-          else
-            {
-              GtkAllocation allocation;
-
-              gtk_widget_get_allocation (info->p->widget, &allocation);
-
-              width  = allocation.width;
-              height = allocation.height;
-            }
-
-          info->p->width  = width;
-          info->p->height = height;
+          gtk_window_get_size (GTK_WINDOW (info->p->widget),
+                               &info->p->width, &info->p->height);
         }
       else
         {
@@ -792,7 +811,7 @@ gimp_session_info_read_geometry (GimpSessionInfo   *info,
 
       info->p->monitor = DEFAULT_MONITOR;
 
-      if (monitor != gdk_screen_get_primary_monitor (screen))
+      if (monitor != gdk_display_get_primary_monitor (display))
         info->p->monitor = monitor;
     }
 
@@ -825,16 +844,6 @@ gimp_session_info_read_geometry (GimpSessionInfo   *info,
           info->p->open = TRUE;
           break;
         }
-    }
-
-  info->p->screen = DEFAULT_SCREEN;
-
-  if (info->p->open)
-    {
-      GdkDisplay *display = gtk_widget_get_display (info->p->widget);
-
-      if (screen != gdk_display_get_default_screen (display))
-        info->p->screen = gdk_screen_get_number (screen);
     }
 }
 
@@ -973,7 +982,7 @@ gimp_session_info_set_widget (GimpSessionInfo *info,
 {
   g_return_if_fail (GIMP_IS_SESSION_INFO (info));
 
-  if (GTK_IS_DIALOG (info->p->widget))
+  if (GTK_IS_WINDOW (info->p->widget))
     g_signal_handlers_disconnect_by_func (info->p->widget,
                                           gimp_session_info_dialog_show,
                                           info);

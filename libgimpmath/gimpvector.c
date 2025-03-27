@@ -43,6 +43,12 @@
  **/
 
 
+static gpointer  gimp_vector2_copy (gpointer boxed);
+static void      gimp_vector2_free (gpointer boxed);
+static gpointer  gimp_vector3_copy (gpointer boxed);
+static void      gimp_vector3_free (gpointer boxed);
+
+
 /*************************/
 /* Some useful constants */
 /*************************/
@@ -69,9 +75,9 @@ static const GimpVector3 gimp_vector3_unit_z = { 0.0, 0.0, 1.0 };
  * @x: the X coordinate.
  * @y: the Y coordinate.
  *
- * Creates a #GimpVector2 of coordinates @x and @y.
+ * Creates a [struct@Vector2] of coordinates @x and @y.
  *
- * Returns: the resulting #GimpVector2.
+ * Returns: the resulting vector
  **/
 GimpVector2
 gimp_vector2_new (gdouble x,
@@ -120,8 +126,8 @@ gimp_vector2_length (const GimpVector2 *vector)
  * gimp_vector2_length_val:
  * @vector: a #GimpVector2.
  *
- * This function is identical to gimp_vector2_length() but the
- * vector is passed by value rather than by reference.
+ * Identical to [method@Vector2.length], but the vector is passed by value
+ * rather than by reference.
  *
  * Returns: the length of @vector (a positive gdouble).
  **/
@@ -152,8 +158,8 @@ gimp_vector2_mul (GimpVector2 *vector,
  * @vector: a #GimpVector2.
  * @factor: a scalar.
  *
- * This function is identical to gimp_vector2_mul() but the vector is
- * passed by value rather than by reference.
+ * Identical to [method@Vector2.mul], but the vector is passed by value rather
+ * than by reference.
  *
  * Returns: the resulting #GimpVector2.
  **/
@@ -200,7 +206,7 @@ gimp_vector2_normalize (GimpVector2 *vector)
  * gimp_vector2_normalize_val:
  * @vector: a #GimpVector2.
  *
- * This function is identical to gimp_vector2_normalize() but the
+ * Identical to [method@Vector2.normalize], but the
  * vector is passed by value rather than by reference.
  *
  * Returns: a #GimpVector2 parallel to @vector, pointing in the same
@@ -244,7 +250,7 @@ gimp_vector2_neg (GimpVector2 *vector)
  * gimp_vector2_neg_val:
  * @vector: a #GimpVector2.
  *
- * This function is identical to gimp_vector2_neg() but the vector
+ * Identical to [method@Vector2.neg], but the vector
  * is passed by value rather than by reference.
  *
  * Returns: the negated #GimpVector2.
@@ -262,7 +268,7 @@ gimp_vector2_neg_val (GimpVector2 vector)
 
 /**
  * gimp_vector2_add:
- * @result: destination for the resulting #GimpVector2.
+ * @result: (out caller-allocates): destination for the resulting #GimpVector2.
  * @vector1: a pointer to the first #GimpVector2.
  * @vector2: a pointer to the second #GimpVector2.
  *
@@ -302,7 +308,7 @@ gimp_vector2_add_val (GimpVector2 vector1,
 
 /**
  * gimp_vector2_sub:
- * @result: the destination for the resulting #GimpVector2.
+ * @result: (out caller-allocates): the destination for the resulting #GimpVector2.
  * @vector1: a pointer to the first #GimpVector2.
  * @vector2: a pointer to the second #GimpVector2.
  *
@@ -362,7 +368,7 @@ gimp_vector2_inner_product (const GimpVector2 *vector1,
  * @vector1: the first #GimpVector2.
  * @vector2: the second #GimpVector2.
  *
- * This function is identical to gimp_vector2_inner_product() but the
+ * Identical to [method@Vector2.inner_product], but the
  * vectors are passed by value rather than by reference.
  *
  * Returns: The inner product.
@@ -406,7 +412,7 @@ gimp_vector2_cross_product (const GimpVector2 *vector1,
  * @vector1: the first #GimpVector2.
  * @vector2: the second #GimpVector2.
  *
- * This function is identical to gimp_vector2_cross_product() but the
+ * Identical to [method@Vector2.cross_product], but the
  * vectors are passed by value rather than by reference.
  *
  * Returns: The cross product.
@@ -447,7 +453,7 @@ gimp_vector2_rotate (GimpVector2 *vector,
  * @vector: a #GimpVector2.
  * @alpha: an angle (in radians).
  *
- * This function is identical to gimp_vector2_rotate() but the vector
+ * Identical to [method@Vector2.rotate], but the vector
  * is passed by value rather than by reference.
  *
  * Returns: a #GimpVector2 representing @vector rotated by @alpha
@@ -492,7 +498,7 @@ gimp_vector2_normal (GimpVector2 *vector)
  * gimp_vector2_normal_val:
  * @vector: a #GimpVector2.
  *
- * This function is identical to gimp_vector2_normal() but the vector
+ * Identical to [method@Vector2.normal], but the vector
  * is passed by value rather than by reference.
  *
  * Returns: a #GimpVector2 perpendicular to @vector, with a length of 1.0.
@@ -579,7 +585,7 @@ gimp_vector3_length (const GimpVector3 *vector)
  * gimp_vector3_length_val:
  * @vector: a #GimpVector3.
  *
- * This function is identical to gimp_vector3_length() but the vector
+ * Identical to [method@Vector3.length], but the vector
  * is passed by value rather than by reference.
  *
  * Returns: the length of @vector (a positive gdouble).
@@ -614,7 +620,7 @@ gimp_vector3_mul (GimpVector3 *vector,
  * @vector: a #GimpVector3.
  * @factor: a scalar.
  *
- * This function is identical to gimp_vector3_mul() but the vector is
+ * Identical to [method@Vector3.mul], but the vector is
  * passed by value rather than by reference.
  *
  * Returns: the resulting #GimpVector3.
@@ -663,7 +669,7 @@ gimp_vector3_normalize (GimpVector3 *vector)
  * gimp_vector3_normalize_val:
  * @vector: a #GimpVector3.
  *
- * This function is identical to gimp_vector3_normalize() but the
+ * Identical to [method@Vector3.normalize], but the
  * vector is passed by value rather than by reference.
  *
  * Returns: a #GimpVector3 parallel to @vector, pointing in the same
@@ -709,7 +715,7 @@ gimp_vector3_neg (GimpVector3 *vector)
  * gimp_vector3_neg_val:
  * @vector: a #GimpVector3.
  *
- * This function is identical to gimp_vector3_neg() but the vector
+ * Identical to [method@Vector3.neg], but the vector
  * is passed by value rather than by reference.
  *
  * Returns: the negated #GimpVector3.
@@ -728,7 +734,7 @@ gimp_vector3_neg_val (GimpVector3 vector)
 
 /**
  * gimp_vector3_add:
- * @result: destination for the resulting #GimpVector3.
+ * @result: (out caller-allocates): destination for the resulting #GimpVector3.
  * @vector1: a pointer to the first #GimpVector3.
  * @vector2: a pointer to the second #GimpVector3.
  *
@@ -770,7 +776,7 @@ gimp_vector3_add_val (GimpVector3 vector1,
 
 /**
  * gimp_vector3_sub:
- * @result: the destination for the resulting #GimpVector3.
+ * @result: (out caller-allocates): the destination for the resulting #GimpVector3.
  * @vector1: a pointer to the first #GimpVector3.
  * @vector2: a pointer to the second #GimpVector3.
  *
@@ -834,7 +840,7 @@ gimp_vector3_inner_product (const GimpVector3 *vector1,
  * @vector1: the first #GimpVector3.
  * @vector2: the second #GimpVector3.
  *
- * This function is identical to gimp_vector3_inner_product() but the
+ * Identical to [method@Vector3.inner_product], but the
  * vectors are passed by value rather than by reference.
  *
  * Returns: The inner product.
@@ -881,7 +887,7 @@ gimp_vector3_cross_product (const GimpVector3 *vector1,
  * @vector1: the first #GimpVector3.
  * @vector2: the second #GimpVector3.
  *
- * This function is identical to gimp_vector3_cross_product() but the
+ * Identical to [method@Vector3.cross_product], but the
  * vectors are passed by value rather than by reference.
  *
  * Returns: The cross product.
@@ -950,7 +956,7 @@ gimp_vector3_rotate (GimpVector3 *vector,
  * @beta: the angle (in radian) of rotation around the Y axis.
  * @gamma: the angle (in radian) of rotation around the X axis.
  *
- * This function is identical to gimp_vector3_rotate() but the vectors
+ * Identical to [method@Vector3.rotate], but the vectors
  * are passed by value rather than by reference.
  *
  * Returns: the rotated vector.
@@ -1005,7 +1011,6 @@ gimp_vector3_rotate_val (GimpVector3 vector,
  * to the plane z = @p->z (parallel to XY), from the @vp point of view
  * through the screen (@sx, @sy)->(@sx + @w, @sy + @h)
  **/
-
 void
 gimp_vector_2d_to_3d (gint               sx,
                       gint               sy,
@@ -1087,8 +1092,8 @@ gimp_vector_2d_to_3d_val (gint        sx,
  * @sy: the ordinate of the upper-left screen rectangle.
  * @w: the width of the screen rectangle.
  * @h: the height of the screen rectangle.
- * @x: the abscissa of the point in the screen rectangle to map (return value).
- * @y: the ordinate of the point in the screen rectangle to map (return value).
+ * @x: (out): the abscissa of the point in the screen rectangle to map.
+ * @y: (out): the ordinate of the point in the screen rectangle to map.
  * @vp: position of the observer.
  * @p: the 3D point to project to the plane.
  *
@@ -1127,3 +1132,52 @@ gimp_vector_3d_to_2d (gint               sx,
       *y = (gdouble) sy + (p->y * (gdouble) h);
     }
 }
+
+/* Private functions for boxed type. */
+
+static gpointer
+gimp_vector2_copy (gpointer boxed)
+{
+  GimpVector2 *vector = boxed;
+  GimpVector2 *new_v;
+
+  new_v = g_slice_new (GimpVector2);
+  new_v->x = vector->x;
+  new_v->y = vector->y;
+
+  return new_v;
+}
+
+static void
+gimp_vector2_free (gpointer boxed)
+{
+  g_slice_free (GimpVector2, boxed);
+}
+
+G_DEFINE_BOXED_TYPE (GimpVector2, gimp_vector2,
+                     gimp_vector2_copy,
+                     gimp_vector2_free)
+
+static gpointer
+gimp_vector3_copy (gpointer boxed)
+{
+  GimpVector3 *vector = boxed;
+  GimpVector3 *new_v;
+
+  new_v = g_slice_new (GimpVector3);
+  new_v->x = vector->x;
+  new_v->y = vector->y;
+  new_v->z = vector->z;
+
+  return new_v;
+}
+
+static void
+gimp_vector3_free (gpointer boxed)
+{
+  g_slice_free (GimpVector3, boxed);
+}
+
+G_DEFINE_BOXED_TYPE (GimpVector3, gimp_vector3,
+                     gimp_vector3_copy,
+                     gimp_vector3_free)

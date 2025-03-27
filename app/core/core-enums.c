@@ -1,6 +1,7 @@
 
 /* Generated data (by gimp-mkenums) */
 
+#include "stamp-core-enums.h"
 #include "config.h"
 #include <gio/gio.h>
 #include "libgimpbase/gimpbase.h"
@@ -13,23 +14,17 @@ gimp_align_reference_type_get_type (void)
 {
   static const GEnumValue values[] =
   {
-    { GIMP_ALIGN_REFERENCE_FIRST, "GIMP_ALIGN_REFERENCE_FIRST", "first" },
     { GIMP_ALIGN_REFERENCE_IMAGE, "GIMP_ALIGN_REFERENCE_IMAGE", "image" },
     { GIMP_ALIGN_REFERENCE_SELECTION, "GIMP_ALIGN_REFERENCE_SELECTION", "selection" },
-    { GIMP_ALIGN_REFERENCE_ACTIVE_LAYER, "GIMP_ALIGN_REFERENCE_ACTIVE_LAYER", "active-layer" },
-    { GIMP_ALIGN_REFERENCE_ACTIVE_CHANNEL, "GIMP_ALIGN_REFERENCE_ACTIVE_CHANNEL", "active-channel" },
-    { GIMP_ALIGN_REFERENCE_ACTIVE_PATH, "GIMP_ALIGN_REFERENCE_ACTIVE_PATH", "active-path" },
+    { GIMP_ALIGN_REFERENCE_PICK, "GIMP_ALIGN_REFERENCE_PICK", "pick" },
     { 0, NULL, NULL }
   };
 
   static const GimpEnumDesc descs[] =
   {
-    { GIMP_ALIGN_REFERENCE_FIRST, NC_("align-reference-type", "First item"), NULL },
     { GIMP_ALIGN_REFERENCE_IMAGE, NC_("align-reference-type", "Image"), NULL },
     { GIMP_ALIGN_REFERENCE_SELECTION, NC_("align-reference-type", "Selection"), NULL },
-    { GIMP_ALIGN_REFERENCE_ACTIVE_LAYER, NC_("align-reference-type", "Active layer"), NULL },
-    { GIMP_ALIGN_REFERENCE_ACTIVE_CHANNEL, NC_("align-reference-type", "Active channel"), NULL },
-    { GIMP_ALIGN_REFERENCE_ACTIVE_PATH, NC_("align-reference-type", "Active path"), NULL },
+    { GIMP_ALIGN_REFERENCE_PICK, NC_("align-reference-type", "Picked reference object"), NULL },
     { 0, NULL, NULL }
   };
 
@@ -56,33 +51,25 @@ gimp_alignment_type_get_type (void)
     { GIMP_ALIGN_TOP, "GIMP_ALIGN_TOP", "align-top" },
     { GIMP_ALIGN_VCENTER, "GIMP_ALIGN_VCENTER", "align-vcenter" },
     { GIMP_ALIGN_BOTTOM, "GIMP_ALIGN_BOTTOM", "align-bottom" },
-    { GIMP_ARRANGE_LEFT, "GIMP_ARRANGE_LEFT", "arrange-left" },
-    { GIMP_ARRANGE_HCENTER, "GIMP_ARRANGE_HCENTER", "arrange-hcenter" },
-    { GIMP_ARRANGE_RIGHT, "GIMP_ARRANGE_RIGHT", "arrange-right" },
-    { GIMP_ARRANGE_TOP, "GIMP_ARRANGE_TOP", "arrange-top" },
-    { GIMP_ARRANGE_VCENTER, "GIMP_ARRANGE_VCENTER", "arrange-vcenter" },
-    { GIMP_ARRANGE_BOTTOM, "GIMP_ARRANGE_BOTTOM", "arrange-bottom" },
     { GIMP_ARRANGE_HFILL, "GIMP_ARRANGE_HFILL", "arrange-hfill" },
     { GIMP_ARRANGE_VFILL, "GIMP_ARRANGE_VFILL", "arrange-vfill" },
+    { GIMP_DISTRIBUTE_EVEN_HORIZONTAL_GAP, "GIMP_DISTRIBUTE_EVEN_HORIZONTAL_GAP", "distribute-even-horizontal-gap" },
+    { GIMP_DISTRIBUTE_EVEN_VERTICAL_GAP, "GIMP_DISTRIBUTE_EVEN_VERTICAL_GAP", "distribute-even-vertical-gap" },
     { 0, NULL, NULL }
   };
 
   static const GimpEnumDesc descs[] =
   {
-    { GIMP_ALIGN_LEFT, "GIMP_ALIGN_LEFT", NULL },
-    { GIMP_ALIGN_HCENTER, "GIMP_ALIGN_HCENTER", NULL },
-    { GIMP_ALIGN_RIGHT, "GIMP_ALIGN_RIGHT", NULL },
-    { GIMP_ALIGN_TOP, "GIMP_ALIGN_TOP", NULL },
-    { GIMP_ALIGN_VCENTER, "GIMP_ALIGN_VCENTER", NULL },
-    { GIMP_ALIGN_BOTTOM, "GIMP_ALIGN_BOTTOM", NULL },
-    { GIMP_ARRANGE_LEFT, "GIMP_ARRANGE_LEFT", NULL },
-    { GIMP_ARRANGE_HCENTER, "GIMP_ARRANGE_HCENTER", NULL },
-    { GIMP_ARRANGE_RIGHT, "GIMP_ARRANGE_RIGHT", NULL },
-    { GIMP_ARRANGE_TOP, "GIMP_ARRANGE_TOP", NULL },
-    { GIMP_ARRANGE_VCENTER, "GIMP_ARRANGE_VCENTER", NULL },
-    { GIMP_ARRANGE_BOTTOM, "GIMP_ARRANGE_BOTTOM", NULL },
-    { GIMP_ARRANGE_HFILL, "GIMP_ARRANGE_HFILL", NULL },
-    { GIMP_ARRANGE_VFILL, "GIMP_ARRANGE_VFILL", NULL },
+    { GIMP_ALIGN_LEFT, NC_("alignment-type", "Align to the left"), NULL },
+    { GIMP_ALIGN_HCENTER, NC_("alignment-type", "Center horizontally"), NULL },
+    { GIMP_ALIGN_RIGHT, NC_("alignment-type", "Align to the right"), NULL },
+    { GIMP_ALIGN_TOP, NC_("alignment-type", "Align to the top"), NULL },
+    { GIMP_ALIGN_VCENTER, NC_("alignment-type", "Center vertically"), NULL },
+    { GIMP_ALIGN_BOTTOM, NC_("alignment-type", "Align to the bottom"), NULL },
+    { GIMP_ARRANGE_HFILL, NC_("alignment-type", "Distribute anchor points horizontally evenly"), NULL },
+    { GIMP_ARRANGE_VFILL, NC_("alignment-type", "Distribute anchor points vertically evenly"), NULL },
+    { GIMP_DISTRIBUTE_EVEN_HORIZONTAL_GAP, NC_("alignment-type", "Distribute horizontally with even horizontal gaps"), NULL },
+    { GIMP_DISTRIBUTE_EVEN_VERTICAL_GAP, NC_("alignment-type", "Distribute vertically with even vertical gaps"), NULL },
     { 0, NULL, NULL }
   };
 
@@ -92,6 +79,37 @@ gimp_alignment_type_get_type (void)
     {
       type = g_enum_register_static ("GimpAlignmentType", values);
       gimp_type_set_translation_context (type, "alignment-type");
+      gimp_enum_set_value_descriptions (type, descs);
+    }
+
+  return type;
+}
+
+GType
+gimp_bucket_fill_mode_get_type (void)
+{
+  static const GEnumValue values[] =
+  {
+    { GIMP_BUCKET_FILL_FG, "GIMP_BUCKET_FILL_FG", "fg" },
+    { GIMP_BUCKET_FILL_BG, "GIMP_BUCKET_FILL_BG", "bg" },
+    { GIMP_BUCKET_FILL_PATTERN, "GIMP_BUCKET_FILL_PATTERN", "pattern" },
+    { 0, NULL, NULL }
+  };
+
+  static const GimpEnumDesc descs[] =
+  {
+    { GIMP_BUCKET_FILL_FG, NC_("bucket-fill-mode", "FG color fill"), NULL },
+    { GIMP_BUCKET_FILL_BG, NC_("bucket-fill-mode", "BG color fill"), NULL },
+    { GIMP_BUCKET_FILL_PATTERN, NC_("bucket-fill-mode", "Pattern fill"), NULL },
+    { 0, NULL, NULL }
+  };
+
+  static GType type = 0;
+
+  if (G_UNLIKELY (! type))
+    {
+      type = g_enum_register_static ("GimpBucketFillMode", values);
+      gimp_type_set_translation_context (type, "bucket-fill-mode");
       gimp_enum_set_value_descriptions (type, descs);
     }
 
@@ -137,6 +155,7 @@ gimp_color_pick_mode_get_type (void)
     { GIMP_COLOR_PICK_MODE_PIXEL, "GIMP_COLOR_PICK_MODE_PIXEL", "pixel" },
     { GIMP_COLOR_PICK_MODE_RGB_PERCENT, "GIMP_COLOR_PICK_MODE_RGB_PERCENT", "rgb-percent" },
     { GIMP_COLOR_PICK_MODE_RGB_U8, "GIMP_COLOR_PICK_MODE_RGB_U8", "rgb-u8" },
+    { GIMP_COLOR_PICK_MODE_GRAYSCALE, "GIMP_COLOR_PICK_MODE_GRAYSCALE", "grayscale" },
     { GIMP_COLOR_PICK_MODE_HSV, "GIMP_COLOR_PICK_MODE_HSV", "hsv" },
     { GIMP_COLOR_PICK_MODE_LCH, "GIMP_COLOR_PICK_MODE_LCH", "lch" },
     { GIMP_COLOR_PICK_MODE_LAB, "GIMP_COLOR_PICK_MODE_LAB", "lab" },
@@ -151,6 +170,7 @@ gimp_color_pick_mode_get_type (void)
     { GIMP_COLOR_PICK_MODE_PIXEL, NC_("color-pick-mode", "Pixel"), NULL },
     { GIMP_COLOR_PICK_MODE_RGB_PERCENT, NC_("color-pick-mode", "RGB (%)"), NULL },
     { GIMP_COLOR_PICK_MODE_RGB_U8, NC_("color-pick-mode", "RGB (0..255)"), NULL },
+    { GIMP_COLOR_PICK_MODE_GRAYSCALE, NC_("color-pick-mode", "Grayscale (%)"), NULL },
     { GIMP_COLOR_PICK_MODE_HSV, NC_("color-pick-mode", "HSV"), NULL },
     { GIMP_COLOR_PICK_MODE_LCH, NC_("color-pick-mode", "CIE LCh"), NULL },
     { GIMP_COLOR_PICK_MODE_LAB, NC_("color-pick-mode", "CIE LAB"), NULL },
@@ -179,7 +199,8 @@ gimp_color_profile_policy_get_type (void)
   {
     { GIMP_COLOR_PROFILE_POLICY_ASK, "GIMP_COLOR_PROFILE_POLICY_ASK", "ask" },
     { GIMP_COLOR_PROFILE_POLICY_KEEP, "GIMP_COLOR_PROFILE_POLICY_KEEP", "keep" },
-    { GIMP_COLOR_PROFILE_POLICY_CONVERT, "GIMP_COLOR_PROFILE_POLICY_CONVERT", "convert" },
+    { GIMP_COLOR_PROFILE_POLICY_CONVERT_BUILTIN, "GIMP_COLOR_PROFILE_POLICY_CONVERT_BUILTIN", "convert-builtin" },
+    { GIMP_COLOR_PROFILE_POLICY_CONVERT_PREFERRED, "GIMP_COLOR_PROFILE_POLICY_CONVERT_PREFERRED", "convert-preferred" },
     { 0, NULL, NULL }
   };
 
@@ -187,7 +208,8 @@ gimp_color_profile_policy_get_type (void)
   {
     { GIMP_COLOR_PROFILE_POLICY_ASK, NC_("color-profile-policy", "Ask what to do"), NULL },
     { GIMP_COLOR_PROFILE_POLICY_KEEP, NC_("color-profile-policy", "Keep embedded profile"), NULL },
-    { GIMP_COLOR_PROFILE_POLICY_CONVERT, NC_("color-profile-policy", "Convert to built-in sRGB or grayscale profile"), NULL },
+    { GIMP_COLOR_PROFILE_POLICY_CONVERT_BUILTIN, NC_("color-profile-policy", "Convert to built-in sRGB or grayscale profile"), NULL },
+    { GIMP_COLOR_PROFILE_POLICY_CONVERT_PREFERRED, NC_("color-profile-policy", "Convert to preferred RGB or grayscale profile (defaulting to built-in)"), NULL },
     { 0, NULL, NULL }
   };
 
@@ -482,7 +504,7 @@ gimp_dirty_mask_get_type (void)
     { GIMP_DIRTY_ITEM, "GIMP_DIRTY_ITEM", "item" },
     { GIMP_DIRTY_ITEM_META, "GIMP_DIRTY_ITEM_META", "item-meta" },
     { GIMP_DIRTY_DRAWABLE, "GIMP_DIRTY_DRAWABLE", "drawable" },
-    { GIMP_DIRTY_VECTORS, "GIMP_DIRTY_VECTORS", "vectors" },
+    { GIMP_DIRTY_PATH, "GIMP_DIRTY_PATH", "path" },
     { GIMP_DIRTY_SELECTION, "GIMP_DIRTY_SELECTION", "selection" },
     { GIMP_DIRTY_ACTIVE_DRAWABLE, "GIMP_DIRTY_ACTIVE_DRAWABLE", "active-drawable" },
     { GIMP_DIRTY_ALL, "GIMP_DIRTY_ALL", "all" },
@@ -499,7 +521,7 @@ gimp_dirty_mask_get_type (void)
     { GIMP_DIRTY_ITEM, "GIMP_DIRTY_ITEM", NULL },
     { GIMP_DIRTY_ITEM_META, "GIMP_DIRTY_ITEM_META", NULL },
     { GIMP_DIRTY_DRAWABLE, "GIMP_DIRTY_DRAWABLE", NULL },
-    { GIMP_DIRTY_VECTORS, "GIMP_DIRTY_VECTORS", NULL },
+    { GIMP_DIRTY_PATH, "GIMP_DIRTY_PATH", NULL },
     { GIMP_DIRTY_SELECTION, "GIMP_DIRTY_SELECTION", NULL },
     { GIMP_DIRTY_ACTIVE_DRAWABLE, "GIMP_DIRTY_ACTIVE_DRAWABLE", NULL },
     { GIMP_DIRTY_ALL, "GIMP_DIRTY_ALL", NULL },
@@ -566,18 +588,49 @@ gimp_dynamics_output_type_get_type (void)
 }
 
 GType
+gimp_custom_style_get_type (void)
+{
+  static const GEnumValue values[] =
+  {
+    { GIMP_CUSTOM_STYLE_SOLID_COLOR, "GIMP_CUSTOM_STYLE_SOLID_COLOR", "solid-color" },
+    { GIMP_CUSTOM_STYLE_PATTERN, "GIMP_CUSTOM_STYLE_PATTERN", "pattern" },
+    { 0, NULL, NULL }
+  };
+
+  static const GimpEnumDesc descs[] =
+  {
+    { GIMP_CUSTOM_STYLE_SOLID_COLOR, NC_("custom-style", "Solid color"), NULL },
+    { GIMP_CUSTOM_STYLE_PATTERN, NC_("custom-style", "Pattern"), NULL },
+    { 0, NULL, NULL }
+  };
+
+  static GType type = 0;
+
+  if (G_UNLIKELY (! type))
+    {
+      type = g_enum_register_static ("GimpCustomStyle", values);
+      gimp_type_set_translation_context (type, "custom-style");
+      gimp_enum_set_value_descriptions (type, descs);
+    }
+
+  return type;
+}
+
+GType
 gimp_fill_style_get_type (void)
 {
   static const GEnumValue values[] =
   {
-    { GIMP_FILL_STYLE_SOLID, "GIMP_FILL_STYLE_SOLID", "solid" },
+    { GIMP_FILL_STYLE_FG_COLOR, "GIMP_FILL_STYLE_FG_COLOR", "fg-color" },
+    { GIMP_FILL_STYLE_BG_COLOR, "GIMP_FILL_STYLE_BG_COLOR", "bg-color" },
     { GIMP_FILL_STYLE_PATTERN, "GIMP_FILL_STYLE_PATTERN", "pattern" },
     { 0, NULL, NULL }
   };
 
   static const GimpEnumDesc descs[] =
   {
-    { GIMP_FILL_STYLE_SOLID, NC_("fill-style", "Solid color"), NULL },
+    { GIMP_FILL_STYLE_FG_COLOR, NC_("fill-style", "Foreground color"), NULL },
+    { GIMP_FILL_STYLE_BG_COLOR, NC_("fill-style", "Background color"), NULL },
     { GIMP_FILL_STYLE_PATTERN, NC_("fill-style", "Pattern"), NULL },
     { 0, NULL, NULL }
   };
@@ -798,7 +851,6 @@ gimp_item_set_get_type (void)
     { GIMP_ITEM_SET_ALL, "GIMP_ITEM_SET_ALL", "all" },
     { GIMP_ITEM_SET_IMAGE_SIZED, "GIMP_ITEM_SET_IMAGE_SIZED", "image-sized" },
     { GIMP_ITEM_SET_VISIBLE, "GIMP_ITEM_SET_VISIBLE", "visible" },
-    { GIMP_ITEM_SET_LINKED, "GIMP_ITEM_SET_LINKED", "linked" },
     { 0, NULL, NULL }
   };
 
@@ -808,7 +860,6 @@ gimp_item_set_get_type (void)
     { GIMP_ITEM_SET_ALL, NC_("item-set", "All layers"), NULL },
     { GIMP_ITEM_SET_IMAGE_SIZED, NC_("item-set", "Image-sized layers"), NULL },
     { GIMP_ITEM_SET_VISIBLE, NC_("item-set", "All visible layers"), NULL },
-    { GIMP_ITEM_SET_LINKED, NC_("item-set", "All linked layers"), NULL },
     { 0, NULL, NULL }
   };
 
@@ -889,6 +940,37 @@ gimp_message_severity_get_type (void)
 }
 
 GType
+gimp_metadata_rotation_policy_get_type (void)
+{
+  static const GEnumValue values[] =
+  {
+    { GIMP_METADATA_ROTATION_POLICY_ASK, "GIMP_METADATA_ROTATION_POLICY_ASK", "ask" },
+    { GIMP_METADATA_ROTATION_POLICY_KEEP, "GIMP_METADATA_ROTATION_POLICY_KEEP", "keep" },
+    { GIMP_METADATA_ROTATION_POLICY_ROTATE, "GIMP_METADATA_ROTATION_POLICY_ROTATE", "rotate" },
+    { 0, NULL, NULL }
+  };
+
+  static const GimpEnumDesc descs[] =
+  {
+    { GIMP_METADATA_ROTATION_POLICY_ASK, NC_("metadata-rotation-policy", "Ask what to do"), NULL },
+    { GIMP_METADATA_ROTATION_POLICY_KEEP, NC_("metadata-rotation-policy", "Discard metadata without rotating"), NULL },
+    { GIMP_METADATA_ROTATION_POLICY_ROTATE, NC_("metadata-rotation-policy", "Rotate the image then discard metadata"), NULL },
+    { 0, NULL, NULL }
+  };
+
+  static GType type = 0;
+
+  if (G_UNLIKELY (! type))
+    {
+      type = g_enum_register_static ("GimpMetadataRotationPolicy", values);
+      gimp_type_set_translation_context (type, "metadata-rotation-policy");
+      gimp_enum_set_value_descriptions (type, descs);
+    }
+
+  return type;
+}
+
+GType
 gimp_paste_type_get_type (void)
 {
   static const GEnumValue values[] =
@@ -899,6 +981,10 @@ gimp_paste_type_get_type (void)
     { GIMP_PASTE_TYPE_FLOATING_INTO_IN_PLACE, "GIMP_PASTE_TYPE_FLOATING_INTO_IN_PLACE", "floating-into-in-place" },
     { GIMP_PASTE_TYPE_NEW_LAYER, "GIMP_PASTE_TYPE_NEW_LAYER", "new-layer" },
     { GIMP_PASTE_TYPE_NEW_LAYER_IN_PLACE, "GIMP_PASTE_TYPE_NEW_LAYER_IN_PLACE", "new-layer-in-place" },
+    { GIMP_PASTE_TYPE_NEW_LAYER_OR_FLOATING, "GIMP_PASTE_TYPE_NEW_LAYER_OR_FLOATING", "new-layer-or-floating" },
+    { GIMP_PASTE_TYPE_NEW_LAYER_OR_FLOATING_IN_PLACE, "GIMP_PASTE_TYPE_NEW_LAYER_OR_FLOATING_IN_PLACE", "new-layer-or-floating-in-place" },
+    { GIMP_PASTE_TYPE_NEW_MERGED_LAYER_OR_FLOATING, "GIMP_PASTE_TYPE_NEW_MERGED_LAYER_OR_FLOATING", "new-merged-layer-or-floating" },
+    { GIMP_PASTE_TYPE_NEW_MERGED_LAYER_OR_FLOATING_IN_PLACE, "GIMP_PASTE_TYPE_NEW_MERGED_LAYER_OR_FLOATING_IN_PLACE", "new-merged-layer-or-floating-in-place" },
     { 0, NULL, NULL }
   };
 
@@ -910,6 +996,10 @@ gimp_paste_type_get_type (void)
     { GIMP_PASTE_TYPE_FLOATING_INTO_IN_PLACE, "GIMP_PASTE_TYPE_FLOATING_INTO_IN_PLACE", NULL },
     { GIMP_PASTE_TYPE_NEW_LAYER, "GIMP_PASTE_TYPE_NEW_LAYER", NULL },
     { GIMP_PASTE_TYPE_NEW_LAYER_IN_PLACE, "GIMP_PASTE_TYPE_NEW_LAYER_IN_PLACE", NULL },
+    { GIMP_PASTE_TYPE_NEW_LAYER_OR_FLOATING, "GIMP_PASTE_TYPE_NEW_LAYER_OR_FLOATING", NULL },
+    { GIMP_PASTE_TYPE_NEW_LAYER_OR_FLOATING_IN_PLACE, "GIMP_PASTE_TYPE_NEW_LAYER_OR_FLOATING_IN_PLACE", NULL },
+    { GIMP_PASTE_TYPE_NEW_MERGED_LAYER_OR_FLOATING, "GIMP_PASTE_TYPE_NEW_MERGED_LAYER_OR_FLOATING", NULL },
+    { GIMP_PASTE_TYPE_NEW_MERGED_LAYER_OR_FLOATING_IN_PLACE, "GIMP_PASTE_TYPE_NEW_MERGED_LAYER_OR_FLOATING_IN_PLACE", NULL },
     { 0, NULL, NULL }
   };
 
@@ -979,6 +1069,37 @@ gimp_thumbnail_size_get_type (void)
     {
       type = g_enum_register_static ("GimpThumbnailSize", values);
       gimp_type_set_translation_context (type, "thumbnail-size");
+      gimp_enum_set_value_descriptions (type, descs);
+    }
+
+  return type;
+}
+
+GType
+gimp_trc_type_get_type (void)
+{
+  static const GEnumValue values[] =
+  {
+    { GIMP_TRC_LINEAR, "GIMP_TRC_LINEAR", "linear" },
+    { GIMP_TRC_NON_LINEAR, "GIMP_TRC_NON_LINEAR", "non-linear" },
+    { GIMP_TRC_PERCEPTUAL, "GIMP_TRC_PERCEPTUAL", "perceptual" },
+    { 0, NULL, NULL }
+  };
+
+  static const GimpEnumDesc descs[] =
+  {
+    { GIMP_TRC_LINEAR, NC_("trc-type", "Linear"), NULL },
+    { GIMP_TRC_NON_LINEAR, NC_("trc-type", "Non-Linear"), NULL },
+    { GIMP_TRC_PERCEPTUAL, NC_("trc-type", "Perceptual"), NULL },
+    { 0, NULL, NULL }
+  };
+
+  static GType type = 0;
+
+  if (G_UNLIKELY (! type))
+    {
+      type = g_enum_register_static ("GimpTRCType", values);
+      gimp_type_set_translation_context (type, "trc-type");
       gimp_enum_set_value_descriptions (type, descs);
     }
 
@@ -1071,23 +1192,32 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_GROUP_IMAGE_ITEM_REMOVE, "GIMP_UNDO_GROUP_IMAGE_ITEM_REMOVE", "group-image-item-remove" },
     { GIMP_UNDO_GROUP_IMAGE_ITEM_REORDER, "GIMP_UNDO_GROUP_IMAGE_ITEM_REORDER", "group-image-item-reorder" },
     { GIMP_UNDO_GROUP_IMAGE_LAYERS_MERGE, "GIMP_UNDO_GROUP_IMAGE_LAYERS_MERGE", "group-image-layers-merge" },
-    { GIMP_UNDO_GROUP_IMAGE_VECTORS_MERGE, "GIMP_UNDO_GROUP_IMAGE_VECTORS_MERGE", "group-image-vectors-merge" },
+    { GIMP_UNDO_GROUP_IMAGE_PATHS_MERGE, "GIMP_UNDO_GROUP_IMAGE_PATHS_MERGE", "group-image-paths-merge" },
     { GIMP_UNDO_GROUP_IMAGE_QUICK_MASK, "GIMP_UNDO_GROUP_IMAGE_QUICK_MASK", "group-image-quick-mask" },
     { GIMP_UNDO_GROUP_IMAGE_GRID, "GIMP_UNDO_GROUP_IMAGE_GRID", "group-image-grid" },
+    { GIMP_UNDO_GROUP_IMAGE_COLORMAP_REMAP, "GIMP_UNDO_GROUP_IMAGE_COLORMAP_REMAP", "group-image-colormap-remap" },
     { GIMP_UNDO_GROUP_GUIDE, "GIMP_UNDO_GROUP_GUIDE", "group-guide" },
     { GIMP_UNDO_GROUP_SAMPLE_POINT, "GIMP_UNDO_GROUP_SAMPLE_POINT", "group-sample-point" },
     { GIMP_UNDO_GROUP_DRAWABLE, "GIMP_UNDO_GROUP_DRAWABLE", "group-drawable" },
     { GIMP_UNDO_GROUP_DRAWABLE_MOD, "GIMP_UNDO_GROUP_DRAWABLE_MOD", "group-drawable-mod" },
     { GIMP_UNDO_GROUP_MASK, "GIMP_UNDO_GROUP_MASK", "group-mask" },
     { GIMP_UNDO_GROUP_ITEM_VISIBILITY, "GIMP_UNDO_GROUP_ITEM_VISIBILITY", "group-item-visibility" },
-    { GIMP_UNDO_GROUP_ITEM_LINKED, "GIMP_UNDO_GROUP_ITEM_LINKED", "group-item-linked" },
+    { GIMP_UNDO_GROUP_ITEM_LOCK_CONTENTS, "GIMP_UNDO_GROUP_ITEM_LOCK_CONTENTS", "group-item-lock-contents" },
+    { GIMP_UNDO_GROUP_ITEM_LOCK_POSITION, "GIMP_UNDO_GROUP_ITEM_LOCK_POSITION", "group-item-lock-position" },
+    { GIMP_UNDO_GROUP_ITEM_LOCK_VISIBILITY, "GIMP_UNDO_GROUP_ITEM_LOCK_VISIBILITY", "group-item-lock-visibility" },
     { GIMP_UNDO_GROUP_ITEM_PROPERTIES, "GIMP_UNDO_GROUP_ITEM_PROPERTIES", "group-item-properties" },
     { GIMP_UNDO_GROUP_ITEM_DISPLACE, "GIMP_UNDO_GROUP_ITEM_DISPLACE", "group-item-displace" },
     { GIMP_UNDO_GROUP_ITEM_SCALE, "GIMP_UNDO_GROUP_ITEM_SCALE", "group-item-scale" },
     { GIMP_UNDO_GROUP_ITEM_RESIZE, "GIMP_UNDO_GROUP_ITEM_RESIZE", "group-item-resize" },
     { GIMP_UNDO_GROUP_LAYER_ADD, "GIMP_UNDO_GROUP_LAYER_ADD", "group-layer-add" },
+    { GIMP_UNDO_GROUP_LAYER_ADD_ALPHA, "GIMP_UNDO_GROUP_LAYER_ADD_ALPHA", "group-layer-add-alpha" },
     { GIMP_UNDO_GROUP_LAYER_ADD_MASK, "GIMP_UNDO_GROUP_LAYER_ADD_MASK", "group-layer-add-mask" },
     { GIMP_UNDO_GROUP_LAYER_APPLY_MASK, "GIMP_UNDO_GROUP_LAYER_APPLY_MASK", "group-layer-apply-mask" },
+    { GIMP_UNDO_GROUP_LAYER_REMOVE_ALPHA, "GIMP_UNDO_GROUP_LAYER_REMOVE_ALPHA", "group-layer-remove-alpha" },
+    { GIMP_UNDO_GROUP_LAYER_LOCK_ALPHA, "GIMP_UNDO_GROUP_LAYER_LOCK_ALPHA", "group-layer-lock-alpha" },
+    { GIMP_UNDO_GROUP_LAYER_OPACITY, "GIMP_UNDO_GROUP_LAYER_OPACITY", "group-layer-opacity" },
+    { GIMP_UNDO_GROUP_LAYER_MODE, "GIMP_UNDO_GROUP_LAYER_MODE", "group-layer-mode" },
+    { GIMP_UNDO_GROUP_CHANNEL_ADD, "GIMP_UNDO_GROUP_CHANNEL_ADD", "group-channel-add" },
     { GIMP_UNDO_GROUP_FS_TO_LAYER, "GIMP_UNDO_GROUP_FS_TO_LAYER", "group-fs-to-layer" },
     { GIMP_UNDO_GROUP_FS_FLOAT, "GIMP_UNDO_GROUP_FS_FLOAT", "group-fs-float" },
     { GIMP_UNDO_GROUP_FS_ANCHOR, "GIMP_UNDO_GROUP_FS_ANCHOR", "group-fs-anchor" },
@@ -1098,7 +1228,7 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_GROUP_PAINT, "GIMP_UNDO_GROUP_PAINT", "group-paint" },
     { GIMP_UNDO_GROUP_PARASITE_ATTACH, "GIMP_UNDO_GROUP_PARASITE_ATTACH", "group-parasite-attach" },
     { GIMP_UNDO_GROUP_PARASITE_REMOVE, "GIMP_UNDO_GROUP_PARASITE_REMOVE", "group-parasite-remove" },
-    { GIMP_UNDO_GROUP_VECTORS_IMPORT, "GIMP_UNDO_GROUP_VECTORS_IMPORT", "group-vectors-import" },
+    { GIMP_UNDO_GROUP_PATHS_IMPORT, "GIMP_UNDO_GROUP_PATHS_IMPORT", "group-paths-import" },
     { GIMP_UNDO_GROUP_MISC, "GIMP_UNDO_GROUP_MISC", "group-misc" },
     { GIMP_UNDO_IMAGE_TYPE, "GIMP_UNDO_IMAGE_TYPE", "image-type" },
     { GIMP_UNDO_IMAGE_PRECISION, "GIMP_UNDO_IMAGE_PRECISION", "image-precision" },
@@ -1107,20 +1237,21 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_IMAGE_GRID, "GIMP_UNDO_IMAGE_GRID", "image-grid" },
     { GIMP_UNDO_IMAGE_METADATA, "GIMP_UNDO_IMAGE_METADATA", "image-metadata" },
     { GIMP_UNDO_IMAGE_COLORMAP, "GIMP_UNDO_IMAGE_COLORMAP", "image-colormap" },
-    { GIMP_UNDO_IMAGE_COLOR_MANAGED, "GIMP_UNDO_IMAGE_COLOR_MANAGED", "image-color-managed" },
+    { GIMP_UNDO_IMAGE_HIDDEN_PROFILE, "GIMP_UNDO_IMAGE_HIDDEN_PROFILE", "image-hidden-profile" },
     { GIMP_UNDO_GUIDE, "GIMP_UNDO_GUIDE", "guide" },
     { GIMP_UNDO_SAMPLE_POINT, "GIMP_UNDO_SAMPLE_POINT", "sample-point" },
     { GIMP_UNDO_DRAWABLE, "GIMP_UNDO_DRAWABLE", "drawable" },
     { GIMP_UNDO_DRAWABLE_MOD, "GIMP_UNDO_DRAWABLE_MOD", "drawable-mod" },
+    { GIMP_UNDO_DRAWABLE_FORMAT, "GIMP_UNDO_DRAWABLE_FORMAT", "drawable-format" },
     { GIMP_UNDO_MASK, "GIMP_UNDO_MASK", "mask" },
     { GIMP_UNDO_ITEM_REORDER, "GIMP_UNDO_ITEM_REORDER", "item-reorder" },
     { GIMP_UNDO_ITEM_RENAME, "GIMP_UNDO_ITEM_RENAME", "item-rename" },
     { GIMP_UNDO_ITEM_DISPLACE, "GIMP_UNDO_ITEM_DISPLACE", "item-displace" },
     { GIMP_UNDO_ITEM_VISIBILITY, "GIMP_UNDO_ITEM_VISIBILITY", "item-visibility" },
-    { GIMP_UNDO_ITEM_LINKED, "GIMP_UNDO_ITEM_LINKED", "item-linked" },
     { GIMP_UNDO_ITEM_COLOR_TAG, "GIMP_UNDO_ITEM_COLOR_TAG", "item-color-tag" },
     { GIMP_UNDO_ITEM_LOCK_CONTENT, "GIMP_UNDO_ITEM_LOCK_CONTENT", "item-lock-content" },
     { GIMP_UNDO_ITEM_LOCK_POSITION, "GIMP_UNDO_ITEM_LOCK_POSITION", "item-lock-position" },
+    { GIMP_UNDO_ITEM_LOCK_VISIBILITY, "GIMP_UNDO_ITEM_LOCK_VISIBILITY", "item-lock-visibility" },
     { GIMP_UNDO_LAYER_ADD, "GIMP_UNDO_LAYER_ADD", "layer-add" },
     { GIMP_UNDO_LAYER_REMOVE, "GIMP_UNDO_LAYER_REMOVE", "layer-remove" },
     { GIMP_UNDO_LAYER_MODE, "GIMP_UNDO_LAYER_MODE", "layer-mode" },
@@ -1143,9 +1274,9 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_CHANNEL_ADD, "GIMP_UNDO_CHANNEL_ADD", "channel-add" },
     { GIMP_UNDO_CHANNEL_REMOVE, "GIMP_UNDO_CHANNEL_REMOVE", "channel-remove" },
     { GIMP_UNDO_CHANNEL_COLOR, "GIMP_UNDO_CHANNEL_COLOR", "channel-color" },
-    { GIMP_UNDO_VECTORS_ADD, "GIMP_UNDO_VECTORS_ADD", "vectors-add" },
-    { GIMP_UNDO_VECTORS_REMOVE, "GIMP_UNDO_VECTORS_REMOVE", "vectors-remove" },
-    { GIMP_UNDO_VECTORS_MOD, "GIMP_UNDO_VECTORS_MOD", "vectors-mod" },
+    { GIMP_UNDO_PATH_ADD, "GIMP_UNDO_PATH_ADD", "path-add" },
+    { GIMP_UNDO_PATH_REMOVE, "GIMP_UNDO_PATH_REMOVE", "path-remove" },
+    { GIMP_UNDO_PATH_MOD, "GIMP_UNDO_PATH_MOD", "path-mod" },
     { GIMP_UNDO_FS_TO_LAYER, "GIMP_UNDO_FS_TO_LAYER", "fs-to-layer" },
     { GIMP_UNDO_TRANSFORM_GRID, "GIMP_UNDO_TRANSFORM_GRID", "transform-grid" },
     { GIMP_UNDO_PAINT, "GIMP_UNDO_PAINT", "paint" },
@@ -1153,6 +1284,9 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_FOREGROUND_SELECT, "GIMP_UNDO_FOREGROUND_SELECT", "foreground-select" },
     { GIMP_UNDO_PARASITE_ATTACH, "GIMP_UNDO_PARASITE_ATTACH", "parasite-attach" },
     { GIMP_UNDO_PARASITE_REMOVE, "GIMP_UNDO_PARASITE_REMOVE", "parasite-remove" },
+    { GIMP_UNDO_FILTER_ADD, "GIMP_UNDO_FILTER_ADD", "filter-add" },
+    { GIMP_UNDO_FILTER_REMOVE, "GIMP_UNDO_FILTER_REMOVE", "filter-remove" },
+    { GIMP_UNDO_FILTER_REORDER, "GIMP_UNDO_FILTER_REORDER", "filter-reorder" },
     { GIMP_UNDO_CANT, "GIMP_UNDO_CANT", "cant" },
     { 0, NULL, NULL }
   };
@@ -1170,23 +1304,32 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_GROUP_IMAGE_ITEM_REMOVE, NC_("undo-type", "Remove item"), NULL },
     { GIMP_UNDO_GROUP_IMAGE_ITEM_REORDER, NC_("undo-type", "Reorder item"), NULL },
     { GIMP_UNDO_GROUP_IMAGE_LAYERS_MERGE, NC_("undo-type", "Merge layers"), NULL },
-    { GIMP_UNDO_GROUP_IMAGE_VECTORS_MERGE, NC_("undo-type", "Merge paths"), NULL },
+    { GIMP_UNDO_GROUP_IMAGE_PATHS_MERGE, NC_("undo-type", "Merge paths"), NULL },
     { GIMP_UNDO_GROUP_IMAGE_QUICK_MASK, NC_("undo-type", "Quick Mask"), NULL },
     { GIMP_UNDO_GROUP_IMAGE_GRID, NC_("undo-type", "Grid"), NULL },
+    { GIMP_UNDO_GROUP_IMAGE_COLORMAP_REMAP, NC_("undo-type", "Colormap remapping"), NULL },
     { GIMP_UNDO_GROUP_GUIDE, NC_("undo-type", "Guide"), NULL },
     { GIMP_UNDO_GROUP_SAMPLE_POINT, NC_("undo-type", "Sample Point"), NULL },
     { GIMP_UNDO_GROUP_DRAWABLE, NC_("undo-type", "Layer/Channel"), NULL },
     { GIMP_UNDO_GROUP_DRAWABLE_MOD, NC_("undo-type", "Layer/Channel modification"), NULL },
     { GIMP_UNDO_GROUP_MASK, NC_("undo-type", "Selection mask"), NULL },
     { GIMP_UNDO_GROUP_ITEM_VISIBILITY, NC_("undo-type", "Item visibility"), NULL },
-    { GIMP_UNDO_GROUP_ITEM_LINKED, NC_("undo-type", "Link/Unlink item"), NULL },
+    { GIMP_UNDO_GROUP_ITEM_LOCK_CONTENTS, NC_("undo-type", "Lock/Unlock contents"), NULL },
+    { GIMP_UNDO_GROUP_ITEM_LOCK_POSITION, NC_("undo-type", "Lock/Unlock position"), NULL },
+    { GIMP_UNDO_GROUP_ITEM_LOCK_VISIBILITY, NC_("undo-type", "Lock/Unlock visibility"), NULL },
     { GIMP_UNDO_GROUP_ITEM_PROPERTIES, NC_("undo-type", "Item properties"), NULL },
     { GIMP_UNDO_GROUP_ITEM_DISPLACE, NC_("undo-type", "Move item"), NULL },
     { GIMP_UNDO_GROUP_ITEM_SCALE, NC_("undo-type", "Scale item"), NULL },
     { GIMP_UNDO_GROUP_ITEM_RESIZE, NC_("undo-type", "Resize item"), NULL },
     { GIMP_UNDO_GROUP_LAYER_ADD, NC_("undo-type", "Add layer"), NULL },
-    { GIMP_UNDO_GROUP_LAYER_ADD_MASK, NC_("undo-type", "Add layer mask"), NULL },
-    { GIMP_UNDO_GROUP_LAYER_APPLY_MASK, NC_("undo-type", "Apply layer mask"), NULL },
+    { GIMP_UNDO_GROUP_LAYER_ADD_ALPHA, NC_("undo-type", "Add alpha channel"), NULL },
+    { GIMP_UNDO_GROUP_LAYER_ADD_MASK, NC_("undo-type", "Add layer masks"), NULL },
+    { GIMP_UNDO_GROUP_LAYER_APPLY_MASK, NC_("undo-type", "Apply layer masks"), NULL },
+    { GIMP_UNDO_GROUP_LAYER_REMOVE_ALPHA, NC_("undo-type", "Remove alpha channel"), NULL },
+    { GIMP_UNDO_GROUP_LAYER_LOCK_ALPHA, NC_("undo-type", "Lock/Unlock alpha channels"), NULL },
+    { GIMP_UNDO_GROUP_LAYER_OPACITY, NC_("undo-type", "Set layers opacity"), NULL },
+    { GIMP_UNDO_GROUP_LAYER_MODE, NC_("undo-type", "Set layers mode"), NULL },
+    { GIMP_UNDO_GROUP_CHANNEL_ADD, NC_("undo-type", "Add channels"), NULL },
     { GIMP_UNDO_GROUP_FS_TO_LAYER, NC_("undo-type", "Floating selection to layer"), NULL },
     { GIMP_UNDO_GROUP_FS_FLOAT, NC_("undo-type", "Float selection"), NULL },
     { GIMP_UNDO_GROUP_FS_ANCHOR, NC_("undo-type", "Anchor floating selection"), NULL },
@@ -1197,7 +1340,7 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_GROUP_PAINT, NC_("undo-type", "Paint"), NULL },
     { GIMP_UNDO_GROUP_PARASITE_ATTACH, NC_("undo-type", "Attach parasite"), NULL },
     { GIMP_UNDO_GROUP_PARASITE_REMOVE, NC_("undo-type", "Remove parasite"), NULL },
-    { GIMP_UNDO_GROUP_VECTORS_IMPORT, NC_("undo-type", "Import paths"), NULL },
+    { GIMP_UNDO_GROUP_PATHS_IMPORT, NC_("undo-type", "Import paths"), NULL },
     { GIMP_UNDO_GROUP_MISC, NC_("undo-type", "Plug-In"), NULL },
     { GIMP_UNDO_IMAGE_TYPE, NC_("undo-type", "Image type"), NULL },
     { GIMP_UNDO_IMAGE_PRECISION, NC_("undo-type", "Image precision"), NULL },
@@ -1206,20 +1349,21 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_IMAGE_GRID, NC_("undo-type", "Grid"), NULL },
     { GIMP_UNDO_IMAGE_METADATA, NC_("undo-type", "Change metadata"), NULL },
     { GIMP_UNDO_IMAGE_COLORMAP, NC_("undo-type", "Change indexed palette"), NULL },
-    { GIMP_UNDO_IMAGE_COLOR_MANAGED, NC_("undo-type", "Change color managed state"), NULL },
+    { GIMP_UNDO_IMAGE_HIDDEN_PROFILE, NC_("undo-type", "Hide/Unhide color profile"), NULL },
     { GIMP_UNDO_GUIDE, NC_("undo-type", "Guide"), NULL },
     { GIMP_UNDO_SAMPLE_POINT, NC_("undo-type", "Sample Point"), NULL },
     { GIMP_UNDO_DRAWABLE, NC_("undo-type", "Layer/Channel"), NULL },
     { GIMP_UNDO_DRAWABLE_MOD, NC_("undo-type", "Layer/Channel modification"), NULL },
+    { GIMP_UNDO_DRAWABLE_FORMAT, NC_("undo-type", "Layer/Channel format"), NULL },
     { GIMP_UNDO_MASK, NC_("undo-type", "Selection mask"), NULL },
     { GIMP_UNDO_ITEM_REORDER, NC_("undo-type", "Reorder item"), NULL },
     { GIMP_UNDO_ITEM_RENAME, NC_("undo-type", "Rename item"), NULL },
     { GIMP_UNDO_ITEM_DISPLACE, NC_("undo-type", "Move item"), NULL },
     { GIMP_UNDO_ITEM_VISIBILITY, NC_("undo-type", "Item visibility"), NULL },
-    { GIMP_UNDO_ITEM_LINKED, NC_("undo-type", "Link/Unlink item"), NULL },
     { GIMP_UNDO_ITEM_COLOR_TAG, NC_("undo-type", "Item color tag"), NULL },
     { GIMP_UNDO_ITEM_LOCK_CONTENT, NC_("undo-type", "Lock/Unlock content"), NULL },
     { GIMP_UNDO_ITEM_LOCK_POSITION, NC_("undo-type", "Lock/Unlock position"), NULL },
+    { GIMP_UNDO_ITEM_LOCK_VISIBILITY, NC_("undo-type", "Lock/Unlock visibility"), NULL },
     { GIMP_UNDO_LAYER_ADD, NC_("undo-type", "New layer"), NULL },
     { GIMP_UNDO_LAYER_REMOVE, NC_("undo-type", "Delete layer"), NULL },
     { GIMP_UNDO_LAYER_MODE, NC_("undo-type", "Set layer mode"), NULL },
@@ -1235,16 +1379,16 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_TEXT_LAYER, NC_("undo-type", "Text layer"), NULL },
     { GIMP_UNDO_TEXT_LAYER_MODIFIED, NC_("undo-type", "Text layer modification"), NULL },
     { GIMP_UNDO_TEXT_LAYER_CONVERT, NC_("undo-type", "Convert text layer"), NULL },
-    { GIMP_UNDO_LAYER_MASK_ADD, NC_("undo-type", "Add layer mask"), NULL },
-    { GIMP_UNDO_LAYER_MASK_REMOVE, NC_("undo-type", "Delete layer mask"), NULL },
-    { GIMP_UNDO_LAYER_MASK_APPLY, NC_("undo-type", "Apply layer mask"), NULL },
-    { GIMP_UNDO_LAYER_MASK_SHOW, NC_("undo-type", "Show layer mask"), NULL },
+    { GIMP_UNDO_LAYER_MASK_ADD, NC_("undo-type", "Add layer masks"), NULL },
+    { GIMP_UNDO_LAYER_MASK_REMOVE, NC_("undo-type", "Delete layer masks"), NULL },
+    { GIMP_UNDO_LAYER_MASK_APPLY, NC_("undo-type", "Apply layer masks"), NULL },
+    { GIMP_UNDO_LAYER_MASK_SHOW, NC_("undo-type", "Show layer masks"), NULL },
     { GIMP_UNDO_CHANNEL_ADD, NC_("undo-type", "New channel"), NULL },
     { GIMP_UNDO_CHANNEL_REMOVE, NC_("undo-type", "Delete channel"), NULL },
     { GIMP_UNDO_CHANNEL_COLOR, NC_("undo-type", "Channel color"), NULL },
-    { GIMP_UNDO_VECTORS_ADD, NC_("undo-type", "New path"), NULL },
-    { GIMP_UNDO_VECTORS_REMOVE, NC_("undo-type", "Delete path"), NULL },
-    { GIMP_UNDO_VECTORS_MOD, NC_("undo-type", "Path modification"), NULL },
+    { GIMP_UNDO_PATH_ADD, NC_("undo-type", "New path"), NULL },
+    { GIMP_UNDO_PATH_REMOVE, NC_("undo-type", "Delete path"), NULL },
+    { GIMP_UNDO_PATH_MOD, NC_("undo-type", "Path modification"), NULL },
     { GIMP_UNDO_FS_TO_LAYER, NC_("undo-type", "Floating selection to layer"), NULL },
     { GIMP_UNDO_TRANSFORM_GRID, NC_("undo-type", "Transform grid"), NULL },
     { GIMP_UNDO_PAINT, NC_("undo-type", "Paint"), NULL },
@@ -1252,6 +1396,9 @@ gimp_undo_type_get_type (void)
     { GIMP_UNDO_FOREGROUND_SELECT, NC_("undo-type", "Select foreground"), NULL },
     { GIMP_UNDO_PARASITE_ATTACH, NC_("undo-type", "Attach parasite"), NULL },
     { GIMP_UNDO_PARASITE_REMOVE, NC_("undo-type", "Remove parasite"), NULL },
+    { GIMP_UNDO_FILTER_ADD, NC_("undo-type", "Add effect"), NULL },
+    { GIMP_UNDO_FILTER_REMOVE, NC_("undo-type", "Remove effect"), NULL },
+    { GIMP_UNDO_FILTER_REORDER, NC_("undo-type", "Reorder effect"), NULL },
     { GIMP_UNDO_CANT, NC_("undo-type", "Not undoable"), NULL },
     { 0, NULL, NULL }
   };
@@ -1334,6 +1481,37 @@ gimp_view_type_get_type (void)
     {
       type = g_enum_register_static ("GimpViewType", values);
       gimp_type_set_translation_context (type, "view-type");
+      gimp_enum_set_value_descriptions (type, descs);
+    }
+
+  return type;
+}
+
+GType
+gimp_select_method_get_type (void)
+{
+  static const GEnumValue values[] =
+  {
+    { GIMP_SELECT_PLAIN_TEXT, "GIMP_SELECT_PLAIN_TEXT", "plain-text" },
+    { GIMP_SELECT_REGEX_PATTERN, "GIMP_SELECT_REGEX_PATTERN", "regex-pattern" },
+    { GIMP_SELECT_GLOB_PATTERN, "GIMP_SELECT_GLOB_PATTERN", "glob-pattern" },
+    { 0, NULL, NULL }
+  };
+
+  static const GimpEnumDesc descs[] =
+  {
+    { GIMP_SELECT_PLAIN_TEXT, NC_("select-method", "Selection by basic text search"), NULL },
+    { GIMP_SELECT_REGEX_PATTERN, NC_("select-method", "Selection by regular expression search"), NULL },
+    { GIMP_SELECT_GLOB_PATTERN, NC_("select-method", "Selection by glob pattern search"), NULL },
+    { 0, NULL, NULL }
+  };
+
+  static GType type = 0;
+
+  if (G_UNLIKELY (! type))
+    {
+      type = g_enum_register_static ("GimpSelectMethod", values);
+      gimp_type_set_translation_context (type, "select-method");
       gimp_enum_set_value_descriptions (type, descs);
     }
 

@@ -70,7 +70,7 @@ typedef struct
   int        run;
   char       selected_brush[200];
   char       selected_paper[200];
-  GimpRGB    color;
+  GeglColor *color;
   int        general_paint_edges;
   int        place_type;
   vector_t   orient_vectors[MAXORIENTVECT];
@@ -159,8 +159,9 @@ double getsiz_proto (double x, double y, int n, smvector_t *vec,
                      double smstrexp, int voronoi);
 
 
-void set_colorbrushes (const gchar *fn);
-int  create_gimpressionist (void);
+void set_colorbrushes      (const gchar         *fn);
+int  create_gimpressionist (GimpProcedure       *procedure,
+                            GimpProcedureConfig *config);
 
 double dist (double x, double y, double dx, double dy);
 
@@ -173,6 +174,11 @@ GtkWidget *create_radio_button (GtkWidget *box, int orient_type,
                                 GSList **radio_group,
                                 GtkWidget **buttons_array
                                );
+
+void gimpressionist_scale_entry_update_double (GimpLabelSpin *entry,
+                                               gdouble       *value);
+void gimpressionist_scale_entry_update_int    (GimpLabelSpin *entry,
+                                               gint          *value);
 
 #define CLAMP_UP_TO(x, max) (CLAMP((x),(0),(max-1)))
 

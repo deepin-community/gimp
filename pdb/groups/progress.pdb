@@ -26,11 +26,13 @@ HELP
 
     &std_pdb_misc;
 
+    $lib_private = 1;
+
     @inargs = (
-	{ name => 'message', type => 'string', null_ok => 1, wrap => 1,
+	{ name => 'message', type => 'string', none_ok => 1,
 	  desc => 'Message to use in the progress dialog' },
 	{ name => 'gdisplay', type => 'display', none_ok => 1,
-	  desc => 'GimpDisplay to update progressbar in, or -1 for a separate
+	  desc => 'GimpDisplay to update progressbar in, or %NULL for a separate
 		   window' }
     );
 
@@ -61,8 +63,10 @@ HELP
 
     &std_pdb_misc;
 
+    $lib_private = 1;
+
     @inargs = (
-	{ name => 'percentage', type => 'float', wrap => 1,
+	{ name => 'percentage', type => 'double',
 	  desc => 'Percentage of progress completed which must
                    be between 0.0 and 1.0' }
     );
@@ -126,7 +130,7 @@ HELP
     &neo_pdb_misc('2005', '2.4');
 
     @inargs = (
-	{ name => 'message', type => 'string', null_ok => 1,
+	{ name => 'message', type => 'string', none_ok => 1,
 	  desc => 'Message to use in the progress dialog' }
     );
 
@@ -176,17 +180,21 @@ CODE
 }
 
 sub progress_get_window_handle {
-    $blurb = 'Returns the native window ID of the toplevel window this plug-in\'s progress is displayed in.';
+    $blurb = 'Returns the native handle of the toplevel window this plug-in\'s progress is or would be displayed in.';
 
     $help = <<'HELP';
-This function returns the native window ID of the toplevel window this plug-in\'s progress is displayed in.
+This function returns the native handle allowing to identify the toplevel window this plug-in's progress is displayed in.
+It should still work even if the progress bar has not been initialized yet, unless the plug-in wasn't called from a GUI.
+
+This handle can be of various types (integer, string, etc.) depending on the platform you are running on which is why it
+returns a GBytes. There are usually no reasons to call this directly.
 HELP
 
     &mitch_pdb_misc('2004', '2.2');
 
     @outargs = (
-	{ name => 'window', type => 'int32',
-	  desc => 'The progress bar\'s toplevel window' }
+	{ name => 'handle', type => 'bytes',
+	  desc => 'The progress bar\'s toplevel window\'s handle' }
     );
 
     %invoke = (
@@ -197,7 +205,7 @@ HELP
   if (plug_in && plug_in->open)
     {
       if (! gimp->no_interface)
-        window = gimp_plug_in_progress_get_window_id (plug_in);
+        handle = gimp_plug_in_progress_get_window_id (plug_in);
     }
   else
     success = FALSE;
@@ -217,10 +225,11 @@ HELP
 
     &mitch_pdb_misc('2004', '2.2');
 
+    $lib_private = 1;
+
     @inargs = (
 	{ name => 'progress_callback', type => 'string', non_empty => 1,
-	  desc => 'The callback PDB proc to call',
-          wrap => 1 }
+	  desc => 'The callback PDB proc to call' }
     );
 
     %invoke = (
@@ -247,10 +256,11 @@ HELP
 
     &mitch_pdb_misc('2004', '2.2');
 
+    $lib_private = 1;
+
     @inargs = (
 	{ name => 'progress_callback', type => 'string', non_empty => 1,
-	  desc => 'The name of the callback registered for this progress',
-          wrap => 1 }
+	  desc => 'The name of the callback registered for this progress' }
     );
 
     %invoke = (

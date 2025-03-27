@@ -47,7 +47,6 @@ typedef struct
   gsize          position;
 } TiffIO;
 
-
 static TIFFExtendProc parent_extender;
 
 static void      tiff_io_warning       (const gchar *module,
@@ -85,6 +84,7 @@ register_geotags (TIFF *tif)
     (*parent_extender) (tif);
 }
 
+
 static TiffIO tiff_io = { 0, };
 
 
@@ -108,11 +108,7 @@ tiff_open (GFile        *file,
 
       tiff_io.stream = G_OBJECT (tiff_io.input);
     }
-#ifdef TIFF_VERSION_BIG
   else if(! strcmp (mode, "w") || ! strcmp (mode, "w8"))
-#else
-  else if(! strcmp (mode, "w"))
-#endif
     {
       tiff_io.output = G_OUTPUT_STREAM (g_file_replace (file,
                                                         NULL, FALSE,
@@ -167,12 +163,19 @@ tiff_reset_file_size_error (void)
   tiff_file_size_error = FALSE;
 }
 
+static gint max_msgs_per_instance = 3;
+
 static void
 tiff_io_warning (const gchar *module,
                  const gchar *fmt,
                  va_list      ap)
 {
   gint tag = 0;
+
+  if (max_msgs_per_instance > 0)
+    max_msgs_per_instance--;
+  else
+    return;
 
   /* Between libtiff 3.7.0beta2 and 4.0.0alpha. */
   if (! strcmp (fmt, "%s: unknown field with tag %d (0x%x) encountered") ||
@@ -284,6 +287,11 @@ tiff_io_error (const gchar *module,
 {
   gchar *msg;
 
+  if (max_msgs_per_instance > 0)
+    max_msgs_per_instance--;
+  else
+    return;
+
   /* Workaround for: http://bugzilla.gnome.org/show_bug.cgi?id=132297
    * Ignore the errors related to random access and JPEG compression
    */
@@ -292,7 +300,6 @@ tiff_io_error (const gchar *module,
 
   msg = g_strdup_vprintf (fmt, ap);
 
-#ifdef TIFF_VERSION_BIG
   if (g_strcmp0 (fmt, "Maximum TIFF file size exceeded") == 0)
     /* @module in my tests were "TIFFAppendToStrip" but I wonder if
      * this same error could not happen with other "modules".
@@ -301,7 +308,6 @@ tiff_io_error (const gchar *module,
   else
     /* Easier for debugging to at least print messages on stderr. */
     g_printerr ("LibTiff error: [%s] %s\n", module, msg);
-#endif
 
   g_log (G_LOG_DOMAIN, G_LOG_LEVEL_MESSAGE, "%s", msg);
   g_free (msg);
@@ -577,7 +583,7 @@ tiff_io_get_file_size (thandle_t handle)
     }
   else
     {
-      size = g_file_info_get_size (info);
+      size = g_file_info_get_attribute_uint64 (info, G_FILE_ATTRIBUTE_STANDARD_SIZE);
       g_object_unref (info);
     }
 

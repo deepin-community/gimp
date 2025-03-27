@@ -29,6 +29,7 @@ struct _GimpContainerTreeViewPrivate
   GtkCellRenderer    *name_cell;
 
   GList              *editable_cells;
+  gchar              *editing_path;
 
   GimpViewRenderer   *dnd_renderer;
 
@@ -40,6 +41,10 @@ struct _GimpContainerTreeViewPrivate
   GdkScrollDirection  scroll_dir;
 
   gboolean            dnd_drop_to_empty;
+
+  gdouble             zoom_accumulated_scroll_delta;
+  GtkGesture         *zoom_gesture;
+  gdouble             zoom_gesture_last_set_value;
 };
 
 

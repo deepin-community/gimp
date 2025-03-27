@@ -20,6 +20,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 
 #include "tools-types.h"
@@ -196,7 +197,7 @@ gimp_tool_init (GimpTool *tool)
   tool->ID                    = global_tool_ID++;
   tool->control               = g_object_new (GIMP_TYPE_TOOL_CONTROL, NULL);
   tool->display               = NULL;
-  tool->drawable              = NULL;
+  tool->drawables             = NULL;
   tool->focus_display         = NULL;
   tool->modifier_state        = 0;
   tool->active_modifier_state = 0;
@@ -330,8 +331,9 @@ gimp_tool_real_control (GimpTool       *tool,
       break;
 
     case GIMP_TOOL_ACTION_HALT:
-      tool->display  = NULL;
-      tool->drawable = NULL;
+      tool->display   = NULL;
+      g_list_free (tool->drawables);
+      tool->drawables = NULL;
       break;
 
     case GIMP_TOOL_ACTION_COMMIT:
@@ -351,8 +353,9 @@ gimp_tool_real_button_press (GimpTool            *tool,
     {
       GimpImage *image = gimp_display_get_image (display);
 
-      tool->display  = display;
-      tool->drawable = gimp_image_get_active_drawable (image);
+      tool->display   = display;
+      g_list_free (tool->drawables);
+      tool->drawables = gimp_image_get_selected_drawables (image);
 
       gimp_tool_control_activate (tool->control);
     }
@@ -1297,6 +1300,26 @@ gimp_tool_get_popup (GimpTool         *tool,
                                                 ui_path);
 }
 
+/*
+ * gimp_tool_push_status:
+ * @tool:
+ * @display:
+ * @format:
+ *
+ * Push a new status message for the context of the @tool, in the shell
+ * associated to @display. Note that the message will replace any
+ * message for the same context (i.e. same tool) while also ensuring it
+ * is in the front of the message list (except for any progress or
+ * temporary messages which might be going on and are always front).
+ * This is the main difference with gimp_tool_replace_status() which
+ * does not necessarily try to make it a front message.
+ *
+ * In particular, it means you don't have to call gimp_tool_pop_status()
+ * first before calling gimp_tool_push_status(). Even more, you should
+ * not pop the status if you were planning to push a new status for the
+ * same context because you are triggering non necessary redraws of the
+ * status bar.
+ */
 void
 gimp_tool_push_status (GimpTool    *tool,
                        GimpDisplay *display,
@@ -1382,6 +1405,26 @@ gimp_tool_push_status_length (GimpTool            *tool,
   tool->status_displays = g_list_prepend (tool->status_displays, display);
 }
 
+/*
+ * gimp_tool_replace_status:
+ * @tool:
+ * @display:
+ * @format:
+ *
+ * Push a new status message for the context of the @tool, in the shell
+ * associated to @display. If any message for the same context (i.e.
+ * same tool) is already lined up, it will be replaced without changing
+ * the appearance order. In other words, it doesn't try to prioritize
+ * this new status message. Yet if no message for the same context
+ * existed already, the new status would end up front (except for any
+ * progress or temporary messages which might be going on and are always
+ * front).
+ * See also gimp_tool_push_status().
+ *
+ * Therefore you should not call gimp_tool_pop_status() first before
+ * calling gimp_tool_replace_status() as it would not be the same
+ * behavior and could trigger unnecessary redraws of the status bar.
+ */
 void
 gimp_tool_replace_status (GimpTool    *tool,
                           GimpDisplay *display,

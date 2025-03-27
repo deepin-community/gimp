@@ -62,10 +62,10 @@ struct _ResizeDialog
 
   gdouble             old_xres;
   gdouble             old_yres;
-  GimpUnit            old_res_unit;
+  GimpUnit           *old_res_unit;
   gint                old_width;
   gint                old_height;
-  GimpUnit            old_unit;
+  GimpUnit           *old_unit;
   GimpFillType        old_fill_type;
   GimpItemSet         old_layer_set;
   gboolean            old_resize_text_layers;
@@ -113,7 +113,6 @@ static void   reset_template_clicked (GtkWidget    *button,
 static void   ppi_select_toggled     (GtkWidget    *radio,
                                       ResizeDialog *private);
 
-
 /*  public function  */
 
 GtkWidget *
@@ -124,7 +123,7 @@ resize_dialog_new (GimpViewable       *viewable,
                    GtkWidget          *parent,
                    GimpHelpFunc        help_func,
                    const gchar        *help_id,
-                   GimpUnit            unit,
+                   GimpUnit           *unit,
                    GimpFillType        fill_type,
                    GimpItemSet         layer_set,
                    gboolean            resize_text_layers,
@@ -217,7 +216,7 @@ resize_dialog_new (GimpViewable       *viewable,
 
   gimp_context_set_template (private->context, NULL);
 
-  dialog = gimp_viewable_dialog_new (viewable, context,
+  dialog = gimp_viewable_dialog_new (g_list_prepend (NULL, viewable), context,
                                      title, role, GIMP_ICON_OBJECT_RESIZE, title,
                                      parent,
                                      help_func, help_id,
@@ -228,7 +227,7 @@ resize_dialog_new (GimpViewable       *viewable,
 
                                      NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            RESPONSE_RESET,
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
@@ -317,8 +316,8 @@ resize_dialog_new (GimpViewable       *viewable,
   private->ppi_image    = ppi_image;
   private->ppi_template = ppi_template;
 
-  gtk_radio_button_set_group (GTK_RADIO_BUTTON (ppi_template),
-                              gtk_radio_button_get_group (GTK_RADIO_BUTTON (ppi_image)));
+  gtk_radio_button_join_group (GTK_RADIO_BUTTON (ppi_template),
+                               GTK_RADIO_BUTTON (ppi_image));
 
   gtk_toggle_button_set_mode (GTK_TOGGLE_BUTTON (ppi_image), FALSE);
   gtk_toggle_button_set_mode (GTK_TOGGLE_BUTTON (ppi_template), FALSE);
@@ -357,13 +356,11 @@ resize_dialog_new (GimpViewable       *viewable,
   gtk_widget_show (center_right_vbox);
 
   /* size select frame */
-
   frame = gimp_frame_new (size_title);
   gtk_box_pack_start (GTK_BOX (center_left_vbox), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
 
   /* size box */
-
   private->box = g_object_new (GIMP_TYPE_SIZE_BOX,
                                "width",           width,
                                "height",          height,
@@ -386,23 +383,17 @@ resize_dialog_new (GimpViewable       *viewable,
   gtk_widget_show (vbox);
 
   /*  the offset sizeentry  */
-  adjustment = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  adjustment = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   spinbutton = gimp_spin_button_new (adjustment, 1.0, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
   gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), SB_WIDTH);
 
-  private->offset = entry = gimp_size_entry_new (1, unit, "%p",
+  private->offset = entry = gimp_size_entry_new (1, unit, "%n",
                                                  TRUE, FALSE, FALSE, SB_WIDTH,
                                                  GIMP_SIZE_ENTRY_UPDATE_SIZE);
-  gtk_table_set_col_spacing (GTK_TABLE (entry), 0, 6);
-  gtk_table_set_col_spacing (GTK_TABLE (entry), 1, 6);
-  gtk_table_set_col_spacing (GTK_TABLE (entry), 3, 12);
-  gtk_table_set_row_spacing (GTK_TABLE (entry), 0, 2);
-
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (entry),
                              GTK_SPIN_BUTTON (spinbutton), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (entry), spinbutton,
-                             1, 2, 0, 1);
+  gtk_grid_attach (GTK_GRID (entry), spinbutton, 1, 0, 1, 1);
   gtk_widget_show (spinbutton);
 
   gimp_size_entry_attach_label (GIMP_SIZE_ENTRY (entry),
@@ -425,8 +416,11 @@ resize_dialog_new (GimpViewable       *viewable,
                     private);
 
   frame = gtk_frame_new (NULL);
+  gtk_widget_set_halign (frame, GTK_ALIGN_CENTER);
   gtk_frame_set_shadow_type (GTK_FRAME (frame), GTK_SHADOW_IN);
   gtk_box_pack_start (GTK_BOX (center_right_vbox), frame, FALSE, FALSE, 0);
+  gtk_style_context_add_class (gtk_widget_get_style_context (frame),
+                               "gimp-offset-area-frame");
   gtk_widget_show (frame);
 
   private->area = gimp_offset_area_new (width, height);
@@ -492,7 +486,7 @@ resize_dialog_new (GimpViewable       *viewable,
       gimp_int_combo_box_connect (GIMP_INT_COMBO_BOX (combo),
                                   private->layer_set,
                                   G_CALLBACK (gimp_int_combo_box_get_active),
-                                  &private->layer_set);
+                                  &private->layer_set, NULL);
     }
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
@@ -507,7 +501,7 @@ resize_dialog_new (GimpViewable       *viewable,
   gimp_int_combo_box_connect (GIMP_INT_COMBO_BOX (combo),
                               private->fill_type,
                               G_CALLBACK (gimp_int_combo_box_get_active),
-                              &private->fill_type);
+                              &private->fill_type, NULL);
 
   if (GIMP_IS_IMAGE (viewable))
     {
@@ -560,12 +554,12 @@ resize_dialog_response (GtkWidget    *dialog,
                         ResizeDialog *private)
 {
   GimpSizeEntry *entry = GIMP_SIZE_ENTRY (private->offset);
-  GimpUnit       unit;
+  GimpUnit      *unit;
   gint           width;
   gint           height;
   gdouble        xres;
   gdouble        yres;
-  GimpUnit       res_unit;
+  GimpUnit      *res_unit;
 
   switch (response_id)
     {
@@ -614,12 +608,19 @@ resize_dialog_reset (ResizeDialog *private)
                 NULL);
 
   g_object_set (private->box,
-                "width",           private->old_width,
-                "height",          private->old_height,
                 "unit",            private->old_unit,
                 "xresolution",     private->old_xres,
                 "yresolution",     private->old_yres,
                 "resolution-unit", private->old_res_unit,
+                NULL);
+  /**
+   * reset width and height after the other properties to avoid the problems
+   * noted in issue #10225
+   **/
+
+  g_object_set (private->box,
+                "width",           private->old_width,
+                "height",          private->old_height,
                 NULL);
 
   if (private->layer_set_combo)
@@ -728,7 +729,7 @@ template_changed (GimpContext  *context,
                   GimpTemplate *template,
                   ResizeDialog *private)
 {
-  GimpUnit unit = private->old_unit;
+  GimpUnit *unit = private->old_unit;
 
   private->template = template;
 
@@ -737,10 +738,10 @@ template_changed (GimpContext  *context,
 
   if (template != NULL)
     {
-      gdouble  xres;
-      gdouble  yres;
-      GimpUnit res_unit;
-      gboolean resolution_mismatch;
+      gdouble   xres;
+      gdouble   yres;
+      GimpUnit *res_unit;
+      gboolean  resolution_mismatch;
 
       unit     = gimp_template_get_unit            (template);
       xres     = gimp_template_get_resolution_x    (template);
@@ -751,8 +752,7 @@ template_changed (GimpContext  *context,
                             yres     != private->old_yres ||
                             res_unit != private->old_res_unit;
 
-      if (resolution_mismatch &&
-          unit != GIMP_UNIT_PIXEL)
+      if (resolution_mismatch && unit != gimp_unit_pixel ())
         {
           gchar *text;
 
@@ -784,10 +784,10 @@ ppi_select_toggled (GtkWidget    *radio,
 {
   gint             width;
   gint             height;
-  GimpUnit         unit;
+  GimpUnit        *unit;
   gdouble          xres;
   gdouble          yres;
-  GimpUnit         res_unit;
+  GimpUnit        *res_unit;
   GtkToggleButton *image_button;
   gboolean         use_image_ppi;
 
@@ -811,8 +811,7 @@ ppi_select_toggled (GtkWidget    *radio,
       res_unit = gimp_template_get_resolution_unit (private->template);
     }
 
-  if (private->template != NULL &&
-      unit != GIMP_UNIT_PIXEL)
+  if (private->template != NULL && unit != gimp_unit_pixel ())
     {
       if (use_image_ppi)
         {

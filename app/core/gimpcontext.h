@@ -56,7 +56,7 @@ struct _GimpContext
   guint32               serialize_props;
 
   GimpImage            *image;
-  gpointer              display;
+  GimpDisplay          *display;
 
   GimpToolInfo         *tool_info;
   gchar                *tool_name;
@@ -64,8 +64,8 @@ struct _GimpContext
   GimpPaintInfo        *paint_info;
   gchar                *paint_name;
 
-  GimpRGB               foreground;
-  GimpRGB               background;
+  GeglColor            *foreground;
+  GeglColor            *background;
 
   gdouble               opacity;
   GimpLayerMode         paint_mode;
@@ -102,6 +102,9 @@ struct _GimpContext
 
   GimpTemplate         *template;
   gchar                *template_name;
+
+  GimpLineArt          *line_art;
+  guint                 line_art_timeout_id;
 };
 
 struct _GimpContextClass
@@ -111,7 +114,7 @@ struct _GimpContextClass
   void (* image_changed)      (GimpContext          *context,
                                GimpImage            *image);
   void (* display_changed)    (GimpContext          *context,
-                               gpointer              display);
+                               GimpDisplay          *display);
 
   void (* tool_changed)       (GimpContext          *context,
                                GimpToolInfo         *tool_info);
@@ -119,9 +122,9 @@ struct _GimpContextClass
                                GimpPaintInfo        *paint_info);
 
   void (* foreground_changed) (GimpContext          *context,
-                               GimpRGB              *color);
+                               GeglColor            *color);
   void (* background_changed) (GimpContext          *context,
-                               GimpRGB              *color);
+                               GeglColor            *color);
   void (* opacity_changed)    (GimpContext          *context,
                                gdouble               opacity);
   void (* paint_mode_changed) (GimpContext          *context,
@@ -221,10 +224,16 @@ void             gimp_context_set_image           (GimpContext     *context,
 void             gimp_context_image_changed       (GimpContext     *context);
 
 
+const Babl *     gimp_context_get_rgba_format     (GimpContext     *context,
+                                                   GeglColor       *color,
+                                                   const gchar     *babl_type,
+                                                   GimpImage      **space_image);
+
+
 /*  display  */
-gpointer         gimp_context_get_display         (GimpContext     *context);
+GimpDisplay    * gimp_context_get_display         (GimpContext     *context);
 void             gimp_context_set_display         (GimpContext     *context,
-                                                   gpointer         display);
+                                                   GimpDisplay     *display);
 void             gimp_context_display_changed     (GimpContext     *context);
 
 
@@ -243,18 +252,16 @@ void             gimp_context_paint_info_changed  (GimpContext     *context);
 
 
 /*  foreground color  */
-void             gimp_context_get_foreground       (GimpContext     *context,
-                                                    GimpRGB         *color);
+GeglColor      * gimp_context_get_foreground       (GimpContext     *context);
 void             gimp_context_set_foreground       (GimpContext     *context,
-                                                    const GimpRGB   *color);
+                                                    GeglColor       *color);
 void             gimp_context_foreground_changed   (GimpContext     *context);
 
 
 /*  background color  */
-void             gimp_context_get_background       (GimpContext     *context,
-                                                    GimpRGB         *color);
+GeglColor      * gimp_context_get_background       (GimpContext     *context);
 void             gimp_context_set_background       (GimpContext     *context,
-                                                    const GimpRGB   *color);
+                                                    GeglColor       *color);
 void             gimp_context_background_changed   (GimpContext     *context);
 
 
@@ -355,6 +362,11 @@ GimpTemplate   * gimp_context_get_template        (GimpContext     *context);
 void             gimp_context_set_template        (GimpContext     *context,
                                                    GimpTemplate    *template);
 void             gimp_context_template_changed    (GimpContext     *context);
+
+/*  line art  */
+GimpLineArt    * gimp_context_take_line_art       (GimpContext     *context);
+void             gimp_context_store_line_art      (GimpContext     *context,
+                                                   GimpLineArt     *line_art);
 
 
 #endif /* __GIMP_CONTEXT_H__ */

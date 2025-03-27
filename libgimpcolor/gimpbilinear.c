@@ -18,6 +18,7 @@
 
 #include "config.h"
 
+#include <gegl.h>
 #include <glib-object.h>
 
 #include "libgimpmath/gimpmath.h"
@@ -36,6 +37,12 @@
  **/
 
 
+/**
+ * gimp_bilinear:
+ * @x:
+ * @y:
+ * @values: (array fixed-size=4):
+ */
 gdouble
 gimp_bilinear (gdouble  x,
                gdouble  y,
@@ -59,6 +66,12 @@ gimp_bilinear (gdouble  x,
   return (1.0 - y) * m0 + y * m1;
 }
 
+/**
+ * gimp_bilinear_8:
+ * @x:
+ * @y:
+ * @values: (array fixed-size=4):
+ */
 guchar
 gimp_bilinear_8 (gdouble x,
                  gdouble y,
@@ -82,6 +95,12 @@ gimp_bilinear_8 (gdouble x,
   return (guchar) ((1.0 - y) * m0 + y * m1);
 }
 
+/**
+ * gimp_bilinear_16:
+ * @x:
+ * @y:
+ * @values: (array fixed-size=4):
+ */
 guint16
 gimp_bilinear_16 (gdouble  x,
                   gdouble  y,
@@ -105,6 +124,12 @@ gimp_bilinear_16 (gdouble  x,
   return (guint16) ((1.0 - y) * m0 + y * m1);
 }
 
+/**
+ * gimp_bilinear_32:
+ * @x:
+ * @y:
+ * @values: (array fixed-size=4):
+ */
 guint32
 gimp_bilinear_32 (gdouble  x,
                   gdouble  y,
@@ -128,186 +153,64 @@ gimp_bilinear_32 (gdouble  x,
   return (guint32) ((1.0 - y) * m0 + y * m1);
 }
 
-GimpRGB
-gimp_bilinear_rgb (gdouble  x,
-                   gdouble  y,
-                   GimpRGB *values)
-{
-  gdouble m0, m1;
-  gdouble ix, iy;
-  GimpRGB v = { 0, };
-
-  g_return_val_if_fail (values != NULL, v);
-
-  x = fmod(x, 1.0);
-  y = fmod(y, 1.0);
-
-  if (x < 0)
-    x += 1.0;
-  if (y < 0)
-    y += 1.0;
-
-  ix = 1.0 - x;
-  iy = 1.0 - y;
-
-  /* Red */
-
-  m0 = ix * values[0].r + x * values[1].r;
-  m1 = ix * values[2].r + x * values[3].r;
-
-  v.r = iy * m0 + y * m1;
-
-  /* Green */
-
-  m0 = ix * values[0].g + x * values[1].g;
-  m1 = ix * values[2].g + x * values[3].g;
-
-  v.g = iy * m0 + y * m1;
-
-  /* Blue */
-
-  m0 = ix * values[0].b + x * values[1].b;
-  m1 = ix * values[2].b + x * values[3].b;
-
-  v.b = iy * m0 + y * m1;
-
-  return v;
-}
-
-GimpRGB
-gimp_bilinear_rgba (gdouble  x,
-                    gdouble  y,
-                    GimpRGB *values)
-{
-  gdouble m0, m1;
-  gdouble ix, iy;
-  gdouble a0, a1, a2, a3, alpha;
-  GimpRGB v = { 0, };
-
-  g_return_val_if_fail (values != NULL, v);
-
-  x = fmod (x, 1.0);
-  y = fmod (y, 1.0);
-
-  if (x < 0)
-    x += 1.0;
-  if (y < 0)
-    y += 1.0;
-
-  ix = 1.0 - x;
-  iy = 1.0 - y;
-
-  a0 = values[0].a;
-  a1 = values[1].a;
-  a2 = values[2].a;
-  a3 = values[3].a;
-
-  /* Alpha */
-
-  m0 = ix * a0 + x * a1;
-  m1 = ix * a2 + x * a3;
-
-  alpha = v.a = iy * m0 + y * m1;
-
-  if (alpha > 0)
-    {
-      /* Red */
-
-      m0 = ix * a0 * values[0].r + x * a1 * values[1].r;
-      m1 = ix * a2 * values[2].r + x * a3 * values[3].r;
-
-      v.r = (iy * m0 + y * m1)/alpha;
-
-      /* Green */
-
-      m0 = ix * a0 * values[0].g + x * a1 * values[1].g;
-      m1 = ix * a2 * values[2].g + x * a3 * values[3].g;
-
-      v.g = (iy * m0 + y * m1)/alpha;
-
-      /* Blue */
-
-      m0 = ix * a0 * values[0].b + x * a1 * values[1].b;
-      m1 = ix * a2 * values[2].b + x * a3 * values[3].b;
-
-      v.b = (iy * m0 + y * m1)/alpha;
-    }
-
-  return v;
-}
-
 /**
- * gimp_bilinear_pixels_8:
- * @dest: Pixel, where interpolation result is to be stored.
- * @x: x-coordinate (0.0 to 1.0).
- * @y: y-coordinate (0.0 to 1.0).
- * @bpp: Bytes per pixel.  @dest and each @values item is an array of
- *    @bpp bytes.
- * @has_alpha: %TRUE if the last channel is an alpha channel.
- * @values: Array of four pointers to pixels.
- *
- * Computes bilinear interpolation of four pixels.
- *
- * When @has_alpha is %FALSE, it's identical to gimp_bilinear_8() on
- * each channel separately.  When @has_alpha is %TRUE, it handles
- * alpha channel correctly.
- *
- * The pixels in @values correspond to corner x, y coordinates in the
- * following order: [0,0], [1,0], [0,1], [1,1].
- **/
+ * gimp_bilinear_rgb:
+ * @x:
+ * @y:
+ * @values:    (array fixed-size=16): Array of pixels in RGBA double format
+ * @has_alpha: Whether @values has an alpha channel
+ * @retvalues: (array fixed-size=4):  Resulting pixel
+ */
 void
-gimp_bilinear_pixels_8 (guchar    *dest,
-                        gdouble    x,
-                        gdouble    y,
-                        guint      bpp,
-                        gboolean   has_alpha,
-                        guchar   **values)
+gimp_bilinear_rgb (gdouble    x,
+                   gdouble    y,
+                   gdouble   *values,
+                   gboolean   has_alpha,
+                   gdouble   *retvalues)
 {
-  guint i;
+  gdouble  m0;
+  gdouble  m1;
+  gdouble  ix;
+  gdouble  iy;
+  gdouble  a[4]  = { 1.0, 1.0, 1.0, 1.0 };
+  gdouble  alpha = 1.0;
 
-  g_return_if_fail (dest != NULL);
+  for (gint i = 0; i < 3; i++)
+    retvalues[i] = 0.0;
+  retvalues[3] = 1.0;
+
   g_return_if_fail (values != NULL);
 
   x = fmod (x, 1.0);
   y = fmod (y, 1.0);
 
-  if (x < 0.0)
+  if (x < 0)
     x += 1.0;
-  if (y < 0.0)
+  if (y < 0)
     y += 1.0;
+
+  ix = 1.0 - x;
+  iy = 1.0 - y;
 
   if (has_alpha)
     {
-      guint   ai     = bpp - 1;
-      gdouble alpha0 = values[0][ai];
-      gdouble alpha1 = values[1][ai];
-      gdouble alpha2 = values[2][ai];
-      gdouble alpha3 = values[3][ai];
-      gdouble alpha  = ((1.0 - y) * ((1.0 - x) * alpha0 + x * alpha1)
-                        + y * ((1.0 - x) * alpha2 + x * alpha3));
+      for (gint i = 0; i < 4; i++)
+        a[i] = values[(i * 4) + 3];
 
-      dest[ai] = (guchar) alpha;
-      if (dest[ai])
-        {
-          for (i = 0; i < ai; i++)
-            {
-              gdouble m0 = ((1.0 - x) * values[0][i] * alpha0
-                            + x * values[1][i] * alpha1);
-              gdouble m1 = ((1.0 - x) * values[2][i] * alpha2
-                            + x * values[3][i] * alpha3);
+      m0 = ix * a[0] + x * a[1];
+      m1 = ix * a[2] + x * a[3];
 
-              dest[i] = (guchar) (((1.0 - y) * m0 + y * m1) / alpha);
-            }
-        }
+      alpha = retvalues[3] = iy * m0 + y * m1;
     }
-  else
-    {
-      for (i = 0; i < bpp; i++)
-        {
-          gdouble m0 = (1.0 - x) * values[0][i] + x * values[1][i];
-          gdouble m1 = (1.0 - x) * values[2][i] + x * values[3][i];
 
-          dest[i] = (guchar) ((1.0 - y) * m0 + y * m1);
+  if (alpha > 0)
+    {
+      for (gint i = 0; i < 3; i++)
+        {
+          m0 = ix * a[0] * values[0 + i] + x * a[1] * values[4 + i];
+          m1 = ix * a[2] * values[8 + i] + x * a[3] * values[12 + i];
+
+          retvalues[i] = (iy * m0 + y * m1) / alpha;
         }
     }
 }

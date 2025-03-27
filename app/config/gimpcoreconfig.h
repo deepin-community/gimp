@@ -41,6 +41,7 @@ struct _GimpCoreConfig
   GimpGeglConfig          parent_instance;
 
   gchar                  *language;
+  gchar                  *prev_language;
   GimpInterpolationType   interpolation_type;
   gint                    default_threshold;
   gchar                  *plug_in_path;
@@ -77,6 +78,7 @@ struct _GimpCoreConfig
   gboolean                global_palette;
   gboolean                global_gradient;
   gboolean                global_font;
+  gboolean                global_expand;
   GimpTemplate           *default_image;
   GimpGrid               *default_grid;
   gint                    levels_of_undo;
@@ -91,13 +93,15 @@ struct _GimpCoreConfig
   guint64                 thumbnail_filesize_limit;
   GimpColorConfig        *color_management;
   gboolean                save_document_history;
-  GimpRGB                 quick_mask_color;
+  GeglColor              *quick_mask_color;
   gboolean                import_promote_float;
   gboolean                import_promote_dither;
   gboolean                import_add_alpha;
   gchar                  *import_raw_plug_in;
   GimpExportFileType      export_file_type;
   gboolean                export_color_profile;
+  gboolean                export_comment;
+  gboolean                export_thumbnail;
   gboolean                export_metadata_exif;
   gboolean                export_metadata_xmp;
   gboolean                export_metadata_iptc;
@@ -105,6 +109,7 @@ struct _GimpCoreConfig
 #ifdef G_OS_WIN32
   GimpWin32PointerInputAPI win32_pointer_input_api;
 #endif
+  GimpSelectMethod        items_select_method;
 
   gboolean                check_updates;
   gint64                  check_update_timestamp;
@@ -112,6 +117,8 @@ struct _GimpCoreConfig
   gint64                  last_release_timestamp;
   gchar                  *last_release_comment;
   gint                    last_revision;
+
+  gchar                  *config_version;
 };
 
 struct _GimpCoreConfigClass

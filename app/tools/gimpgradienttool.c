@@ -37,7 +37,9 @@
 #include "operations/layer-modes/gimp-layer-modes.h"
 
 #include "core/gimp.h"
+#include "core/gimpcontainer.h"
 #include "core/gimpdrawable.h"
+#include "core/gimpdrawable-filters.h"
 #include "core/gimpdrawable-gradient.h"
 #include "core/gimpdrawablefilter.h"
 #include "core/gimperror.h"
@@ -215,9 +217,9 @@ gimp_gradient_tool_init (GimpGradientTool *gradient_tool)
   gimp_tool_control_set_tool_cursor        (tool->control,
                                             GIMP_TOOL_CURSOR_GRADIENT);
   gimp_tool_control_set_action_opacity     (tool->control,
-                                            "context/context-opacity-set");
+                                            "context-opacity-set");
   gimp_tool_control_set_action_object_1    (tool->control,
-                                            "context/context-gradient-select-set");
+                                            "context-gradient-select-set");
 
   gimp_draw_tool_set_default_status (GIMP_DRAW_TOOL (tool),
                                      _("Click-Drag to draw a gradient"));
@@ -238,15 +240,35 @@ gimp_gradient_tool_initialize (GimpTool     *tool,
                                GimpDisplay  *display,
                                GError      **error)
 {
-  GimpImage           *image    = gimp_display_get_image (display);
-  GimpDrawable        *drawable = gimp_image_get_active_drawable (image);
-  GimpGradientOptions *options  = GIMP_GRADIENT_TOOL_GET_OPTIONS (tool);
-  GimpGuiConfig       *config   = GIMP_GUI_CONFIG (display->gimp->config);
+  GimpImage           *image       = gimp_display_get_image (display);
+  GimpGradientOptions *options     = GIMP_GRADIENT_TOOL_GET_OPTIONS (tool);
+  GimpGuiConfig       *config      = GIMP_GUI_CONFIG (display->gimp->config);
+  GimpItem            *locked_item = NULL;
+  GList               *drawables;
+  GimpDrawable        *drawable;
 
   if (! GIMP_TOOL_CLASS (parent_class)->initialize (tool, display, error))
     {
       return FALSE;
     }
+
+  drawables = gimp_image_get_selected_drawables (image);
+  if (g_list_length (drawables) != 1)
+    {
+      if (g_list_length (drawables) > 1)
+        gimp_tool_message_literal (tool, display,
+                                   _("Cannot paint on multiple drawables. Select only one."));
+      else
+        gimp_tool_message_literal (tool, display, _("No active drawables."));
+
+      g_list_free (drawables);
+
+      return FALSE;
+    }
+
+  /* Only a single drawable at this point. */
+  drawable = drawables->data;
+  g_list_free (drawables);
 
   if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)))
     {
@@ -255,12 +277,12 @@ gimp_gradient_tool_initialize (GimpTool     *tool,
       return FALSE;
     }
 
-  if (gimp_item_is_content_locked (GIMP_ITEM (drawable)))
+  if (gimp_item_is_content_locked (GIMP_ITEM (drawable), &locked_item))
     {
       g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
-                           _("The active layer's pixels are locked."));
+                           _("The selected layer's pixels are locked."));
       if (error)
-        gimp_tools_blink_lock_box (display->gimp, GIMP_ITEM (drawable));
+        gimp_tools_blink_lock_box (display->gimp, locked_item);
       return FALSE;
     }
 
@@ -268,7 +290,7 @@ gimp_gradient_tool_initialize (GimpTool     *tool,
       ! config->edit_non_visible)
     {
       g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
-                           _("The active layer is not visible."));
+                           _("The selected item is not visible."));
       return FALSE;
     }
 
@@ -450,21 +472,24 @@ gimp_gradient_tool_cursor_update (GimpTool         *tool,
                                   GdkModifierType   state,
                                   GimpDisplay      *display)
 {
-  GimpGuiConfig *config   = GIMP_GUI_CONFIG (display->gimp->config);
-  GimpImage     *image    = gimp_display_get_image (display);
-  GimpDrawable  *drawable = gimp_image_get_active_drawable (image);
+  GimpGuiConfig *config    = GIMP_GUI_CONFIG (display->gimp->config);
+  GimpImage     *image     = gimp_display_get_image (display);
+  GList         *drawables = gimp_image_get_selected_drawables (image);
 
-  if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)) ||
-      gimp_item_is_content_locked (GIMP_ITEM (drawable))    ||
-      ! (gimp_item_is_visible (GIMP_ITEM (drawable)) ||
+  if (g_list_length (drawables) != 1                      ||
+      gimp_viewable_get_children (drawables->data)        ||
+      gimp_item_is_content_locked (drawables->data, NULL) ||
+      ! (gimp_item_is_visible (drawables->data) ||
          config->edit_non_visible))
     {
       gimp_tool_set_cursor (tool, display,
                             gimp_tool_control_get_cursor (tool->control),
                             gimp_tool_control_get_tool_cursor (tool->control),
                             GIMP_CURSOR_MODIFIER_BAD);
+      g_list_free (drawables);
       return;
     }
+  g_list_free (drawables);
 
   GIMP_TOOL_CLASS (parent_class)->cursor_update (tool, coords, state, display);
 }
@@ -502,7 +527,7 @@ gimp_gradient_tool_options_notify (GimpTool         *tool,
                                    GimpToolOptions  *options,
                                    const GParamSpec *pspec)
 {
-  GimpContext   *context    = GIMP_CONTEXT (options);
+  GimpContext      *context       = GIMP_CONTEXT (options);
   GimpGradientTool *gradient_tool = GIMP_GRADIENT_TOOL (tool);
 
   if (! strcmp (pspec->name, "gradient"))
@@ -603,18 +628,22 @@ gimp_gradient_tool_start (GimpGradientTool *gradient_tool,
                           const GimpCoords *coords,
                           GimpDisplay      *display)
 {
-  GimpTool            *tool     = GIMP_TOOL (gradient_tool);
-  GimpDisplayShell    *shell    = gimp_display_get_shell (display);
-  GimpImage           *image    = gimp_display_get_image (display);
-  GimpDrawable        *drawable = gimp_image_get_active_drawable (image);
-  GimpGradientOptions *options  = GIMP_GRADIENT_TOOL_GET_OPTIONS (gradient_tool);
-  GimpContext         *context  = GIMP_CONTEXT (options);
+  GimpTool            *tool      = GIMP_TOOL (gradient_tool);
+  GimpDisplayShell    *shell     = gimp_display_get_shell (display);
+  GimpImage           *image     = gimp_display_get_image (display);
+  GList               *drawables = gimp_image_get_selected_drawables (image);
+  GimpGradientOptions *options   = GIMP_GRADIENT_TOOL_GET_OPTIONS (gradient_tool);
+  GimpContext         *context   = GIMP_CONTEXT (options);
+  GimpContainer       *filters;
+
+  g_return_if_fail (g_list_length (drawables) == 1);
 
   if (options->instant_toggle)
     gtk_widget_set_sensitive (options->instant_toggle, FALSE);
 
-  tool->display  = display;
-  tool->drawable = drawable;
+  tool->display   = display;
+  g_list_free (tool->drawables);
+  tool->drawables = drawables;
 
   gradient_tool->start_x = coords->x;
   gradient_tool->start_y = coords->y;
@@ -647,7 +676,7 @@ gimp_gradient_tool_start (GimpGradientTool *gradient_tool,
                             G_CALLBACK (gimp_gradient_tool_fg_bg_changed),
                             gradient_tool);
 
-  gimp_gradient_tool_create_filter (gradient_tool, drawable);
+  gimp_gradient_tool_create_filter (gradient_tool, tool->drawables->data);
 
   /* Initially sync all of the properties */
   gimp_operation_config_sync_node (G_OBJECT (options),
@@ -668,6 +697,24 @@ gimp_gradient_tool_start (GimpGradientTool *gradient_tool,
   gimp_draw_tool_start (GIMP_DRAW_TOOL (gradient_tool), display);
 
   gimp_gradient_tool_editor_start (gradient_tool);
+
+  gimp_drawable_filter_apply (gradient_tool->filter, NULL);
+
+  /* Move this operation below any non-destructive filters that
+   * may be active, so that it's directly affect the raw pixels. */
+  filters =
+    gimp_drawable_get_filters (gimp_drawable_filter_get_drawable (gradient_tool->filter));
+
+  if (gimp_container_have (filters, GIMP_OBJECT (gradient_tool->filter)))
+  {
+    gint end_index = gimp_container_get_n_children (filters) - 1;
+    gint index     = gimp_container_get_child_index (filters,
+                                                     GIMP_OBJECT (gradient_tool->filter));
+
+    if (end_index > 0 && index != end_index)
+      gimp_container_reorder (filters, GIMP_OBJECT (gradient_tool->filter),
+                              end_index);
+  }
 }
 
 static void
@@ -720,8 +767,9 @@ gimp_gradient_tool_halt (GimpGradientTool *gradient_tool)
   gimp_draw_tool_set_widget (GIMP_DRAW_TOOL (tool), NULL);
   g_clear_object (&gradient_tool->widget);
 
-  tool->display  = NULL;
-  tool->drawable = NULL;
+  tool->display   = NULL;
+  g_list_free (tool->drawables);
+  tool->drawables = NULL;
 
   if (options->instant_toggle)
     gtk_widget_set_sensitive (options->instant_toggle, TRUE);
@@ -742,7 +790,7 @@ gimp_gradient_tool_commit (GimpGradientTool *gradient_tool)
 
       gimp_tool_control_push_preserve (tool->control, TRUE);
 
-      gimp_drawable_filter_commit (gradient_tool->filter,
+      gimp_drawable_filter_commit (gradient_tool->filter, FALSE,
                                    GIMP_PROGRESS (tool), FALSE);
       g_clear_object (&gradient_tool->filter);
 
@@ -818,15 +866,17 @@ gimp_gradient_tool_precalc_shapeburst (GimpGradientTool *gradient_tool)
   GimpTool            *tool    = GIMP_TOOL (gradient_tool);
   gint                 x, y, width, height;
 
-  if (gradient_tool->dist_buffer || ! tool->drawable)
+  if (gradient_tool->dist_buffer || ! tool->drawables)
     return;
 
-  if (! gimp_item_mask_intersect (GIMP_ITEM (tool->drawable),
+  g_return_if_fail (g_list_length (tool->drawables) == 1);
+
+  if (! gimp_item_mask_intersect (GIMP_ITEM (tool->drawables->data),
                                   &x, &y, &width, &height))
     return;
 
   gradient_tool->dist_buffer =
-    gimp_drawable_gradient_shapeburst_distmap (tool->drawable,
+    gimp_drawable_gradient_shapeburst_distmap (tool->drawables->data,
                                                options->distance_metric,
                                                GEGL_RECTANGLE (x, y, width, height),
                                                GIMP_PROGRESS (gradient_tool));
@@ -902,7 +952,7 @@ gimp_gradient_tool_update_graph (GimpGradientTool *gradient_tool)
   GimpGradientOptions *options = GIMP_GRADIENT_TOOL_GET_OPTIONS (gradient_tool);
   gint                 off_x, off_y;
 
-  gimp_item_get_offset (GIMP_ITEM (tool->drawable), &off_x, &off_y);
+  gimp_item_get_offset (GIMP_ITEM (tool->drawables->data), &off_x, &off_y);
 
 #if 0
   if (gimp_gradient_tool_is_shapeburst (gradient_tool))
@@ -940,7 +990,7 @@ gimp_gradient_tool_update_graph (GimpGradientTool *gradient_tool)
       gdouble       start_x, start_y;
       gdouble       end_x,   end_y;
 
-      gimp_item_mask_intersect (GIMP_ITEM (tool->drawable),
+      gimp_item_mask_intersect (GIMP_ITEM (tool->drawables->data),
                                 &roi.x, &roi.y, &roi.width, &roi.height);
 
       start_x = gradient_tool->start_x - off_x;
@@ -948,7 +998,7 @@ gimp_gradient_tool_update_graph (GimpGradientTool *gradient_tool)
       end_x   = gradient_tool->end_x   - off_x;
       end_y   = gradient_tool->end_y   - off_y;
 
-      gimp_drawable_gradient_adjust_coords (tool->drawable,
+      gimp_drawable_gradient_adjust_coords (tool->drawables->data,
                                             options->gradient_type,
                                             &roi,
                                             &start_x, &start_y, &end_x, &end_y);

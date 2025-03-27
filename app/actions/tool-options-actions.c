@@ -54,39 +54,19 @@ static void tool_options_actions_update_presets (GimpActionGroup    *group,
 
 static const GimpActionEntry tool_options_actions[] =
 {
-  { "tool-options-popup", GIMP_ICON_DIALOG_TOOL_OPTIONS,
-    NC_("tool-options-action", "Tool Options Menu"), NULL, NULL, NULL,
-    GIMP_HELP_TOOL_OPTIONS_DIALOG },
-
-  { "tool-options-save-preset-menu", GIMP_ICON_DOCUMENT_SAVE,
-    NC_("tool-options-action", "_Save Tool Preset"), "", NULL, NULL,
-    GIMP_HELP_TOOL_OPTIONS_SAVE },
-
-  { "tool-options-restore-preset-menu", GIMP_ICON_DOCUMENT_REVERT,
-    NC_("tool-options-action", "_Restore Tool Preset"), "", NULL, NULL,
-    GIMP_HELP_TOOL_OPTIONS_RESTORE },
-
-  { "tool-options-edit-preset-menu", GIMP_ICON_EDIT,
-    NC_("tool-options-action", "E_dit Tool Preset"), NULL, NULL, NULL,
-    GIMP_HELP_TOOL_OPTIONS_EDIT },
-
-  { "tool-options-delete-preset-menu", GIMP_ICON_EDIT_DELETE,
-    NC_("tool-options-action", "_Delete Tool Preset"), "", NULL, NULL,
-    GIMP_HELP_TOOL_OPTIONS_DELETE },
-
   { "tool-options-save-new-preset", GIMP_ICON_DOCUMENT_NEW,
-    NC_("tool-options-action", "_New Tool Preset..."), "", NULL,
+    NC_("tool-options-action", "_New Tool Preset..."), NULL, { NULL }, NULL,
     tool_options_save_new_preset_cmd_callback,
     GIMP_HELP_TOOL_OPTIONS_SAVE },
 
   { "tool-options-reset", GIMP_ICON_RESET,
-    NC_("tool-options-action", "R_eset Tool Options"), NULL,
+    NC_("tool-options-action", "R_eset Tool Options"), NULL, { NULL },
     NC_("tool-options-action", "Reset to default values"),
     tool_options_reset_cmd_callback,
     GIMP_HELP_TOOL_OPTIONS_RESET },
 
   { "tool-options-reset-all", GIMP_ICON_RESET,
-    NC_("tool-options-action", "Reset _all Tool Options"), NULL,
+    NC_("tool-options-action", "Reset _all Tool Options"), NULL, { NULL },
     NC_("tool-options-action", "Reset all tool options"),
     tool_options_reset_all_cmd_callback,
     GIMP_HELP_TOOL_OPTIONS_RESET }
@@ -98,7 +78,7 @@ static const GimpActionEntry tool_options_actions[] =
 #define SET_VISIBLE(action,condition) \
         gimp_action_group_set_action_visible (group, action, (condition) != 0)
 #define SET_SENSITIVE(action,condition) \
-        gimp_action_group_set_action_sensitive (group, action, (condition) != 0)
+        gimp_action_group_set_action_sensitive (group, action, (condition) != 0, NULL)
 #define SET_HIDE_EMPTY(action,condition) \
         gimp_action_group_set_action_hide_empty (group, action, (condition) != 0)
 
@@ -108,10 +88,6 @@ tool_options_actions_setup (GimpActionGroup *group)
   gimp_action_group_add_actions (group, "tool-options-action",
                                  tool_options_actions,
                                  G_N_ELEMENTS (tool_options_actions));
-
-  SET_HIDE_EMPTY ("tool-options-restore-preset-menu", FALSE);
-  SET_HIDE_EMPTY ("tool-options-edit-preset-menu",    FALSE);
-  SET_HIDE_EMPTY ("tool-options-delete-preset-menu",  FALSE);
 }
 
 void
@@ -120,11 +96,6 @@ tool_options_actions_update (GimpActionGroup *group,
 {
   GimpContext  *context   = gimp_get_user_context (group->gimp);
   GimpToolInfo *tool_info = gimp_context_get_tool (context);
-
-  SET_VISIBLE ("tool-options-save-preset-menu",    tool_info->presets);
-  SET_VISIBLE ("tool-options-restore-preset-menu", tool_info->presets);
-  SET_VISIBLE ("tool-options-edit-preset-menu",    tool_info->presets);
-  SET_VISIBLE ("tool-options-delete-preset-menu",  tool_info->presets);
 
   tool_options_actions_update_presets (group, "tool-options-save-preset",
                                        tool_options_save_preset_cmd_callback,
@@ -191,11 +162,10 @@ tool_options_actions_update_presets (GimpActionGroup    *group,
 
   if (n_children > 0)
     {
-      GimpEnumActionEntry entry;
+      GimpEnumActionEntry entry = { 0 };
 
       entry.name           = NULL;
       entry.label          = NULL;
-      entry.accelerator    = "";
       entry.tooltip        = NULL;
       entry.value          = 0;
       entry.value_variable = FALSE;

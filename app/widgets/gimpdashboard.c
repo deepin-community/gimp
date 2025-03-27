@@ -72,7 +72,6 @@
 #include "gimpdashboard.h"
 #include "gimpdialogfactory.h"
 #include "gimphelp-ids.h"
-#include "gimphighlightablebutton.h"
 #include "gimpmeter.h"
 #include "gimpsessioninfo-aux.h"
 #include "gimptoggleaction.h"
@@ -211,7 +210,7 @@ struct _VariableInfo
   const gchar   *description;
   VariableType   type;
   gboolean       exclude_from_log;
-  GimpRGB        color;
+  gdouble        rgb[4];
   VariableFunc   sample_func;
   VariableFunc   reset_func;
   gconstpointer  data;
@@ -291,7 +290,7 @@ struct _GroupData
   GtkButton        *menu_button;
   GtkMenu          *menu;
   GimpMeter        *meter;
-  GtkTable         *table;
+  GtkGrid          *grid;
 
   FieldData        *fields;
 };
@@ -327,7 +326,7 @@ struct _GimpDashboardPrivate
   GHashTable                   *log_addresses;
   GimpLogHandler                log_log_handler;
 
-  GimpHighlightableButton      *log_record_button;
+  GtkWidget                    *log_record_button;
   GtkLabel                     *log_add_marker_label;
 };
 
@@ -394,12 +393,6 @@ static void       gimp_dashboard_sample_memory_size             (GimpDashboard  
 static void       gimp_dashboard_sample_object                  (GimpDashboard       *dashboard,
                                                                  GObject             *object,
                                                                  Variable             variable);
-
-static void       gimp_dashboard_group_menu_position            (GtkMenu             *menu,
-                                                                 gint                *x,
-                                                                 gint                *y,
-                                                                 gboolean            *push_in,
-                                                                 gpointer             user_data);
 
 static void       gimp_dashboard_update_groups                  (GimpDashboard       *dashboard);
 static void       gimp_dashboard_update_group                   (GimpDashboard       *dashboard,
@@ -480,7 +473,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Occupied"),
     .description      = N_("Tile cache occupied size"),
     .type             = VARIABLE_TYPE_SIZE,
-    .color            = {0.3, 0.6, 0.3, 1.0},
+    .rgb              = {0.3, 0.6, 0.3, 1.0},
     .sample_func      = gimp_dashboard_sample_gegl_stats,
     .data             = "tile-cache-total"
   },
@@ -490,7 +483,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Maximum"),
     .description      = N_("Maximal tile cache occupied size"),
     .type             = VARIABLE_TYPE_SIZE,
-    .color            = {0.3, 0.7, 0.8, 1.0},
+    .rgb              = {0.3, 0.7, 0.8, 1.0},
     .sample_func      = gimp_dashboard_sample_gegl_stats,
     .data             = "tile-cache-total-max"
   },
@@ -532,7 +525,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Occupied"),
     .description      = N_("Swap file occupied size"),
     .type             = VARIABLE_TYPE_SIZE,
-    .color            = {0.8, 0.2, 0.2, 1.0},
+    .rgb              = {0.8, 0.2, 0.2, 1.0},
     .sample_func      = gimp_dashboard_sample_gegl_stats,
     .data             = "swap-total"
   },
@@ -542,7 +535,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Size"),
     .description      = N_("Swap file size"),
     .type             = VARIABLE_TYPE_SIZE,
-    .color            = {0.8, 0.6, 0.4, 1.0},
+    .rgb              = {0.8, 0.6, 0.4, 1.0},
     .sample_func      = gimp_dashboard_sample_gegl_stats,
     .data             = "swap-file-size"
   },
@@ -560,7 +553,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Queued"),
     .description      = N_("Size of data queued for writing to the swap"),
     .type             = VARIABLE_TYPE_SIZE,
-    .color            = {0.8, 0.8, 0.2, 0.5},
+    .rgb              = {0.8, 0.8, 0.2, 0.5},
     .sample_func      = gimp_dashboard_sample_gegl_stats,
     .data             = "swap-queued-total"
   },
@@ -592,7 +585,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Read"),
     .description      = N_("Total amount of data read from the swap"),
     .type             = VARIABLE_TYPE_SIZE,
-    .color            = {0.2, 0.4, 1.0, 0.4},
+    .rgb              = {0.2, 0.4, 1.0, 0.4},
     .sample_func      = gimp_dashboard_sample_gegl_stats,
     .data             = "swap-read-total"
   },
@@ -602,7 +595,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Read throughput"),
     .description      = N_("The rate at which data is read from the swap"),
     .type             = VARIABLE_TYPE_RATE_OF_CHANGE,
-    .color            = {0.2, 0.4, 1.0, 1.0},
+    .rgb              = {0.2, 0.4, 1.0, 1.0},
     .sample_func      = gimp_dashboard_sample_variable_rate_of_change,
     .data             = GINT_TO_POINTER (VARIABLE_SWAP_READ)
   },
@@ -615,7 +608,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Written"),
     .description      = N_("Total amount of data written to the swap"),
     .type             = VARIABLE_TYPE_SIZE,
-    .color            = {0.8, 0.3, 0.2, 0.4},
+    .rgb              = {0.8, 0.3, 0.2, 0.4},
     .sample_func      = gimp_dashboard_sample_gegl_stats,
     .data             = "swap-write-total"
   },
@@ -625,7 +618,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Write throughput"),
     .description      = N_("The rate at which data is written to the swap"),
     .type             = VARIABLE_TYPE_RATE_OF_CHANGE,
-    .color            = {0.8, 0.3, 0.2, 1.0},
+    .rgb              = {0.8, 0.3, 0.2, 1.0},
     .sample_func      = gimp_dashboard_sample_variable_rate_of_change,
     .data             = GINT_TO_POINTER (VARIABLE_SWAP_WRITTEN)
   },
@@ -649,7 +642,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Usage"),
     .description      = N_("Total CPU usage"),
     .type             = VARIABLE_TYPE_PERCENTAGE,
-    .color            = {0.8, 0.7, 0.2, 1.0},
+    .rgb              = {0.8, 0.7, 0.2, 1.0},
     .sample_func      = gimp_dashboard_sample_cpu_usage
   },
 
@@ -658,7 +651,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Active"),
     .description      = N_("Whether the CPU is active"),
     .type             = VARIABLE_TYPE_BOOLEAN,
-    .color            = {0.9, 0.8, 0.3, 1.0},
+    .rgb              = {0.9, 0.8, 0.3, 1.0},
     .sample_func      = gimp_dashboard_sample_cpu_active
   },
 
@@ -667,7 +660,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Active"),
     .description      = N_("Total amount of time the CPU has been active"),
     .type             = VARIABLE_TYPE_DURATION,
-    .color            = {0.8, 0.7, 0.2, 0.4},
+    .rgb              = {0.8, 0.7, 0.2, 0.4},
     .sample_func      = gimp_dashboard_sample_cpu_active_time
   },
 #endif /* HAVE_CPU_GROUP */
@@ -681,7 +674,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Used"),
     .description      = N_("Amount of memory used by the process"),
     .type             = VARIABLE_TYPE_SIZE,
-    .color            = {0.8, 0.5, 0.2, 1.0},
+    .rgb              = {0.8, 0.5, 0.2, 1.0},
     .sample_func      = gimp_dashboard_sample_memory_used
   },
 
@@ -690,7 +683,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Available"),
     .description      = N_("Amount of available physical memory"),
     .type             = VARIABLE_TYPE_SIZE,
-    .color            = {0.8, 0.5, 0.2, 0.4},
+    .rgb              = {0.8, 0.5, 0.2, 0.4},
     .sample_func      = gimp_dashboard_sample_memory_available
   },
 
@@ -747,7 +740,7 @@ static const VariableInfo variables[] =
     .title            = NC_("dashboard-variable", "Tile"),
     .description      = N_("Total size of tile memory"),
     .type             = VARIABLE_TYPE_SIZE,
-    .color            = {0.3, 0.3, 1.0, 1.0},
+    .rgb              = {0.3, 0.3, 1.0, 1.0},
     .sample_func      = gimp_dashboard_sample_gegl_stats,
     .data             = "tile-alloc-total"
   },
@@ -1039,7 +1032,7 @@ gimp_dashboard_init (GimpDashboard *dashboard)
   GtkWidget            *frame;
   GtkWidget            *vbox2;
   GtkWidget            *meter;
-  GtkWidget            *table;
+  GtkWidget            *grid;
   GtkWidget            *label;
   gint                  content_spacing;
   Group                 group;
@@ -1225,7 +1218,9 @@ gimp_dashboard_init (GimpDashboard *dashboard)
       /* group meter */
       if (group_info->has_meter)
         {
-          meter = gimp_meter_new (group_data->n_meter_values);
+          GeglColor *color = gegl_color_new (NULL);
+
+          meter = gimp_meter_new (priv->gimp, group_data->n_meter_values);
           group_data->meter = GIMP_METER (meter);
           gimp_help_set_help_data (meter,
                                    g_dgettext (NULL, group_info->description),
@@ -1245,9 +1240,11 @@ gimp_dashboard_init (GimpDashboard *dashboard)
                 {
                   const VariableInfo *variable_info = &variables[field_info->variable];
 
+                  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), variable_info->rgb);
+
                   gimp_meter_set_value_color (GIMP_METER (meter),
                                               field_info->meter_value - 1,
-                                              &variable_info->color);
+                                              color);
 
                   if (gimp_dashboard_field_use_meter_underlay (group, field))
                     {
@@ -1260,15 +1257,17 @@ gimp_dashboard_init (GimpDashboard *dashboard)
                     }
                 }
             }
+
+          g_object_unref (color);
         }
 
-      /* group table */
-      table = gtk_table_new (1, 1, FALSE);
-      group_data->table = GTK_TABLE (table);
-      gtk_table_set_row_spacings (GTK_TABLE (table), content_spacing);
-      gtk_table_set_col_spacings (GTK_TABLE (table), 4);
-      gtk_box_pack_start (GTK_BOX (vbox2), table, FALSE, FALSE, 0);
-      gtk_widget_show (table);
+      /* group grid */
+      grid = gtk_grid_new ();
+      group_data->grid = GTK_GRID (grid);
+      gtk_grid_set_row_spacing (GTK_GRID (grid), content_spacing);
+      gtk_grid_set_column_spacing (GTK_GRID (grid), 4);
+      gtk_box_pack_start (GTK_BOX (vbox2), grid, FALSE, FALSE, 0);
+      gtk_widget_show (grid);
 
       gimp_dashboard_group_set_active (dashboard, group,
                                        group_info->default_active);
@@ -1306,7 +1305,6 @@ gimp_dashboard_constructed (GObject *object)
   GimpActionGroup      *action_group;
   GimpAction           *action;
   GtkWidget            *button;
-  GtkWidget            *alignment;
   GtkWidget            *box;
   GtkWidget            *image;
   GtkWidget            *label;
@@ -1322,7 +1320,7 @@ gimp_dashboard_constructed (GObject *object)
     {
       const GroupInfo       *group_info = &groups[group];
       GroupData             *group_data = &priv->groups[group];
-      GimpToggleActionEntry  entry      = {};
+      GimpToggleActionEntry  entry      = { 0 };
 
       entry.name      = g_strdup_printf ("dashboard-group-%s", group_info->name);
       entry.label     = g_dpgettext2 (NULL, "dashboard-group", group_info->title);
@@ -1347,10 +1345,7 @@ gimp_dashboard_constructed (GObject *object)
 
   button = gimp_editor_add_action_button (GIMP_EDITOR (dashboard), "dashboard",
                                           "dashboard-log-record", NULL);
-  priv->log_record_button = GIMP_HIGHLIGHTABLE_BUTTON (button);
-  gimp_highlightable_button_set_highlight_color (
-    GIMP_HIGHLIGHTABLE_BUTTON (button),
-    GIMP_HIGHLIGHTABLE_BUTTON_COLOR_AFFIRMATIVE);
+  priv->log_record_button = button;
 
   button = gimp_editor_add_action_button (GIMP_EDITOR (dashboard), "dashboard",
                                           "dashboard-log-add-marker",
@@ -1367,12 +1362,10 @@ gimp_dashboard_constructed (GObject *object)
   image = g_object_ref (gtk_bin_get_child (GTK_BIN (button)));
   gtk_container_remove (GTK_CONTAINER (button), image);
 
-  alignment = gtk_alignment_new (0.5, 0.5, 0.0, 0.0);
-  gtk_container_add (GTK_CONTAINER (button), alignment);
-  gtk_widget_show (alignment);
-
   box = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
-  gtk_container_add (GTK_CONTAINER (alignment), box);
+  gtk_container_add (GTK_CONTAINER (button), box);
+  gtk_widget_set_halign (GTK_WIDGET (box), GTK_ALIGN_CENTER);
+  gtk_widget_set_valign (GTK_WIDGET (box), GTK_ALIGN_CENTER);
   gtk_widget_show (box);
 
   gtk_box_pack_start (GTK_BOX (box), image, FALSE, FALSE, 0);
@@ -1716,11 +1709,11 @@ gimp_dashboard_group_expander_button_press (GimpDashboard  *dashboard,
       bevent->y >= allocation.y                    &&
       bevent->y <  allocation.y + allocation.height)
     {
-      gtk_menu_popup (group_data->menu,
-                      NULL, NULL,
-                      gimp_dashboard_group_menu_position,
-                      group_data->menu_button,
-                      bevent->button, bevent->time);
+      gtk_menu_popup_at_widget (group_data->menu,
+                                GTK_WIDGET (group_data->menu_button),
+                                GDK_GRAVITY_WEST,
+                                GDK_GRAVITY_NORTH_EAST,
+                                (GdkEvent *) bevent);
 
       return TRUE;
     }
@@ -1973,9 +1966,8 @@ gimp_dashboard_low_swap_space (GimpDashboard *dashboard)
 
   if (priv->gimp)
     {
-      GdkScreen *screen;
-      gint       monitor;
-      gint       field;
+      GdkMonitor *monitor;
+      gint        field;
 
       gtk_expander_set_expanded (priv->groups[GROUP_SWAP].expander, TRUE);
 
@@ -1993,13 +1985,13 @@ gimp_dashboard_low_swap_space (GimpDashboard *dashboard)
 
       gimp_dashboard_update_groups (dashboard);
 
-      monitor = gimp_get_monitor_at_pointer (&screen);
+      monitor = gimp_get_monitor_at_pointer ();
 
       gimp_window_strategy_show_dockable_dialog (
         GIMP_WINDOW_STRATEGY (gimp_get_window_strategy (priv->gimp)),
         priv->gimp,
         gimp_dialog_factory_get_singleton (),
-        screen, monitor,
+        monitor,
         "gimp-dashboard");
 
       g_mutex_lock (&priv->mutex);
@@ -2031,6 +2023,7 @@ gimp_dashboard_sample_function (GimpDashboard *dashboard,
 
     case VARIABLE_TYPE_INTEGER:
       variable_data->value.integer = CALL_FUNC (gint);
+      break;
 
     case VARIABLE_TYPE_SIZE:
       variable_data->value.size = CALL_FUNC (guint64);
@@ -2420,13 +2413,6 @@ gimp_dashboard_sample_cpu_active_time (GimpDashboard *dashboard,
 
 #ifdef HAVE_MEMORY_GROUP
 #ifdef PLATFORM_OSX
-  #if MAC_OS_X_VERSION_MAX_ALLOWED < 1080
-    #define MACH_TASK_BASIC_INFO_COUNT TASK_BASIC_INFO_COUNT
-    #define mach_task_basic_info_data_t task_basic_info_data_t
-
-    #define MACH_TASK_BASIC_INFO TASK_BASIC_INFO
-    #define mach_task_basic_info task_basic_info
-  #endif
 static void
 gimp_dashboard_sample_memory_used (GimpDashboard *dashboard,
                                    Variable       variable)
@@ -2827,16 +2813,6 @@ gimp_dashboard_sample_object (GimpDashboard *dashboard,
 }
 
 static void
-gimp_dashboard_group_menu_position (GtkMenu  *menu,
-                                    gint     *x,
-                                    gint     *y,
-                                    gboolean *push_in,
-                                    gpointer  user_data)
-{
-  gimp_button_menu_position (user_data, menu, GTK_POS_LEFT, x, y);
-}
-
-static void
 gimp_dashboard_update_groups (GimpDashboard *dashboard)
 {
   Group group;
@@ -2897,8 +2873,7 @@ gimp_dashboard_update_group (GimpDashboard *dashboard,
         }
     }
 
-  gimp_gtk_container_clear (GTK_CONTAINER (group_data->table));
-  gtk_table_resize (group_data->table, MAX (n_rows, 1), 3);
+  gimp_gtk_container_clear (GTK_CONTAINER (group_data->grid));
 
   n_rows        = 0;
   add_separator = FALSE;
@@ -2925,10 +2900,9 @@ gimp_dashboard_update_group (GimpDashboard *dashboard,
           if (add_separator)
             {
               separator = gtk_separator_new (GTK_ORIENTATION_HORIZONTAL);
-              gtk_table_attach (group_data->table, separator,
-                                0, 3, n_rows, n_rows + 1,
-                                GTK_EXPAND | GTK_FILL, 0,
-                                0, 0);
+              gtk_widget_set_hexpand (separator, TRUE);
+              gtk_grid_attach (group_data->grid, separator,
+                               0, n_rows, 3, 1);
               gtk_widget_show (separator);
 
               add_separator = FALSE;
@@ -2937,16 +2911,19 @@ gimp_dashboard_update_group (GimpDashboard *dashboard,
 
           if (group_info->has_meter && field_info->meter_value)
             {
-              color_area = gimp_color_area_new (&variable_info->color,
-                                                GIMP_COLOR_AREA_FLAT, 0);
+              GeglColor *color = gegl_color_new (NULL);
+
+              gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), variable_info->rgb);
+              color_area = gimp_color_area_new (color, GIMP_COLOR_AREA_FLAT, 0);
               gimp_help_set_help_data (color_area, description,
                                        NULL);
               gtk_widget_set_size_request (color_area, 5, 5);
-              gtk_table_attach (group_data->table, color_area,
-                                0, 1, n_rows, n_rows + 1,
-                                0, 0,
-                                0, 0);
+              gtk_widget_set_valign (color_area, GTK_ALIGN_CENTER);
+              gtk_grid_attach (group_data->grid, color_area,
+                               0, n_rows, 1, 1);
               gtk_widget_show (color_area);
+
+              g_object_unref (color);
             }
 
           str = g_strdup_printf ("%s:",
@@ -2959,10 +2936,8 @@ gimp_dashboard_update_group (GimpDashboard *dashboard,
           gimp_help_set_help_data (label, description,
                                    NULL);
           gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-          gtk_table_attach (group_data->table, label,
-                            1, 2, n_rows, n_rows + 1,
-                            GTK_FILL, 0,
-                            0, 0);
+          gtk_grid_attach (group_data->grid, label,
+                           1, n_rows, 1, 1);
           gtk_widget_show (label);
 
           g_free (str);
@@ -2972,10 +2947,9 @@ gimp_dashboard_update_group (GimpDashboard *dashboard,
           gimp_help_set_help_data (label, description,
                                    NULL);
           gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-          gtk_table_attach (group_data->table, label,
-                            2, 3, n_rows, n_rows + 1,
-                            GTK_EXPAND | GTK_FILL, 0,
-                            0, 0);
+          gtk_widget_set_hexpand (label, TRUE);
+          gtk_grid_attach (group_data->grid, label,
+                           2, n_rows, 1, 1);
           gtk_widget_show (label);
 
           n_rows++;
@@ -3043,7 +3017,7 @@ gimp_dashboard_update_group_values (GimpDashboard *dashboard,
 
       if (group_info->meter_led)
         {
-          GimpRGB         color  = {0.0, 0.0, 0.0, 1.0};
+          gdouble         rgb[3] = {0.0, 0.0, 0.0};
           gboolean        active = FALSE;
           const Variable *var;
 
@@ -3053,16 +3027,22 @@ gimp_dashboard_update_group_values (GimpDashboard *dashboard,
                 {
                   const VariableInfo *variable_info = &variables[*var];
 
-                  color.r = MAX (color.r, variable_info->color.r);
-                  color.g = MAX (color.g, variable_info->color.g);
-                  color.b = MAX (color.b, variable_info->color.b);
+                  rgb[0] = MAX (rgb[0], variable_info->rgb[0]);
+                  rgb[1] = MAX (rgb[1], variable_info->rgb[1]);
+                  rgb[2] = MAX (rgb[2], variable_info->rgb[2]);
 
                   active = TRUE;
                 }
             }
 
           if (active)
-            gimp_meter_set_led_color (group_data->meter, &color);
+            {
+              GeglColor *color = gegl_color_new (NULL);
+
+              gegl_color_set_pixel (color, babl_format ("R'G'B' double"), rgb);
+              gimp_meter_set_led_color (group_data->meter, color);
+              g_object_unref (color);
+            }
 
           gimp_meter_set_led_active (group_data->meter, active);
         }
@@ -4045,10 +4025,15 @@ static void
 gimp_dashboard_log_update_highlight (GimpDashboard *dashboard)
 {
   GimpDashboardPrivate *priv = dashboard->priv;
+  GtkReliefStyle        default_relief;
 
-  gimp_highlightable_button_set_highlight (
-    priv->log_record_button,
-    gimp_dashboard_log_is_recording (dashboard));
+  gtk_widget_style_get (GTK_WIDGET (dashboard),
+                        "button-relief", &default_relief,
+                        NULL);
+
+  gimp_button_set_suggested (priv->log_record_button,
+                             gimp_dashboard_log_is_recording (dashboard),
+                             default_relief);
 }
 
 static void
@@ -5033,29 +5018,21 @@ void
 gimp_dashboard_menu_setup (GimpUIManager *manager,
                            const gchar   *ui_path)
 {
-  guint merge_id;
   Group group;
 
   g_return_if_fail (GIMP_IS_UI_MANAGER (manager));
   g_return_if_fail (ui_path != NULL);
 
-  merge_id = gimp_ui_manager_new_merge_id (manager);
-
   for (group = FIRST_GROUP; group < N_GROUPS; group++)
     {
       const GroupInfo *group_info = &groups[group];
       gchar           *action_name;
-      gchar           *action_path;
 
       action_name = g_strdup_printf ("dashboard-group-%s", group_info->name);
-      action_path = g_strdup_printf ("%s/Groups/Groups", ui_path);
 
-      gimp_ui_manager_add_ui (manager, merge_id,
-                              action_path, action_name, action_name,
-                              GTK_UI_MANAGER_MENUITEM,
-                              FALSE);
+      gimp_ui_manager_add_ui (manager, "/Dashboard Menu/Groups/[Groups]",
+                              action_name, FALSE);
 
       g_free (action_name);
-      g_free (action_path);
     }
 }

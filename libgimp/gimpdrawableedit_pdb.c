@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -36,7 +38,7 @@
 
 /**
  * gimp_drawable_edit_clear:
- * @drawable_ID: The drawable to clear from.
+ * @drawable: The drawable to clear from.
  *
  * Clear selected area of drawable.
  *
@@ -52,27 +54,31 @@
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_drawable_edit_clear (gint32 drawable_ID)
+gimp_drawable_edit_clear (GimpDrawable *drawable)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-edit-clear",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-edit-clear",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_edit_fill:
- * @drawable_ID: The drawable to fill to.
+ * @drawable: The drawable to fill to.
  * @fill_type: The type of fill.
  *
  * Fill selected area of drawable.
@@ -90,29 +96,33 @@ gimp_drawable_edit_clear (gint32 drawable_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_drawable_edit_fill (gint32       drawable_ID,
-                         GimpFillType fill_type)
+gimp_drawable_edit_fill (GimpDrawable *drawable,
+                         GimpFillType  fill_type)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-edit-fill",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, fill_type,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_FILL_TYPE, fill_type,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-edit-fill",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_edit_bucket_fill:
- * @drawable_ID: The affected drawable.
+ * @drawable: The affected drawable.
  * @fill_type: The type of fill.
  * @x: The x coordinate of this bucket fill's application.
  * @y: The y coordinate of this bucket fill's application.
@@ -138,33 +148,37 @@ gimp_drawable_edit_fill (gint32       drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_edit_bucket_fill (gint32       drawable_ID,
-                                GimpFillType fill_type,
-                                gdouble      x,
-                                gdouble      y)
+gimp_drawable_edit_bucket_fill (GimpDrawable *drawable,
+                                GimpFillType  fill_type,
+                                gdouble       x,
+                                gdouble       y)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-edit-bucket-fill",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, fill_type,
-                                    GIMP_PDB_FLOAT, x,
-                                    GIMP_PDB_FLOAT, y,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_FILL_TYPE, fill_type,
+                                          G_TYPE_DOUBLE, x,
+                                          G_TYPE_DOUBLE, y,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-edit-bucket-fill",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_edit_gradient_fill:
- * @drawable_ID: The affected drawable.
+ * @drawable: The affected drawable.
  * @gradient_type: The type of gradient.
  * @offset: Offset relates to the starting and ending coordinates specified for the blend. This parameter is mode dependent.
  * @supersample: Do adaptive supersampling.
@@ -196,47 +210,51 @@ gimp_drawable_edit_bucket_fill (gint32       drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_edit_gradient_fill (gint32           drawable_ID,
-                                  GimpGradientType gradient_type,
-                                  gdouble          offset,
-                                  gboolean         supersample,
-                                  gint             supersample_max_depth,
-                                  gdouble          supersample_threshold,
-                                  gboolean         dither,
-                                  gdouble          x1,
-                                  gdouble          y1,
-                                  gdouble          x2,
-                                  gdouble          y2)
+gimp_drawable_edit_gradient_fill (GimpDrawable     *drawable,
+                                  GimpGradientType  gradient_type,
+                                  gdouble           offset,
+                                  gboolean          supersample,
+                                  gint              supersample_max_depth,
+                                  gdouble           supersample_threshold,
+                                  gboolean          dither,
+                                  gdouble           x1,
+                                  gdouble           y1,
+                                  gdouble           x2,
+                                  gdouble           y2)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-edit-gradient-fill",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, gradient_type,
-                                    GIMP_PDB_FLOAT, offset,
-                                    GIMP_PDB_INT32, supersample,
-                                    GIMP_PDB_INT32, supersample_max_depth,
-                                    GIMP_PDB_FLOAT, supersample_threshold,
-                                    GIMP_PDB_INT32, dither,
-                                    GIMP_PDB_FLOAT, x1,
-                                    GIMP_PDB_FLOAT, y1,
-                                    GIMP_PDB_FLOAT, x2,
-                                    GIMP_PDB_FLOAT, y2,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_GRADIENT_TYPE, gradient_type,
+                                          G_TYPE_DOUBLE, offset,
+                                          G_TYPE_BOOLEAN, supersample,
+                                          G_TYPE_INT, supersample_max_depth,
+                                          G_TYPE_DOUBLE, supersample_threshold,
+                                          G_TYPE_BOOLEAN, dither,
+                                          G_TYPE_DOUBLE, x1,
+                                          G_TYPE_DOUBLE, y1,
+                                          G_TYPE_DOUBLE, x2,
+                                          G_TYPE_DOUBLE, y2,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-edit-gradient-fill",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_edit_stroke_selection:
- * @drawable_ID: The drawable to stroke to.
+ * @drawable: The drawable to stroke to.
  *
  * Stroke the current selection
  *
@@ -256,28 +274,32 @@ gimp_drawable_edit_gradient_fill (gint32           drawable_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_drawable_edit_stroke_selection (gint32 drawable_ID)
+gimp_drawable_edit_stroke_selection (GimpDrawable *drawable)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-edit-stroke-selection",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-edit-stroke-selection",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_edit_stroke_item:
- * @drawable_ID: The drawable to stroke to.
- * @item_ID: The item to stroke.
+ * @drawable: The drawable to stroke to.
+ * @item: The item to stroke.
  *
  * Stroke the specified item
  *
@@ -299,22 +321,26 @@ gimp_drawable_edit_stroke_selection (gint32 drawable_ID)
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_edit_stroke_item (gint32 drawable_ID,
-                                gint32 item_ID)
+gimp_drawable_edit_stroke_item (GimpDrawable *drawable,
+                                GimpItem     *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-edit-stroke-item",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-edit-stroke-item",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

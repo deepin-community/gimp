@@ -28,7 +28,6 @@
 
 #include "gimpwidgetstypes.h"
 
-#undef GIMP_DISABLE_DEPRECATED
 #include "gimpcolordisplay.h"
 #include "gimpcolordisplaystack.h"
 #include "gimpwidgetsmarshal.h"
@@ -51,6 +50,14 @@ enum
   REMOVED,
   REORDERED,
   LAST_SIGNAL
+};
+
+
+struct _GimpColorDisplayStack
+{
+  GObject  parent;
+
+  GList   *filters;
 };
 
 
@@ -81,16 +88,15 @@ gimp_color_display_stack_class_init (GimpColorDisplayStackClass *klass)
     g_signal_new ("changed",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (GimpColorDisplayStackClass, changed),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
+                  0,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   stack_signals[ADDED] =
     g_signal_new ("added",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (GimpColorDisplayStackClass, added),
+                  0,
                   NULL, NULL,
                   _gimp_widgets_marshal_VOID__OBJECT_INT,
                   G_TYPE_NONE, 2,
@@ -101,9 +107,8 @@ gimp_color_display_stack_class_init (GimpColorDisplayStackClass *klass)
     g_signal_new ("removed",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (GimpColorDisplayStackClass, removed),
-                  NULL, NULL,
-                  _gimp_widgets_marshal_VOID__OBJECT,
+                  0,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_COLOR_DISPLAY);
 
@@ -111,7 +116,7 @@ gimp_color_display_stack_class_init (GimpColorDisplayStackClass *klass)
     g_signal_new ("reordered",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (GimpColorDisplayStackClass, reordered),
+                  0,
                   NULL, NULL,
                   _gimp_widgets_marshal_VOID__OBJECT_INT,
                   G_TYPE_NONE, 2,
@@ -119,17 +124,11 @@ gimp_color_display_stack_class_init (GimpColorDisplayStackClass *klass)
                   G_TYPE_INT);
 
   object_class->dispose = gimp_color_display_stack_dispose;
-
-  klass->changed        = NULL;
-  klass->added          = NULL;
-  klass->removed        = NULL;
-  klass->reordered      = NULL;
 }
 
 static void
 gimp_color_display_stack_init (GimpColorDisplayStack *stack)
 {
-  stack->filters = NULL;
 }
 
 static void
@@ -156,12 +155,35 @@ gimp_color_display_stack_dispose (GObject *object)
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
 
+
+/*  public functions  */
+
+/**
+ * gimp_color_display_stack_new:
+ *
+ * Creates a new stack of color correction modules.
+ *
+ * Returns: (transfer full): a newly allocated #GimpColorDisplayStack.
+ *
+ * Since: 2.0
+ **/
 GimpColorDisplayStack *
 gimp_color_display_stack_new (void)
 {
   return g_object_new (GIMP_TYPE_COLOR_DISPLAY_STACK, NULL);
 }
 
+/**
+ * gimp_color_display_stack_clone:
+ * @stack: a #GimpColorDisplayStack
+ *
+ * Creates a copy of @stack with all its display color modules also
+ * duplicated.
+ *
+ * Returns: (transfer full): a duplicate of @stack.
+ *
+ * Since: 2.0
+ **/
 GimpColorDisplayStack *
 gimp_color_display_stack_clone (GimpColorDisplayStack *stack)
 {
@@ -185,6 +207,14 @@ gimp_color_display_stack_clone (GimpColorDisplayStack *stack)
   return clone;
 }
 
+/**
+ * gimp_color_display_stack_changed:
+ * @stack: a #GimpColorDisplayStack
+ *
+ * Emit the "changed" signal of @stack.
+ *
+ * Since: 2.0
+ **/
 void
 gimp_color_display_stack_changed (GimpColorDisplayStack *stack)
 {
@@ -193,12 +223,41 @@ gimp_color_display_stack_changed (GimpColorDisplayStack *stack)
   g_signal_emit (stack, stack_signals[CHANGED], 0);
 }
 
+/**
+ * gimp_color_display_stack_get_filters:
+ * @stack: a #GimpColorDisplayStack
+ *
+ * Gets the list of added color modules.
+ *
+ * Returns: (transfer none) (element-type GimpColorDisplay):
+            the list of @stack's display color modules.
+ *
+ * Since: 3.0
+ **/
+GList *
+gimp_color_display_stack_get_filters (GimpColorDisplayStack *stack)
+{
+  g_return_val_if_fail (GIMP_IS_COLOR_DISPLAY_STACK (stack), NULL);
+
+  return stack->filters;
+}
+
+/**
+ * gimp_color_display_stack_add:
+ * @stack:   a #GimpColorDisplayStack
+ * @display: (transfer none): a #GimpColorDisplay
+ *
+ * Add the color module @display to @stack.
+ *
+ * Since: 2.0
+ **/
 void
 gimp_color_display_stack_add (GimpColorDisplayStack *stack,
                               GimpColorDisplay      *display)
 {
   g_return_if_fail (GIMP_IS_COLOR_DISPLAY_STACK (stack));
   g_return_if_fail (GIMP_IS_COLOR_DISPLAY (display));
+
   g_return_if_fail (g_list_find (stack->filters, display) == NULL);
 
   stack->filters = g_list_append (stack->filters, g_object_ref (display));
@@ -216,12 +275,22 @@ gimp_color_display_stack_add (GimpColorDisplayStack *stack,
   gimp_color_display_stack_changed (stack);
 }
 
+/**
+ * gimp_color_display_stack_remove:
+ * @stack:   a #GimpColorDisplayStack
+ * @display: (transfer none): a #GimpColorDisplay
+ *
+ * Remove the color module @display from @stack.
+ *
+ * Since: 2.0
+ **/
 void
 gimp_color_display_stack_remove (GimpColorDisplayStack *stack,
                                  GimpColorDisplay      *display)
 {
   g_return_if_fail (GIMP_IS_COLOR_DISPLAY_STACK (stack));
   g_return_if_fail (GIMP_IS_COLOR_DISPLAY (display));
+
   g_return_if_fail (g_list_find (stack->filters, display) != NULL);
 
   gimp_color_display_stack_disconnect (stack, display);
@@ -235,6 +304,15 @@ gimp_color_display_stack_remove (GimpColorDisplayStack *stack,
   g_object_unref (display);
 }
 
+/**
+ * gimp_color_display_stack_reorder_up:
+ * @stack:   a #GimpColorDisplayStack
+ * @display: a #GimpColorDisplay
+ *
+ * Move the color module @display up in the filter list of @stack.
+ *
+ * Since: 2.0
+ **/
 void
 gimp_color_display_stack_reorder_up (GimpColorDisplayStack *stack,
                                      GimpColorDisplay      *display)
@@ -260,6 +338,15 @@ gimp_color_display_stack_reorder_up (GimpColorDisplayStack *stack,
     }
 }
 
+/**
+ * gimp_color_display_stack_reorder_down:
+ * @stack:   a #GimpColorDisplayStack
+ * @display: a #GimpColorDisplay
+ *
+ * Move the color module @display down in the filter list of @stack.
+ *
+ * Since: 2.0
+ **/
 void
 gimp_color_display_stack_reorder_down (GimpColorDisplayStack *stack,
                                        GimpColorDisplay      *display)
@@ -313,73 +400,6 @@ gimp_color_display_stack_convert_buffer (GimpColorDisplayStack *stack,
     }
 }
 
-/**
- * gimp_color_display_stack_convert_surface:
- * @stack: a #GimpColorDisplayStack
- * @surface: a #cairo_image_surface_t of type ARGB32
- *
- * Runs all the stack's filters on all pixels in @surface.
- *
- * Since: 2.8
- *
- * Deprecated: GIMP 2.10: Use gimp_color_display_stack_convert_buffer() instead.
- **/
-void
-gimp_color_display_stack_convert_surface (GimpColorDisplayStack *stack,
-                                          cairo_surface_t       *surface)
-{
-  GList *list;
-
-  g_return_if_fail (GIMP_IS_COLOR_DISPLAY_STACK (stack));
-  g_return_if_fail (surface != NULL);
-  g_return_if_fail (cairo_surface_get_type (surface) ==
-                    CAIRO_SURFACE_TYPE_IMAGE);
-
-  for (list = stack->filters; list; list = g_list_next (list))
-    {
-      GimpColorDisplay *display = list->data;
-
-      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-      gimp_color_display_convert_surface (display, surface);
-      G_GNUC_END_IGNORE_DEPRECATIONS
-    }
-}
-
-/**
- * gimp_color_display_stack_convert:
- * @stack: a #GimpColorDisplayStack
- * @buf: the pixel buffer to convert
- * @width: the width of the buffer
- * @height: the height of the buffer
- * @bpp: the number of bytes per pixel
- * @bpl: the buffer's rowstride
- *
- * Converts all pixels in @buf.
- *
- * Deprecated: GIMP 2.8: Use gimp_color_display_stack_convert_buffer() instead.
- **/
-void
-gimp_color_display_stack_convert (GimpColorDisplayStack *stack,
-                                  guchar                *buf,
-                                  gint                   width,
-                                  gint                   height,
-                                  gint                   bpp,
-                                  gint                   bpl)
-{
-  GList *list;
-
-  g_return_if_fail (GIMP_IS_COLOR_DISPLAY_STACK (stack));
-
-  for (list = stack->filters; list; list = g_list_next (list))
-    {
-      GimpColorDisplay *display = list->data;
-
-      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
-      gimp_color_display_convert (display, buf, width, height, bpp, bpl);
-      G_GNUC_END_IGNORE_DEPRECATIONS
-    }
-}
-
 
 /*  private functions  */
 
@@ -387,7 +407,7 @@ static void
 gimp_color_display_stack_display_changed (GimpColorDisplay      *display,
                                           GimpColorDisplayStack *stack)
 {
-  if (display->enabled)
+  if (gimp_color_display_get_enabled (display))
     gimp_color_display_stack_changed (stack);
 }
 

@@ -48,7 +48,6 @@
 #include "gimphelp.h"
 #include "gimphelp-ids.h"
 #include "gimplanguagecombobox.h"
-#include "gimplanguagestore-parser.h"
 #include "gimpmessagebox.h"
 #include "gimpmessagedialog.h"
 #include "gimpmessagedialog.h"
@@ -92,7 +91,7 @@ static void       gimp_help_call          (Gimp          *gimp,
                                            const gchar   *help_locales,
                                            const gchar   *help_id);
 
-static gint       gimp_help_get_help_domains         (Gimp    *gimp,
+static void       gimp_help_get_help_domains         (Gimp    *gimp,
                                                       gchar ***domain_names,
                                                       gchar ***domain_uris);
 static gchar    * gimp_help_get_default_domain_uri   (Gimp    *gimp);
@@ -257,7 +256,7 @@ gimp_help_get_installed_languages (void)
           while ((info = g_file_enumerator_next_file (enumerator,
                                                       NULL, NULL)))
             {
-              if (g_file_info_get_file_type (info) == G_FILE_TYPE_DIRECTORY)
+              if (g_file_info_get_attribute_uint32 (info, G_FILE_ATTRIBUTE_STANDARD_TYPE) == G_FILE_TYPE_DIRECTORY)
                 {
                   GFile *locale_dir;
                   GFile *file;
@@ -357,7 +356,6 @@ gimp_help_browser (Gimp         *gimp,
   if (! procedure)
     {
       GimpValueArray *args         = NULL;
-      gint            n_domains    = 0;
       gchar         **help_domains = NULL;
       gchar         **help_uris    = NULL;
       GError         *error        = NULL;
@@ -379,21 +377,14 @@ gimp_help_browser (Gimp         *gimp,
           return FALSE;
         }
 
-      n_domains = gimp_help_get_help_domains (gimp, &help_domains, &help_uris);
+      gimp_help_get_help_domains (gimp, &help_domains, &help_uris);
 
       args = gimp_procedure_get_arguments (procedure);
-      gimp_value_array_truncate (args, 5);
+      gimp_value_array_truncate (args, 3);
 
-      g_value_set_int             (gimp_value_array_index (args, 0),
-                                   GIMP_RUN_INTERACTIVE);
-      g_value_set_int             (gimp_value_array_index (args, 1),
-                                   n_domains);
-      gimp_value_take_stringarray (gimp_value_array_index (args, 2),
-                                   help_domains, n_domains);
-      g_value_set_int             (gimp_value_array_index (args, 3),
-                                   n_domains);
-      gimp_value_take_stringarray (gimp_value_array_index (args, 4),
-                                   help_uris, n_domains);
+      g_value_set_enum (gimp_value_array_index (args, 0), GIMP_RUN_INTERACTIVE);
+      g_value_take_boxed (gimp_value_array_index (args, 1), help_domains);
+      g_value_take_boxed (gimp_value_array_index (args, 2), help_uris);
 
       gimp_procedure_execute_async (procedure, gimp,
                                     gimp_get_user_context (gimp),
@@ -449,18 +440,13 @@ gimp_help_browser_error (Gimp         *gimp,
 
                                     NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
                                            -1);
 
   if (progress)
-    {
-      guint32 window_id = gimp_progress_get_window_id (progress);
-
-      if (window_id)
-        gimp_window_set_transient_for (GTK_WINDOW (dialog), window_id);
-    }
+    gimp_window_set_transient_for (GTK_WINDOW (dialog), progress);
 
   gimp_message_box_set_primary_text (GIMP_MESSAGE_DIALOG (dialog)->box,
                                      "%s", primary);
@@ -525,7 +511,6 @@ gimp_help_call (Gimp         *gimp,
   if (! procedure)
     {
       GimpValueArray  *args         = NULL;
-      gint             n_domains    = 0;
       gchar          **help_domains = NULL;
       gchar          **help_uris    = NULL;
       GError          *error        = NULL;
@@ -536,19 +521,13 @@ gimp_help_call (Gimp         *gimp,
         /*  FIXME: error msg  */
         return;
 
-      n_domains = gimp_help_get_help_domains (gimp, &help_domains, &help_uris);
+      gimp_help_get_help_domains (gimp, &help_domains, &help_uris);
 
       args = gimp_procedure_get_arguments (procedure);
-      gimp_value_array_truncate (args, 4);
+      gimp_value_array_truncate (args, 2);
 
-      g_value_set_int             (gimp_value_array_index (args, 0),
-                                   n_domains);
-      gimp_value_take_stringarray (gimp_value_array_index (args, 1),
-                                   help_domains, n_domains);
-      g_value_set_int             (gimp_value_array_index (args, 2),
-                                   n_domains);
-      gimp_value_take_stringarray (gimp_value_array_index (args, 3),
-                                   help_uris, n_domains);
+      g_value_take_boxed (gimp_value_array_index (args, 0), help_domains);
+      g_value_take_boxed (gimp_value_array_index (args, 1), help_uris);
 
       gimp_procedure_execute_async (procedure, gimp,
                                     gimp_get_user_context (gimp), progress,
@@ -598,7 +577,7 @@ gimp_help_call (Gimp         *gimp,
     }
 }
 
-static gint
+static void
 gimp_help_get_help_domains (Gimp    *gimp,
                             gchar ***domain_names,
                             gchar ***domain_uris)
@@ -611,8 +590,8 @@ gimp_help_get_help_domains (Gimp    *gimp,
                                                      &plug_in_domains,
                                                      &plug_in_uris);
 
-  *domain_names = g_new0 (gchar *, n_domains + 1);
-  *domain_uris  = g_new0 (gchar *, n_domains + 1);
+  *domain_names = g_new0 (gchar *, n_domains + 2);
+  *domain_uris  = g_new0 (gchar *, n_domains + 2);
 
   (*domain_names)[0] = g_strdup ("https://www.gimp.org/help");
   (*domain_uris)[0]  = gimp_help_get_default_domain_uri (gimp);
@@ -625,8 +604,6 @@ gimp_help_get_help_domains (Gimp    *gimp,
 
   g_free (plug_in_domains);
   g_free (plug_in_uris);
-
-  return n_domains + 1;
 }
 
 static gchar *
@@ -798,12 +775,7 @@ gimp_help_query_alt_user_manual (GimpIdleHelp *idle_help)
   idle_help->query_dialog = GTK_DIALOG (dialog);
 
   if (idle_help->progress)
-    {
-      guint32 window_id = gimp_progress_get_window_id (idle_help->progress);
-
-      if (window_id)
-        gimp_window_set_transient_for (GTK_WINDOW (dialog), window_id);
-    }
+    gimp_window_set_transient_for (GTK_WINDOW (dialog), idle_help->progress);
 
   gimp_message_box_set_primary_text (GIMP_MESSAGE_DIALOG (dialog)->box,
                                      _("The GIMP user manual is not installed "
@@ -848,7 +820,7 @@ gimp_help_query_alt_user_manual (GimpIdleHelp *idle_help)
   gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_ACCEPT);
   if (manuals != NULL)
     {
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                                GTK_RESPONSE_ACCEPT,
                                                GTK_RESPONSE_YES,
                                                GTK_RESPONSE_CANCEL,
@@ -857,7 +829,7 @@ gimp_help_query_alt_user_manual (GimpIdleHelp *idle_help)
     }
   else
     {
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                                GTK_RESPONSE_ACCEPT,
                                                GTK_RESPONSE_CANCEL,
                                                -1);

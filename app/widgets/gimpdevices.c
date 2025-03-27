@@ -113,10 +113,10 @@ gimp_devices_restore (Gimp *gimp)
   if (gimp->be_verbose)
     g_print ("Parsing '%s'\n", gimp_file_get_utf8_name (file));
 
-  if (! gimp_config_deserialize_gfile (GIMP_CONFIG (manager),
-                                       file,
-                                       gimp,
-                                       &error))
+  if (! gimp_config_deserialize_file (GIMP_CONFIG (manager),
+                                      file,
+                                      gimp,
+                                      &error))
     {
       if (error->code != GIMP_CONFIG_ERROR_OPEN_ENOENT)
         gimp_message_literal (gimp, NULL, GIMP_MESSAGE_ERROR, error->message);
@@ -183,12 +183,12 @@ gimp_devices_save (Gimp     *gimp,
       gimp_device_info_save_tool (current_device);
     }
 
-  if (! gimp_config_serialize_to_gfile (GIMP_CONFIG (manager),
-                                        file,
-                                        "GIMP devicerc",
-                                        "end of devicerc",
-                                        NULL,
-                                        &error))
+  if (! gimp_config_serialize_to_file (GIMP_CONFIG (manager),
+                                       file,
+                                       "GIMP devicerc",
+                                       "end of devicerc",
+                                       NULL,
+                                       &error))
     {
       gimp_message_literal (gimp, NULL, GIMP_MESSAGE_ERROR, error->message);
       g_error_free (error);
@@ -197,6 +197,7 @@ gimp_devices_save (Gimp     *gimp,
   g_object_unref (file);
 
   devicerc_deleted = FALSE;
+  gimp_device_manager_reconfigure_pads (manager);
 }
 
 gboolean
@@ -250,14 +251,95 @@ gimp_devices_get_manager (Gimp *gimp)
   return manager;
 }
 
+GdkDevice *
+gimp_devices_get_from_event (Gimp            *gimp,
+                             const GdkEvent  *event,
+                             GdkDevice      **grab_device)
+{
+  GdkDevice *device;
+
+  g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
+  g_return_val_if_fail (event != NULL, NULL);
+
+  device = gdk_event_get_source_device (event);
+
+  /*  initialize the default grab device to the event's device,
+   *  because that is always either a master or a floating device,
+   *  which is the types of devices we can make grabs on without
+   *  disturbing side effects.
+   */
+  if (grab_device)
+    *grab_device = gdk_event_get_device (event);
+
+  if (gdk_device_get_source (device) == GDK_SOURCE_KEYBOARD)
+    {
+      switch (gdk_device_get_device_type (device))
+        {
+        case GDK_DEVICE_TYPE_MASTER:
+          /*  this happens on focus synthesized focus changed events,
+           *  and we can't do anything with the returned device, so
+           *  return NULL
+           */
+          return NULL;
+
+        case GDK_DEVICE_TYPE_SLAVE:
+          /*  it makes no sense for us to distinguigh between
+           *  different slave keyboards, so just always return
+           *  their respective master
+           */
+          return gdk_device_get_associated_device (device);
+
+        case GDK_DEVICE_TYPE_FLOATING:
+          /*  we have no way of explicitly enabling floating
+           *  keyboards, so we cannot get their events
+           */
+          g_return_val_if_reached (device);
+       }
+    }
+  else
+    {
+      switch (gdk_device_get_device_type (device))
+        {
+        case GDK_DEVICE_TYPE_MASTER:
+          /*  this can only happen for synthesized events which have
+           *  no actual source, so return NULL to indicate that we
+           *  cannot do anything with the event's device information
+           */
+          return NULL;
+
+        case GDK_DEVICE_TYPE_SLAVE:
+          /*  this is the tricky part: we do want to distingiugh slave
+           *  devices, but only if we actually enabled them ourselves
+           *  explicitly (like the pens of a tablet); however we
+           *  usually don't enable the different incarnations of the
+           *  mouse itself (like touchpad, trackpoint, usb mouse
+           *  etc.), so for these return their respective master so
+           *  its settings are used
+           */
+          if (gdk_device_get_mode (device) == GDK_MODE_DISABLED)
+            {
+              return gdk_device_get_associated_device (device);
+            }
+
+          return device;
+
+        case GDK_DEVICE_TYPE_FLOATING:
+          /*  we only get events for floating devices which have
+           *  enabled ourselves, so return the floating device
+           */
+          return device;
+        }
+    }
+
+  g_return_val_if_reached (device);
+}
+
 void
 gimp_devices_add_widget (Gimp      *gimp,
                          GtkWidget *widget)
 {
   g_return_if_fail (GIMP_IS_GIMP (gimp));
   g_return_if_fail (GTK_IS_WIDGET (widget));
-
-  gtk_widget_set_extension_events (widget, GDK_EXTENSION_EVENTS_ALL);
 
   g_signal_connect (widget, "motion-notify-event",
                     G_CALLBACK (gimp_devices_check_callback),
@@ -273,67 +355,39 @@ gimp_devices_check_callback (GtkWidget *widget,
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), FALSE);
 
   if (! gimp->busy)
-    gimp_devices_check_change (gimp, event);
+    {
+      GdkDevice *device;
+
+      device = gimp_devices_get_from_event (gimp, event, NULL);
+
+      if (device)
+        gimp_devices_check_change (gimp, device);
+    }
 
   return FALSE;
 }
 
 gboolean
-gimp_devices_check_change (Gimp     *gimp,
-                           GdkEvent *event)
+gimp_devices_check_change (Gimp      *gimp,
+                           GdkDevice *device)
 {
   GimpDeviceManager *manager;
-  GdkDevice         *device;
   GimpDeviceInfo    *device_info;
-  GtkWidget         *source;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), FALSE);
-  g_return_val_if_fail (event != NULL, FALSE);
+  g_return_val_if_fail (GDK_IS_DEVICE (device), FALSE);
 
   manager = gimp_devices_get_manager (gimp);
 
   g_return_val_if_fail (GIMP_IS_DEVICE_MANAGER (manager), FALSE);
 
-  /* It is possible that the event was propagated from a widget that does not
-     want extension events and therefore always sends core pointer events.
-     This can cause a false switch to the core pointer device. */
-
-  source = gtk_get_event_widget (event);
-
-  if (source &&
-      gtk_widget_get_extension_events (source) == GDK_EXTENSION_EVENTS_NONE)
-    return FALSE;
-
-  switch (event->type)
-    {
-    case GDK_MOTION_NOTIFY:
-      device = ((GdkEventMotion *) event)->device;
-      break;
-
-    case GDK_BUTTON_PRESS:
-    case GDK_2BUTTON_PRESS:
-    case GDK_3BUTTON_PRESS:
-    case GDK_BUTTON_RELEASE:
-      device = ((GdkEventButton *) event)->device;
-      break;
-
-    case GDK_PROXIMITY_IN:
-    case GDK_PROXIMITY_OUT:
-      device = ((GdkEventProximity *) event)->device;
-      break;
-
-    case GDK_SCROLL:
-      device = ((GdkEventScroll *) event)->device;
-      break;
-
-    default:
-      device = gimp_device_manager_get_current_device (manager)->device;
-      break;
-    }
-
   device_info = gimp_device_info_get_by_device (device);
 
-  if (device_info != gimp_device_manager_get_current_device (manager))
+  if (! device_info)
+    device_info = gimp_device_manager_get_current_device (manager);
+
+  if (device_info &&
+      device_info != gimp_device_manager_get_current_device (manager))
     {
       gimp_device_manager_set_current_device (manager, device_info);
       return TRUE;

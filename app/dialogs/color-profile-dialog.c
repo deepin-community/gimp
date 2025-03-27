@@ -124,7 +124,7 @@ color_profile_dialog_new (ColorProfileDialogType    dialog_type,
     {
     case COLOR_PROFILE_DIALOG_ASSIGN_PROFILE:
       dialog =
-        gimp_viewable_dialog_new (GIMP_VIEWABLE (image), context,
+        gimp_viewable_dialog_new (g_list_prepend (NULL, image), context,
                                   _("Assign ICC Color Profile"),
                                   "gimp-image-color-profile-assign",
                                   NULL,
@@ -142,7 +142,7 @@ color_profile_dialog_new (ColorProfileDialogType    dialog_type,
 
     case COLOR_PROFILE_DIALOG_CONVERT_TO_PROFILE:
       dialog =
-        gimp_viewable_dialog_new (GIMP_VIEWABLE (image), context,
+        gimp_viewable_dialog_new (g_list_prepend (NULL, image), context,
                                   _("Convert to ICC Color Profile"),
                                   "gimp-image-color-profile-convert",
                                   NULL,
@@ -160,7 +160,7 @@ color_profile_dialog_new (ColorProfileDialogType    dialog_type,
 
     case COLOR_PROFILE_DIALOG_CONVERT_TO_RGB:
       dialog =
-        gimp_viewable_dialog_new (GIMP_VIEWABLE (image), context,
+        gimp_viewable_dialog_new (g_list_prepend (NULL, image), context,
                                   _("RGB Conversion"),
                                   "gimp-image-convert-rgb",
                                   GIMP_ICON_CONVERT_RGB,
@@ -178,7 +178,7 @@ color_profile_dialog_new (ColorProfileDialogType    dialog_type,
 
     case COLOR_PROFILE_DIALOG_CONVERT_TO_GRAY:
       dialog =
-        gimp_viewable_dialog_new (GIMP_VIEWABLE (image), context,
+        gimp_viewable_dialog_new (g_list_prepend (NULL, image), context,
                                   _("Grayscale Conversion"),
                                   "gimp-image-convert-gray",
                                   GIMP_ICON_CONVERT_GRAYSCALE,
@@ -196,7 +196,7 @@ color_profile_dialog_new (ColorProfileDialogType    dialog_type,
 
     case COLOR_PROFILE_DIALOG_SELECT_SOFTPROOF_PROFILE:
       dialog =
-        gimp_viewable_dialog_new (GIMP_VIEWABLE (image), context,
+        gimp_viewable_dialog_new (g_list_prepend (NULL, image), context,
                                   _("Soft-Proof Profile"),
                                   "gimp-select-softproof-profile",
                                   GIMP_ICON_DOCUMENT_PRINT,
@@ -218,7 +218,7 @@ color_profile_dialog_new (ColorProfileDialogType    dialog_type,
 
   private->dialog = dialog;
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
                                            -1);
@@ -298,7 +298,7 @@ color_profile_dialog_new (ColorProfileDialogType    dialog_type,
       gimp_int_combo_box_connect (GIMP_INT_COMBO_BOX (combo),
                                   private->intent,
                                   G_CALLBACK (gimp_int_combo_box_get_active),
-                                  &private->intent);
+                                  &private->intent, NULL);
 
       gtk_label_set_mnemonic_widget (GTK_LABEL (label), combo);
 
@@ -331,11 +331,11 @@ color_profile_combo_box_new (ProfileDialog *private)
   GtkListStore *store;
   GtkWidget    *combo;
   GtkWidget    *chooser;
-  gchar        *history;
+  GFile        *history;
 
-  history = gimp_personal_rc_file ("profilerc");
+  history = gimp_directory_file ("profilerc", NULL);
   store = gimp_color_profile_store_new (history);
-  g_free (history);
+  g_object_unref (history);
 
   if (private->default_profile)
     {

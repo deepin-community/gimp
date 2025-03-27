@@ -5,18 +5,19 @@
     brushes
     buffer
     channel
-    color
     context
     debug
     display
     drawable
     drawable_color
     drawable_edit
-    drawable_transform
+    drawable_filter
+    drawable_select
     dynamics
     edit
-    fileops
+    file
     floating_sel
+    font
     font_select
     fonts
     gimp
@@ -24,8 +25,10 @@
     gradient
     gradient_select
     gradients
+    group_layer
     help
     image
+    image_autocrop
     image_color_profile
     image_convert
     image_grid
@@ -42,19 +45,16 @@
     palette
     palette_select
     palettes
-    paths
+    path
     pattern
     pattern_select
     patterns
+    pdb
     plug_in
-    plug_in_compat
-    procedural_db
     progress
+    resource
     selection
-    selection_tools
     text_layer
     text_tool
-    transform_tools
     unit
-    vectors
 );

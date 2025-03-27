@@ -28,8 +28,6 @@
 
 #include "widgets-types.h"
 
-#include "core/gimpmarshal.h"
-
 #include "plug-in/gimppluginprocedure.h"
 
 #include "gimppluginview.h"
@@ -78,8 +76,7 @@ gimp_plug_in_view_class_init (GimpPlugInViewClass *klass)
                                         G_SIGNAL_RUN_LAST,
                                         G_STRUCT_OFFSET (GimpPlugInViewClass,
                                                          changed),
-                                        NULL, NULL,
-                                        gimp_marshal_VOID__VOID,
+                                        NULL, NULL, NULL,
                                         G_TYPE_NONE, 0);
 }
 
@@ -141,7 +138,7 @@ gimp_plug_in_view_new (GSList *procedures)
 
           g_hash_table_insert (GIMP_PLUG_IN_VIEW (view)->plug_in_hash,
                                g_object_ref (file),
-                               g_memdup (&iter, sizeof (GtkTreeIter)));
+                               g_memdup2 (&iter, sizeof (GtkTreeIter)));
         }
     }
 

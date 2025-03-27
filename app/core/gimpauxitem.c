@@ -17,7 +17,9 @@
 
 #include "config.h"
 
-#include <glib-object.h>
+#include <gio/gio.h>
+
+#include "libgimpbase/gimpbase.h"
 
 #include "core-types.h"
 
@@ -39,7 +41,7 @@ enum
 
 struct _GimpAuxItemPrivate
 {
-  guint32  aux_item_ID;
+  guint32  aux_item_id;
 };
 
 
@@ -68,8 +70,7 @@ gimp_aux_item_class_init (GimpAuxItemClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpAuxItemClass, removed),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->get_property = gimp_aux_item_get_property;
@@ -101,7 +102,7 @@ gimp_aux_item_get_property (GObject    *object,
   switch (property_id)
     {
     case PROP_ID:
-      g_value_set_uint (value, aux_item->priv->aux_item_ID);
+      g_value_set_uint (value, aux_item->priv->aux_item_id);
       break;
 
     default:
@@ -121,7 +122,7 @@ gimp_aux_item_set_property (GObject      *object,
   switch (property_id)
     {
     case PROP_ID:
-      aux_item->priv->aux_item_ID = g_value_get_uint (value);
+      aux_item->priv->aux_item_id = g_value_get_uint (value);
       break;
 
     default:
@@ -131,11 +132,11 @@ gimp_aux_item_set_property (GObject      *object,
 }
 
 guint32
-gimp_aux_item_get_ID (GimpAuxItem *aux_item)
+gimp_aux_item_get_id (GimpAuxItem *aux_item)
 {
   g_return_val_if_fail (GIMP_IS_AUX_ITEM (aux_item), 0);
 
-  return aux_item->priv->aux_item_ID;
+  return aux_item->priv->aux_item_id;
 }
 
 void

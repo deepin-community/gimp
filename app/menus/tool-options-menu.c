@@ -44,8 +44,6 @@ static void   tool_options_menu_update_after   (GimpUIManager *manager,
                                                 gpointer       update_data,
                                                 const gchar   *ui_path);
 static void   tool_options_menu_update_presets (GimpUIManager *manager,
-                                                guint          merge_id,
-                                                const gchar   *ui_path,
                                                 const gchar   *menu_path,
                                                 const gchar   *which_action,
                                                 GimpContainer *presets);
@@ -63,6 +61,8 @@ tool_options_menu_setup (GimpUIManager *manager,
   g_signal_connect_after (manager, "update",
                           G_CALLBACK (tool_options_menu_update_after),
                           (gpointer) ui_path);
+
+  tool_options_menu_update_after (manager, NULL, ui_path);
 }
 
 
@@ -73,20 +73,7 @@ tool_options_menu_update (GimpUIManager *manager,
                           gpointer       update_data,
                           const gchar   *ui_path)
 {
-  guint merge_id;
-
-  merge_id = GPOINTER_TO_UINT (g_object_get_data (G_OBJECT (manager),
-                                                  "tool-options-merge-id"));
-
-  if (merge_id)
-    {
-      gimp_ui_manager_remove_ui (manager, merge_id);
-
-      g_object_set_data (G_OBJECT (manager), "tool-options-merge-id",
-                         GINT_TO_POINTER (0));
-
-      gimp_ui_manager_ensure_update (manager);
-    }
+  /* no-op. */
 }
 
 static void
@@ -96,7 +83,6 @@ tool_options_menu_update_after (GimpUIManager *manager,
 {
   GimpContext  *context;
   GimpToolInfo *tool_info;
-  guint         merge_id;
 
   context   = gimp_get_user_context (manager->gimp);
   tool_info = gimp_context_get_tool (context);
@@ -104,58 +90,46 @@ tool_options_menu_update_after (GimpUIManager *manager,
   if (! tool_info->presets)
     return;
 
-  merge_id = gimp_ui_manager_new_merge_id (manager);
+  tool_options_menu_update_presets (manager, "Save Tool Preset",
+                                    "save", tool_info->presets);
 
-  g_object_set_data (G_OBJECT (manager), "tool-options-merge-id",
-                     GUINT_TO_POINTER (merge_id));
+  tool_options_menu_update_presets (manager, "Restore Tool Preset",
+                                    "restore", tool_info->presets);
 
-  tool_options_menu_update_presets (manager, merge_id, ui_path,
-                                    "Save", "save",
-                                    tool_info->presets);
+  tool_options_menu_update_presets (manager, "Edit Tool Preset",
+                                    "edit", tool_info->presets);
 
-  tool_options_menu_update_presets (manager, merge_id, ui_path,
-                                    "Restore", "restore",
-                                    tool_info->presets);
-
-  tool_options_menu_update_presets (manager, merge_id, ui_path,
-                                    "Edit", "edit",
-                                    tool_info->presets);
-
-  tool_options_menu_update_presets (manager, merge_id, ui_path,
-                                    "Delete", "delete",
-                                    tool_info->presets);
-
-  gimp_ui_manager_ensure_update (manager);
+  tool_options_menu_update_presets (manager, "Delete Tool Preset",
+                                    "delete", tool_info->presets);
 }
 
 static void
 tool_options_menu_update_presets (GimpUIManager *manager,
-                                  guint          merge_id,
-                                  const gchar   *ui_path,
                                   const gchar   *menu_path,
                                   const gchar   *which_action,
                                   GimpContainer *presets)
 {
-  gint n_children;
-  gint i;
+  gchar *action_prefix;
+  gint   n_children;
+  gint   i;
+
+  action_prefix = g_strdup_printf ("tool-options-%s-preset-", which_action);
+  gimp_ui_manager_remove_uis (manager, action_prefix);
 
   n_children = gimp_container_get_n_children (presets);
-
   for (i = 0; i < n_children; i++)
     {
       gchar *action_name;
       gchar *path;
 
-      action_name = g_strdup_printf ("tool-options-%s-preset-%03d",
-                                     which_action, i);
-      path        = g_strdup_printf ("%s/%s", ui_path, menu_path);
+      action_name = g_strdup_printf ("%s%03d", action_prefix, i);
+      path        = g_strdup_printf ("/Tool Options Menu/%s", menu_path);
 
-      gimp_ui_manager_add_ui (manager, merge_id,
-                              path, action_name, action_name,
-                              GTK_UI_MANAGER_MENUITEM,
-                              FALSE);
+      gimp_ui_manager_add_ui (manager, path, action_name, FALSE);
 
       g_free (action_name);
       g_free (path);
     }
+
+  g_free (action_prefix);
 }

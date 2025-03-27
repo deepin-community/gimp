@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <string.h>
 
 #include <gegl.h>
@@ -77,7 +79,7 @@ message_get_handler_invoker (GimpProcedure         *procedure,
                              GError               **error)
 {
   GimpValueArray *return_vals;
-  gint32 handler = 0;
+  gint handler = 0;
 
   handler = gimp->message_handler;
 
@@ -96,7 +98,7 @@ message_set_handler_invoker (GimpProcedure         *procedure,
                              GError               **error)
 {
   gboolean success = TRUE;
-  gint32 handler;
+  gint handler;
 
   handler = g_value_get_enum (gimp_value_array_index (args, 0));
 
@@ -117,17 +119,17 @@ register_message_procs (GimpPDB *pdb)
   /*
    * gimp-message
    */
-  procedure = gimp_procedure_new (message_invoker);
+  procedure = gimp_procedure_new (message_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-message");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-message",
-                                     "Displays a dialog box with a message.",
-                                     "Displays a dialog box with a message. Useful for status or error reporting. The message must be in UTF-8 encoding.",
-                                     "Manish Singh",
-                                     "Manish Singh",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Displays a dialog box with a message.",
+                                  "Displays a dialog box with a message. Useful for status or error reporting. The message must be in UTF-8 encoding.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Manish Singh",
+                                         "Manish Singh",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("message",
                                                        "message",
@@ -141,17 +143,17 @@ register_message_procs (GimpPDB *pdb)
   /*
    * gimp-message-get-handler
    */
-  procedure = gimp_procedure_new (message_get_handler_invoker);
+  procedure = gimp_procedure_new (message_get_handler_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-message-get-handler");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-message-get-handler",
-                                     "Returns the current state of where warning messages are displayed.",
-                                     "This procedure returns the way g_message warnings are displayed. They can be shown in a dialog box or printed on the console where gimp was started.",
-                                     "Manish Singh",
-                                     "Manish Singh",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the current state of where warning messages are displayed.",
+                                  "This procedure returns the way g_message warnings are displayed. They can be shown in a dialog box or printed on the console where gimp was started.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Manish Singh",
+                                         "Manish Singh",
+                                         "1998");
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_enum ("handler",
                                                       "handler",
@@ -165,17 +167,17 @@ register_message_procs (GimpPDB *pdb)
   /*
    * gimp-message-set-handler
    */
-  procedure = gimp_procedure_new (message_set_handler_invoker);
+  procedure = gimp_procedure_new (message_set_handler_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-message-set-handler");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-message-set-handler",
-                                     "Controls where warning messages are displayed.",
-                                     "This procedure controls how g_message warnings are displayed. They can be shown in a dialog box or printed on the console where gimp was started.",
-                                     "Manish Singh",
-                                     "Manish Singh",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Controls where warning messages are displayed.",
+                                  "This procedure controls how g_message warnings are displayed. They can be shown in a dialog box or printed on the console where gimp was started.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Manish Singh",
+                                         "Manish Singh",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("handler",
                                                   "handler",

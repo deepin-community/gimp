@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -36,7 +38,7 @@
 
 /**
  * gimp_image_add_hguide:
- * @image_ID: The image.
+ * @image: The image.
  * @yposition: The guide's y-offset from top of image.
  *
  * Add a horizontal guide to an image.
@@ -47,31 +49,35 @@
  *
  * Returns: The new guide.
  **/
-gint32
-gimp_image_add_hguide (gint32 image_ID,
-                       gint   yposition)
+guint
+gimp_image_add_hguide (GimpImage *image,
+                       gint       yposition)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 guide_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  guint guide = 0;
 
-  return_vals = gimp_run_procedure ("gimp-image-add-hguide",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, yposition,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_INT, yposition,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    guide_ID = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-add-hguide",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    guide = GIMP_VALUES_GET_UINT (return_vals, 1);
 
-  return guide_ID;
+  gimp_value_array_unref (return_vals);
+
+  return guide;
 }
 
 /**
  * gimp_image_add_vguide:
- * @image_ID: The image.
+ * @image: The image.
  * @xposition: The guide's x-offset from left of image.
  *
  * Add a vertical guide to an image.
@@ -82,32 +88,36 @@ gimp_image_add_hguide (gint32 image_ID,
  *
  * Returns: The new guide.
  **/
-gint32
-gimp_image_add_vguide (gint32 image_ID,
-                       gint   xposition)
+guint
+gimp_image_add_vguide (GimpImage *image,
+                       gint       xposition)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 guide_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  guint guide = 0;
 
-  return_vals = gimp_run_procedure ("gimp-image-add-vguide",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, xposition,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_INT, xposition,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    guide_ID = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-add-vguide",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    guide = GIMP_VALUES_GET_UINT (return_vals, 1);
 
-  return guide_ID;
+  gimp_value_array_unref (return_vals);
+
+  return guide;
 }
 
 /**
  * gimp_image_delete_guide:
- * @image_ID: The image.
- * @guide_ID: The ID of the guide to be removed.
+ * @image: The image.
+ * @guide: The ID of the guide to be removed.
  *
  * Deletes a guide from an image.
  *
@@ -117,30 +127,34 @@ gimp_image_add_vguide (gint32 image_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_delete_guide (gint32 image_ID,
-                         gint32 guide_ID)
+gimp_image_delete_guide (GimpImage *image,
+                         guint      guide)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-delete-guide",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, guide_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_UINT, guide,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-delete-guide",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_find_next_guide:
- * @image_ID: The image.
- * @guide_ID: The ID of the current guide (0 if first invocation).
+ * @image: The image.
+ * @guide: The ID of the current guide (0 if first invocation).
  *
  * Find next guide on an image.
  *
@@ -152,32 +166,36 @@ gimp_image_delete_guide (gint32 image_ID,
  *
  * Returns: The next guide's ID.
  **/
-gint32
-gimp_image_find_next_guide (gint32 image_ID,
-                            gint32 guide_ID)
+guint
+gimp_image_find_next_guide (GimpImage *image,
+                            gint       guide)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 next_guide_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  guint next_guide = 0;
 
-  return_vals = gimp_run_procedure ("gimp-image-find-next-guide",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, guide_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_INT, guide,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    next_guide_ID = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-find-next-guide",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    next_guide = GIMP_VALUES_GET_UINT (return_vals, 1);
 
-  return next_guide_ID;
+  gimp_value_array_unref (return_vals);
+
+  return next_guide;
 }
 
 /**
  * gimp_image_get_guide_orientation:
- * @image_ID: The image.
- * @guide_ID: The guide.
+ * @image: The image.
+ * @guide: The guide.
  *
  * Get orientation of a guide on an image.
  *
@@ -187,31 +205,35 @@ gimp_image_find_next_guide (gint32 image_ID,
  * Returns: The guide's orientation.
  **/
 GimpOrientationType
-gimp_image_get_guide_orientation (gint32 image_ID,
-                                  gint32 guide_ID)
+gimp_image_get_guide_orientation (GimpImage *image,
+                                  guint      guide)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpOrientationType orientation = GIMP_ORIENTATION_UNKNOWN;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-guide-orientation",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, guide_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_UINT, guide,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    orientation = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-guide-orientation",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    orientation = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return orientation;
 }
 
 /**
  * gimp_image_get_guide_position:
- * @image_ID: The image.
- * @guide_ID: The guide.
+ * @image: The image.
+ * @guide: The guide.
  *
  * Get position of a guide on an image.
  *
@@ -221,23 +243,27 @@ gimp_image_get_guide_orientation (gint32 image_ID,
  * Returns: The guide's position relative to top or left of image.
  **/
 gint
-gimp_image_get_guide_position (gint32 image_ID,
-                               gint32 guide_ID)
+gimp_image_get_guide_position (GimpImage *image,
+                               guint      guide)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gint position = G_MININT /* GIMP_GUIDE_POSITION_UNDEFINED */;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-guide-position",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, guide_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_UINT, guide,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    position = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-guide-position",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    position = GIMP_VALUES_GET_INT (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return position;
 }

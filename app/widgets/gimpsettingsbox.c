@@ -23,6 +23,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
@@ -105,16 +106,16 @@ static void      gimp_settings_box_get_property  (GObject           *object,
 
 static GtkWidget *
                  gimp_settings_box_menu_item_add (GimpSettingsBox   *box,
-                                                  const gchar       *icon_name,
                                                   const gchar       *label,
                                                   GCallback          callback);
 static gboolean
             gimp_settings_box_row_separator_func (GtkTreeModel      *model,
                                                   GtkTreeIter       *iter,
                                                   gpointer           data);
-static void   gimp_settings_box_setting_selected (GimpContainerView *view,
-                                                  GimpViewable      *object,
-                                                  gpointer           insert_data,
+static gboolean
+              gimp_settings_box_setting_selected (GimpContainerView *view,
+                                                  GList             *objects,
+                                                  GList             *paths,
                                                   GimpSettingsBox   *box);
 static gboolean gimp_settings_box_menu_press     (GtkWidget         *widget,
                                                   GdkEventButton    *bevent,
@@ -137,6 +138,10 @@ static void  gimp_settings_box_file_dialog       (GimpSettingsBox   *box,
 static void  gimp_settings_box_file_response     (GtkWidget         *dialog,
                                                   gint               response_id,
                                                   GimpSettingsBox   *box);
+#ifdef G_OS_WIN32
+static void  gimp_settings_box_dialog_realize    (GtkWidget         *dialog,
+                                                  gpointer          *data);
+#endif
 static void  gimp_settings_box_toplevel_unmap    (GtkWidget         *toplevel,
                                                   GtkWidget         *dialog);
 static void  gimp_settings_box_truncate_list     (GimpSettingsBox   *box,
@@ -191,8 +196,7 @@ gimp_settings_box_class_init (GimpSettingsBoxClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpSettingsBoxClass, selected),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_CONFIG);
 
@@ -300,7 +304,7 @@ gimp_settings_box_constructed (GObject *object)
   gimp_help_set_help_data (private->combo, _("Pick a preset from the list"),
                            NULL);
 
-  g_signal_connect_after (private->combo, "select-item",
+  g_signal_connect_after (private->combo, "select-items",
                           G_CALLBACK (gimp_settings_box_setting_selected),
                           box);
 
@@ -352,20 +356,17 @@ gimp_settings_box_constructed (GObject *object)
 
   private->import_item =
     gimp_settings_box_menu_item_add (box,
-                                     GIMP_ICON_DOCUMENT_OPEN,
                                      _("_Import Current Settings from File..."),
                                      G_CALLBACK (gimp_settings_box_import_activate));
 
   private->export_item =
     gimp_settings_box_menu_item_add (box,
-                                     GIMP_ICON_DOCUMENT_SAVE,
                                      _("_Export Current Settings to File..."),
                                      G_CALLBACK (gimp_settings_box_export_activate));
 
-  gimp_settings_box_menu_item_add (box, NULL, NULL, NULL);
+  gimp_settings_box_menu_item_add (box, NULL, NULL);
 
   gimp_settings_box_menu_item_add (box,
-                                   GIMP_ICON_EDIT,
                                    _("_Manage Saved Presets..."),
                                    G_CALLBACK (gimp_settings_box_manage_activate));
 }
@@ -511,7 +512,6 @@ gimp_settings_box_get_property (GObject    *object,
 
 static GtkWidget *
 gimp_settings_box_menu_item_add (GimpSettingsBox *box,
-                                 const gchar     *icon_name,
                                  const gchar     *label,
                                  GCallback        callback)
 {
@@ -520,11 +520,7 @@ gimp_settings_box_menu_item_add (GimpSettingsBox *box,
 
   if (label)
     {
-      GtkWidget *image;
-
-      item = gtk_image_menu_item_new_with_mnemonic (label);
-      image = gtk_image_new_from_icon_name (icon_name, GTK_ICON_SIZE_MENU);
-      gtk_image_menu_item_set_image (GTK_IMAGE_MENU_ITEM (item), image);
+      item = gtk_menu_item_new_with_mnemonic (label);
 
       g_signal_connect (item, "activate",
                         callback,
@@ -556,25 +552,19 @@ gimp_settings_box_row_separator_func (GtkTreeModel *model,
   return name == NULL;
 }
 
-static void
+static gboolean
 gimp_settings_box_setting_selected (GimpContainerView *view,
-                                    GimpViewable      *object,
-                                    gpointer           insert_data,
+                                    GList             *objects,
+                                    GList             *paths,
                                     GimpSettingsBox   *box)
 {
-  if (object)
-    g_signal_emit (box, settings_box_signals[SELECTED], 0,
-                   object);
-}
+  g_return_val_if_fail (g_list_length (objects) < 2, FALSE);
 
-static void
-gimp_settings_box_menu_position (GtkMenu  *menu,
-                                 gint     *x,
-                                 gint     *y,
-                                 gboolean *push_in,
-                                 gpointer  user_data)
-{
-  gimp_button_menu_position (user_data, menu, GTK_POS_LEFT, x, y);
+  if (objects)
+    g_signal_emit (box, settings_box_signals[SELECTED], 0,
+                   objects->data);
+
+  return TRUE;
 }
 
 static gboolean
@@ -586,10 +576,10 @@ gimp_settings_box_menu_press (GtkWidget       *widget,
 
   if (bevent->type == GDK_BUTTON_PRESS)
     {
-      gtk_menu_popup (GTK_MENU (private->menu),
-                      NULL, NULL,
-                      gimp_settings_box_menu_position, widget,
-                      bevent->button, bevent->time);
+      gtk_menu_popup_at_widget (GTK_MENU (private->menu), widget,
+                                GDK_GRAVITY_WEST,
+                                GDK_GRAVITY_NORTH_EAST,
+                                (GdkEvent *) bevent);
     }
 
   return TRUE;
@@ -608,7 +598,8 @@ gimp_settings_box_favorite_activate (GtkWidget       *widget,
                                   _("Enter a name for the preset"),
                                   _("Saved Settings"),
                                   G_OBJECT (toplevel), "hide",
-                                  gimp_settings_box_favorite_callback, box);
+                                  gimp_settings_box_favorite_callback,
+                                  box, NULL);
   gtk_widget_show (dialog);
 }
 
@@ -647,17 +638,16 @@ gimp_settings_box_manage_activate (GtkWidget       *widget,
 
   toplevel = gtk_widget_get_toplevel (GTK_WIDGET (box));
 
-  private->editor_dialog = gimp_dialog_new (_("Manage Saved Presets"),
-                                            "gimp-settings-editor-dialog",
-                                            toplevel, 0,
-                                            NULL, NULL,
+  g_set_weak_pointer (&private->editor_dialog,
+                      gimp_dialog_new (_("Manage Saved Presets"),
+                                       "gimp-settings-editor-dialog",
+                                       toplevel, 0,
+                                       NULL, NULL,
 
-                                            _("_Close"), GTK_RESPONSE_CLOSE,
+                                       _("_Close"), GTK_RESPONSE_CLOSE,
 
-                                            NULL);
+                                       NULL));
 
-  g_object_add_weak_pointer (G_OBJECT (private->editor_dialog),
-                             (gpointer) &private->editor_dialog);
   g_signal_connect_object (toplevel, "unmap",
                            G_CALLBACK (gimp_settings_box_toplevel_unmap),
                            private->editor_dialog, 0);
@@ -717,7 +707,7 @@ gimp_settings_box_file_dialog (GimpSettingsBox *box,
 
   toplevel = gtk_widget_get_toplevel (GTK_WIDGET (box));
 
-  private->file_dialog = dialog =
+  dialog =
     gtk_file_chooser_dialog_new (title, GTK_WINDOW (toplevel),
                                  save ?
                                  GTK_FILE_CHOOSER_ACTION_SAVE :
@@ -729,11 +719,13 @@ gimp_settings_box_file_dialog (GimpSettingsBox *box,
 
                                  NULL);
 
+  g_set_weak_pointer (&private->file_dialog, dialog);
+
   gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+                                            GTK_RESPONSE_OK,
+                                            GTK_RESPONSE_CANCEL,
+                                            -1);
 
   g_object_set_data (G_OBJECT (dialog), "save", GINT_TO_POINTER (save));
 
@@ -741,8 +733,6 @@ gimp_settings_box_file_dialog (GimpSettingsBox *box,
   gtk_window_set_position (GTK_WINDOW (dialog), GTK_WIN_POS_MOUSE);
   gtk_window_set_destroy_with_parent (GTK_WINDOW (dialog), TRUE);
 
-  g_object_add_weak_pointer (G_OBJECT (dialog),
-                             (gpointer) &private->file_dialog);
   g_signal_connect_object (toplevel, "unmap",
                            G_CALLBACK (gimp_settings_box_toplevel_unmap),
                            dialog, 0);
@@ -751,6 +741,11 @@ gimp_settings_box_file_dialog (GimpSettingsBox *box,
     gtk_file_chooser_set_do_overwrite_confirmation (GTK_FILE_CHOOSER (dialog),
                                                     TRUE);
 
+#ifdef G_OS_WIN32
+  g_signal_connect (dialog, "realize",
+                    G_CALLBACK (gimp_settings_box_dialog_realize),
+                    box);
+#endif
   g_signal_connect (dialog, "response",
                     G_CALLBACK (gimp_settings_box_file_response),
                     box);
@@ -783,8 +778,8 @@ gimp_settings_box_file_dialog (GimpSettingsBox *box,
     gtk_file_chooser_set_file (GTK_FILE_CHOOSER (dialog),
                                private->last_file, NULL);
 
-  gimp_help_connect (private->file_dialog, gimp_standard_help_func,
-                     private->help_id, NULL);
+  gimp_help_connect (private->file_dialog, NULL, gimp_standard_help_func,
+                     private->help_id, NULL, NULL);
 
   /*  allow callbacks to add widgets to the dialog  */
   g_signal_emit (box, settings_box_signals[FILE_DIALOG_SETUP], 0,
@@ -838,6 +833,18 @@ gimp_settings_box_file_response (GtkWidget       *dialog,
 
   gtk_widget_destroy (dialog);
 }
+
+#ifdef G_OS_WIN32
+static void
+gimp_settings_box_dialog_realize (GtkWidget *dialog,
+                                  gpointer  *data)
+{
+  GimpSettingsBox        *box     = (GimpSettingsBox *) data;
+  GimpSettingsBoxPrivate *private = GET_PRIVATE (box);
+
+  gimp_window_set_title_bar_theme (private->gimp, dialog);
+}
+#endif
 
 static void
 gimp_settings_box_toplevel_unmap (GtkWidget *toplevel,
@@ -987,5 +994,5 @@ gimp_settings_box_unset (GimpSettingsBox *box)
 
   private = GET_PRIVATE (box);
 
-  gimp_container_view_select_item (GIMP_CONTAINER_VIEW (private->combo), NULL);
+  gimp_container_view_select_items (GIMP_CONTAINER_VIEW (private->combo), NULL);
 }

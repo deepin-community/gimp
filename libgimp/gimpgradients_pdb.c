@@ -22,7 +22,7 @@
 
 #include "config.h"
 
-#include <string.h>
+#include "stamp-pdbgen.h"
 
 #include "gimp.h"
 
@@ -49,189 +49,60 @@
 gboolean
 gimp_gradients_refresh (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-gradients-refresh",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-gradients-refresh",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_gradients_get_list:
- * @filter: An optional regular expression used to filter the list.
- * @num_gradients: The number of loaded gradients.
+ * @filter: (nullable): An optional regular expression used to filter the list.
  *
  * Retrieve the list of loaded gradients.
  *
  * This procedure returns a list of the gradients that are currently
- * loaded. You can later use the gimp_context_set_gradient() function
- * to set the active gradient.
+ * loaded.
+ * Each gradient returned can be used as input to
+ * [func@Gimp.context_set_gradient].
  *
- * Returns: The list of gradient names. The returned value must be
- * freed with g_strfreev().
+ * Returns: (element-type GimpGradient) (array zero-terminated=1) (transfer container):
+ *          The list of gradients.
+ *          The returned value must be freed with g_free().
  **/
-gchar **
-gimp_gradients_get_list (const gchar *filter,
-                         gint        *num_gradients)
+GimpGradient **
+gimp_gradients_get_list (const gchar *filter)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar **gradient_list = NULL;
-  gint i;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpGradient **gradient_list = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-gradients-get-list",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, filter,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, filter,
+                                          G_TYPE_NONE);
 
-  *num_gradients = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-gradients-get-list",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_gradients = return_vals[1].data.d_int32;
-      if (*num_gradients > 0)
-        {
-          gradient_list = g_new0 (gchar *, *num_gradients + 1);
-          for (i = 0; i < *num_gradients; i++)
-            gradient_list[i] = g_strdup (return_vals[2].data.d_stringarray[i]);
-        }
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    gradient_list = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return gradient_list;
-}
-
-/**
- * gimp_gradients_sample_uniform:
- * @num_samples: The number of samples to take.
- * @reverse: Use the reverse gradient.
- *
- * Deprecated: Use gimp_gradient_get_uniform_samples() instead.
- *
- * Returns: Color samples: { R1, G1, B1, A1, ..., Rn, Gn, Bn, An }.
- **/
-gdouble *
-gimp_gradients_sample_uniform (gint     num_samples,
-                               gboolean reverse)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gdouble *color_samples = NULL;
-  gint num_color_samples;
-
-  return_vals = gimp_run_procedure ("gimp-gradients-sample-uniform",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, num_samples,
-                                    GIMP_PDB_INT32, reverse,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      num_color_samples = return_vals[1].data.d_int32;
-      color_samples = g_new (gdouble, num_color_samples);
-      memcpy (color_samples,
-              return_vals[2].data.d_floatarray,
-              num_color_samples * sizeof (gdouble));
-    }
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return color_samples;
-}
-
-/**
- * gimp_gradients_sample_custom:
- * @num_samples: The number of samples to take.
- * @positions: The list of positions to sample along the gradient.
- * @reverse: Use the reverse gradient.
- *
- * Deprecated: Use gimp_gradient_get_custom_samples() instead.
- *
- * Returns: Color samples: { R1, G1, B1, A1, ..., Rn, Gn, Bn, An }.
- **/
-gdouble *
-gimp_gradients_sample_custom (gint           num_samples,
-                              const gdouble *positions,
-                              gboolean       reverse)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gdouble *color_samples = NULL;
-  gint num_color_samples;
-
-  return_vals = gimp_run_procedure ("gimp-gradients-sample-custom",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, num_samples,
-                                    GIMP_PDB_FLOATARRAY, positions,
-                                    GIMP_PDB_INT32, reverse,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      num_color_samples = return_vals[1].data.d_int32;
-      color_samples = g_new (gdouble, num_color_samples);
-      memcpy (color_samples,
-              return_vals[2].data.d_floatarray,
-              num_color_samples * sizeof (gdouble));
-    }
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return color_samples;
-}
-
-/**
- * gimp_gradients_get_gradient_data:
- * @name: The gradient name (\"\" means current active gradient).
- * @sample_size: Size of the sample to return when the gradient is changed.
- * @reverse: Use the reverse gradient.
- * @width: The gradient sample width (r,g,b,a).
- * @grad_data: The gradient sample data.
- *
- * Deprecated: Use gimp_gradient_get_uniform_samples() instead.
- *
- * Returns: The gradient name.
- **/
-gchar *
-gimp_gradients_get_gradient_data (const gchar  *name,
-                                  gint          sample_size,
-                                  gboolean      reverse,
-                                  gint         *width,
-                                  gdouble     **grad_data)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *actual_name = NULL;
-
-  return_vals = gimp_run_procedure ("gimp-gradients-get-gradient-data",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_INT32, sample_size,
-                                    GIMP_PDB_INT32, reverse,
-                                    GIMP_PDB_END);
-
-  *width = 0;
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      actual_name = g_strdup (return_vals[1].data.d_string);
-      *width = return_vals[2].data.d_int32;
-      *grad_data = g_new (gdouble, *width);
-      memcpy (*grad_data,
-              return_vals[3].data.d_floatarray,
-              *width * sizeof (gdouble));
-    }
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return actual_name;
 }

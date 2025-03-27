@@ -31,58 +31,34 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_SPIN_BUTTON            (gimp_spin_button_get_type ())
-#define GIMP_SPIN_BUTTON(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_SPIN_BUTTON, GimpSpinButton))
-#define GIMP_SPIN_BUTTON_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_SPIN_BUTTON, GimpSpinButtonClass))
-#define GIMP_IS_SPIN_BUTTON(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_SPIN_BUTTON))
-#define GIMP_IS_SPIN_BUTTON_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_SPIN_BUTTON))
-#define GIMP_SPIN_BUTTON_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_SPIN_BUTTON, GimpSpinButtonClass))
+#define GIMP_TYPE_SPIN_BUTTON (gimp_spin_button_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpSpinButton, gimp_spin_button, GIMP, SPIN_BUTTON, GtkSpinButton)
 
-
-typedef struct _GimpSpinButtonPrivate  GimpSpinButtonPrivate;
-typedef struct _GimpSpinButtonClass    GimpSpinButtonClass;
-
-struct _GimpSpinButton
-{
-  GtkSpinButton          parent_instance;
-
-  GimpSpinButtonPrivate *priv;
-};
 
 struct _GimpSpinButtonClass
 {
   GtkSpinButtonClass  parent_class;
 
   /* Padding for future expansion */
+  void (* _gimp_reserved0) (void);
   void (* _gimp_reserved1) (void);
   void (* _gimp_reserved2) (void);
   void (* _gimp_reserved3) (void);
   void (* _gimp_reserved4) (void);
+  void (* _gimp_reserved5) (void);
+  void (* _gimp_reserved6) (void);
+  void (* _gimp_reserved7) (void);
+  void (* _gimp_reserved8) (void);
+  void (* _gimp_reserved9) (void);
 };
 
 
-GType       gimp_spin_button_get_type       (void) G_GNUC_CONST;
-
-GtkWidget * gimp_spin_button_new_           (GtkAdjustment *adjustment,
+GtkWidget * gimp_spin_button_new            (GtkAdjustment *adjustment,
                                              gdouble        climb_rate,
                                              guint          digits);
 GtkWidget * gimp_spin_button_new_with_range (gdouble        min,
                                              gdouble        max,
                                              gdouble        step);
-
-
-/* compatibility magic, expanding to either the old (deprecated)
- * gimp_spin_button_new(), defined in gimpwidgets.h, or the new
- * gimp_spin_button_new(), defined here, based on the number of arguments.
- */
-#define gimp_spin_button_new(...) gimp_spin_button_new_I (__VA_ARGS__, \
-                                                          9, , , , , , 3)
-#define gimp_spin_button_new_I(_1, _2, _3, _4, _5, _6, _7, _8, _9, n, ...) \
-  gimp_spin_button_new_I_##n (_1, _2, _3, _4, _5, _6, _7, _8, _9)
-#define gimp_spin_button_new_I_3(_1, _2, _3, _4, _5, _6, _7, _8, _9) \
-  gimp_spin_button_new_ (_1, _2, _3)
-#define gimp_spin_button_new_I_9(_1, _2, _3, _4, _5, _6, _7, _8, _9) \
-  gimp_spin_button_new (_1, _2, _3, _4, _5, _6, _7, _8, _9)
 
 
 G_END_DECLS

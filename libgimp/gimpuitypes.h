@@ -28,24 +28,30 @@ G_BEGIN_DECLS
 /* For information look into the html documentation */
 
 
-typedef struct _GimpAspectPreview        GimpAspectPreview;
-typedef struct _GimpDrawablePreview      GimpDrawablePreview;
-typedef struct _GimpProcBrowserDialog    GimpProcBrowserDialog;
-typedef struct _GimpProgressBar          GimpProgressBar;
-typedef struct _GimpZoomPreview          GimpZoomPreview;
+typedef struct _GimpProcedureDialog           GimpProcedureDialog;
+typedef struct _GimpExportProcedureDialog     GimpExportProcedureDialog;
+typedef struct _GimpVectorLoadProcedureDialog GimpVectorLoadProcedureDialog;
 
-typedef struct _GimpDrawableComboBox     GimpDrawableComboBox;
-typedef struct _GimpChannelComboBox      GimpChannelComboBox;
-typedef struct _GimpLayerComboBox        GimpLayerComboBox;
-typedef struct _GimpVectorsComboBox      GimpVectorsComboBox;
-typedef struct _GimpImageComboBox        GimpImageComboBox;
+typedef struct _GimpAspectPreview             GimpAspectPreview;
+typedef struct _GimpDrawablePreview           GimpDrawablePreview;
+typedef struct _GimpProcBrowserDialog         GimpProcBrowserDialog;
+typedef struct _GimpProgressBar               GimpProgressBar;
+typedef struct _GimpZoomPreview               GimpZoomPreview;
 
-typedef struct _GimpSelectButton         GimpSelectButton;
-typedef struct _GimpBrushSelectButton    GimpBrushSelectButton;
-typedef struct _GimpFontSelectButton     GimpFontSelectButton;
-typedef struct _GimpGradientSelectButton GimpGradientSelectButton;
-typedef struct _GimpPaletteSelectButton  GimpPaletteSelectButton;
-typedef struct _GimpPatternSelectButton  GimpPatternSelectButton;
+typedef struct _GimpDrawableComboBox          GimpDrawableComboBox;
+typedef struct _GimpChannelComboBox           GimpChannelComboBox;
+typedef struct _GimpLayerComboBox             GimpLayerComboBox;
+typedef struct _GimpPathComboBox              GimpPathComboBox;
+typedef struct _GimpImageComboBox             GimpImageComboBox;
+
+typedef struct _GimpDrawableChooser           GimpDrawableChooser;
+
+typedef struct _GimpResourceChooser           GimpResourceChooser;
+typedef struct _GimpBrushChooser              GimpBrushChooser;
+typedef struct _GimpFontChooser               GimpFontChooser;
+typedef struct _GimpGradientChooser           GimpGradientChooser;
+typedef struct _GimpPaletteChooser            GimpPaletteChooser;
+typedef struct _GimpPatternChooser            GimpPatternChooser;
 
 
 G_END_DECLS

@@ -22,13 +22,14 @@
 void   tools_select_cmd_callback                    (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
-void   tools_select_cmd_block_initialize            (void);
-void   tools_select_cmd_unblock_initialize          (void);
 
 void   tools_color_average_radius_cmd_callback      (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
 
+void   tools_paintbrush_pixel_size_cmd_callback     (GimpAction *action,
+                                                     GVariant   *value,
+                                                     gpointer    data);
 void   tools_paintbrush_size_cmd_callback           (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
@@ -48,6 +49,9 @@ void   tools_paintbrush_force_cmd_callback          (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
 
+void   tools_ink_blob_pixel_size_cmd_callback       (GimpAction *action,
+                                                     GVariant   *value,
+                                                     gpointer    data);
 void   tools_ink_blob_size_cmd_callback             (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
@@ -68,6 +72,9 @@ void   tools_airbrush_flow_cmd_callback             (GimpAction *action,
 void   tools_mybrush_radius_cmd_callback            (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
+void   tools_mybrush_pixel_size_cmd_callback        (GimpAction *action,
+                                                     GVariant   *value,
+                                                     gpointer    data);
 void   tools_mybrush_hardness_cmd_callback          (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
@@ -80,6 +87,9 @@ void   tools_transform_preview_opacity_cmd_callback (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
 
+void   tools_warp_effect_pixel_size_cmd_callback    (GimpAction *action,
+                                                     GVariant   *value,
+                                                     gpointer    data);
 void   tools_warp_effect_size_cmd_callback          (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
@@ -106,6 +116,10 @@ void   tools_hardness_cmd_callback                  (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
 void   tools_force_cmd_callback                     (GimpAction *action,
+                                                     GVariant   *value,
+                                                     gpointer    data);
+
+void   tools_paint_select_pixel_size_cmd_callback   (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
 

@@ -28,6 +28,7 @@
 #include "gimpuitypes.h"
 
 #include "gimp.h"
+#include "gimppdb-private.h"
 
 #include "libgimp-intl.h"
 
@@ -46,14 +47,15 @@
 enum
 {
   PROP_0,
-  PROP_DRAWABLE,
-  PROP_DRAWABLE_ID
+  PROP_DRAWABLE
 };
 
-typedef struct
+struct _GimpAspectPreview
 {
-  gint32 drawable_ID;
-} GimpAspectPreviewPrivate;
+  GimpPreview   parent_instance;
+
+  GimpDrawable *drawable;
+};
 
 typedef struct
 {
@@ -61,46 +63,38 @@ typedef struct
 } PreviewSettings;
 
 
-#define GIMP_ASPECT_PREVIEW_GET_PRIVATE(obj) \
-  ((GimpAspectPreviewPrivate *) gimp_aspect_preview_get_instance_private ((GimpAspectPreview *) (preview)))
+static void  gimp_aspect_preview_constructed   (GObject         *object);
+static void  gimp_aspect_preview_dispose       (GObject         *object);
+static void  gimp_aspect_preview_get_property  (GObject         *object,
+                                                guint            property_id,
+                                                GValue          *value,
+                                                GParamSpec      *pspec);
+static void  gimp_aspect_preview_set_property  (GObject         *object,
+                                                guint            property_id,
+                                                const GValue    *value,
+                                                GParamSpec      *pspec);
 
-static void  gimp_aspect_preview_constructed  (GObject         *object);
-static void  gimp_aspect_preview_dispose      (GObject         *object);
-static void  gimp_aspect_preview_get_property (GObject         *object,
-                                               guint            property_id,
-                                               GValue          *value,
-                                               GParamSpec      *pspec);
-static void  gimp_aspect_preview_set_property (GObject         *object,
-                                               guint            property_id,
-                                               const GValue    *value,
-                                               GParamSpec      *pspec);
+static void  gimp_aspect_preview_style_updated (GtkWidget       *widget);
+static void  gimp_aspect_preview_draw          (GimpPreview     *preview);
+static void  gimp_aspect_preview_draw_buffer   (GimpPreview     *preview,
+                                                const guchar    *buffer,
+                                                gint             rowstride);
+static void  gimp_aspect_preview_transform     (GimpPreview     *preview,
+                                                gint             src_x,
+                                                gint             src_y,
+                                                gint            *dest_x,
+                                                gint            *dest_y);
+static void  gimp_aspect_preview_untransform   (GimpPreview     *preview,
+                                                gint             src_x,
+                                                gint             src_y,
+                                                gint            *dest_x,
+                                                gint            *dest_y);
 
-static void  gimp_aspect_preview_style_set    (GtkWidget       *widget,
-                                               GtkStyle        *prev_style);
-static void  gimp_aspect_preview_draw         (GimpPreview     *preview);
-static void  gimp_aspect_preview_draw_buffer  (GimpPreview     *preview,
-                                               const guchar    *buffer,
-                                               gint             rowstride);
-static void  gimp_aspect_preview_transform    (GimpPreview     *preview,
-                                               gint             src_x,
-                                               gint             src_y,
-                                               gint            *dest_x,
-                                               gint            *dest_y);
-static void  gimp_aspect_preview_untransform  (GimpPreview     *preview,
-                                               gint             src_x,
-                                               gint             src_y,
-                                               gint            *dest_x,
-                                               gint            *dest_y);
-
-static void  gimp_aspect_preview_set_drawable (GimpAspectPreview *preview,
-                                               GimpDrawable      *drawable);
-static void  gimp_aspect_preview_set_drawable_id
-                                              (GimpAspectPreview *preview,
-                                               gint32             drawable_ID);
+static void  gimp_aspect_preview_set_drawable  (GimpAspectPreview *preview,
+                                                GimpDrawable      *drawable);
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpAspectPreview, gimp_aspect_preview,
-                            GIMP_TYPE_PREVIEW)
+G_DEFINE_TYPE (GimpAspectPreview, gimp_aspect_preview, GIMP_TYPE_PREVIEW)
 
 #define parent_class gimp_aspect_preview_parent_class
 
@@ -114,31 +108,17 @@ gimp_aspect_preview_class_init (GimpAspectPreviewClass *klass)
   GtkWidgetClass   *widget_class  = GTK_WIDGET_CLASS (klass);
   GimpPreviewClass *preview_class = GIMP_PREVIEW_CLASS (klass);
 
-  object_class->constructed  = gimp_aspect_preview_constructed;
-  object_class->dispose      = gimp_aspect_preview_dispose;
-  object_class->get_property = gimp_aspect_preview_get_property;
-  object_class->set_property = gimp_aspect_preview_set_property;
+  object_class->constructed   = gimp_aspect_preview_constructed;
+  object_class->dispose       = gimp_aspect_preview_dispose;
+  object_class->get_property  = gimp_aspect_preview_get_property;
+  object_class->set_property  = gimp_aspect_preview_set_property;
 
-  widget_class->style_set    = gimp_aspect_preview_style_set;
+  widget_class->style_updated = gimp_aspect_preview_style_updated;
 
-  preview_class->draw        = gimp_aspect_preview_draw;
-  preview_class->draw_buffer = gimp_aspect_preview_draw_buffer;
-  preview_class->transform   = gimp_aspect_preview_transform;
-  preview_class->untransform = gimp_aspect_preview_untransform;
-
-  /**
-   * GimpAspectPreview:drawable:
-   *
-   * Deprecated: use the drawable-id property instead.
-   *
-   * Since: 2.4
-   */
-  g_object_class_install_property (object_class, PROP_DRAWABLE,
-                                   g_param_spec_pointer ("drawable",
-                                                         "Drawable",
-                                                         "Deprecated: use the drawable-id property instead",
-                                                         GIMP_PARAM_READWRITE |
-                                                         G_PARAM_CONSTRUCT_ONLY));
+  preview_class->draw         = gimp_aspect_preview_draw;
+  preview_class->draw_buffer  = gimp_aspect_preview_draw_buffer;
+  preview_class->transform    = gimp_aspect_preview_transform;
+  preview_class->untransform  = gimp_aspect_preview_untransform;
 
   /**
    * GimpAspectPreview:drawable-id:
@@ -147,21 +127,23 @@ gimp_aspect_preview_class_init (GimpAspectPreviewClass *klass)
    *
    * Since: 2.10
    */
-  g_object_class_install_property (object_class, PROP_DRAWABLE_ID,
-                                   g_param_spec_int ("drawable-id",
-                                                     "Drawable ID",
-                                                     "The drawable this preview is attached to",
-                                                     -1, G_MAXINT, -1,
-                                                     GIMP_PARAM_READWRITE |
-                                                     G_PARAM_CONSTRUCT_ONLY));
+  g_object_class_install_property (object_class, PROP_DRAWABLE,
+                                   g_param_spec_object ("drawable",
+                                                        "Drawable",
+                                                        "The drawable this preview is attached to",
+                                                        GIMP_TYPE_DRAWABLE,
+                                                        GIMP_PARAM_READWRITE |
+                                                        G_PARAM_CONSTRUCT_ONLY));
 }
 
 static void
 gimp_aspect_preview_init (GimpAspectPreview *preview)
 {
-  g_object_set (GIMP_PREVIEW (preview)->area,
+  g_object_set (gimp_preview_get_area (GIMP_PREVIEW (preview)),
                 "check-size", gimp_check_size (),
                 "check-type", gimp_check_type (),
+                "check-custom-color1", gimp_check_custom_color1 (),
+                "check-custom-color2", gimp_check_custom_color2 (),
                 NULL);
 }
 
@@ -170,6 +152,7 @@ gimp_aspect_preview_constructed (GObject *object)
 {
   gchar           *data_name;
   PreviewSettings  settings;
+  GBytes          *settings_bytes = NULL;
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
@@ -177,10 +160,13 @@ gimp_aspect_preview_constructed (GObject *object)
                                g_get_prgname (),
                                gimp_aspect_preview_counter++);
 
-  if (gimp_get_data (data_name, &settings))
+  if (gimp_pdb_get_data (data_name, &settings_bytes) &&
+      g_bytes_get_size (settings_bytes) == sizeof (PreviewSettings))
     {
+      settings = *((PreviewSettings *) g_bytes_get_data (settings_bytes, NULL));
       gimp_preview_set_update (GIMP_PREVIEW (object), settings.update);
     }
+  g_bytes_unref (settings_bytes);
 
   g_object_set_data_full (object, "gimp-aspect-preview-data-name",
                           data_name, (GDestroyNotify) g_free);
@@ -189,18 +175,25 @@ gimp_aspect_preview_constructed (GObject *object)
 static void
 gimp_aspect_preview_dispose (GObject *object)
 {
-  const gchar *data_name = g_object_get_data (G_OBJECT (object),
-                                              "gimp-aspect-preview-data-name");
+  GimpAspectPreview *preview = GIMP_ASPECT_PREVIEW (object);
+  const gchar       *data_name;
 
+  data_name = g_object_get_data (G_OBJECT (object),
+                                 "gimp-aspect-preview-data-name");
   if (data_name)
     {
       GimpPreview     *preview = GIMP_PREVIEW (object);
+      GBytes          *bytes;
       PreviewSettings  settings;
 
       settings.update = gimp_preview_get_update (preview);
 
-      gimp_set_data (data_name, &settings, sizeof (PreviewSettings));
+      bytes = g_bytes_new_static (&settings, sizeof (PreviewSettings));
+      gimp_pdb_set_data (data_name, bytes);
+      g_bytes_unref (bytes);
     }
+
+  g_clear_object (&preview->drawable);
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
@@ -211,17 +204,12 @@ gimp_aspect_preview_get_property (GObject    *object,
                                   GValue     *value,
                                   GParamSpec *pspec)
 {
-  GimpAspectPreview        *preview = GIMP_ASPECT_PREVIEW (object);
-  GimpAspectPreviewPrivate *priv    = GIMP_ASPECT_PREVIEW_GET_PRIVATE (preview);
+  GimpAspectPreview *preview = GIMP_ASPECT_PREVIEW (object);
 
   switch (property_id)
     {
     case PROP_DRAWABLE:
-      g_value_set_pointer (value, preview->drawable);
-      break;
-
-    case PROP_DRAWABLE_ID:
-      g_value_set_int (value, priv->drawable_ID);
+      g_value_set_object (value, preview->drawable);
       break;
 
     default:
@@ -232,25 +220,16 @@ gimp_aspect_preview_get_property (GObject    *object,
 
 static void
 gimp_aspect_preview_set_property (GObject      *object,
-                                    guint         property_id,
-                                    const GValue *value,
-                                    GParamSpec   *pspec)
+                                  guint         property_id,
+                                  const GValue *value,
+                                  GParamSpec   *pspec)
 {
-  GimpAspectPreview        *preview = GIMP_ASPECT_PREVIEW (object);
-  GimpAspectPreviewPrivate *priv    = GIMP_ASPECT_PREVIEW_GET_PRIVATE (preview);
+  GimpAspectPreview *preview = GIMP_ASPECT_PREVIEW (object);
 
   switch (property_id)
     {
     case PROP_DRAWABLE:
-      g_return_if_fail (priv->drawable_ID < 1);
-      if (g_value_get_pointer (value))
-        gimp_aspect_preview_set_drawable (preview,
-                                          g_value_get_pointer (value));
-      break;
-
-    case PROP_DRAWABLE_ID:
-      gimp_aspect_preview_set_drawable_id (preview,
-                                           g_value_get_int (value));
+      gimp_aspect_preview_set_drawable (preview, g_value_dup_object (value));
       break;
 
     default:
@@ -260,50 +239,56 @@ gimp_aspect_preview_set_property (GObject      *object,
 }
 
 static void
-gimp_aspect_preview_style_set (GtkWidget *widget,
-                               GtkStyle  *prev_style)
+gimp_aspect_preview_style_updated (GtkWidget *widget)
 {
-  GimpPreview              *preview = GIMP_PREVIEW (widget);
-  GimpAspectPreviewPrivate *priv    = GIMP_ASPECT_PREVIEW_GET_PRIVATE (preview);
-  gint                      width;
-  gint                      height;
-  gint                      size;
+  GimpPreview       *preview        = GIMP_PREVIEW (widget);
+  GimpAspectPreview *aspect_preview = GIMP_ASPECT_PREVIEW (preview);
+  GtkWidget         *area           = gimp_preview_get_area (preview);
 
-  if (GTK_WIDGET_CLASS (parent_class)->style_set)
-    GTK_WIDGET_CLASS (parent_class)->style_set (widget, prev_style);
+  GTK_WIDGET_CLASS (parent_class)->style_updated (widget);
 
-  gtk_widget_style_get (widget,
-                        "size", &size,
-                        NULL);
-
-  width  = gimp_drawable_width  (priv->drawable_ID);
-  height = gimp_drawable_height (priv->drawable_ID);
-
-  if (width > height)
+  if (area)
     {
-      preview->width  = MIN (width, size);
-      preview->height = (height * preview->width) / width;
-    }
-  else
-    {
-      preview->height = MIN (height, size);
-      preview->width  = (width * preview->height) / height;
-    }
+      gint width;
+      gint height;
+      gint preview_width;
+      gint preview_height;
+      gint size;
 
-  gtk_widget_set_size_request (preview->area,
-                               preview->width, preview->height);
+      width  = gimp_drawable_get_width  (aspect_preview->drawable);
+      height = gimp_drawable_get_height (aspect_preview->drawable);
+
+      gtk_widget_style_get (widget,
+                            "size", &size,
+                            NULL);
+
+      if (width > height)
+        {
+          preview_width  = MIN (width, size);
+          preview_height = (height * preview_width) / width;
+        }
+      else
+        {
+          preview_height = MIN (height, size);
+          preview_width  = (width * preview_height) / height;
+        }
+
+      gimp_preview_set_size (preview, preview_width, preview_height);
+    }
 }
-
 
 static void
 gimp_aspect_preview_draw (GimpPreview *preview)
 {
-  g_return_if_fail (GIMP_IS_ASPECT_PREVIEW (preview));
+  GtkWidget *area = gimp_preview_get_area (preview);
+  gint       width;
+  gint       height;
 
-  gimp_preview_area_fill (GIMP_PREVIEW_AREA (preview->area),
+  gimp_preview_get_size (preview, &width, &height);
+
+  gimp_preview_area_fill (GIMP_PREVIEW_AREA (area),
                           0, 0,
-                          preview->width,
-                          preview->height,
+                          width, height,
                           0, 0, 0);
 }
 
@@ -312,47 +297,52 @@ gimp_aspect_preview_draw_buffer (GimpPreview  *preview,
                                  const guchar *buffer,
                                  gint          rowstride)
 {
-  GimpAspectPreviewPrivate *priv = GIMP_ASPECT_PREVIEW_GET_PRIVATE (preview);
-  gint32                    image_ID;
+  GimpAspectPreview *aspect_preview = GIMP_ASPECT_PREVIEW (preview);
+  GtkWidget         *area           = gimp_preview_get_area (preview);
+  GimpImage         *image;
+  gint               width;
+  gint               height;
 
-  image_ID = gimp_item_get_image (priv->drawable_ID);
+  gimp_preview_get_size (preview, &width, &height);
 
-  if (gimp_selection_is_empty (image_ID))
+  image = gimp_item_get_image (GIMP_ITEM (aspect_preview->drawable));
+
+  if (gimp_selection_is_empty (image))
     {
-      gimp_preview_area_draw (GIMP_PREVIEW_AREA (preview->area),
+      gimp_preview_area_draw (GIMP_PREVIEW_AREA (area),
                               0, 0,
-                              preview->width, preview->height,
-                              gimp_drawable_type (priv->drawable_ID),
+                              width, height,
+                              gimp_drawable_type (aspect_preview->drawable),
                               buffer,
                               rowstride);
     }
   else
     {
-      guchar *sel;
-      guchar *src;
-      gint    selection_ID;
-      gint    width, height;
-      gint    bpp;
+      GBytes        *sel;
+      GBytes        *src;
+      GimpSelection *selection;
+      gint           w, h;
+      gint           bpp;
 
-      selection_ID = gimp_image_get_selection (image_ID);
+      selection = gimp_image_get_selection (image);
 
-      width  = preview->width;
-      height = preview->height;
+      src = gimp_drawable_get_thumbnail_data (aspect_preview->drawable,
+                                              width, height,
+                                              &w, &h, &bpp);
+      sel = gimp_drawable_get_thumbnail_data (GIMP_DRAWABLE (selection),
+                                              width, height,
+                                              &w, &h, &bpp);
 
-      src = gimp_drawable_get_thumbnail_data (priv->drawable_ID,
-                                              &width, &height, &bpp);
-      sel = gimp_drawable_get_thumbnail_data (selection_ID,
-                                              &width, &height, &bpp);
-
-      gimp_preview_area_mask (GIMP_PREVIEW_AREA (preview->area),
-                              0, 0, preview->width, preview->height,
-                              gimp_drawable_type (priv->drawable_ID),
-                              src, width * gimp_drawable_bpp (priv->drawable_ID),
+      gimp_preview_area_mask (GIMP_PREVIEW_AREA (area),
+                              0, 0, width, height,
+                              gimp_drawable_type (aspect_preview->drawable),
+                              g_bytes_get_data (src, NULL),
+                              width * gimp_drawable_get_bpp (aspect_preview->drawable),
                               buffer, rowstride,
-                              sel, width);
+                              g_bytes_get_data (sel, NULL), width);
 
-      g_free (sel);
-      g_free (src);
+      g_bytes_unref (sel);
+      g_bytes_unref (src);
     }
 }
 
@@ -363,10 +353,14 @@ gimp_aspect_preview_transform (GimpPreview *preview,
                                gint        *dest_x,
                                gint        *dest_y)
 {
-  GimpAspectPreviewPrivate *priv = GIMP_ASPECT_PREVIEW_GET_PRIVATE (preview);
+  GimpAspectPreview *aspect_preview = GIMP_ASPECT_PREVIEW (preview);
+  gint               width;
+  gint               height;
 
-  *dest_x = (gdouble) src_x * preview->width  / gimp_drawable_width  (priv->drawable_ID);
-  *dest_y = (gdouble) src_y * preview->height / gimp_drawable_height (priv->drawable_ID);
+  gimp_preview_get_size (preview, &width, &height);
+
+  *dest_x = (gdouble) src_x * width  / gimp_drawable_get_width  (aspect_preview->drawable);
+  *dest_y = (gdouble) src_y * height / gimp_drawable_get_height (aspect_preview->drawable);
 }
 
 static void
@@ -376,42 +370,31 @@ gimp_aspect_preview_untransform (GimpPreview *preview,
                                  gint        *dest_x,
                                  gint        *dest_y)
 {
-  GimpAspectPreviewPrivate *priv = GIMP_ASPECT_PREVIEW_GET_PRIVATE (preview);
+  GimpAspectPreview *aspect_preview = GIMP_ASPECT_PREVIEW (preview);
+  gint               width;
+  gint               height;
 
-  *dest_x = (gdouble) src_x * gimp_drawable_width  (priv->drawable_ID) / preview->width;
-  *dest_y = (gdouble) src_y * gimp_drawable_height (priv->drawable_ID) / preview->height;
+  gimp_preview_get_size (preview, &width, &height);
+
+  *dest_x = (gdouble) src_x * gimp_drawable_get_width  (aspect_preview->drawable) / width;
+  *dest_y = (gdouble) src_y * gimp_drawable_get_height (aspect_preview->drawable) / height;
 }
 
 static void
 gimp_aspect_preview_set_drawable (GimpAspectPreview *preview,
                                   GimpDrawable      *drawable)
 {
-  GimpAspectPreviewPrivate *priv = GIMP_ASPECT_PREVIEW_GET_PRIVATE (preview);
+  gint d_width;
+  gint d_height;
+  gint width;
+  gint height;
 
   g_return_if_fail (preview->drawable == NULL);
-  g_return_if_fail (priv->drawable_ID < 1);
 
   preview->drawable = drawable;
 
-  gimp_aspect_preview_set_drawable_id (preview, drawable->drawable_id);
-}
-
-static void
-gimp_aspect_preview_set_drawable_id (GimpAspectPreview *preview,
-                                     gint32             drawable_ID)
-{
-  GimpAspectPreviewPrivate *priv = GIMP_ASPECT_PREVIEW_GET_PRIVATE (preview);
-  gint                      d_width;
-  gint                      d_height;
-  gint                      width;
-  gint                      height;
-
-  g_return_if_fail (priv->drawable_ID < 1);
-
-  priv->drawable_ID = drawable_ID;
-
-  d_width  = gimp_drawable_width  (priv->drawable_ID);
-  d_height = gimp_drawable_height (priv->drawable_ID);
+  d_width  = gimp_drawable_get_width  (preview->drawable);
+  d_height = gimp_drawable_get_height (preview->drawable);
 
   if (d_width > d_height)
     {
@@ -427,55 +410,28 @@ gimp_aspect_preview_set_drawable_id (GimpAspectPreview *preview,
   gimp_preview_set_bounds (GIMP_PREVIEW (preview), 0, 0, width, height);
 
   if (height > 0)
-    g_object_set (GIMP_PREVIEW (preview)->frame,
+    g_object_set (gimp_preview_get_frame (GIMP_PREVIEW (preview)),
                   "ratio",
                   (gdouble) d_width / (gdouble) d_height,
                   NULL);
 }
 
 /**
- * gimp_aspect_preview_new_from_drawable_id:
- * @drawable_ID: a drawable ID
+ * gimp_aspect_preview_new_from_drawable:
+ * @drawable: (transfer none): a drawable
  *
- * Creates a new #GimpAspectPreview widget for @drawable_ID. See also
- * gimp_drawable_preview_new_from_drawable_id().
+ * Creates a new #GimpAspectPreview widget for @drawable_. See also
+ * gimp_drawable_preview_new_from_drawable().
  *
  * Since: 2.10
  *
  * Returns: a new #GimpAspectPreview.
  **/
 GtkWidget *
-gimp_aspect_preview_new_from_drawable_id (gint32 drawable_ID)
+gimp_aspect_preview_new_from_drawable (GimpDrawable *drawable)
 {
-  g_return_val_if_fail (gimp_item_is_valid (drawable_ID), NULL);
-  g_return_val_if_fail (gimp_item_is_drawable (drawable_ID), NULL);
-
-  return g_object_new (GIMP_TYPE_ASPECT_PREVIEW,
-                       "drawable-id", drawable_ID,
-                       NULL);
-}
-/**
- * gimp_aspect_preview_new:
- * @drawable: a #GimpDrawable
- * @toggle:   unused
- *
- * Creates a new #GimpAspectPreview widget for @drawable. See also
- * gimp_drawable_preview_new().
- *
- * In GIMP 2.2 the @toggle parameter was provided to conviently access
- * the state of the "Preview" check-button. This is not any longer
- * necessary as the preview itself now stores this state, as well as
- * the scroll offset.
- *
- * Since: 2.2
- *
- * Returns: a new #GimpAspectPreview.
- **/
-GtkWidget *
-gimp_aspect_preview_new (GimpDrawable *drawable,
-                         gboolean     *toggle)
-{
-  g_return_val_if_fail (drawable != NULL, NULL);
+  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
+  g_return_val_if_fail (gimp_item_is_valid (GIMP_ITEM (drawable)), NULL);
 
   return g_object_new (GIMP_TYPE_ASPECT_PREVIEW,
                        "drawable", drawable,

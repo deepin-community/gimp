@@ -32,81 +32,69 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-G_GNUC_INTERNAL gint32 _gimp_layer_new                 (gint32                  image_ID,
+GimpLayer*             gimp_layer_new                  (GimpImage              *image,
+                                                        const gchar            *name,
                                                         gint                    width,
                                                         gint                    height,
                                                         GimpImageType           type,
-                                                        const gchar            *name,
                                                         gdouble                 opacity,
                                                         GimpLayerMode           mode);
-gint32                 gimp_layer_new_from_visible     (gint32                  image_ID,
-                                                        gint32                  dest_image_ID,
+GimpLayer*             gimp_layer_new_from_visible     (GimpImage              *image,
+                                                        GimpImage              *dest_image,
                                                         const gchar            *name);
-gint32                 gimp_layer_new_from_drawable    (gint32                  drawable_ID,
-                                                        gint32                  dest_image_ID);
-gint32                 gimp_layer_group_new            (gint32                  image_ID);
-G_GNUC_INTERNAL gint32 _gimp_layer_copy                (gint32                  layer_ID,
-                                                        gboolean                add_alpha);
-gboolean               gimp_layer_add_alpha            (gint32                  layer_ID);
-gboolean               gimp_layer_flatten              (gint32                  layer_ID);
-gboolean               gimp_layer_scale                (gint32                  layer_ID,
+GimpLayer*             gimp_layer_new_from_drawable    (GimpDrawable           *drawable,
+                                                        GimpImage              *dest_image);
+GimpLayer*             gimp_layer_copy                 (GimpLayer              *layer);
+gboolean               gimp_layer_add_alpha            (GimpLayer              *layer);
+gboolean               gimp_layer_flatten              (GimpLayer              *layer);
+gboolean               gimp_layer_scale                (GimpLayer              *layer,
                                                         gint                    new_width,
                                                         gint                    new_height,
                                                         gboolean                local_origin);
-GIMP_DEPRECATED_FOR(gimp_layer_scale)
-gboolean               gimp_layer_scale_full           (gint32                  layer_ID,
-                                                        gint                    new_width,
-                                                        gint                    new_height,
-                                                        gboolean                local_origin,
-                                                        GimpInterpolationType   interpolation);
-gboolean               gimp_layer_resize               (gint32                  layer_ID,
+gboolean               gimp_layer_resize               (GimpLayer              *layer,
                                                         gint                    new_width,
                                                         gint                    new_height,
                                                         gint                    offx,
                                                         gint                    offy);
-gboolean               gimp_layer_resize_to_image_size (gint32                  layer_ID);
-GIMP_DEPRECATED_FOR(gimp_item_transform_translate)
-gboolean               gimp_layer_translate            (gint32                  layer_ID,
+gboolean               gimp_layer_resize_to_image_size (GimpLayer              *layer);
+gboolean               gimp_layer_set_offsets          (GimpLayer              *layer,
                                                         gint                    offx,
                                                         gint                    offy);
-gboolean               gimp_layer_set_offsets          (gint32                  layer_ID,
-                                                        gint                    offx,
-                                                        gint                    offy);
-gint32                 gimp_layer_create_mask          (gint32                  layer_ID,
+GimpLayerMask*         gimp_layer_create_mask          (GimpLayer              *layer,
                                                         GimpAddMaskType         mask_type);
-gint32                 gimp_layer_get_mask             (gint32                  layer_ID);
-gint32                 gimp_layer_from_mask            (gint32                  mask_ID);
-gboolean               gimp_layer_add_mask             (gint32                  layer_ID,
-                                                        gint32                  mask_ID);
-gboolean               gimp_layer_remove_mask          (gint32                  layer_ID,
+GimpLayerMask*         gimp_layer_get_mask             (GimpLayer              *layer);
+GimpLayer*             gimp_layer_from_mask            (GimpLayerMask          *mask);
+gboolean               gimp_layer_add_mask             (GimpLayer              *layer,
+                                                        GimpLayerMask          *mask);
+gboolean               gimp_layer_remove_mask          (GimpLayer              *layer,
                                                         GimpMaskApplyMode       mode);
-gboolean               gimp_layer_is_floating_sel      (gint32                  layer_ID);
-gboolean               gimp_layer_get_lock_alpha       (gint32                  layer_ID);
-gboolean               gimp_layer_set_lock_alpha       (gint32                  layer_ID,
+gboolean               gimp_layer_is_floating_sel      (GimpLayer              *layer);
+gboolean               gimp_layer_get_lock_alpha       (GimpLayer              *layer);
+gboolean               gimp_layer_set_lock_alpha       (GimpLayer              *layer,
                                                         gboolean                lock_alpha);
-gboolean               gimp_layer_get_apply_mask       (gint32                  layer_ID);
-gboolean               gimp_layer_set_apply_mask       (gint32                  layer_ID,
+gboolean               gimp_layer_get_apply_mask       (GimpLayer              *layer);
+gboolean               gimp_layer_set_apply_mask       (GimpLayer              *layer,
                                                         gboolean                apply_mask);
-gboolean               gimp_layer_get_show_mask        (gint32                  layer_ID);
-gboolean               gimp_layer_set_show_mask        (gint32                  layer_ID,
+gboolean               gimp_layer_get_show_mask        (GimpLayer              *layer);
+gboolean               gimp_layer_set_show_mask        (GimpLayer              *layer,
                                                         gboolean                show_mask);
-gboolean               gimp_layer_get_edit_mask        (gint32                  layer_ID);
-gboolean               gimp_layer_set_edit_mask        (gint32                  layer_ID,
+gboolean               gimp_layer_get_edit_mask        (GimpLayer              *layer);
+gboolean               gimp_layer_set_edit_mask        (GimpLayer              *layer,
                                                         gboolean                edit_mask);
-gdouble                gimp_layer_get_opacity          (gint32                  layer_ID);
-gboolean               gimp_layer_set_opacity          (gint32                  layer_ID,
+gdouble                gimp_layer_get_opacity          (GimpLayer              *layer);
+gboolean               gimp_layer_set_opacity          (GimpLayer              *layer,
                                                         gdouble                 opacity);
-GimpLayerMode          gimp_layer_get_mode             (gint32                  layer_ID);
-gboolean               gimp_layer_set_mode             (gint32                  layer_ID,
+GimpLayerMode          gimp_layer_get_mode             (GimpLayer              *layer);
+gboolean               gimp_layer_set_mode             (GimpLayer              *layer,
                                                         GimpLayerMode           mode);
-GimpLayerColorSpace    gimp_layer_get_blend_space      (gint32                  layer_ID);
-gboolean               gimp_layer_set_blend_space      (gint32                  layer_ID,
+GimpLayerColorSpace    gimp_layer_get_blend_space      (GimpLayer              *layer);
+gboolean               gimp_layer_set_blend_space      (GimpLayer              *layer,
                                                         GimpLayerColorSpace     blend_space);
-GimpLayerColorSpace    gimp_layer_get_composite_space  (gint32                  layer_ID);
-gboolean               gimp_layer_set_composite_space  (gint32                  layer_ID,
+GimpLayerColorSpace    gimp_layer_get_composite_space  (GimpLayer              *layer);
+gboolean               gimp_layer_set_composite_space  (GimpLayer              *layer,
                                                         GimpLayerColorSpace     composite_space);
-GimpLayerCompositeMode gimp_layer_get_composite_mode   (gint32                  layer_ID);
-gboolean               gimp_layer_set_composite_mode   (gint32                  layer_ID,
+GimpLayerCompositeMode gimp_layer_get_composite_mode   (GimpLayer              *layer);
+gboolean               gimp_layer_set_composite_mode   (GimpLayer              *layer,
                                                         GimpLayerCompositeMode  composite_mode);
 
 

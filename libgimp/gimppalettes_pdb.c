@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -47,132 +49,59 @@
 gboolean
 gimp_palettes_refresh (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-palettes-refresh",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-palettes-refresh",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_palettes_get_list:
- * @filter: An optional regular expression used to filter the list.
- * @num_palettes: The number of palettes in the list.
+ * @filter: (nullable): An optional regular expression used to filter the list.
  *
  * Retrieves a list of all of the available palettes
  *
  * This procedure returns a complete listing of available palettes.
- * Each name returned can be used as input to the command
- * gimp_context_set_palette().
+ * Each palette returned can be used as input to
+ * [func@Gimp.context_set_palette].
  *
- * Returns: The list of palette names. The returned value must be freed
- * with g_strfreev().
+ * Returns: (element-type GimpPalette) (array zero-terminated=1) (transfer container):
+ *          The list of palettes.
+ *          The returned value must be freed with g_free().
  **/
-gchar **
-gimp_palettes_get_list (const gchar *filter,
-                        gint        *num_palettes)
+GimpPalette **
+gimp_palettes_get_list (const gchar *filter)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar **palette_list = NULL;
-  gint i;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpPalette **palette_list = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-palettes-get-list",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, filter,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, filter,
+                                          G_TYPE_NONE);
 
-  *num_palettes = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-palettes-get-list",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_palettes = return_vals[1].data.d_int32;
-      if (*num_palettes > 0)
-        {
-          palette_list = g_new0 (gchar *, *num_palettes + 1);
-          for (i = 0; i < *num_palettes; i++)
-            palette_list[i] = g_strdup (return_vals[2].data.d_stringarray[i]);
-        }
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    palette_list = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return palette_list;
-}
-
-/**
- * gimp_palettes_get_palette:
- * @num_colors: The palette num_colors.
- *
- * Deprecated: Use gimp_context_get_palette() instead.
- *
- * Returns: The palette name.
- **/
-gchar *
-gimp_palettes_get_palette (gint *num_colors)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *name = NULL;
-
-  return_vals = gimp_run_procedure ("gimp-palettes-get-palette",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      name = g_strdup (return_vals[1].data.d_string);
-      *num_colors = return_vals[2].data.d_int32;
-    }
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return name;
-}
-
-/**
- * gimp_palettes_get_palette_entry:
- * @name: The palette name (\"\" means currently active palette).
- * @entry_num: The entry to retrieve.
- * @num_colors: The palette num_colors.
- * @color: The color requested.
- *
- * Deprecated: Use gimp_palette_entry_get_color() instead.
- *
- * Returns: The palette name.
- **/
-gchar *
-gimp_palettes_get_palette_entry (const gchar *name,
-                                 gint         entry_num,
-                                 gint        *num_colors,
-                                 GimpRGB     *color)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *actual_name = NULL;
-
-  return_vals = gimp_run_procedure ("gimp-palettes-get-palette-entry",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_INT32, entry_num,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      actual_name = g_strdup (return_vals[1].data.d_string);
-      *num_colors = return_vals[2].data.d_int32;
-      *color = return_vals[3].data.d_color;
-    }
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return actual_name;
 }

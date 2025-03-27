@@ -1,7 +1,9 @@
 #!/usr/bin/make -f
 
-export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+# Temporarily disable LTO https://gitlab.gnome.org/GNOME/gimp/-/issues/9633
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all optimize=-lto
 export DEB_LDFLAGS_MAINT_APPEND = -Wl,-O1
+export DPKG_GENSYMBOLS_CHECK_LEVEL = 4
 
 ifeq (yes,$(shell dpkg-vendor --derives-from Ubuntu && echo yes))
 	BUGTRACKER = https://bugs.launchpad.net/ubuntu/+source/gimp/+filebug?no-redirect
@@ -9,35 +11,51 @@ else
 	BUGTRACKER = https://www.debian.org/Bugs/Reporting
 endif
 
+built_binaries := $(shell dh_listpackages)
+
+ifneq ($(filter %-doc,$(built_binaries)),)
+	BUILD_DOCS := -Dgi-docgen=enabled
+else
+	BUILD_DOCS := -Dgi-docgen=disabled
+endif
+
+# Check Filters > Development > Plug-in Examples
+# If this is enabled, a JavaScript version is installed but there is no menu button for it
+# Therefore, we disable it
+ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armhf i386 mips64el ppc64el riscv64 s390x loong64 ppc64 sparc64))
+	JS = disabled
+else
+	JS = disabled
+endif
+
+# Upstream has marked the Lua plugins as experimental and disabled by default
+# One of the plugins is an example like JavaScript but there is no menu button for it either
+ifneq (,$(filter $(DEB_HOST_ARCH), amd64 arm64 armel armhf i386 mips64el riscv64 s390x loong64 powerpc))
+	LUA = false
+else
+	LUA = false
+endif
+
 %:
 	dh $@
 
-# Don't switch to Multi-Arch yet because of potential incompatibility with
-# third-party add-ons
 override_dh_auto_configure:
 	dh_auto_configure -- \
-		--libdir=/usr/lib \
-		--libexecdir=/usr/lib/gimp \
-		--disable-static \
-		--disable-python \
-		--disable-check-update \
-		--enable-default-binary \
-		--enable-gtk-doc \
-		--without-appdata-test \
-		--without-webkit \
-		--without-xvfb-run \
-		--with-bug-report-url=$(BUGTRACKER)
-
-override_dh_autoreconf:
-	dh_autoreconf --as-needed
-
-# exclude since we manually add the Suggests in debian/control
-override_dh_shlibdeps:
-	dh_shlibdeps -Xusr/lib/gimp/2.0/modules/libcontroller-midi.so \
-		-Llibgimp2.0 -l$(CURDIR)/debian/libgimp2.0/usr/lib
+		-Dlibexecdir=/usr/lib/$(DEB_HOST_MULTIARCH)/gimp \
+		-Dauto_features=enabled \
+		$(BUILD_DOCS) \
+		-Dcheck-update=no \
+		-Dappdata-test=disabled \
+		-Dheadless-tests=disabled \
+		-Djavascript=$(JS) \
+		-Dlua=$(LUA) \
+		-Dmng=disabled \
+		-Dilbm=disabled \
+		-Dbug-report-url=$(BUGTRACKER)
 
 override_dh_makeshlibs:
-	dh_makeshlibs -X/usr/lib/gimp/2.0/modules -- -c4
+	dh_makeshlibs -X/usr/lib/$(DEB_HOST_MULTIARCH)/gimp/3.0/modules
 
-execute_before_dh_install:
-	find debian/tmp -name '*.la' -print -delete
+# Give tests more time on slow architectures like riscv64
+override_dh_auto_test:
+	xvfb-run -s -noreset -a dh_auto_test --  --verbose --timeout-multiplier 5

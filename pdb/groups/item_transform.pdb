@@ -82,14 +82,6 @@ $assemble_matrix
           else
             success = FALSE;
         }
-      else if (gimp_item_get_linked (item))
-        {
-          gimp_item_linked_transform (item, context, &matrix,
-                                      pdb_context->transform_direction,
-                                      pdb_context->interpolation,
-                                      pdb_context->transform_resize,
-                                      progress);
-        }
       else
         {
           gimp_item_transform (item, context, &matrix,
@@ -118,12 +110,6 @@ This procedure translates the item by the amounts specified in the
 off_x and off_y arguments. These can be negative, and are considered
 offsets from the current position. The offsets will be rounded to the
 nearest pixel unless the item is a path.
-
-
-If the item is attached to an image and has its linked flag set to
-TRUE, all additional items contained in the image which have the
-linked flag set to TRUE will also be translated by the specified
-offsets.
 HELP
 
     &mitch_pdb_misc('2018', '2.10');
@@ -131,9 +117,9 @@ HELP
     @inargs = (
 	{ name => 'item', type => 'item',
 	  desc => 'The item' },
-	{ name => 'off_x', type => 'float',
+	{ name => 'off_x', type => 'double',
 	  desc => "Offset in x direction" },
-	{ name => 'off_y', type => 'float',
+	{ name => 'off_y', type => 'double',
 	  desc => "Offset in y direction" }
     );
 
@@ -147,16 +133,7 @@ HELP
 {
   if (gimp_pdb_item_is_modifiable (item,
                                    GIMP_PDB_ITEM_POSITION, error))
-    {
-      if (gimp_item_get_linked (item) && gimp_item_is_attached (item))
-        {
-          gimp_item_linked_translate (item, off_x, off_y, TRUE);
-        }
-      else
-        {
-          gimp_item_translate (item, off_x, off_y, TRUE);
-        }
-    }
+    gimp_item_translate (item, off_x, off_y, TRUE);
   else
     success = FALSE;
 }
@@ -184,10 +161,7 @@ the ID of the flipped floating selection.
 If there is no selection or the item is not a drawable, the entire
 item will be flipped around its center if auto_center is set to TRUE,
 otherwise the coordinate of the axis needs to be specified.
-Additionally, if the item has its linked flag set to TRUE, all
-additional items contained in the image which have the linked flag set
-to TRUE will also be flipped around the same axis. The return value
-will be equal to the item ID supplied as input.
+The return value will be equal to the item ID supplied as input.
 
 
 This procedure is affected by the following context setters:
@@ -204,7 +178,7 @@ HELP
           desc => 'Type of flip' },
         { name => 'auto_center', type => 'boolean',
           desc => 'Whether to automatically position the axis in the selection center' },
-        { name => 'axis', type => 'float',
+        { name => 'axis', type => 'double',
           desc => 'coord. of flip axis' }
     );
 
@@ -253,12 +227,6 @@ HELP
           else
             success = FALSE;
         }
-      else if (gimp_item_get_linked (item))
-        {
-          gimp_item_linked_flip (item, context,
-                                 flip_type, axis,
-                                 pdb_context->transform_resize);
-        }
       else
         {
           gimp_item_flip (item, context,
@@ -290,11 +258,8 @@ return value is the ID of the flipped floating selection.
 
 
 If there is no selection or the item is not a drawable, the entire
-item will be flipped around the specified axis. Additionally, if the
-item has its linked flag set to TRUE, all additional items contained
-in the image which have the linked flag set to TRUE will also be
-flipped around the same axis. The return value will be equal to the
-item ID supplied as input.
+item will be flipped around the specified axis.
+The return value will be equal to the item ID supplied as input.
 
 
 This procedure is affected by the following context setters:
@@ -307,13 +272,13 @@ HELP
     @inargs = (
 	{ name => 'item', type => 'item',
 	  desc => 'The affected item' },
-        { name => 'x0', type => 'float',
+        { name => 'x0', type => 'double',
           desc => 'horz. coord. of one end of axis' },
-        { name => 'y0', type => 'float',
+        { name => 'y0', type => 'double',
           desc => 'vert. coord. of one end of axis' },
-        { name => 'x1', type => 'float',
+        { name => 'x1', type => 'double',
           desc => 'horz. coord. of other end of axis' },
-        { name => 'y1', type => 'float',
+        { name => 'y1', type => 'double',
           desc => 'vert. coord. of other end of axis' }
     );
 
@@ -356,10 +321,8 @@ The return value is the ID of the transformed floating selection.
 
 If there is no selection or the item is not a drawable, the entire
 item will be transformed according to the specified mapping.
-Additionally, if the item has its linked flag set to TRUE, all
-additional items contained in the image which have the linked flag set
-to TRUE will also be transformed the same way. The return value will be
-equal to the item ID supplied as input.
+
+The return value will be equal to the item ID supplied as input.
 
 
 This procedure is affected by the following context setters:
@@ -372,28 +335,28 @@ HELP
     @inargs = (
 	{ name => 'item', type => 'item',
 	  desc => 'The affected item' },
-	{ name => 'x0', type => 'float',
+	{ name => 'x0', type => 'double',
 	  desc => 'The new x coordinate of upper-left corner of original
 		   bounding box' },
-	{ name => 'y0', type => 'float',
+	{ name => 'y0', type => 'double',
 	  desc => 'The new y coordinate of upper-left corner of original
 		   bounding box' },
-	{ name => 'x1', type => 'float',
+	{ name => 'x1', type => 'double',
 	  desc => 'The new x coordinate of upper-right corner of original
 		   bounding box' },
-	{ name => 'y1', type => 'float',
+	{ name => 'y1', type => 'double',
 	  desc => 'The new y coordinate of upper-right corner of original
 		   bounding box' },
-	{ name => 'x2', type => 'float',
+	{ name => 'x2', type => 'double',
 	  desc => 'The new x coordinate of lower-left corner of original
 		   bounding box' },
-	{ name => 'y2', type => 'float',
+	{ name => 'y2', type => 'double',
 	  desc => 'The new y coordinate of lower-left corner of original
 		   bounding box' },
-	{ name => 'x3', type => 'float',
+	{ name => 'x3', type => 'double',
 	  desc => 'The new x coordinate of lower-right corner of original
 		   bounding box' },
-	{ name => 'y3', type => 'float',
+	{ name => 'y3', type => 'double',
 	  desc => 'The new y coordinate of lower-right corner of original
 		   bounding box' }
     );
@@ -434,10 +397,8 @@ floating selection.
 If there is no selection or the item is not a drawable, the entire
 item will be rotated around its center if auto_center is set to TRUE,
 otherwise the coordinate of the center point needs to be specified.
-Additionally, if the item has its linked flag set to TRUE, all
-additional items contained in the image which have the linked flag set
-to TRUE will also be rotated around the same center point. The return
-value will be equal to the item ID supplied as input.
+
+The return value will be equal to the item ID supplied as input.
 
 
 This procedure is affected by the following context setters:
@@ -453,9 +414,9 @@ HELP
           desc => 'Type of rotation' },
         { name => 'auto_center', type => 'boolean',
           desc => 'Whether to automatically rotate around the selection center' },
-        { name => 'center_x', type => 'float',
+        { name => 'center_x', type => 'double',
           desc => 'The hor. coordinate of the center of rotation' },
-        { name => 'center_y', type => 'float',
+        { name => 'center_y', type => 'double',
           desc => 'The vert. coordinate of the center of rotation' }
     );
 
@@ -506,13 +467,6 @@ HELP
           else
             success = FALSE;
         }
-      else if (gimp_item_get_linked (item))
-        {
-          gimp_item_linked_rotate (item, context,
-                                   rotate_type,
-                                   center_x, center_y,
-                                   pdb_context->transform_resize);
-        }
       else
         {
           gimp_item_rotate (item, context,
@@ -550,10 +504,8 @@ floating selection.
 If there is no selection or the item is not a drawable, the entire
 item will be rotated around its center if auto_center is set to TRUE,
 otherwise the coordinate of the center point needs to be specified.
-Additionally, if the item has its linked flag set to TRUE, all
-additional items contained in the image which have the linked flag set
-to TRUE will also be rotated around the same center point. The return
-value will be equal to the item ID supplied as input.
+
+The return value will be equal to the item ID supplied as input.
 
 
 This procedure is affected by the following context setters:
@@ -566,13 +518,13 @@ HELP
     @inargs = (
 	{ name => 'item', type => 'item',
 	  desc => 'The affected item' },
-        { name => 'angle', type => 'float',
+        { name => 'angle', type => 'double',
           desc => 'The angle of rotation (radians)' },
         { name => 'auto_center', type => 'boolean',
           desc => 'Whether to automatically rotate around the selection center' },
-        { name => 'center_x', type => 'float',
+        { name => 'center_x', type => 'double',
           desc => 'The hor. coordinate of the center of rotation' },
-        { name => 'center_y', type => 'float',
+        { name => 'center_y', type => 'double',
           desc => 'The vert. coordinate of the center of rotation' }
     );
 
@@ -612,10 +564,8 @@ return value is the ID of the scaled floating selection.
 
 If there is no selection or the item is not a drawable, the entire
 item will be scaled according to the specified coordinates.
-Additionally, if the item has its linked flag set to TRUE, all
-additional items contained in the image which have the linked flag set
-to TRUE will also be scaled the same way. The return value will be
-equal to the item ID supplied as input.
+
+The return value will be equal to the item ID supplied as input.
 
 
 This procedure is affected by the following context setters:
@@ -628,16 +578,16 @@ HELP
     @inargs = (
 	{ name => 'item', type => 'item',
 	  desc => 'The affected item' },
-	{ name => 'x0', type => 'float',
+	{ name => 'x0', type => 'double',
 	  desc => 'The new x coordinate of the upper-left corner of the
 		    scaled region' },
-	{ name => 'y0', type => 'float',
+	{ name => 'y0', type => 'double',
 	  desc => 'The new y coordinate of the upper-left corner of the
 		    scaled region' },
-	{ name => 'x1', type => 'float',
+	{ name => 'x1', type => 'double',
 	  desc => 'The new x coordinate of the lower-right corner of the
 		    scaled region' },
-	{ name => 'y1', type => 'float',
+	{ name => 'y1', type => 'double',
 	  desc => 'The new y coordinate of the lower-right corner of the
 		    scaled region' }
     );
@@ -678,10 +628,8 @@ The return value is the ID of the sheared floating selection.
 
 If there is no selection or the item is not a drawable, the entire
 item will be sheared according to the specified parameters.
-Additionally, if the item has its linked flag set to TRUE, all
-additional items contained in the image which have the linked flag set
-to TRUE will also be sheared the same way. The return value will be
-equal to the item ID supplied as input.
+
+The return value will be equal to the item ID supplied as input.
 
 
 This procedure is affected by the following context setters:
@@ -697,7 +645,7 @@ HELP
         { name => 'shear_type',
 	  type => 'enum GimpOrientationType (no GIMP_ORIENTATION_UNKNOWN)',
           desc => 'Type of shear' },
-        { name => 'magnitude', type => 'float',
+        { name => 'magnitude', type => 'double',
           desc => 'The magnitude of the shear' }
     );
 
@@ -736,10 +684,8 @@ The return value is the ID of the transformed floating selection.
 
 If there is no selection or the item is not a drawable, the entire
 item will be transformed according to the specified parameters.
-Additionally, if the item has its linked flag set to TRUE, all
-additional items contained in the image which have the linked flag set
-to TRUE will also be transformed the same way. The return value will
-be equal to the item ID supplied as input.
+
+The return value will be equal to the item ID supplied as input.
 
 
 This procedure is affected by the following context setters:
@@ -752,19 +698,19 @@ HELP
     @inargs = (
 	{ name => 'item', type => 'item',
 	  desc => 'The affected item' },
-        { name => 'source_x', type => 'float',
+        { name => 'source_x', type => 'double',
           desc => 'X coordinate of the transformation center' },
-        { name => 'source_y', type => 'float',
+        { name => 'source_y', type => 'double',
           desc => 'Y coordinate of the transformation center' },
-        { name => 'scale_x', type => 'float',
+        { name => 'scale_x', type => 'double',
           desc => 'Amount to scale in x direction' },
-        { name => 'scale_y', type => 'float',
+        { name => 'scale_y', type => 'double',
           desc => 'Amount to scale in y direction' },
-        { name => 'angle', type => 'float',
+        { name => 'angle', type => 'double',
           desc => 'The angle of rotation (radians)' },
-        { name => 'dest_x', type => 'float',
+        { name => 'dest_x', type => 'double',
           desc => 'X coordinate of where the center goes' },
-        { name => 'dest_y', type => 'float',
+        { name => 'dest_y', type => 'double',
           desc => 'Y coordinate of where the center goes' }
     );
 
@@ -802,10 +748,8 @@ The return value is the ID of the transformed floating selection.
 
 If there is no selection or the item is not a drawable, the entire
 item will be transformed according to the specified matrix.
-Additionally, if the item has its linked flag set to TRUE, all
-additional items contained in the image which have the linked flag set
-to TRUE will also be transformed the same way. The return value will
-be equal to the item ID supplied as input.
+
+The return value will be equal to the item ID supplied as input.
 
 
 This procedure is affected by the following context setters:
@@ -818,23 +762,23 @@ HELP
     @inargs = (
 	{ name => 'item', type => 'item',
 	  desc => 'The affected item' },
-        { name => 'coeff_0_0', type => 'float',
+        { name => 'coeff_0_0', type => 'double',
           desc => 'coefficient (0,0) of the transformation matrix' },
-        { name => 'coeff_0_1', type => 'float',
+        { name => 'coeff_0_1', type => 'double',
           desc => 'coefficient (0,1) of the transformation matrix' },
-        { name => 'coeff_0_2', type => 'float',
+        { name => 'coeff_0_2', type => 'double',
           desc => 'coefficient (0,2) of the transformation matrix' },
-        { name => 'coeff_1_0', type => 'float',
+        { name => 'coeff_1_0', type => 'double',
           desc => 'coefficient (1,0) of the transformation matrix' },
-        { name => 'coeff_1_1', type => 'float',
+        { name => 'coeff_1_1', type => 'double',
           desc => 'coefficient (1,1) of the transformation matrix' },
-        { name => 'coeff_1_2', type => 'float',
+        { name => 'coeff_1_2', type => 'double',
           desc => 'coefficient (1,2) of the transformation matrix' },
-        { name => 'coeff_2_0', type => 'float',
+        { name => 'coeff_2_0', type => 'double',
           desc => 'coefficient (2,0) of the transformation matrix' },
-        { name => 'coeff_2_1', type => 'float',
+        { name => 'coeff_2_1', type => 'double',
           desc => 'coefficient (2,1) of the transformation matrix' },
-        { name => 'coeff_2_2', type => 'float',
+        { name => 'coeff_2_2', type => 'double',
           desc => 'coefficient (2,2) of the transformation matrix' }
     );
 
@@ -863,7 +807,6 @@ CODE
               "core/gimpdrawable.h"
               "core/gimpdrawable-transform.h"
               "core/gimpimage.h"
-              "core/gimpitem-linked.h"
               "core/gimpprogress.h"
               "gimppdb-utils.h"
               "gimppdbcontext.h"

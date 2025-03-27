@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <string.h>
 
 #include <gegl.h>
@@ -140,12 +142,12 @@ get_default_unit_invoker (GimpProcedure         *procedure,
                           GError               **error)
 {
   GimpValueArray *return_vals;
-  GimpUnit unit_id = 0;
+  GimpUnit *unit = NULL;
 
-  unit_id = gimp_get_default_unit ();
+  unit = gimp_get_default_unit ();
 
   return_vals = gimp_procedure_get_return_values (procedure, TRUE, NULL);
-  g_value_set_int (gimp_value_array_index (return_vals, 1), unit_id);
+  g_value_set_object (gimp_value_array_index (return_vals, 1), unit);
 
   return return_vals;
 }
@@ -169,50 +171,6 @@ get_monitor_resolution_invoker (GimpProcedure         *procedure,
 
   g_value_set_double (gimp_value_array_index (return_vals, 1), xres);
   g_value_set_double (gimp_value_array_index (return_vals, 2), yres);
-
-  return return_vals;
-}
-
-static GimpValueArray *
-get_theme_dir_invoker (GimpProcedure         *procedure,
-                       Gimp                  *gimp,
-                       GimpContext           *context,
-                       GimpProgress          *progress,
-                       const GimpValueArray  *args,
-                       GError               **error)
-{
-  GimpValueArray *return_vals;
-  gchar *theme_dir = NULL;
-
-  GFile *file = gimp_get_theme_dir (gimp);
-
-  if (file)
-    theme_dir = g_file_get_path (file);
-
-  return_vals = gimp_procedure_get_return_values (procedure, TRUE, NULL);
-  g_value_take_string (gimp_value_array_index (return_vals, 1), theme_dir);
-
-  return return_vals;
-}
-
-static GimpValueArray *
-get_icon_theme_dir_invoker (GimpProcedure         *procedure,
-                            Gimp                  *gimp,
-                            GimpContext           *context,
-                            GimpProgress          *progress,
-                            const GimpValueArray  *args,
-                            GError               **error)
-{
-  GimpValueArray *return_vals;
-  gchar *icon_theme_dir = NULL;
-
-  GFile *file = gimp_get_icon_theme_dir (gimp);
-
-  if (file)
-    icon_theme_dir = g_file_get_path (file);
-
-  return_vals = gimp_procedure_get_return_values (procedure, TRUE, NULL);
-  g_value_take_string (gimp_value_array_index (return_vals, 1), icon_theme_dir);
 
   return return_vals;
 }
@@ -263,17 +221,17 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-gimprc-query
    */
-  procedure = gimp_procedure_new (gimprc_query_invoker);
+  procedure = gimp_procedure_new (gimprc_query_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-gimprc-query");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-gimprc-query",
-                                     "Queries the gimprc file parser for information on a specified token.",
-                                     "This procedure is used to locate additional information contained in the gimprc file considered extraneous to the operation of GIMP. Plug-ins that need configuration information can expect it will be stored in the user gimprc file and can use this procedure to retrieve it. This query procedure will return the value associated with the specified token. This corresponds _only_ to entries with the format: (<token> <value>). The value must be a string. Entries not corresponding to this format will cause warnings to be issued on gimprc parsing and will not be queryable.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1997",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Queries the gimprc file parser for information on a specified token.",
+                                  "This procedure is used to locate additional information contained in the gimprc file considered extraneous to the operation of GIMP. Plug-ins that need configuration information can expect it will be stored in the user gimprc file and can use this procedure to retrieve it. This query procedure will return the value associated with the specified token. This corresponds _only_ to entries with the format: (<token> <value>). The value must be a string. Entries not corresponding to this format will cause warnings to be issued on gimprc parsing and will not be queryable.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1997");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("token",
                                                        "token",
@@ -294,17 +252,17 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-gimprc-set
    */
-  procedure = gimp_procedure_new (gimprc_set_invoker);
+  procedure = gimp_procedure_new (gimprc_set_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-gimprc-set");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-gimprc-set",
-                                     "Sets a gimprc token to a value and saves it in the gimprc.",
-                                     "This procedure is used to add or change additional information in the gimprc file that is considered extraneous to the operation of GIMP. Plug-ins that need configuration information can use this function to store it, and 'gimp-gimprc-query' to retrieve it. This will accept _only_ string values in UTF-8 encoding.",
-                                     "Seth Burgess",
-                                     "Seth Burgess",
-                                     "1999",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets a gimprc token to a value and saves it in the gimprc.",
+                                  "This procedure is used to add or change additional information in the gimprc file that is considered extraneous to the operation of GIMP. Plug-ins that need configuration information can use this function to store it, and 'gimp-gimprc-query' to retrieve it. This will accept _only_ string values in UTF-8 encoding.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Seth Burgess",
+                                         "Seth Burgess",
+                                         "1999");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("token",
                                                        "token",
@@ -325,17 +283,17 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-get-default-comment
    */
-  procedure = gimp_procedure_new (get_default_comment_invoker);
+  procedure = gimp_procedure_new (get_default_comment_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-get-default-comment");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-get-default-comment",
-                                     "Get the default image comment as specified in the Preferences.",
-                                     "Returns a copy of the default image comment.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the default image comment as specified in the Preferences.",
+                                  "Returns a copy of the default image comment.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("comment",
                                                            "comment",
@@ -349,24 +307,24 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-get-default-unit
    */
-  procedure = gimp_procedure_new (get_default_unit_invoker);
+  procedure = gimp_procedure_new (get_default_unit_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-get-default-unit");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-get-default-unit",
-                                     "Get the default unit (taken from the user's locale).",
-                                     "Returns the default unit's integer ID.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the default unit (taken from the user's locale).",
+                                  "Returns the default unit.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_unit ("unit-id",
-                                                         "unit id",
+                                   gimp_param_spec_unit ("unit",
+                                                         "unit",
                                                          "Default unit",
-                                                         TRUE,
                                                          FALSE,
-                                                         GIMP_UNIT_PIXEL,
+                                                         FALSE,
+                                                         gimp_unit_inch (),
                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -374,17 +332,17 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-get-monitor-resolution
    */
-  procedure = gimp_procedure_new (get_monitor_resolution_invoker);
+  procedure = gimp_procedure_new (get_monitor_resolution_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-get-monitor-resolution");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-get-monitor-resolution",
-                                     "Get the monitor resolution as specified in the Preferences.",
-                                     "Returns the resolution of the monitor in pixels/inch. This value is taken from the Preferences (or the windowing system if this is set in the Preferences) and there's no guarantee for the value to be reasonable.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the monitor resolution as specified in the Preferences.",
+                                  "Returns the resolution of the monitor in pixels/inch. This value is taken from the Preferences (or the windowing system if this is set in the Preferences) and there's no guarantee for the value to be reasonable.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_double ("xres",
                                                         "xres",
@@ -401,71 +359,19 @@ register_gimprc_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-get-theme-dir
-   */
-  procedure = gimp_procedure_new (get_theme_dir_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-get-theme-dir");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-get-theme-dir",
-                                     "Get the directory of the current GUI theme.",
-                                     "Returns a copy of the current GUI theme dir.\n"
-                                     "\n"
-                                     "Deprecated: There is no replacement for this procedure.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     "NONE");
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_string ("theme-dir",
-                                                           "theme dir",
-                                                           "The GUI theme dir",
-                                                           FALSE, FALSE, FALSE,
-                                                           NULL,
-                                                           GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-get-icon-theme-dir
-   */
-  procedure = gimp_procedure_new (get_icon_theme_dir_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-get-icon-theme-dir");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-get-icon-theme-dir",
-                                     "Get the directory of the current icon theme.",
-                                     "Returns a copy of the current icon theme dir.\n"
-                                     "\n"
-                                     "Deprecated: There is no replacement for this procedure.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2015",
-                                     "NONE");
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_string ("icon-theme-dir",
-                                                           "icon theme dir",
-                                                           "The icon theme dir",
-                                                           FALSE, FALSE, FALSE,
-                                                           NULL,
-                                                           GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
    * gimp-get-color-configuration
    */
-  procedure = gimp_procedure_new (get_color_configuration_invoker);
+  procedure = gimp_procedure_new (get_color_configuration_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-get-color-configuration");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-get-color-configuration",
-                                     "Get a serialized version of the color management configuration.",
-                                     "Returns a string that can be deserialized into a GimpColorConfig object representing the current color management configuration.",
-                                     "Sven Neumann <sven@gimp.org>",
-                                     "Sven Neumann",
-                                     "2005",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get a serialized version of the color management configuration.",
+                                  "Returns a string that can be deserialized into a GimpColorConfig object representing the current color management configuration.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Sven Neumann <sven@gimp.org>",
+                                         "Sven Neumann",
+                                         "2005");
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("config",
                                                            "config",
@@ -479,17 +385,17 @@ register_gimprc_procs (GimpPDB *pdb)
   /*
    * gimp-get-module-load-inhibit
    */
-  procedure = gimp_procedure_new (get_module_load_inhibit_invoker);
+  procedure = gimp_procedure_new (get_module_load_inhibit_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-get-module-load-inhibit");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-get-module-load-inhibit",
-                                     "Get the list of modules which should not be loaded.",
-                                     "Returns a copy of the list of modules which should not be loaded.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the list of modules which should not be loaded.",
+                                  "Returns a copy of the list of modules which should not be loaded.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("load-inhibit",
                                                            "load inhibit",

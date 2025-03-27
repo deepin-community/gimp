@@ -20,6 +20,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
@@ -28,7 +29,6 @@
 #include "core/gimptoolinfo.h"
 
 #include "widgets/gimppropwidgets.h"
-#include "widgets/gimpspinscale.h"
 
 #include "gimprectangleoptions.h"
 #include "gimprectangleselectoptions.h"
@@ -172,7 +172,7 @@ gimp_rectangle_select_options_gui (GimpToolOptions *tool_options)
       GtkWidget *scale;
       GtkWidget *toggle;
 
-      scale = gimp_prop_spin_scale_new (config, "corner-radius", NULL,
+      scale = gimp_prop_spin_scale_new (config, "corner-radius",
                                         1.0, 10.0, 1);
       gimp_spin_scale_set_scale_limits (GIMP_SPIN_SCALE (scale),
                                         0.0, 1000.0);
@@ -181,7 +181,6 @@ gimp_rectangle_select_options_gui (GimpToolOptions *tool_options)
       frame = gimp_prop_expanding_frame_new (config, "round-corners", NULL,
                                              scale, NULL);
       gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-      gtk_widget_show (frame);
 
       toggle = GIMP_SELECTION_OPTIONS (tool_options)->antialias_toggle;
 

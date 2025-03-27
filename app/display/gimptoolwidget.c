@@ -26,6 +26,8 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "display-types.h"
 
 #include "core/gimpmarshal.h"
@@ -127,8 +129,7 @@ gimp_tool_widget_class_init (GimpToolWidgetClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpToolWidgetClass, changed),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   widget_signals[RESPONSE] =
@@ -136,8 +137,7 @@ gimp_tool_widget_class_init (GimpToolWidgetClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpToolWidgetClass, response),
-                  NULL, NULL,
-                  gimp_marshal_VOID__INT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   G_TYPE_INT);
 
@@ -159,8 +159,7 @@ gimp_tool_widget_class_init (GimpToolWidgetClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpToolWidgetClass, status),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__STRING,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   G_TYPE_STRING);
 
@@ -183,8 +182,7 @@ gimp_tool_widget_class_init (GimpToolWidgetClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpToolWidgetClass, message),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__STRING,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   G_TYPE_STRING);
 
@@ -193,8 +191,7 @@ gimp_tool_widget_class_init (GimpToolWidgetClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpToolWidgetClass, focus_changed),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   g_object_class_install_property (object_class, PROP_SHELL,
@@ -1114,4 +1111,23 @@ gimp_tool_widget_get_cursor (GimpToolWidget      *widget,
     }
 
   return FALSE;
+}
+
+GimpUIManager *
+gimp_tool_widget_get_popup (GimpToolWidget        *widget,
+                            const GimpCoords      *coords,
+                            GdkModifierType        state,
+                            const gchar          **ui_path)
+{
+  g_return_val_if_fail (GIMP_IS_TOOL_WIDGET (widget), NULL);
+  g_return_val_if_fail (coords != NULL, NULL);
+
+  if (widget->private->visible &&
+      GIMP_TOOL_WIDGET_GET_CLASS (widget)->get_popup)
+    {
+      return GIMP_TOOL_WIDGET_GET_CLASS (widget)->get_popup (widget, coords,
+                                                             state, ui_path);
+    }
+
+  return NULL;
 }

@@ -44,44 +44,6 @@
 
 
 /**
- * gimp_cairo_set_source_rgb:
- * @cr:    Cairo context
- * @color: GimpRGB color
- *
- * Sets the source pattern within @cr to the solid opaque color
- * described by @color.
- *
- * This function calls cairo_set_source_rgb() for you.
- *
- * Since: 2.6
- **/
-void
-gimp_cairo_set_source_rgb (cairo_t       *cr,
-                           const GimpRGB *color)
-{
-  cairo_set_source_rgb (cr, color->r, color->g, color->b);
-}
-
-/**
- * gimp_cairo_set_source_rgba:
- * @cr:    Cairo context
- * @color: GimpRGB color
- *
- * Sets the source pattern within @cr to the solid translucent color
- * described by @color.
- *
- * This function calls cairo_set_source_rgba() for you.
- *
- * Since: 2.6
- **/
-void
-gimp_cairo_set_source_rgba (cairo_t       *cr,
-                            const GimpRGB *color)
-{
-  cairo_set_source_rgba (cr, color->r, color->g, color->b, color->a);
-}
-
-/**
  * gimp_cairo_checkerboard_create:
  * @cr:    Cairo context
  * @size:  check size
@@ -90,15 +52,15 @@ gimp_cairo_set_source_rgba (cairo_t       *cr,
  *
  * Create a repeating checkerboard pattern.
  *
- * Return value: a new Cairo pattern that can be used as a source on @cr.
+ * Returns: a new Cairo pattern that can be used as a source on @cr.
  *
  * Since: 2.6
  **/
 cairo_pattern_t *
-gimp_cairo_checkerboard_create (cairo_t       *cr,
-                                gint           size,
-                                const GimpRGB *light,
-                                const GimpRGB *dark)
+gimp_cairo_checkerboard_create (cairo_t         *cr,
+                                gint             size,
+                                const GeglColor *light,
+                                const GeglColor *dark)
 {
   cairo_t         *context;
   cairo_surface_t *surface;
@@ -113,20 +75,34 @@ gimp_cairo_checkerboard_create (cairo_t       *cr,
   context = cairo_create (surface);
 
   if (light)
-    gimp_cairo_set_source_rgb (context, light);
+    {
+      gdouble rgb[3];
+
+      gegl_color_get_pixel (GEGL_COLOR (light), babl_format ("R'G'B' double"), rgb);
+      cairo_set_source_rgb (context, rgb[0], rgb[1], rgb[2]);
+    }
   else
-    cairo_set_source_rgb (context,
-                          GIMP_CHECK_LIGHT, GIMP_CHECK_LIGHT, GIMP_CHECK_LIGHT);
+    {
+      cairo_set_source_rgb (context,
+                            GIMP_CHECK_LIGHT, GIMP_CHECK_LIGHT, GIMP_CHECK_LIGHT);
+    }
 
   cairo_rectangle (context, 0,    0,    size, size);
   cairo_rectangle (context, size, size, size, size);
   cairo_fill (context);
 
   if (dark)
-    gimp_cairo_set_source_rgb (context, dark);
+    {
+      gdouble rgb[3];
+
+      gegl_color_get_pixel (GEGL_COLOR (dark), babl_format ("R'G'B' double"), rgb);
+      cairo_set_source_rgb (context, rgb[0], rgb[1], rgb[2]);
+    }
   else
-    cairo_set_source_rgb (context,
-                          GIMP_CHECK_DARK, GIMP_CHECK_DARK, GIMP_CHECK_DARK);
+    {
+      cairo_set_source_rgb (context,
+                            GIMP_CHECK_DARK, GIMP_CHECK_DARK, GIMP_CHECK_DARK);
+    }
 
   cairo_rectangle (context, 0,    size, size, size);
   cairo_rectangle (context, size, 0,    size, size);
@@ -149,7 +125,7 @@ gimp_cairo_checkerboard_create (cairo_t       *cr,
  * This function returns a #Babl format that corresponds to @surface's
  * pixel format.
  *
- * Return value: the #Babl format of @surface.
+ * Returns: the #Babl format of @surface.
  *
  * Since: 2.10
  **/
@@ -162,9 +138,14 @@ gimp_cairo_surface_get_format (cairo_surface_t *surface)
 
   switch (cairo_image_surface_get_format (surface))
     {
-    case CAIRO_FORMAT_RGB24:  return babl_format ("cairo-RGB24");
-    case CAIRO_FORMAT_ARGB32: return babl_format ("cairo-ARGB32");
-    case CAIRO_FORMAT_A8:     return babl_format ("cairo-A8");
+    case CAIRO_FORMAT_RGB24:    return babl_format ("cairo-RGB24");
+    case CAIRO_FORMAT_ARGB32:   return babl_format ("cairo-ARGB32");
+    case CAIRO_FORMAT_A8:       return babl_format ("cairo-A8");
+#if CAIRO_VERSION >= CAIRO_VERSION_ENCODE(1, 17, 2)
+    /* Since Cairo 1.17.2 */
+    case CAIRO_FORMAT_RGB96F:   return babl_format ("R'G'B' float");
+    case CAIRO_FORMAT_RGBA128F: return babl_format ("R'aG'aB'aA float");
+#endif
 
     default:
       break;
@@ -176,27 +157,37 @@ gimp_cairo_surface_get_format (cairo_surface_t *surface)
 /**
  * gimp_cairo_surface_create_buffer:
  * @surface: a Cairo surface
+ * @format:  a Babl format.
  *
  * This function returns a #GeglBuffer which wraps @surface's pixels.
  * It must only be called on image surfaces, calling it on other surface
  * types is an error.
  *
- * Return value: a #GeglBuffer
+ * If @format is set, the returned [class@Gegl.Buffer] will use it. It has to
+ * map with @surface Cairo format. If unset, the buffer format will be
+ * determined from @surface. The main difference is that automatically
+ * determined format has sRGB space and TRC by default.
+ *
+ * Returns: (transfer full): a #GeglBuffer
  *
  * Since: 2.10
  **/
 GeglBuffer *
-gimp_cairo_surface_create_buffer (cairo_surface_t *surface)
+gimp_cairo_surface_create_buffer (cairo_surface_t *surface,
+                                  const Babl      *format)
 {
-  const Babl *format;
-  gint        width;
-  gint        height;
+  gint width;
+  gint height;
 
   g_return_val_if_fail (surface != NULL, NULL);
   g_return_val_if_fail (cairo_surface_get_type (surface) ==
                         CAIRO_SURFACE_TYPE_IMAGE, NULL);
+  g_return_val_if_fail (format == NULL ||
+                        babl_format_get_bytes_per_pixel (format) == babl_format_get_bytes_per_pixel (gimp_cairo_surface_get_format (surface)),
+                        NULL);
 
-  format = gimp_cairo_surface_get_format  (surface);
+  if (format == NULL)
+    format = gimp_cairo_surface_get_format (surface);
   width  = cairo_image_surface_get_width  (surface);
   height = cairo_image_surface_get_height (surface);
 

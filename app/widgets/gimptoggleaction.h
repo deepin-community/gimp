@@ -23,39 +23,60 @@
 #define __GIMP_TOGGLE_ACTION_H__
 
 
+#include "gimpactionimpl.h"
+
+
 #define GIMP_TYPE_TOGGLE_ACTION            (gimp_toggle_action_get_type ())
 #define GIMP_TOGGLE_ACTION(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_TOGGLE_ACTION, GimpToggleAction))
 #define GIMP_TOGGLE_ACTION_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_TOGGLE_ACTION, GimpToggleActionClass))
 #define GIMP_IS_TOGGLE_ACTION(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_TOGGLE_ACTION))
-#define GIMP_IS_TOGGLE_ACTION_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((obj), GIMP_TYPE_ACTION))
+#define GIMP_IS_TOGGLE_ACTION_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((obj), GIMP_TYPE_TOGGLE_ACTION))
 #define GIMP_TOGGLE_ACTION_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS((obj), GIMP_TYPE_TOGGLE_ACTION, GimpToggleActionClass))
 
 
-typedef struct _GimpToggleAction      GimpToggleAction;
-typedef struct _GimpToggleActionClass GimpToggleActionClass;
+typedef struct _GimpToggleActionClass   GimpToggleActionClass;
+typedef struct _GimpToggleActionPrivate GimpToggleActionPrivate;
 
 struct _GimpToggleAction
 {
-  GtkToggleAction  parent_instance;
+  GimpActionImpl           parent_instance;
+
+  GimpToggleActionPrivate *priv;
 };
 
 struct _GimpToggleActionClass
 {
-  GtkToggleActionClass  parent_class;
+  GimpActionImplClass  parent_class;
+
+  /* Signals */
+
+  void     (* toggled) (GimpToggleAction *action);
+
+  /* Private methods */
+
+  gboolean (* toggle)  (GimpToggleAction *action);
 };
 
 
 GType             gimp_toggle_action_get_type  (void) G_GNUC_CONST;
 
-GtkToggleAction * gimp_toggle_action_new       (const gchar *name,
+GimpAction      * gimp_toggle_action_new       (const gchar *name,
                                                 const gchar *label,
+                                                const gchar *short_label,
                                                 const gchar *tooltip,
                                                 const gchar *icon_name,
-                                                const gchar *help_id);
+                                                const gchar *help_id,
+                                                GimpContext *context);
 
 void              gimp_toggle_action_set_active (GimpToggleAction *action,
                                                  gboolean          active);
 gboolean          gimp_toggle_action_get_active (GimpToggleAction *action);
+
+
+/* Protected functions */
+
+void             _gimp_toggle_action_set_active (GimpToggleAction *action,
+                                                 gboolean          active);
 
 
 #endif  /* __GIMP_TOGGLE_ACTION_H__ */

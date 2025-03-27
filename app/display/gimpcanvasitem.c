@@ -23,11 +23,10 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 
 #include "display-types.h"
-
-#include "core/gimpmarshal.h"
 
 #include "gimpcanvas-style.h"
 #include "gimpcanvasitem.h"
@@ -123,8 +122,7 @@ gimp_canvas_item_class_init (GimpCanvasItemClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpCanvasItemClass, update),
-                  NULL, NULL,
-                  gimp_marshal_VOID__POINTER,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   G_TYPE_POINTER);
 

@@ -26,6 +26,8 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "core-types.h"
 
 #include "gimpimage.h"
@@ -41,7 +43,8 @@ enum
   PROP_IMAGE,
   PROP_CONTAINER_TYPE,
   PROP_ITEM_TYPE,
-  PROP_ACTIVE_ITEM
+  PROP_ACTIVE_ITEM,
+  PROP_SELECTED_ITEMS
 };
 
 
@@ -54,7 +57,7 @@ struct _GimpItemTreePrivate
   GType       container_type;
   GType       item_type;
 
-  GimpItem   *active_item;
+  GList      *selected_items;
 
   GHashTable *name_hash;
 };
@@ -130,6 +133,11 @@ gimp_item_tree_class_init (GimpItemTreeClass *klass)
                                                         NULL, NULL,
                                                         GIMP_TYPE_ITEM,
                                                         GIMP_PARAM_READWRITE));
+
+  g_object_class_install_property (object_class, PROP_SELECTED_ITEMS,
+                                   g_param_spec_pointer ("selected-items",
+                                                         NULL, NULL,
+                                                         GIMP_PARAM_READWRITE));
 }
 
 static void
@@ -137,7 +145,8 @@ gimp_item_tree_init (GimpItemTree *tree)
 {
   GimpItemTreePrivate *private = GIMP_ITEM_TREE_GET_PRIVATE (tree);
 
-  private->name_hash = g_hash_table_new (g_str_hash, g_str_equal);
+  private->name_hash      = g_hash_table_new (g_str_hash, g_str_equal);
+  private->selected_items = NULL;
 }
 
 static void
@@ -166,7 +175,7 @@ gimp_item_tree_dispose (GObject *object)
   GimpItemTree        *tree    = GIMP_ITEM_TREE (object);
   GimpItemTreePrivate *private = GIMP_ITEM_TREE_GET_PRIVATE (tree);
 
-  gimp_item_tree_set_active_item (tree, NULL);
+  gimp_item_tree_set_selected_items (tree, NULL);
 
   gimp_container_foreach (tree->container,
                           (GFunc) gimp_item_removed, NULL);
@@ -209,7 +218,12 @@ gimp_item_tree_set_property (GObject      *object,
       private->item_type = g_value_get_gtype (value);
       break;
     case PROP_ACTIVE_ITEM:
-      private->active_item = g_value_get_object (value); /* don't ref */
+      /* Don't ref the item. */
+      private->selected_items = g_list_prepend (NULL, g_value_get_object (value));
+      break;
+    case PROP_SELECTED_ITEMS:
+      /* Don't ref the item. */
+      private->selected_items = g_value_get_pointer (value);
       break;
 
     default:
@@ -238,7 +252,10 @@ gimp_item_tree_get_property (GObject    *object,
       g_value_set_gtype (value, private->item_type);
       break;
     case PROP_ACTIVE_ITEM:
-      g_value_set_object (value, private->active_item);
+      g_value_set_object (value, gimp_item_tree_get_active_item (GIMP_ITEM_TREE (object)));
+      break;
+    case PROP_SELECTED_ITEMS:
+      g_value_set_pointer (value, private->selected_items);
       break;
 
     default:
@@ -282,30 +299,94 @@ gimp_item_tree_new (GimpImage *image,
 GimpItem *
 gimp_item_tree_get_active_item (GimpItemTree *tree)
 {
+  GList *items;
+
   g_return_val_if_fail (GIMP_IS_ITEM_TREE (tree), NULL);
 
-  return GIMP_ITEM_TREE_GET_PRIVATE (tree)->active_item;
+  items = GIMP_ITEM_TREE_GET_PRIVATE (tree)->selected_items;
+  if (g_list_length (items) == 1)
+    return items->data;
+  else
+    return NULL;
 }
 
 void
 gimp_item_tree_set_active_item (GimpItemTree *tree,
                                 GimpItem     *item)
 {
+  gimp_item_tree_set_selected_items (tree,
+                                     g_list_prepend (NULL, item));
+}
+
+GList *
+gimp_item_tree_get_selected_items (GimpItemTree *tree)
+{
+  g_return_val_if_fail (GIMP_IS_ITEM_TREE (tree), NULL);
+
+  return GIMP_ITEM_TREE_GET_PRIVATE (tree)->selected_items;
+}
+
+/**
+ * gimp_item_tree_set_selected_items:
+ * @tree:
+ * @items: (transfer container):
+ *
+ * Sets the list of selected items. @tree takes ownership of @items
+ * container (not the #GimpItem themselves).
+ */
+void
+gimp_item_tree_set_selected_items (GimpItemTree *tree,
+                                   GList        *items)
+{
   GimpItemTreePrivate *private;
+  GList               *iter;
+  gboolean             selection_changed = TRUE;
+  gint                 prev_selected_count;
+  gint                 selected_count;
 
   g_return_if_fail (GIMP_IS_ITEM_TREE (tree));
 
   private = GIMP_ITEM_TREE_GET_PRIVATE (tree);
 
-  g_return_if_fail (item == NULL ||
-                    G_TYPE_CHECK_INSTANCE_TYPE (item, private->item_type));
-  g_return_if_fail (item == NULL || gimp_item_get_tree (item) == tree);
-
-  if (item != private->active_item)
+  for (iter = items; iter; iter = iter->next)
     {
-      private->active_item = item;
+      g_return_if_fail (G_TYPE_CHECK_INSTANCE_TYPE (iter->data, private->item_type));
+      g_return_if_fail (gimp_item_get_tree (iter->data) == tree);
+    }
 
-      g_object_notify (G_OBJECT (tree), "active-item");
+  prev_selected_count = g_list_length (private->selected_items);
+  selected_count      = g_list_length (items);
+
+  if (selected_count == prev_selected_count)
+    {
+      selection_changed = FALSE;
+      for (iter = items; iter; iter = iter->next)
+        {
+          if (g_list_find (private->selected_items, iter->data) == NULL)
+            {
+              selection_changed = TRUE;
+              break;
+            }
+        }
+    }
+
+  if (selection_changed)
+    {
+      if (private->selected_items)
+        g_list_free (private->selected_items);
+
+      private->selected_items = items;
+      g_object_notify (G_OBJECT (tree), "selected-items");
+
+      /* XXX: if we add back a proper concept of active item (not just
+       * meaning selection of 1), we may also notify of active item
+       * update.
+       */
+      /*g_object_notify (G_OBJECT (tree), "active-item");*/
+    }
+  else if (items != private->selected_items)
+    {
+      g_list_free (items);
     }
 }
 
@@ -354,26 +435,39 @@ gimp_item_tree_get_insert_pos (GimpItemTree  *tree,
   /*  if we want to insert in the active item's parent container  */
   if (*parent == GIMP_IMAGE_ACTIVE_PARENT)
     {
-      if (private->active_item)
+      GList    *iter;
+      GimpItem *selected_parent;
+
+      *parent = NULL;
+      for (iter = private->selected_items; iter; iter = iter->next)
         {
-          /*  if the active item is a branch, add to the top of that
-           *  branch; add to the active item's parent container
+          /*  if the selected item is a branch, add to the top of that
+           *  branch; add to the selected item's parent container
            *  otherwise
            */
-          if (gimp_viewable_get_children (GIMP_VIEWABLE (private->active_item)))
+          if (gimp_viewable_get_children (GIMP_VIEWABLE (iter->data)))
             {
-              *parent   = private->active_item;
-              *position = 0;
+              selected_parent = iter->data;
+              *position       = 0;
             }
           else
             {
-              *parent = gimp_item_get_parent (private->active_item);
+              selected_parent = gimp_item_get_parent (iter->data);
             }
-        }
-      else
-        {
-          /*  use the toplevel container if there is no active item  */
-          *parent = NULL;
+
+          /* Only allow if all selected items have the same parent.
+           * If hierarchy is different, use the toplevel container
+           * (same if there are no selected items).
+           */
+          if (iter != private->selected_items && *parent != selected_parent)
+            {
+              *parent = NULL;
+              break;
+            }
+          else
+            {
+              *parent = selected_parent;
+            }
         }
     }
 
@@ -382,19 +476,32 @@ gimp_item_tree_get_insert_pos (GimpItemTree  *tree,
   else
     container = tree->container;
 
-  /*  if we want to add on top of the active item  */
+  /* We want to add on top of the selected items. */
   if (*position == -1)
     {
-      if (private->active_item)
-        *position =
-          gimp_container_get_child_index (container,
-                                          GIMP_OBJECT (private->active_item));
+      GList    *iter;
+      gint      selected_position;
 
-      /*  if the active item is not in the specified parent container,
-       *  fall back to index 0
-       */
-      if (*position == -1)
-        *position = 0;
+      for (iter = private->selected_items; iter; iter = iter->next)
+        {
+          selected_position =
+            gimp_container_get_child_index (container, iter->data);
+
+          /* If one the selected items is not in the specified parent
+           * container, fall back to index 0.
+           */
+          if (selected_position == -1)
+            {
+              *position = 0;
+              break;
+            }
+
+          if (*position == -1)
+            *position = selected_position;
+          else
+            /* Higher selected items has the lower index. */
+            *position = MIN (*position, selected_position);
+        }
     }
 
   /*  don't add at a non-existing index  */
@@ -458,10 +565,10 @@ gimp_item_tree_add_item (GimpItemTree *tree,
     gimp_item_unset_removed (item);
 }
 
-GimpItem *
+GList *
 gimp_item_tree_remove_item (GimpItemTree *tree,
                             GimpItem     *item,
-                            GimpItem     *new_active)
+                            GList        *new_selected)
 {
   GimpItemTreePrivate *private;
   GimpItem            *parent;
@@ -508,26 +615,34 @@ gimp_item_tree_remove_item (GimpItemTree *tree,
 
   gimp_item_removed (item);
 
-  if (! new_active)
+  if (! new_selected)
     {
-      gint n_children = gimp_container_get_n_children (container);
+      GimpItem *selected   = NULL;
+      gint      n_children = gimp_container_get_n_children (container);
 
       if (n_children > 0)
         {
           index = CLAMP (index, 0, n_children - 1);
 
-          new_active =
+          selected =
             GIMP_ITEM (gimp_container_get_child_by_index (container, index));
         }
       else if (parent)
         {
-          new_active = parent;
+          selected = parent;
         }
+
+      if (selected)
+        new_selected = g_list_prepend (NULL, selected);
+    }
+  else
+    {
+      new_selected = g_list_copy (new_selected);
     }
 
   g_object_unref (item);
 
-  return new_active;
+  return new_selected;
 }
 
 gboolean
@@ -582,6 +697,7 @@ gimp_item_tree_reorder_item (GimpItemTree *tree,
   if (new_container != container ||
       new_index     != gimp_item_get_index (item))
     {
+      GList *selected_items = g_list_copy (private->selected_items);
       if (push_undo)
         gimp_image_undo_push_item_reorder (private->image, undo_desc, item);
 
@@ -602,6 +718,10 @@ gimp_item_tree_reorder_item (GimpItemTree *tree,
         {
           gimp_container_reorder (container, GIMP_OBJECT (item), new_index);
         }
+      /* After reorder, selection is likely lost. We must recreate it as
+       * it was.
+       */
+      gimp_item_tree_set_selected_items (tree, selected_items);
     }
 
   return TRUE;

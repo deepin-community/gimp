@@ -110,7 +110,7 @@ template_options_dialog_new (GimpTemplate *template,
       gimp_object_set_static_name (GIMP_OBJECT (template), _("Unnamed"));
     }
 
-  dialog = gimp_viewable_dialog_new (viewable, context,
+  dialog = gimp_viewable_dialog_new (g_list_prepend (NULL, viewable), context,
                                      title, role, icon_name, desc,
                                      parent,
                                      gimp_standard_help_func, help_id,
@@ -120,7 +120,7 @@ template_options_dialog_new (GimpTemplate *template,
 
                                      NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
                                            -1);

@@ -32,9 +32,11 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-gboolean gimp_fonts_refresh  (void);
-gchar**  gimp_fonts_get_list (const gchar *filter,
-                              gint        *num_fonts);
+gboolean               gimp_fonts_refresh             (void);
+G_GNUC_INTERNAL gchar* _gimp_fonts_get_custom_configs (gchar        **sysconfig,
+                                                       gchar        **renaming_config,
+                                                       gchar       ***dirs);
+GimpFont**             gimp_fonts_get_list            (const gchar   *filter);
 
 
 G_END_DECLS

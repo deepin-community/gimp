@@ -92,7 +92,7 @@ print_size_dialog_new (GimpImage              *image,
   PrintSizeDialog *private;
   GtkWidget       *dialog;
   GtkWidget       *frame;
-  GtkWidget       *table;
+  GtkWidget       *grid;
   GtkWidget       *entry;
   GtkWidget       *label;
   GtkWidget       *width;
@@ -100,7 +100,6 @@ print_size_dialog_new (GimpImage              *image,
   GtkWidget       *hbox;
   GtkWidget       *chain;
   GtkAdjustment   *adj;
-  GList           *focus_chain = NULL;
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
@@ -114,7 +113,7 @@ print_size_dialog_new (GimpImage              *image,
 
   gimp_image_get_resolution (image, &private->xres, &private->yres);
 
-  dialog = gimp_viewable_dialog_new (GIMP_VIEWABLE (image), context,
+  dialog = gimp_viewable_dialog_new (g_list_prepend (NULL, image), context,
                                      title, role,
                                      GIMP_ICON_DOCUMENT_PRINT_RESOLUTION, title,
                                      parent,
@@ -126,7 +125,7 @@ print_size_dialog_new (GimpImage              *image,
 
                                      NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            RESPONSE_RESET,
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
@@ -147,27 +146,24 @@ print_size_dialog_new (GimpImage              *image,
                       frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
 
-  table = gtk_table_new (4, 3, FALSE);
-  gtk_table_set_col_spacing (GTK_TABLE (table), 0, 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 12);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 0, 2);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 2, 2);
-  gtk_container_add (GTK_CONTAINER (frame), table);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 12);
+  gtk_container_add (GTK_CONTAINER (frame), grid);
+  gtk_widget_show (grid);
 
   /*  the print size entry  */
 
-  adj = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  adj = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   width = gimp_spin_button_new (adj, 1.0, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (width), TRUE);
   gtk_entry_set_width_chars (GTK_ENTRY (width), SB_WIDTH);
 
-  adj = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  adj = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   height = gimp_spin_button_new (adj, 1.0, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (height), TRUE);
   gtk_entry_set_width_chars (GTK_ENTRY (height), SB_WIDTH);
 
-  entry = gimp_size_entry_new (0, gimp_get_default_unit (), "%p",
+  entry = gimp_size_entry_new (0, gimp_get_default_unit (), "%n",
                                FALSE, FALSE, FALSE, SB_WIDTH,
                                GIMP_SIZE_ENTRY_UPDATE_SIZE);
   private->size_entry = GIMP_SIZE_ENTRY (entry);
@@ -175,35 +171,30 @@ print_size_dialog_new (GimpImage              *image,
   label = gtk_label_new_with_mnemonic (_("_Width:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), width);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 0, 1,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 1, 1);
   gtk_widget_show (label);
 
   label = gtk_label_new_with_mnemonic (_("H_eight:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), height);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 1, 2,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 1, 1, 1);
   gtk_widget_show (label);
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_table_attach_defaults (GTK_TABLE (table), hbox, 1, 2, 0, 2);
+  gtk_grid_attach (GTK_GRID (grid), hbox, 1, 0, 1, 2);
   gtk_widget_show (hbox);
-
-  gtk_table_set_row_spacing (GTK_TABLE (entry), 0, 2);
-  gtk_table_set_col_spacing (GTK_TABLE (entry), 1, 6);
 
   gtk_box_pack_start (GTK_BOX (hbox), entry, FALSE, FALSE, 0);
   gtk_widget_show (entry);
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (entry),
                              GTK_SPIN_BUTTON (height), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (entry), height, 0, 1, 1, 2);
+  gtk_grid_attach (GTK_GRID (entry), height, 0, 1, 1, 1);
   gtk_widget_show (height);
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (entry),
                              GTK_SPIN_BUTTON (width), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (entry), width, 0, 1, 0, 1);
+  gtk_grid_attach (GTK_GRID (entry), width, 0, 0, 1, 1);
   gtk_widget_show (width);
 
   gimp_size_entry_set_resolution (GIMP_SIZE_ENTRY (entry), 0,
@@ -223,12 +214,12 @@ print_size_dialog_new (GimpImage              *image,
 
   /*  the resolution entry  */
 
-  adj = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  adj = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   width = gimp_spin_button_new (adj, 1.0, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (width), TRUE);
   gtk_entry_set_width_chars (GTK_ENTRY (width), SB_WIDTH);
 
-  adj = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  adj = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   height = gimp_spin_button_new (adj, 1.0, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (height), TRUE);
   gtk_entry_set_width_chars (GTK_ENTRY (height), SB_WIDTH);
@@ -236,19 +227,17 @@ print_size_dialog_new (GimpImage              *image,
   label = gtk_label_new_with_mnemonic (_("_X resolution:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), width);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 2, 3,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 2, 1, 1);
   gtk_widget_show (label);
 
   label = gtk_label_new_with_mnemonic (_("_Y resolution:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), height);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 3, 4,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 3, 1, 1);
   gtk_widget_show (label);
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_table_attach_defaults (GTK_TABLE (table), hbox, 1, 2, 2, 4);
+  gtk_grid_attach (GTK_GRID (grid), hbox, 1, 2, 1, 2);
   gtk_widget_show (hbox);
 
   entry = gimp_size_entry_new (0, gimp_image_get_unit (image), _("pixels/%a"),
@@ -256,21 +245,17 @@ print_size_dialog_new (GimpImage              *image,
                                GIMP_SIZE_ENTRY_UPDATE_RESOLUTION);
   private->resolution_entry = GIMP_SIZE_ENTRY (entry);
 
-  gtk_table_set_row_spacing (GTK_TABLE (entry), 0, 2);
-  gtk_table_set_col_spacing (GTK_TABLE (entry), 1, 2);
-  gtk_table_set_col_spacing (GTK_TABLE (entry), 2, 2);
-
   gtk_box_pack_start (GTK_BOX (hbox), entry, FALSE, FALSE, 0);
   gtk_widget_show (entry);
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (entry),
                              GTK_SPIN_BUTTON (height), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (entry), height, 0, 1, 1, 2);
+  gtk_grid_attach (GTK_GRID (entry), height, 0, 1, 1, 1);
   gtk_widget_show (height);
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (entry),
                              GTK_SPIN_BUTTON (width), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (entry), width, 0, 1, 0, 1);
+  gtk_grid_attach (GTK_GRID (entry), width, 0, 0, 1, 1);
   gtk_widget_show (width);
 
   gimp_size_entry_set_refval_boundaries (GIMP_SIZE_ENTRY (entry), 0,
@@ -286,18 +271,10 @@ print_size_dialog_new (GimpImage              *image,
   chain = gimp_chain_button_new (GIMP_CHAIN_RIGHT);
   if (ABS (private->xres - private->yres) < GIMP_MIN_RESOLUTION)
     gimp_chain_button_set_active (GIMP_CHAIN_BUTTON (chain), TRUE);
-  gtk_table_attach_defaults (GTK_TABLE (entry), chain, 1, 2, 0, 2);
+  gtk_grid_attach (GTK_GRID (entry), chain, 1, 0, 1, 2);
   gtk_widget_show (chain);
 
   private->chain = GIMP_CHAIN_BUTTON (chain);
-
-  focus_chain = g_list_prepend (focus_chain, GIMP_SIZE_ENTRY (entry)->unitmenu);
-  focus_chain = g_list_prepend (focus_chain, chain);
-  focus_chain = g_list_prepend (focus_chain, height);
-  focus_chain = g_list_prepend (focus_chain, width);
-
-  gtk_container_set_focus_chain (GTK_CONTAINER (entry), focus_chain);
-  g_list_free (focus_chain);
 
   g_signal_connect (private->size_entry, "value-changed",
                     G_CALLBACK (print_size_dialog_size_changed),

@@ -30,11 +30,12 @@
 #include "core/gimp.h"
 #include "core/gimp-memsize.h"
 #include "core/gimpchannel.h"
+#include "core/gimpdisplay.h"
 #include "core/gimplayer.h"
 #include "core/gimpparamspecs.h"
 #include "core/gimpprogress.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "gimppdbcontext.h"
 #include "gimppdberror.h"
@@ -66,9 +67,11 @@ static void        gimp_procedure_real_execute_async    (GimpProcedure   *proced
                                                          GimpContext     *context,
                                                          GimpProgress    *progress,
                                                          GimpValueArray  *args,
-                                                         GimpObject      *display);
+                                                         GimpDisplay     *display);
 
-static void          gimp_procedure_free_strings        (GimpProcedure   *procedure);
+static void          gimp_procedure_free_help           (GimpProcedure   *procedure);
+static void          gimp_procedure_free_attribution    (GimpProcedure   *procedure);
+
 static gboolean      gimp_procedure_validate_args       (GimpProcedure   *procedure,
                                                          GParamSpec     **param_specs,
                                                          gint             n_param_specs,
@@ -104,7 +107,8 @@ gimp_procedure_class_init (GimpProcedureClass *klass)
 static void
 gimp_procedure_init (GimpProcedure *procedure)
 {
-  procedure->proc_type = GIMP_INTERNAL;
+  procedure->proc_type   = GIMP_PDB_PROC_TYPE_INTERNAL;
+  procedure->is_private  = FALSE;
 }
 
 static void
@@ -113,7 +117,11 @@ gimp_procedure_finalize (GObject *object)
   GimpProcedure *procedure = GIMP_PROCEDURE (object);
   gint           i;
 
-  gimp_procedure_free_strings (procedure);
+  gimp_procedure_free_help        (procedure);
+  gimp_procedure_free_attribution (procedure);
+
+  g_clear_pointer (&procedure->deprecated, g_free);
+  g_clear_pointer (&procedure->label,      g_free);
 
   if (procedure->args)
     {
@@ -142,16 +150,21 @@ gimp_procedure_get_memsize (GimpObject *object,
   gint64         memsize   = 0;
   gint           i;
 
-  if (! procedure->static_strings)
+  if (! procedure->static_help)
     {
-      memsize += gimp_string_get_memsize (procedure->original_name);
       memsize += gimp_string_get_memsize (procedure->blurb);
       memsize += gimp_string_get_memsize (procedure->help);
-      memsize += gimp_string_get_memsize (procedure->author);
+      memsize += gimp_string_get_memsize (procedure->help_id);
+    }
+
+  if (! procedure->static_attribution)
+    {
+      memsize += gimp_string_get_memsize (procedure->authors);
       memsize += gimp_string_get_memsize (procedure->copyright);
       memsize += gimp_string_get_memsize (procedure->date);
-      memsize += gimp_string_get_memsize (procedure->deprecated);
     }
+
+  memsize += gimp_string_get_memsize (procedure->deprecated);
 
   memsize += procedure->num_args * sizeof (GParamSpec *);
 
@@ -170,13 +183,31 @@ gimp_procedure_get_memsize (GimpObject *object,
 static const gchar *
 gimp_procedure_real_get_label (GimpProcedure *procedure)
 {
-  return gimp_object_get_name (procedure); /* lame fallback */
+  gchar *ellipsis;
+  gchar *label;
+
+  if (procedure->label)
+    return procedure->label;
+
+  label = gimp_strip_uline (gimp_procedure_get_menu_label (procedure));
+
+  ellipsis = strstr (label, "...");
+
+  if (! ellipsis)
+    ellipsis = strstr (label, "\342\200\246" /* U+2026 HORIZONTAL ELLIPSIS */);
+
+  if (ellipsis && ellipsis == (label + strlen (label) - 3))
+    *ellipsis = '\0';
+
+  procedure->label = label;
+
+  return procedure->label;
 }
 
 static const gchar *
 gimp_procedure_real_get_menu_label (GimpProcedure *procedure)
 {
-  return gimp_procedure_get_label (procedure);
+  return gimp_object_get_name (procedure); /* lame fallback */
 }
 
 static const gchar *
@@ -188,7 +219,10 @@ gimp_procedure_real_get_blurb (GimpProcedure *procedure)
 static const gchar *
 gimp_procedure_real_get_help_id (GimpProcedure *procedure)
 {
-  return NULL;
+  if (procedure->help_id)
+    return procedure->help_id;
+
+  return gimp_object_get_name (procedure);
 }
 
 static gboolean
@@ -221,7 +255,7 @@ gimp_procedure_real_execute_async (GimpProcedure  *procedure,
                                    GimpContext    *context,
                                    GimpProgress   *progress,
                                    GimpValueArray *args,
-                                   GimpObject     *display)
+                                   GimpDisplay    *display)
 {
   GimpValueArray *return_vals;
   GError         *error = NULL;
@@ -249,7 +283,8 @@ gimp_procedure_real_execute_async (GimpProcedure  *procedure,
 /*  public functions  */
 
 GimpProcedure  *
-gimp_procedure_new (GimpMarshalFunc marshal_func)
+gimp_procedure_new (GimpMarshalFunc marshal_func,
+                    gboolean        is_private)
 {
   GimpProcedure *procedure;
 
@@ -258,83 +293,121 @@ gimp_procedure_new (GimpMarshalFunc marshal_func)
   procedure = g_object_new (GIMP_TYPE_PROCEDURE, NULL);
 
   procedure->marshal_func = marshal_func;
+  procedure->is_private   = is_private;
 
   return procedure;
 }
 
 void
-gimp_procedure_set_strings (GimpProcedure *procedure,
-                            const gchar   *original_name,
-                            const gchar   *blurb,
-                            const gchar   *help,
-                            const gchar   *author,
-                            const gchar   *copyright,
-                            const gchar   *date,
-                            const gchar   *deprecated)
+gimp_procedure_set_help (GimpProcedure *procedure,
+                         const gchar   *blurb,
+                         const gchar   *help,
+                         const gchar   *help_id)
 {
   g_return_if_fail (GIMP_IS_PROCEDURE (procedure));
 
-  gimp_procedure_free_strings (procedure);
+  gimp_procedure_free_help (procedure);
 
-  procedure->original_name = g_strdup (original_name);
-  procedure->blurb         = g_strdup (blurb);
-  procedure->help          = g_strdup (help);
-  procedure->author        = g_strdup (author);
-  procedure->copyright     = g_strdup (copyright);
-  procedure->date          = g_strdup (date);
-  procedure->deprecated    = g_strdup (deprecated);
+  procedure->blurb   = g_strdup (blurb);
+  procedure->help    = g_strdup (help);
+  procedure->help_id = g_strdup (help_id);
 
-  procedure->static_strings = FALSE;
+  procedure->static_help = FALSE;
 }
 
 void
-gimp_procedure_set_static_strings (GimpProcedure *procedure,
-                                   const gchar   *original_name,
-                                   const gchar   *blurb,
-                                   const gchar   *help,
-                                   const gchar   *author,
-                                   const gchar   *copyright,
-                                   const gchar   *date,
-                                   const gchar   *deprecated)
+gimp_procedure_set_static_help (GimpProcedure *procedure,
+                                const gchar   *blurb,
+                                const gchar   *help,
+                                const gchar   *help_id)
 {
   g_return_if_fail (GIMP_IS_PROCEDURE (procedure));
 
-  gimp_procedure_free_strings (procedure);
+  gimp_procedure_free_help (procedure);
 
-  procedure->original_name = (gchar *) original_name;
-  procedure->blurb         = (gchar *) blurb;
-  procedure->help          = (gchar *) help;
-  procedure->author        = (gchar *) author;
-  procedure->copyright     = (gchar *) copyright;
-  procedure->date          = (gchar *) date;
-  procedure->deprecated    = (gchar *) deprecated;
+  procedure->blurb   = (gchar *) blurb;
+  procedure->help    = (gchar *) help;
+  procedure->help_id = (gchar *) help_id;
 
-  procedure->static_strings = TRUE;
+  procedure->static_help = TRUE;
 }
 
 void
-gimp_procedure_take_strings (GimpProcedure *procedure,
-                             gchar         *original_name,
-                             gchar         *blurb,
-                             gchar         *help,
-                             gchar         *author,
-                             gchar         *copyright,
-                             gchar         *date,
-                             gchar         *deprecated)
+gimp_procedure_take_help (GimpProcedure *procedure,
+                          gchar         *blurb,
+                          gchar         *help,
+                          gchar         *help_id)
 {
   g_return_if_fail (GIMP_IS_PROCEDURE (procedure));
 
-  gimp_procedure_free_strings (procedure);
+  gimp_procedure_free_help (procedure);
 
-  procedure->original_name = original_name;
-  procedure->blurb         = blurb;
-  procedure->help          = help;
-  procedure->author        = author;
-  procedure->copyright     = copyright;
-  procedure->date          = date;
-  procedure->deprecated    = deprecated;
+  procedure->blurb   = blurb;
+  procedure->help    = help;
+  procedure->help_id = help_id;
 
-  procedure->static_strings = FALSE;
+  procedure->static_help = FALSE;
+}
+
+void
+gimp_procedure_set_attribution (GimpProcedure *procedure,
+                                const gchar   *authors,
+                                const gchar   *copyright,
+                                const gchar   *date)
+{
+  g_return_if_fail (GIMP_IS_PROCEDURE (procedure));
+
+  gimp_procedure_free_attribution (procedure);
+
+  procedure->authors   = g_strdup (authors);
+  procedure->copyright = g_strdup (copyright);
+  procedure->date      = g_strdup (date);
+
+  procedure->static_attribution = FALSE;
+}
+
+void
+gimp_procedure_set_static_attribution (GimpProcedure *procedure,
+                                       const gchar   *authors,
+                                       const gchar   *copyright,
+                                       const gchar   *date)
+{
+  g_return_if_fail (GIMP_IS_PROCEDURE (procedure));
+
+  gimp_procedure_free_attribution (procedure);
+
+  procedure->authors   = (gchar *) authors;
+  procedure->copyright = (gchar *) copyright;
+  procedure->date      = (gchar *) date;
+
+  procedure->static_attribution = TRUE;
+}
+
+void
+gimp_procedure_take_attribution (GimpProcedure *procedure,
+                                 gchar         *authors,
+                                 gchar         *copyright,
+                                 gchar         *date)
+{
+  g_return_if_fail (GIMP_IS_PROCEDURE (procedure));
+
+  gimp_procedure_free_attribution (procedure);
+
+  procedure->authors   = authors;
+  procedure->copyright = copyright;
+  procedure->date      = date;
+
+  procedure->static_attribution = FALSE;
+}
+
+void
+gimp_procedure_set_deprecated (GimpProcedure *procedure,
+                               const gchar   *deprecated)
+{
+  g_return_if_fail (GIMP_IS_PROCEDURE (procedure));
+
+  g_free (procedure->deprecated);
+  procedure->deprecated = g_strdup (deprecated);
 }
 
 const gchar *
@@ -362,6 +435,14 @@ gimp_procedure_get_blurb (GimpProcedure *procedure)
 }
 
 const gchar *
+gimp_procedure_get_help (GimpProcedure *procedure)
+{
+  g_return_val_if_fail (GIMP_IS_PROCEDURE (procedure), NULL);
+
+  return procedure->help;
+}
+
+const gchar *
 gimp_procedure_get_help_id (GimpProcedure *procedure)
 {
   g_return_val_if_fail (GIMP_IS_PROCEDURE (procedure), NULL);
@@ -372,9 +453,9 @@ gimp_procedure_get_help_id (GimpProcedure *procedure)
 gboolean
 gimp_procedure_get_sensitive (GimpProcedure  *procedure,
                               GimpObject     *object,
-                              const gchar   **tooltip)
+                              const gchar   **reason)
 {
-  const gchar *my_tooltip = NULL;
+  const gchar *my_reason  = NULL;
   gboolean     sensitive;
 
   g_return_val_if_fail (GIMP_IS_PROCEDURE (procedure), FALSE);
@@ -382,10 +463,10 @@ gimp_procedure_get_sensitive (GimpProcedure  *procedure,
 
   sensitive = GIMP_PROCEDURE_GET_CLASS (procedure)->get_sensitive (procedure,
                                                                    object,
-                                                                   &my_tooltip);
+                                                                   &my_reason);
 
-  if (tooltip)
-    *tooltip = my_tooltip;
+  if (reason)
+    *reason = my_reason;
 
   return sensitive;
 }
@@ -414,6 +495,12 @@ gimp_procedure_execute (GimpProcedure   *procedure,
     {
       return_vals = gimp_procedure_get_return_values (procedure, FALSE,
                                                       pdb_error);
+      if (! error)
+        /* If we can't properly propagate the error, at least print it
+         * to standard error stream. This makes debugging easier.
+         */
+        g_printerr ("%s failed to validate arguments: %s\n", G_STRFUNC, pdb_error->message);
+
       g_propagate_error (error, pdb_error);
 
       return return_vals;
@@ -495,7 +582,7 @@ gimp_procedure_execute_async (GimpProcedure  *procedure,
                               GimpContext    *context,
                               GimpProgress   *progress,
                               GimpValueArray *args,
-                              GimpObject     *display,
+                              GimpDisplay    *display,
                               GError        **error)
 {
   g_return_if_fail (GIMP_IS_PROCEDURE (procedure));
@@ -503,7 +590,7 @@ gimp_procedure_execute_async (GimpProcedure  *procedure,
   g_return_if_fail (GIMP_IS_CONTEXT (context));
   g_return_if_fail (progress == NULL || GIMP_IS_PROGRESS (progress));
   g_return_if_fail (args != NULL);
-  g_return_if_fail (display == NULL || GIMP_IS_OBJECT (display));
+  g_return_if_fail (display == NULL || GIMP_IS_DISPLAY (display));
   g_return_if_fail (error == NULL || *error == NULL);
 
   if (gimp_procedure_validate_args (procedure,
@@ -543,6 +630,7 @@ gimp_procedure_get_arguments (GimpProcedure *procedure)
   for (i = 0; i < procedure->num_args; i++)
     {
       g_value_init (&value, G_PARAM_SPEC_VALUE_TYPE (procedure->args[i]));
+      g_param_value_set_default (procedure->args[i], &value);
       gimp_value_array_append (args, &value);
       g_value_unset (&value);
     }
@@ -574,6 +662,7 @@ gimp_procedure_get_return_values (GimpProcedure *procedure,
       for (i = 0; i < procedure->num_values; i++)
         {
           g_value_init (&value, G_PARAM_SPEC_VALUE_TYPE (procedure->values[i]));
+          g_param_value_set_default (procedure->values[i], &value);
           gimp_value_array_append (args, &value);
           g_value_unset (&value);
         }
@@ -677,7 +766,7 @@ gimp_procedure_create_override (GimpProcedure   *procedure,
   const gchar   *name          = NULL;
   int            i             = 0;
 
-  new_procedure = gimp_procedure_new (new_marshal_func);
+  new_procedure = gimp_procedure_new (new_marshal_func, procedure->is_private);
   name          = gimp_object_get_name (procedure);
 
   gimp_object_set_static_name (GIMP_OBJECT (new_procedure), name);
@@ -696,35 +785,44 @@ gimp_procedure_name_compare (GimpProcedure *proc1,
                              GimpProcedure *proc2)
 {
   /* Assume there always is a name, don't bother with NULL checks */
-  return strcmp (proc1->original_name,
-                 proc2->original_name);
+  return strcmp (gimp_object_get_name (proc1),
+                 gimp_object_get_name (proc2));
 }
 
 /*  private functions  */
 
 static void
-gimp_procedure_free_strings (GimpProcedure *procedure)
+gimp_procedure_free_help (GimpProcedure *procedure)
 {
-  if (! procedure->static_strings)
+  if (! procedure->static_help)
     {
-      g_free (procedure->original_name);
       g_free (procedure->blurb);
       g_free (procedure->help);
-      g_free (procedure->author);
-      g_free (procedure->copyright);
-      g_free (procedure->date);
-      g_free (procedure->deprecated);
+      g_free (procedure->help_id);
     }
 
-  procedure->original_name = NULL;
-  procedure->blurb         = NULL;
-  procedure->help          = NULL;
-  procedure->author        = NULL;
-  procedure->copyright     = NULL;
-  procedure->date          = NULL;
-  procedure->deprecated    = NULL;
+  procedure->blurb   = NULL;
+  procedure->help    = NULL;
+  procedure->help_id = NULL;
 
-  procedure->static_strings = FALSE;
+  procedure->static_help = FALSE;
+}
+
+static void
+gimp_procedure_free_attribution (GimpProcedure *procedure)
+{
+  if (! procedure->static_attribution)
+    {
+      g_free (procedure->authors);
+      g_free (procedure->copyright);
+      g_free (procedure->date);
+    }
+
+  procedure->authors   = NULL;
+  procedure->copyright = NULL;
+  procedure->date      = NULL;
+
+  procedure->static_attribution = FALSE;
 }
 
 static gboolean
@@ -744,7 +842,7 @@ gimp_procedure_validate_args (GimpProcedure  *procedure,
       GType       arg_type  = G_VALUE_TYPE (arg);
       GType       spec_type = G_PARAM_SPEC_VALUE_TYPE (pspec);
 
-      if (arg_type != spec_type)
+      if (! g_type_is_a (arg_type, spec_type))
         {
           if (return_vals)
             {
@@ -775,7 +873,8 @@ gimp_procedure_validate_args (GimpProcedure  *procedure,
         }
       else if (! (pspec->flags & GIMP_PARAM_NO_VALIDATE))
         {
-          GValue string_value = G_VALUE_INIT;
+          GObject *old_value    = NULL;
+          GValue   string_value = G_VALUE_INIT;
 
           g_value_init (&string_value, G_TYPE_STRING);
 
@@ -785,10 +884,13 @@ gimp_procedure_validate_args (GimpProcedure  *procedure,
             g_value_set_static_string (&string_value,
                                        "<not transformable to string>");
 
+          if (G_IS_PARAM_SPEC_OBJECT (pspec))
+            old_value = g_value_dup_object (arg);
+
           if (g_param_value_validate (pspec, arg))
             {
-              if (GIMP_IS_PARAM_SPEC_DRAWABLE_ID (pspec) &&
-                  g_value_get_int (arg) == -1)
+              if (GIMP_IS_PARAM_SPEC_DRAWABLE (pspec) &&
+                  g_value_get_object (arg) == NULL)
                 {
                   if (return_vals)
                     {
@@ -817,8 +919,8 @@ gimp_procedure_validate_args (GimpProcedure  *procedure,
                                    g_param_spec_get_name (pspec));
                     }
                 }
-              else if (GIMP_IS_PARAM_SPEC_IMAGE_ID (pspec) &&
-                       g_value_get_int (arg) == -1)
+              else if (GIMP_IS_PARAM_SPEC_IMAGE (pspec) &&
+                       g_value_get_object (arg) == NULL)
                 {
                   if (return_vals)
                     {
@@ -845,6 +947,57 @@ gimp_procedure_validate_args (GimpProcedure  *procedure,
                                      "exist any longer."),
                                    gimp_object_get_name (procedure),
                                    g_param_spec_get_name (pspec));
+                    }
+                }
+              else if (GIMP_IS_PARAM_SPEC_UNIT (pspec) &&
+                       ((GIMP_UNIT (old_value) == gimp_unit_pixel () &&
+                         ! gimp_param_spec_unit_pixel_allowed (pspec)) ||
+                        (GIMP_UNIT (old_value) == gimp_unit_percent () &&
+                         ! gimp_param_spec_unit_percent_allowed (pspec))))
+                {
+                  if (return_vals)
+                    {
+                      if (GIMP_UNIT (old_value) == gimp_unit_pixel ())
+                        g_set_error (error,
+                                     GIMP_PDB_ERROR,
+                                     GIMP_PDB_ERROR_INVALID_RETURN_VALUE,
+                                     _("Procedure '%s' returned "
+                                       "`gimp_unit_pixel()` as GimpUnit return value #%d '%s'. "
+                                       "This return value does not allow pixel unit."),
+                                     gimp_object_get_name (procedure),
+                                     i + 1, g_param_spec_get_name (pspec));
+                      else
+                        g_set_error (error,
+                                     GIMP_PDB_ERROR,
+                                     GIMP_PDB_ERROR_INVALID_RETURN_VALUE,
+                                     _("Procedure '%s' returned "
+                                       "`gimp_unit_percent()` as GimpUnit return value #%d '%s'. "
+                                       "This return value does not allow percent unit."),
+                                     gimp_object_get_name (procedure),
+                                     i + 1, g_param_spec_get_name (pspec));
+                    }
+                  else
+                    {
+                      if (GIMP_UNIT (old_value) == gimp_unit_pixel ())
+                        g_set_error (error,
+                                     GIMP_PDB_ERROR,
+                                     GIMP_PDB_ERROR_INVALID_ARGUMENT,
+                                     _("Procedure '%s' has been called with "
+                                       "`gimp_unit_pixel()` for GimpUnit "
+                                       "argument #%d '%s'. "
+                                       "This argument does not allow pixel unit."),
+                                     gimp_object_get_name (procedure),
+                                     i + 1, g_param_spec_get_name (pspec));
+                      else
+                        g_set_error (error,
+                                     GIMP_PDB_ERROR,
+                                     GIMP_PDB_ERROR_INVALID_ARGUMENT,
+                                     _("Procedure '%s' has been called with "
+                                       "`gimp_unit_percent()` for GimpUnit "
+                                       "argument #%d '%s'. "
+                                       "This argument does not allow percent unit."),
+                                     gimp_object_get_name (procedure),
+                                     i + 1, g_param_spec_get_name (pspec));
                     }
                 }
               else
@@ -885,8 +1038,70 @@ gimp_procedure_validate_args (GimpProcedure  *procedure,
                 }
 
               g_value_unset (&string_value);
+              g_clear_object (&old_value);
 
               return FALSE;
+            }
+          g_clear_object (&old_value);
+
+          /*  UTT-8 validate all strings  */
+          if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_STRING ||
+              (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_BOXED &&
+               G_PARAM_SPEC_VALUE_TYPE (pspec) == G_TYPE_STRV))
+            {
+              gboolean valid = TRUE;
+
+              if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_STRING)
+                {
+                  const gchar *string = g_value_get_string (arg);
+
+                  if (string)
+                    valid = g_utf8_validate (string, -1, NULL);
+                }
+              else
+                {
+                  const gchar **array = g_value_get_boxed (arg);
+
+                  if (array)
+                    {
+                      gint i;
+
+                      for (i = 0; array[i]; i++)
+                        {
+                          valid = g_utf8_validate (array[i], -1, NULL);
+                          if (! valid)
+                            break;
+                        }
+                    }
+                }
+
+              if (! valid)
+                {
+                  if (return_vals)
+                    {
+                      g_set_error (error,
+                                   GIMP_PDB_ERROR,
+                                   GIMP_PDB_ERROR_INVALID_RETURN_VALUE,
+                                   _("Procedure '%s' returned an "
+                                     "invalid UTF-8 string for argument '%s'."),
+                                   gimp_object_get_name (procedure),
+                                   g_param_spec_get_name (pspec));
+                    }
+                  else
+                    {
+                      g_set_error (error,
+                                   GIMP_PDB_ERROR,
+                                   GIMP_PDB_ERROR_INVALID_ARGUMENT,
+                                   _("Procedure '%s' has been called with an "
+                                     "invalid UTF-8 string for argument '%s'."),
+                                   gimp_object_get_name (procedure),
+                                   g_param_spec_get_name (pspec));
+                    }
+
+                  g_value_unset (&string_value);
+
+                  return FALSE;
+                }
             }
 
           g_value_unset (&string_value);

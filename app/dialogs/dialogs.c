@@ -211,12 +211,10 @@ GimpContainer *global_recent_docks = NULL;
 
 
 static GtkWidget * dialogs_restore_dialog (GimpDialogFactory *factory,
-                                           GdkScreen         *screen,
-                                           gint               monitor,
+                                           GdkMonitor        *monitor,
                                            GimpSessionInfo   *info);
 static GtkWidget * dialogs_restore_window (GimpDialogFactory *factory,
-                                           GdkScreen         *screen,
-                                           gint               monitor,
+                                           GdkMonitor        *monitor,
                                            GimpSessionInfo   *info);
 
 
@@ -253,9 +251,11 @@ static const GimpDialogFactoryEntry entries[] =
   FOREIGN ("gimp-gradient-editor-color-dialog",    TRUE,  FALSE),
   FOREIGN ("gimp-palette-editor-color-dialog",     TRUE,  FALSE),
   FOREIGN ("gimp-colormap-editor-color-dialog",    TRUE,  FALSE),
+  FOREIGN ("gimp-colormap-selection-color-dialog", TRUE,  FALSE),
 
   FOREIGN ("gimp-controller-editor-dialog",        FALSE, TRUE),
   FOREIGN ("gimp-controller-action-dialog",        FALSE, TRUE),
+  FOREIGN ("gimp-pad-action-dialog",               FALSE, TRUE),
 
   /*  ordinary toplevels  */
   TOPLEVEL ("gimp-image-new-dialog",
@@ -282,6 +282,8 @@ static const GimpDialogFactoryEntry entries[] =
             dialogs_palette_import_get,     TRUE, TRUE,  TRUE),
   TOPLEVEL ("gimp-tips-dialog",
             dialogs_tips_get,               TRUE, FALSE, FALSE),
+  TOPLEVEL ("gimp-welcome-dialog",
+            dialogs_welcome_get,            TRUE, FALSE, FALSE),
   TOPLEVEL ("gimp-about-dialog",
             dialogs_about_get,              TRUE, FALSE, FALSE),
   TOPLEVEL ("gimp-action-search-dialog",
@@ -294,6 +296,8 @@ static const GimpDialogFactoryEntry entries[] =
             dialogs_close_all_get,          TRUE, FALSE, FALSE),
   TOPLEVEL ("gimp-quit-dialog",
             dialogs_quit_get,               TRUE, FALSE, FALSE),
+  TOPLEVEL ("gimp-extensions-dialog",
+            dialogs_extensions_get,         TRUE, TRUE,  TRUE),
 
   /*  docks  */
   DOCK ("gimp-dock",
@@ -450,7 +454,6 @@ static const GimpDialogFactoryEntry entries[] =
  * dialogs_restore_dialog:
  * @factory:
  * @screen:
- * @monitor:
  * @info:
  *
  * Creates a top level widget based on the given session info object
@@ -461,20 +464,23 @@ static const GimpDialogFactoryEntry entries[] =
  **/
 static GtkWidget *
 dialogs_restore_dialog (GimpDialogFactory *factory,
-                        GdkScreen         *screen,
-                        gint               monitor,
+                        GdkMonitor        *monitor,
                         GimpSessionInfo   *info)
 {
-  GtkWidget      *dialog;
-  GimpCoreConfig *config = gimp_dialog_factory_get_context (factory)->gimp->config;
+  GtkWidget        *dialog;
+  Gimp             *gimp    = gimp_dialog_factory_get_context (factory)->gimp;
+  GimpCoreConfig   *config  = gimp->config;
+  GimpDisplay      *display = gimp_context_get_display (gimp_get_user_context (gimp));
+  GimpDisplayShell *shell   = gimp_display_get_shell (display);
 
   GIMP_LOG (DIALOG_FACTORY, "restoring toplevel \"%s\" (info %p)",
             gimp_session_info_get_factory_entry (info)->identifier,
             info);
 
   dialog =
-    gimp_dialog_factory_dialog_new (factory, screen, monitor,
+    gimp_dialog_factory_dialog_new (factory, monitor,
                                     NULL /*ui_manager*/,
+                                    GTK_WIDGET (gimp_display_shell_get_window (shell)),
                                     gimp_session_info_get_factory_entry (info)->identifier,
                                     gimp_session_info_get_factory_entry (info)->view_size,
                                     ! GIMP_GUI_CONFIG (config)->hide_docks);
@@ -490,7 +496,6 @@ dialogs_restore_dialog (GimpDialogFactory *factory,
 /**
  * dialogs_restore_window:
  * @factory:
- * @screen:
  * @monitor:
  * @info:
  *
@@ -502,8 +507,7 @@ dialogs_restore_dialog (GimpDialogFactory *factory,
  **/
 static GtkWidget *
 dialogs_restore_window (GimpDialogFactory *factory,
-                        GdkScreen         *screen,
-                        gint               monitor,
+                        GdkMonitor        *monitor,
                         GimpSessionInfo   *info)
 {
   Gimp             *gimp    = gimp_dialog_factory_get_context (factory)->gimp;
@@ -520,25 +524,21 @@ dialogs_restore_window (GimpDialogFactory *factory,
 /*  public functions  */
 
 void
-dialogs_init (Gimp            *gimp,
-              GimpMenuFactory *menu_factory)
+dialogs_init (Gimp *gimp)
 {
   GimpDialogFactory *factory = NULL;
   gint               i       = 0;
 
   g_return_if_fail (GIMP_IS_GIMP (gimp));
-  g_return_if_fail (GIMP_IS_MENU_FACTORY (menu_factory));
 
-  factory = gimp_dialog_factory_new ("toplevel",
-                                     gimp_get_user_context (gimp),
-                                     menu_factory);
+  factory = gimp_dialog_factory_new ("toplevel", gimp_get_user_context (gimp));
   gimp_dialog_factory_set_singleton (factory);
 
   for (i = 0; i < G_N_ELEMENTS (entries); i++)
     gimp_dialog_factory_register_entry (factory,
                                         entries[i].identifier,
-                                        gettext (entries[i].name),
-                                        gettext (entries[i].blurb),
+                                        entries[i].name ? gettext(entries[i].name) : NULL,
+                                        entries[i].blurb ? gettext(entries[i].blurb) : NULL,
                                         entries[i].icon_name,
                                         entries[i].help_id,
                                         entries[i].new_func,
@@ -616,9 +616,9 @@ dialogs_load_recent_docks (Gimp *gimp)
   if (gimp->be_verbose)
     g_print ("Parsing '%s'\n", gimp_file_get_utf8_name (file));
 
-  if (! gimp_config_deserialize_gfile (GIMP_CONFIG (global_recent_docks),
-                                       file,
-                                       NULL, &error))
+  if (! gimp_config_deserialize_file (GIMP_CONFIG (global_recent_docks),
+                                      file,
+                                      NULL, &error))
     {
       if (error->code != GIMP_CONFIG_ERROR_OPEN_ENOENT)
         gimp_message_literal (gimp, NULL, GIMP_MESSAGE_ERROR, error->message);
@@ -651,11 +651,11 @@ dialogs_save_recent_docks (Gimp *gimp)
   if (gimp->be_verbose)
     g_print ("Writing '%s'\n", gimp_file_get_utf8_name (file));
 
-  if (! gimp_config_serialize_to_gfile (GIMP_CONFIG (global_recent_docks),
-                                        file,
-                                        "recently closed docks",
-                                        "end of recently closed docks",
-                                        NULL, &error))
+  if (! gimp_config_serialize_to_file (GIMP_CONFIG (global_recent_docks),
+                                       file,
+                                       "recently closed docks",
+                                       "end of recently closed docks",
+                                       NULL, &error))
     {
       gimp_message_literal (gimp, NULL, GIMP_MESSAGE_ERROR, error->message);
       g_clear_error (&error);

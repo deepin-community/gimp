@@ -36,8 +36,11 @@ static void            gimp_layer_mask_preview_freeze       (GimpViewable      *
 static void            gimp_layer_mask_preview_thaw         (GimpViewable      *viewable);
 
 static gboolean        gimp_layer_mask_is_attached          (GimpItem          *item);
-static gboolean        gimp_layer_mask_is_content_locked    (GimpItem          *item);
-static gboolean        gimp_layer_mask_is_position_locked   (GimpItem          *item);
+static gboolean        gimp_layer_mask_is_content_locked    (GimpItem          *item,
+                                                             GimpItem         **locked_item);
+static gboolean        gimp_layer_mask_is_position_locked   (GimpItem          *item,
+                                                             GimpItem         **locked_item,
+                                                             gboolean           check_children);
 static GimpItemTree  * gimp_layer_mask_get_tree             (GimpItem          *item);
 static GimpItem      * gimp_layer_mask_duplicate            (GimpItem          *item,
                                                              GType              new_type);
@@ -50,6 +53,7 @@ static void            gimp_layer_mask_bounding_box_changed (GimpDrawable      *
 static void            gimp_layer_mask_convert_type         (GimpDrawable      *drawable,
                                                              GimpImage         *dest_image,
                                                              const Babl        *new_format,
+                                                             GimpColorProfile  *src_profile,
                                                              GimpColorProfile  *dest_profile,
                                                              GeglDitherMethod   layer_dither_type,
                                                              GeglDitherMethod   mask_dither_type,
@@ -130,25 +134,28 @@ gimp_layer_mask_preview_thaw (GimpViewable *viewable)
 }
 
 static gboolean
-gimp_layer_mask_is_content_locked (GimpItem *item)
+gimp_layer_mask_is_content_locked (GimpItem  *item,
+                                   GimpItem **locked_item)
 {
   GimpLayerMask *mask  = GIMP_LAYER_MASK (item);
   GimpLayer     *layer = gimp_layer_mask_get_layer (mask);
 
   if (layer)
-    return gimp_item_is_content_locked (GIMP_ITEM (layer));
+    return gimp_item_is_content_locked (GIMP_ITEM (layer), locked_item);
 
   return FALSE;
 }
 
 static gboolean
-gimp_layer_mask_is_position_locked (GimpItem *item)
+gimp_layer_mask_is_position_locked (GimpItem  *item,
+                                    GimpItem **locked_item,
+                                    gboolean   check_children)
 {
   GimpLayerMask *mask  = GIMP_LAYER_MASK (item);
   GimpLayer     *layer = gimp_layer_mask_get_layer (mask);
 
   if (layer)
-    return gimp_item_is_position_locked (GIMP_ITEM (layer));
+    return gimp_item_is_position_locked (GIMP_ITEM (layer), locked_item);
 
   return FALSE;
 }
@@ -215,6 +222,7 @@ static void
 gimp_layer_mask_convert_type (GimpDrawable      *drawable,
                               GimpImage         *dest_image,
                               const Babl        *new_format,
+                              GimpColorProfile  *src_profile,
                               GimpColorProfile  *dest_profile,
                               GeglDitherMethod   layer_dither_type,
                               GeglDitherMethod   mask_dither_type,
@@ -226,6 +234,7 @@ gimp_layer_mask_convert_type (GimpDrawable      *drawable,
 
   GIMP_DRAWABLE_CLASS (parent_class)->convert_type (drawable, dest_image,
                                                     new_format,
+                                                    src_profile,
                                                     dest_profile,
                                                     layer_dither_type,
                                                     mask_dither_type,
@@ -234,18 +243,18 @@ gimp_layer_mask_convert_type (GimpDrawable      *drawable,
 }
 
 GimpLayerMask *
-gimp_layer_mask_new (GimpImage     *image,
-                     gint           width,
-                     gint           height,
-                     const gchar   *name,
-                     const GimpRGB *color)
+gimp_layer_mask_new (GimpImage   *image,
+                     gint         width,
+                     gint         height,
+                     const gchar *name,
+                     GeglColor   *color)
 {
   GimpLayerMask *layer_mask;
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (width > 0, NULL);
   g_return_val_if_fail (height > 0, NULL);
-  g_return_val_if_fail (color != NULL, NULL);
+  g_return_val_if_fail (GEGL_IS_COLOR (color), NULL);
 
   layer_mask =
     GIMP_LAYER_MASK (gimp_drawable_new (GIMP_TYPE_LAYER_MASK,

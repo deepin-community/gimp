@@ -35,14 +35,14 @@ typedef struct _GimpPivotSelectorClass   GimpPivotSelectorClass;
 
 struct _GimpPivotSelector
 {
-  GtkTable                parent_instance;
+  GtkGrid                   parent_instance;
 
   GimpPivotSelectorPrivate *priv;
 };
 
 struct _GimpPivotSelectorClass
 {
-  GtkTableClass  parent_class;
+  GtkGridClass  parent_class;
 
   /*  signals  */
   void (* changed) (GimpPivotSelector *selector);

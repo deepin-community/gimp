@@ -36,12 +36,10 @@
 #define ZOOM_UNDO_SIZE 100
 
 
-static gint              n_gradient_samples = 0;
-static gdouble          *gradient_samples = NULL;
-static gchar            *gradient_name    = NULL;
+static GeglColor       **gradient_samples = NULL;
+static GimpGradient     *gradient = NULL;
 static gboolean          ready_now = FALSE;
 static gchar            *tpath = NULL;
-static DialogElements   *elements = NULL;
 static GtkWidget        *cmap_preview;
 static GtkWidget        *maindlg;
 
@@ -83,68 +81,48 @@ static explorer_vals_t standardvals =
  FORWARD DECLARATIONS
  *********************************************************************/
 
-static void load_file_chooser_response (GtkFileChooser *chooser,
-                                        gint            response_id,
-                                        gpointer        data);
-static void save_file_chooser_response (GtkFileChooser *chooser,
-                                        gint            response_id,
-                                        gpointer        data);
-static void create_load_file_chooser   (GtkWidget      *widget,
-                                        GtkWidget      *dialog);
-static void create_save_file_chooser   (GtkWidget      *widget,
-                                        GtkWidget      *dialog);
+static void update_previews            (GimpProcedureConfig *config);
+static void load_file_chooser_response (GtkFileChooser      *chooser,
+                                        gint                 response_id,
+                                        gpointer             data);
+static void save_file_chooser_response (GtkFileChooser      *chooser,
+                                        gint                 response_id,
+                                        gpointer             data);
+static void create_load_file_chooser   (GtkWidget           *widget,
+                                        GtkWidget           *dialog);
+static void create_save_file_chooser   (GtkWidget           *widget,
+                                        GtkWidget           *dialog);
 
-static void cmap_preview_size_allocate (GtkWidget      *widget,
-                                        GtkAllocation  *allocation);
+static void cmap_preview_size_allocate (GtkWidget           *widget,
+                                        GtkAllocation       *allocation,
+                                        GimpProcedureConfig *config);
+
+static void set_grad_data_cache        (GimpGradient        *in_gradient,
+                                        gint                 n_colors);
 
 /**********************************************************************
  CALLBACKS
  *********************************************************************/
 
+/* Update both previews: image and colormap
+ * Handler for notify signals, and also called directly.
+ */
 static void
-dialog_response (GtkWidget *widget,
-                 gint       response_id,
-                 gpointer   data)
+update_previews (GimpProcedureConfig *config)
 {
-  switch (response_id)
-    {
-    case GTK_RESPONSE_OK:
-      wint.run = TRUE;
-      gtk_widget_destroy (widget);
-      break;
-
-    default:
-      gtk_widget_destroy (widget);
-      break;
-    }
-}
-
-static void
-dialog_reset_callback (GtkWidget *widget,
-                       gpointer   data)
-{
-  wvals.xmin = standardvals.xmin;
-  wvals.xmax = standardvals.xmax;
-  wvals.ymin = standardvals.ymin;
-  wvals.ymax = standardvals.ymax;
-  wvals.iter = standardvals.iter;
-  wvals.cx   = standardvals.cx;
-  wvals.cy   = standardvals.cy;
-
-  dialog_change_scale ();
-  set_cmap_preview ();
-  dialog_update_preview ();
+  set_cmap_preview (config);
+  dialog_update_preview (config);
 }
 
 static void
 dialog_redraw_callback (GtkWidget *widget,
                         gpointer   data)
 {
-  gint alwaysprev = wvals.alwayspreview;
+  GimpProcedureConfig *config     = (GimpProcedureConfig *) data;
+  gint                 alwaysprev = wvals.alwayspreview;
 
   wvals.alwayspreview = TRUE;
-  set_cmap_preview ();
-  dialog_update_preview ();
+  update_previews (config);
   wvals.alwayspreview = alwaysprev;
 }
 
@@ -152,14 +130,29 @@ static void
 dialog_undo_zoom_callback (GtkWidget *widget,
                            gpointer   data)
 {
+  GimpProcedureConfig *config = (GimpProcedureConfig *) data;
+
   if (zoomindex > 0)
     {
+      g_object_get (config,
+                    "xmin", &wvals.xmin,
+                    "xmax", &wvals.xmax,
+                    "ymin", &wvals.ymin,
+                    "ymax", &wvals.ymax,
+                    NULL);
+
       zooms[zoomindex] = wvals;
       zoomindex--;
       wvals = zooms[zoomindex];
-      dialog_change_scale ();
-      set_cmap_preview ();
-      dialog_update_preview ();
+
+      g_object_set (config,
+                    "xmin", wvals.xmin,
+                    "xmax", wvals.xmax,
+                    "ymin", wvals.ymin,
+                    "ymax", wvals.ymax,
+                    NULL);
+
+      update_previews (config);
     }
 }
 
@@ -167,13 +160,20 @@ static void
 dialog_redo_zoom_callback (GtkWidget *widget,
                            gpointer   data)
 {
+  GimpProcedureConfig *config = (GimpProcedureConfig *) data;
+
   if (zoomindex < zoommax)
     {
       zoomindex++;
       wvals = zooms[zoomindex];
-      dialog_change_scale ();
-      set_cmap_preview ();
-      dialog_update_preview ();
+      g_object_set (config,
+                    "xmin", wvals.xmin,
+                    "xmax", wvals.xmax,
+                    "ymin", wvals.ymin,
+                    "ymax", wvals.ymax,
+                    NULL);
+
+      update_previews (config);
     }
 }
 
@@ -181,54 +181,112 @@ static void
 dialog_step_in_callback (GtkWidget *widget,
                          gpointer   data)
 {
-  double xdifferenz;
-  double ydifferenz;
+  GimpProcedureConfig *config = (GimpProcedureConfig *) data;
+  gdouble              xdifferenz;
+  gdouble              ydifferenz;
+  gdouble              xmin;
+  gdouble              xmax;
+  gdouble              ymin;
+  gdouble              ymax;
+
+  g_object_get (config,
+                "xmin", &xmin,
+                "xmax", &xmax,
+                "ymin", &ymin,
+                "ymax", &ymax,
+                NULL);
 
   if (zoomindex < ZOOM_UNDO_SIZE - 1)
     {
-      zooms[zoomindex]=wvals;
+      g_object_get (config,
+                    "xmin", &wvals.xmin,
+                    "xmax", &wvals.xmax,
+                    "ymin", &wvals.ymin,
+                    "ymax", &wvals.ymax,
+                    NULL);
+
+      zooms[zoomindex] = wvals;
       zoomindex++;
     }
   zoommax = zoomindex;
 
-  xdifferenz =  wvals.xmax - wvals.xmin;
-  ydifferenz =  wvals.ymax - wvals.ymin;
-  wvals.xmin += 1.0 / 6.0 * xdifferenz;
-  wvals.ymin += 1.0 / 6.0 * ydifferenz;
-  wvals.xmax -= 1.0 / 6.0 * xdifferenz;
-  wvals.ymax -= 1.0 / 6.0 * ydifferenz;
+  xdifferenz =  xmax - xmin;
+  ydifferenz =  ymax - ymin;
+  xmin += 1.0 / 6.0 * xdifferenz;
+  ymin += 1.0 / 6.0 * ydifferenz;
+  xmax -= 1.0 / 6.0 * xdifferenz;
+  ymax -= 1.0 / 6.0 * ydifferenz;
+
+  wvals.xmin = xmin;
+  wvals.xmax = xmax;
+  wvals.ymin = ymin;
+  wvals.ymax = ymax;
   zooms[zoomindex] = wvals;
 
-  dialog_change_scale ();
-  set_cmap_preview ();
-  dialog_update_preview ();
+  g_object_set (config,
+                "xmin", xmin,
+                "xmax", xmax,
+                "ymin", ymin,
+                "ymax", ymax,
+                NULL);
+
+  update_previews (config);
 }
 
 static void
 dialog_step_out_callback (GtkWidget *widget,
                           gpointer   data)
 {
-  gdouble xdifferenz;
-  gdouble ydifferenz;
+  GimpProcedureConfig *config = (GimpProcedureConfig *) data;
+  gdouble              xdifferenz;
+  gdouble              ydifferenz;
+  gdouble              xmin;
+  gdouble              xmax;
+  gdouble              ymin;
+  gdouble              ymax;
+
+  g_object_get (config,
+                "xmin", &xmin,
+                "xmax", &xmax,
+                "ymin", &ymin,
+                "ymax", &ymax,
+                NULL);
 
   if (zoomindex < ZOOM_UNDO_SIZE - 1)
     {
-      zooms[zoomindex]=wvals;
+      g_object_get (config,
+                    "xmin", &wvals.xmin,
+                    "xmax", &wvals.xmax,
+                    "ymin", &wvals.ymin,
+                    "ymax", &wvals.ymax,
+                    NULL);
+
+      zooms[zoomindex] = wvals;
       zoomindex++;
     }
   zoommax = zoomindex;
 
-  xdifferenz =  wvals.xmax - wvals.xmin;
-  ydifferenz =  wvals.ymax - wvals.ymin;
-  wvals.xmin -= 1.0 / 4.0 * xdifferenz;
-  wvals.ymin -= 1.0 / 4.0 * ydifferenz;
-  wvals.xmax += 1.0 / 4.0 * xdifferenz;
-  wvals.ymax += 1.0 / 4.0 * ydifferenz;
+  xdifferenz =  xmax - xmin;
+  ydifferenz =  ymax - ymin;
+  xmin -= 1.0 / 4.0 * xdifferenz;
+  ymin -= 1.0 / 4.0 * ydifferenz;
+  xmax += 1.0 / 4.0 * xdifferenz;
+  ymax += 1.0 / 4.0 * ydifferenz;
+
+  wvals.xmin = xmin;
+  wvals.xmax = xmax;
+  wvals.ymin = ymin;
+  wvals.ymax = ymax;
   zooms[zoomindex] = wvals;
 
-  dialog_change_scale ();
-  set_cmap_preview ();
-  dialog_update_preview ();
+  g_object_set (config,
+                "xmin", xmin,
+                "xmax", xmax,
+                "ymin", ymin,
+                "ymax", ymax,
+                NULL);
+
+  update_previews (config);
 }
 
 static void
@@ -237,19 +295,20 @@ explorer_toggle_update (GtkWidget *widget,
 {
   gimp_toggle_button_update (widget, data);
 
-  set_cmap_preview ();
-  dialog_update_preview ();
+  update_previews (wvals.config);
 }
 
 static void
-explorer_radio_update  (GtkWidget *widget,
-                        gpointer   data)
+explorer_radio_update (GtkWidget *widget,
+                       gpointer   data)
 {
   gboolean c_sensitive;
+  gint     fractal_type;
 
-  gimp_radio_button_update (widget, data);
+  fractal_type =
+    gimp_procedure_config_get_choice_id (wvals.config, "fractal-type");
 
-  switch (wvals.fractaltype)
+  switch (fractal_type)
     {
     case TYPE_MANDELBROT:
     case TYPE_SIERPINSKI:
@@ -261,67 +320,48 @@ explorer_radio_update  (GtkWidget *widget,
       break;
     }
 
-  gimp_scale_entry_set_sensitive (elements->cx, c_sensitive);
-  gimp_scale_entry_set_sensitive (elements->cy, c_sensitive);
+  gimp_procedure_dialog_set_sensitive (GIMP_PROCEDURE_DIALOG (maindlg),
+                                       "cx",
+                                       c_sensitive, NULL, NULL, FALSE);
+  gimp_procedure_dialog_set_sensitive (GIMP_PROCEDURE_DIALOG (maindlg),
+                                       "cy",
+                                       c_sensitive, NULL, NULL, FALSE);
 
-  set_cmap_preview ();
-  dialog_update_preview ();
+  update_previews (wvals.config);
 }
 
 static void
-explorer_double_adjustment_update (GtkAdjustment *adjustment,
-                                   gpointer       data)
+explorer_number_of_colors_callback (GimpProcedureConfig *config)
 {
-  gimp_double_adjustment_update (adjustment, data);
+  gint n_colors;
 
-  set_cmap_preview ();
-  dialog_update_preview ();
+  g_object_get (config,
+                "n-colors", &n_colors,
+                NULL);
+  set_grad_data_cache (gradient, n_colors);
+
+  update_previews (config);
 }
 
+/* Same signature as all GimpResourceSelectButton */
 static void
-explorer_number_of_colors_callback (GtkAdjustment *adjustment,
-                                    gpointer       data)
+explorer_gradient_select_callback (gpointer      data,  /* config */
+                                   GimpGradient *gradient,
+                                   gboolean      dialog_closing)
 {
-  gimp_int_adjustment_update (adjustment, data);
+  GimpProcedureConfig *config = (GimpProcedureConfig *) data;
+  gint n_colors;
+  gint color_mode;
 
-  g_free (gradient_samples);
+  g_object_get (config,
+                "n-colors",   &n_colors,
+                NULL);
+  color_mode = gimp_procedure_config_get_choice_id (config, "color-mode");
+  set_grad_data_cache (gradient, n_colors);
 
-  if (! gradient_name)
-    gradient_name = gimp_context_get_gradient ();
-
-  gimp_gradient_get_uniform_samples (gradient_name,
-                                     wvals.ncolors,
-                                     wvals.gradinvert,
-                                     &n_gradient_samples,
-                                     &gradient_samples);
-
-  set_cmap_preview ();
-  dialog_update_preview ();
-}
-
-static void
-explorer_gradient_select_callback (GimpGradientSelectButton *gradient_button,
-                                   const gchar              *name,
-                                   gint                      width,
-                                   const gdouble            *gradient_data,
-                                   gboolean                  dialog_closing,
-                                   gpointer                  data)
-{
-  g_free (gradient_name);
-  g_free (gradient_samples);
-
-  gradient_name = g_strdup (name);
-
-  gimp_gradient_get_uniform_samples (gradient_name,
-                                     wvals.ncolors,
-                                     wvals.gradinvert,
-                                     &n_gradient_samples,
-                                     &gradient_samples);
-
-  if (wvals.colormode == 1)
+  if (color_mode == 1)
     {
-      set_cmap_preview ();
-      dialog_update_preview ();
+      update_previews (config);
     }
 }
 
@@ -452,12 +492,25 @@ preview_enter_notify_event (GtkWidget      *widget,
 
 static gboolean
 preview_button_release_event (GtkWidget      *widget,
-                              GdkEventButton *event)
+                              GdkEventButton *event,
+                              gpointer        data)
 {
+  GimpProcedureConfig *config = (GimpProcedureConfig *) data;
   gdouble l_xmin;
   gdouble l_xmax;
   gdouble l_ymin;
   gdouble l_ymax;
+  gdouble xmin;
+  gdouble xmax;
+  gdouble ymin;
+  gdouble ymax;
+
+  g_object_get (config,
+                "xmin", &xmin,
+                "xmax", &xmax,
+                "ymin", &ymin,
+                "ymax", &ymax,
+                NULL);
 
   if (event->button == 1)
     {
@@ -471,27 +524,29 @@ preview_button_release_event (GtkWidget      *widget,
           (x_press < preview_width) && (y_press < preview_height) &&
           (x_release < preview_width) && (y_release < preview_height))
         {
-          l_xmin = (wvals.xmin +
-                    (wvals.xmax - wvals.xmin) * (x_press / preview_width));
-          l_xmax = (wvals.xmin +
-                    (wvals.xmax - wvals.xmin) * (x_release / preview_width));
-          l_ymin = (wvals.ymin +
-                    (wvals.ymax - wvals.ymin) * (y_press / preview_height));
-          l_ymax = (wvals.ymin +
-                    (wvals.ymax - wvals.ymin) * (y_release / preview_height));
+          l_xmin = (xmin + (xmax -xmin) * (x_press / preview_width));
+          l_xmax = (xmin + (xmax - xmin) * (x_release / preview_width));
+          l_ymin = (ymin + (ymax - ymin) * (y_press / preview_height));
+          l_ymax = (ymin + (ymax - ymin) * (y_release / preview_height));
 
           if (zoomindex < ZOOM_UNDO_SIZE - 1)
             {
+              wvals.xmin = l_xmin;
+              wvals.xmax = l_xmax;
+              wvals.ymin = l_ymin;
+              wvals.ymax = l_ymax;
               zooms[zoomindex] = wvals;
               zoomindex++;
             }
           zoommax = zoomindex;
-          wvals.xmin = l_xmin;
-          wvals.xmax = l_xmax;
-          wvals.ymin = l_ymin;
-          wvals.ymax = l_ymax;
-          dialog_change_scale ();
-          dialog_update_preview ();
+          g_object_set (config,
+                "xmin", l_xmin,
+                "xmax", l_xmax,
+                "ymin", l_ymin,
+                "ymax", l_ymax,
+                NULL);
+
+          dialog_update_preview (config);
           oldypos = oldxpos = -1;
         }
     }
@@ -504,30 +559,23 @@ preview_button_release_event (GtkWidget      *widget,
  *********************************************************************/
 
 gint
-explorer_dialog (void)
+explorer_dialog (GimpProcedure       *procedure,
+                 GimpProcedureConfig *config)
 {
   GtkWidget *dialog;
   GtkWidget *top_hbox;
   GtkWidget *left_vbox;
-  GtkWidget *abox;
   GtkWidget *vbox;
   GtkWidget *bbox;
   GtkWidget *frame;
   GtkWidget *toggle;
-  GtkWidget *toggle_vbox;
-  GtkWidget *toggle_vbox2;
-  GtkWidget *toggle_vbox3;
-  GtkWidget *notebook;
   GtkWidget *hbox;
-  GtkWidget *table;
   GtkWidget *button;
-  GtkWidget *gradient;
+  GtkWidget *gradient_button;
   gchar     *path;
-  gchar     *gradient_name;
-  GSList    *group = NULL;
-  gint       i;
+  gint       n_colors;
 
-  gimp_ui_init (PLUG_IN_BINARY, TRUE);
+  gimp_ui_init (PLUG_IN_BINARY);
 
   path = gimp_gimprc_query ("fractalexplorer-path");
 
@@ -538,7 +586,7 @@ explorer_dialog (void)
     }
   else
     {
-      gchar *gimprc    = gimp_personal_rc_file ("gimprc");
+      GFile *gimprc    = gimp_directory_file ("gimprc", NULL);
       gchar *full_path = gimp_config_build_data_path ("fractalexplorer");
       gchar *esc_path  = g_strescape (full_path, NULL);
       g_free (full_path);
@@ -549,48 +597,26 @@ explorer_dialog (void)
                    "to your %s file."),
                  "fractalexplorer-path",
                  "fractalexplorer-path",
-                 esc_path, gimp_filename_to_utf8 (gimprc));
+                 esc_path, gimp_file_get_utf8_name (gimprc));
 
-      g_free (gimprc);
+      g_object_unref (gimprc);
       g_free (esc_path);
     }
 
   wint.wimage = g_new (guchar, preview_width * preview_height * 3);
-  elements    = g_new (DialogElements, 1);
 
-  dialog = maindlg =
-    gimp_dialog_new (_("Fractal Explorer"), PLUG_IN_ROLE,
-                     NULL, 0,
-                     gimp_standard_help_func, PLUG_IN_PROC,
-
-                     _("_Cancel"), GTK_RESPONSE_CANCEL,
-                     _("_OK"),     GTK_RESPONSE_OK,
-
-                     NULL);
-
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
-
-  gimp_window_set_transient (GTK_WINDOW (dialog));
-
-  g_signal_connect (dialog, "response",
-                    G_CALLBACK (dialog_response),
-                    NULL);
-
-  g_signal_connect (dialog, "destroy",
-                    G_CALLBACK (gtk_main_quit),
-                    NULL);
+  dialog = maindlg = gimp_procedure_dialog_new (procedure,
+                                                GIMP_PROCEDURE_CONFIG (config),
+                                                _("Fractal Explorer"));
 
   top_hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
+  gtk_widget_set_vexpand (top_hbox, FALSE);
   gtk_container_set_border_width (GTK_CONTAINER (top_hbox), 12);
   gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
                       top_hbox, FALSE, FALSE, 0);
   gtk_widget_show (top_hbox);
 
   left_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-  gtk_box_pack_start (GTK_BOX (top_hbox), left_vbox, FALSE, FALSE, 0);
   gtk_widget_show (left_vbox);
 
   /*  Preview  */
@@ -598,13 +624,10 @@ explorer_dialog (void)
   gtk_box_pack_start (GTK_BOX (left_vbox), vbox, FALSE, FALSE, 0);
   gtk_widget_show (vbox);
 
-  abox = gtk_alignment_new (0.0, 0.0, 0.0, 0.0);
-  gtk_box_pack_start (GTK_BOX (vbox), abox, FALSE, FALSE, 0);
-  gtk_widget_show (abox);
-
   frame = gtk_frame_new (NULL);
+  gtk_widget_set_halign (frame, GTK_ALIGN_START);
   gtk_frame_set_shadow_type (GTK_FRAME (frame), GTK_SHADOW_IN);
-  gtk_container_add (GTK_CONTAINER (abox), frame);
+  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
 
   wint.preview = gimp_preview_area_new ();
@@ -616,7 +639,7 @@ explorer_dialog (void)
                     NULL);
   g_signal_connect (wint.preview, "button-release-event",
                     G_CALLBACK (preview_button_release_event),
-                    NULL);
+                    config);
   g_signal_connect (wint.preview, "motion-notify-event",
                     G_CALLBACK (preview_motion_notify_event),
                     NULL);
@@ -649,7 +672,7 @@ explorer_dialog (void)
   gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
   g_signal_connect (button, "clicked",
                     G_CALLBACK (dialog_redraw_callback),
-                    dialog);
+                    config);
   gtk_widget_show (button);
 
   /*  Zoom Options  */
@@ -672,7 +695,7 @@ explorer_dialog (void)
 
   g_signal_connect (button, "clicked",
                     G_CALLBACK (dialog_step_in_callback),
-                    dialog);
+                    config);
 
   button = gtk_button_new_with_mnemonic (_("Zoom _Out"));
   gtk_box_pack_start (GTK_BOX (bbox), button, TRUE, TRUE, 0);
@@ -680,7 +703,7 @@ explorer_dialog (void)
 
   g_signal_connect (button, "clicked",
                     G_CALLBACK (dialog_step_out_callback),
-                    dialog);
+                    config);
 
   bbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
   gtk_box_set_homogeneous (GTK_BOX (bbox), TRUE);
@@ -695,7 +718,7 @@ explorer_dialog (void)
 
   g_signal_connect (button, "clicked",
                     G_CALLBACK (dialog_undo_zoom_callback),
-                    dialog);
+                    config);
 
   button = gtk_button_new_with_mnemonic (_("_Redo"));
   gtk_box_pack_start (GTK_BOX (bbox), button, TRUE, TRUE, 0);
@@ -705,510 +728,320 @@ explorer_dialog (void)
 
   g_signal_connect (button, "clicked",
                     G_CALLBACK (dialog_redo_zoom_callback),
-                    dialog);
+                    config);
 
   /*  Create notebook  */
-  notebook = gtk_notebook_new ();
-  gtk_box_pack_start (GTK_BOX (top_hbox), notebook, FALSE, FALSE, 0);
-  gtk_widget_show (notebook);
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "parameter-tab", _("_Parameters"), FALSE, TRUE);
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "color-tab", _("_Colors"), FALSE, TRUE);
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "fractal-tab", _("_Fractals"), FALSE, TRUE);
 
   /*  "Parameters" page  */
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-  gtk_container_set_border_width (GTK_CONTAINER (vbox), 12);
-  gtk_notebook_append_page (GTK_NOTEBOOK (notebook), vbox,
-                            gtk_label_new_with_mnemonic (_("_Parameters")));
-  gtk_widget_show (vbox);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "xmin", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "xmax", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "ymin", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "ymax", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "iter", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "cx", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "cy", 1.0);
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "parameter-input-label", _("Fractal Parameters"),
+                                   FALSE, FALSE);
+  gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                  "parameter-input-box",
+                                  "xmin", "xmax", "ymin", "ymax",
+                                  "iter", "cx", "cy",
+                                  NULL);
+  gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "parameter-input-frame",
+                                    "parameter-input-label", FALSE,
+                                    "parameter-input-box");
 
-  frame = gimp_frame_new (_("Fractal Parameters"));
-  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "parameter-type-label", _("Fractal Type"),
+                                   FALSE, FALSE);
+  gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                  "parameter-type-box",
+                                  "fractal-type",
+                                  NULL);
+  gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "parameter-type-frame",
+                                    "parameter-type-label", FALSE,
+                                    "parameter-type-box");
 
-  table = gtk_table_new (8, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 6, 12);
-  gtk_container_add (GTK_CONTAINER (frame), table);
-  gtk_widget_show (table);
-
-  elements->xmin =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 0,
-                          _("Left:"), SCALE_WIDTH, 10,
-                          wvals.xmin, -3, 3, 0.001, 0.01, 5,
-                          TRUE, 0, 0, NULL, NULL);
-  g_signal_connect (elements->xmin, "value-changed",
-                    G_CALLBACK (explorer_double_adjustment_update),
-                    &wvals.xmin);
-
-  elements->xmax =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 1,
-                          _("Right:"), SCALE_WIDTH, 10,
-                          wvals.xmax, -3, 3, 0.001, 0.01, 5,
-                          TRUE, 0, 0, NULL, NULL);
-  g_signal_connect (elements->xmax, "value-changed",
-                    G_CALLBACK (explorer_double_adjustment_update),
-                    &wvals.xmax);
-
-  elements->ymin =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 2,
-                          _("Top:"), SCALE_WIDTH, 10,
-                          wvals.ymin, -3, 3, 0.001, 0.01, 5,
-                          TRUE, 0, 0, NULL, NULL);
-  g_signal_connect (elements->ymin, "value-changed",
-                    G_CALLBACK (explorer_double_adjustment_update),
-                    &wvals.ymin);
-
-  elements->ymax =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 3,
-                          _("Bottom:"), SCALE_WIDTH, 10,
-                          wvals.ymax, -3, 3, 0.001, 0.01, 5,
-                          TRUE, 0, 0, NULL, NULL);
-  g_signal_connect (elements->ymax, "value-changed",
-                    G_CALLBACK (explorer_double_adjustment_update),
-                    &wvals.ymax);
-
-  elements->iter =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 4,
-                          _("Iterations:"), SCALE_WIDTH, 10,
-                          wvals.iter, 1, 1000, 1, 10, 0,
-                          TRUE, 0, 0,
-                          _("The higher the number of iterations, "
-                            "the more details will be calculated"), NULL);
-  g_signal_connect (elements->iter, "value-changed",
-                    G_CALLBACK (explorer_double_adjustment_update),
-                    &wvals.iter);
-
-  elements->cx =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 5,
-                          _("CX:"), SCALE_WIDTH, 10,
-                          wvals.cx, -2.5, 2.5, 0.001, 0.01, 5,
-                          TRUE, 0, 0,
-                          _("Changes aspect of fractal"), NULL);
-  g_signal_connect (elements->cx, "value-changed",
-                    G_CALLBACK (explorer_double_adjustment_update),
-                    &wvals.cx);
-
-  elements->cy =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 6,
-                          _("CY:"), SCALE_WIDTH, 10,
-                          wvals.cy, -2.5, 2.5, 0.001, 0.01, 5,
-                          TRUE, 0, 0,
-                          _("Changes aspect of fractal"), NULL);
-  g_signal_connect (elements->cy, "value-changed",
-                    G_CALLBACK (explorer_double_adjustment_update),
-                    &wvals.cy);
+  vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "parameter-box",
+                                         "parameter-input-frame",
+                                         "parameter-type-frame",
+                                         NULL);
 
   bbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
+  gtk_widget_set_margin_top (bbox, 12);
   gtk_box_set_homogeneous (GTK_BOX (bbox), TRUE);
-  gtk_table_attach_defaults (GTK_TABLE (table), bbox, 0, 3, 7, 8);
-  gtk_widget_show (bbox);
+  gtk_box_pack_start (GTK_BOX (vbox), bbox, TRUE, TRUE, 2);
+  gtk_box_reorder_child (GTK_BOX (vbox), bbox, 1);
+  gtk_widget_set_visible (bbox, TRUE);
 
   button = gtk_button_new_with_mnemonic (_("_Open"));
   gtk_box_pack_start (GTK_BOX (bbox), button, TRUE, TRUE, 0);
   g_signal_connect (button, "clicked",
                     G_CALLBACK (create_load_file_chooser),
                     dialog);
-  gtk_widget_show (button);
+  gtk_widget_set_visible (button, TRUE);
   gimp_help_set_help_data (button, _("Load a fractal from file"), NULL);
-
-  button = gtk_button_new_with_mnemonic (_("_Reset"));
-  gtk_box_pack_start (GTK_BOX (bbox), button, TRUE, TRUE, 0);
-  g_signal_connect (button, "clicked",
-                    G_CALLBACK (dialog_reset_callback),
-                    dialog);
-  gtk_widget_show (button);
-  gimp_help_set_help_data (button, _("Reset parameters to default values"),
-                           NULL);
 
   button = gtk_button_new_with_mnemonic (_("_Save"));
   gtk_box_pack_start (GTK_BOX (bbox), button, TRUE, TRUE, 0);
   g_signal_connect (button, "clicked",
                     G_CALLBACK (create_save_file_chooser),
                     dialog);
-  gtk_widget_show (button);
+  gtk_widget_set_visible (button, TRUE);
   gimp_help_set_help_data (button, _("Save active fractal to file"), NULL);
 
-  /*  Fractal type toggle box  */
-  frame = gimp_frame_new (_("Fractal Type"));
-  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
+  g_signal_connect (config, "notify::xmin",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::xmax",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::ymin",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::ymax",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::iter",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::cx",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::cy",
+                    G_CALLBACK (update_previews),
+                    config);
 
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_container_add (GTK_CONTAINER (frame), hbox);
-  gtk_widget_show (hbox);
-
-  toggle_vbox =
-    gimp_int_radio_group_new (FALSE, NULL,
-                              G_CALLBACK (explorer_radio_update),
-                              &wvals.fractaltype, wvals.fractaltype,
-
-                              _("Mandelbrot"), TYPE_MANDELBROT,
-                              &(elements->type[TYPE_MANDELBROT]),
-                              _("Julia"),      TYPE_JULIA,
-                              &(elements->type[TYPE_JULIA]),
-                              _("Barnsley 1"), TYPE_BARNSLEY_1,
-                              &(elements->type[TYPE_BARNSLEY_1]),
-                              _("Barnsley 2"), TYPE_BARNSLEY_2,
-                              &(elements->type[TYPE_BARNSLEY_2]),
-                              _("Barnsley 3"), TYPE_BARNSLEY_3,
-                              &(elements->type[TYPE_BARNSLEY_3]),
-                              _("Spider"),     TYPE_SPIDER,
-                              &(elements->type[TYPE_SPIDER]),
-                              _("Man'o'war"),  TYPE_MAN_O_WAR,
-                              &(elements->type[TYPE_MAN_O_WAR]),
-                              _("Lambda"),     TYPE_LAMBDA,
-                              &(elements->type[TYPE_LAMBDA]),
-                              _("Sierpinski"), TYPE_SIERPINSKI,
-                              &(elements->type[TYPE_SIERPINSKI]),
-
-                              NULL);
-
-  toggle_vbox2 = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-  for (i = TYPE_BARNSLEY_2; i <= TYPE_SPIDER; i++)
-    {
-      g_object_ref (elements->type[i]);
-
-      gtk_widget_hide (elements->type[i]);
-      gtk_container_remove (GTK_CONTAINER (toggle_vbox), elements->type[i]);
-      gtk_box_pack_start (GTK_BOX (toggle_vbox2), elements->type[i],
-                          FALSE, FALSE, 0);
-      gtk_widget_show (elements->type[i]);
-
-      g_object_unref (elements->type[i]);
-    }
-
-  toggle_vbox3 = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-  for (i = TYPE_MAN_O_WAR; i <= TYPE_SIERPINSKI; i++)
-    {
-      g_object_ref (elements->type[i]);
-
-      gtk_widget_hide (elements->type[i]);
-      gtk_container_remove (GTK_CONTAINER (toggle_vbox), elements->type[i]);
-      gtk_box_pack_start (GTK_BOX (toggle_vbox3), elements->type[i],
-                          FALSE, FALSE, 0);
-      gtk_widget_show (elements->type[i]);
-
-      g_object_unref (elements->type[i]);
-    }
-
-  gtk_box_pack_start (GTK_BOX (hbox), toggle_vbox, FALSE, FALSE, 0);
-  gtk_widget_show (toggle_vbox);
-
-  gtk_box_pack_start (GTK_BOX (hbox), toggle_vbox2, FALSE, FALSE, 0);
-  gtk_widget_show (toggle_vbox2);
-
-  gtk_box_pack_start (GTK_BOX (hbox), toggle_vbox3, FALSE, FALSE, 0);
-  gtk_widget_show (toggle_vbox3);
-
-  /*  Color page  */
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-  gtk_container_set_border_width (GTK_CONTAINER (vbox), 12);
-  gtk_notebook_append_page (GTK_NOTEBOOK (notebook), vbox,
-                            gtk_label_new_with_mnemonic (_("Co_lors")));
-  gtk_widget_show (vbox);
-
-  /*  Number of Colors frame  */
-  frame = gimp_frame_new (_("Number of Colors"));
-  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
-
-  table = gtk_table_new (2, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_container_add (GTK_CONTAINER (frame), table);
-  gtk_widget_show (table);
-
-  elements->ncol =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 0,
-                          _("Number of colors:"), SCALE_WIDTH, 0,
-                          wvals.ncolors, 2, MAXNCOLORS, 1, 10, 0,
-                          TRUE, 0, 0,
-                          _("Change the number of colors in the mapping"),
-                          NULL);
-  g_signal_connect (elements->ncol, "value-changed",
-                    G_CALLBACK (explorer_number_of_colors_callback),
-                    &wvals.ncolors);
-
-  elements->useloglog = toggle =
-    gtk_check_button_new_with_label (_("Use loglog smoothing"));
-  gtk_table_attach_defaults (GTK_TABLE (table), toggle, 0, 3, 1, 2);
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (explorer_toggle_update),
-                    &wvals.useloglog);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle), wvals.useloglog);
-  gtk_widget_show (toggle);
-  gimp_help_set_help_data (toggle, _("Use log log smoothing to eliminate "
-                                     "\"banding\" in the result"), NULL);
-
-  /*  Color Density frame  */
-  frame = gimp_frame_new (_("Color Density"));
-  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
-
-  table = gtk_table_new (3, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_container_add (GTK_CONTAINER (frame), table);
-  gtk_widget_show (table);
-
-  elements->red =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 0,
-                          _("Red:"), SCALE_WIDTH, 0,
-                          wvals.redstretch, 0, 1, 0.01, 0.1, 2,
-                          TRUE, 0, 0,
-                          _("Change the intensity of the red channel"), NULL);
-  g_signal_connect (elements->red, "value-changed",
-                    G_CALLBACK (explorer_double_adjustment_update),
-                    &wvals.redstretch);
-
-  elements->green =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 1,
-                          _("Green:"), SCALE_WIDTH, 0,
-                          wvals.greenstretch, 0, 1, 0.01, 0.1, 2,
-                          TRUE, 0, 0,
-                          _("Change the intensity of the green channel"), NULL);
-  g_signal_connect (elements->green, "value-changed",
-                    G_CALLBACK (explorer_double_adjustment_update),
-                    &wvals.greenstretch);
-
-  elements->blue =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 2,
-                          _("Blue:"), SCALE_WIDTH, 0,
-                          wvals.bluestretch, 0, 1, 0.01, 0.1, 2,
-                          TRUE, 0, 0,
-                          _("Change the intensity of the blue channel"), NULL);
-  g_signal_connect (elements->blue, "value-changed",
-                    G_CALLBACK (explorer_double_adjustment_update),
-                    &wvals.bluestretch);
-
-  /*  Color Function frame  */
-  frame = gimp_frame_new (_("Color Function"));
-  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
-
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_container_add (GTK_CONTAINER (frame), hbox);
-  gtk_widget_show (hbox);
-
-  /*  Redmode radio frame  */
-  frame = gimp_int_radio_group_new (TRUE, _("Red"),
-                                    G_CALLBACK (explorer_radio_update),
-                                    &wvals.redmode, wvals.redmode,
-
-                                    _("Sine"),                    SINUS,
-                                    &elements->redmode[SINUS],
-                                    _("Cosine"),                  COSINUS,
-                                    &elements->redmode[COSINUS],
-                                    C_("color-function", "None"), NONE,
-                                    &elements->redmode[NONE],
-
-                                    NULL);
-  gimp_help_set_help_data (elements->redmode[SINUS],
-                           _("Use sine-function for this color component"),
-                           NULL);
-  gimp_help_set_help_data (elements->redmode[COSINUS],
-                           _("Use cosine-function for this color "
-                             "component"), NULL);
-  gimp_help_set_help_data (elements->redmode[NONE],
-                           _("Use linear mapping instead of any "
-                             "trigonometrical function for this color "
-                             "channel"), NULL);
-  gtk_box_pack_start (GTK_BOX (hbox), frame, TRUE, TRUE, 0);
-  gtk_widget_show (frame);
-
-  toggle_vbox = gtk_bin_get_child (GTK_BIN (frame));
-
-  elements->redinvert = toggle =
-    gtk_check_button_new_with_label (_("Inversion"));
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle), wvals.redinvert);
-  gtk_box_pack_start (GTK_BOX (toggle_vbox), toggle, FALSE, FALSE, 0);
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (explorer_toggle_update),
-                    &wvals.redinvert);
-  gtk_widget_show (toggle);
-  gimp_help_set_help_data (toggle,
-                           _("If you enable this option higher color values "
-                             "will be swapped with lower ones and vice "
-                             "versa"), NULL);
-
-  /*  Greenmode radio frame  */
-  frame = gimp_int_radio_group_new (TRUE, _("Green"),
-                                    G_CALLBACK (explorer_radio_update),
-                                    &wvals.greenmode, wvals.greenmode,
-
-                                    _("Sine"),                    SINUS,
-                                    &elements->greenmode[SINUS],
-                                    _("Cosine"),                  COSINUS,
-                                    &elements->greenmode[COSINUS],
-                                    C_("color-function", "None"), NONE,
-                                    &elements->greenmode[NONE],
-
-                                    NULL);
-  gimp_help_set_help_data (elements->greenmode[SINUS],
-                           _("Use sine-function for this color component"),
-                           NULL);
-  gimp_help_set_help_data (elements->greenmode[COSINUS],
-                           _("Use cosine-function for this color "
-                             "component"), NULL);
-  gimp_help_set_help_data (elements->greenmode[NONE],
-                           _("Use linear mapping instead of any "
-                             "trigonometrical function for this color "
-                             "channel"), NULL);
-  gtk_box_pack_start (GTK_BOX (hbox), frame, TRUE, TRUE, 0);
-  gtk_widget_show (frame);
-
-  toggle_vbox = gtk_bin_get_child (GTK_BIN (frame));
-
-  elements->greeninvert = toggle =
-    gtk_check_button_new_with_label (_("Inversion"));
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle), wvals.greeninvert);
-  gtk_box_pack_start (GTK_BOX (toggle_vbox), toggle, FALSE, FALSE, 0);
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (explorer_toggle_update),
-                    &wvals.greeninvert);
-  gtk_widget_show (toggle);
-  gimp_help_set_help_data (toggle,
-                           _("If you enable this option higher color values "
-                             "will be swapped with lower ones and vice "
-                             "versa"), NULL);
-
-  /*  Bluemode radio frame  */
-  frame = gimp_int_radio_group_new (TRUE, _("Blue"),
-                                    G_CALLBACK (explorer_radio_update),
-                                    &wvals.bluemode, wvals.bluemode,
-
-                                    _("Sine"),                    SINUS,
-                                    &elements->bluemode[SINUS],
-                                    _("Cosine"),                  COSINUS,
-                                    &elements->bluemode[COSINUS],
-                                    C_("color-function", "None"), NONE,
-                                    &elements->bluemode[NONE],
-
-                                    NULL);
-  gimp_help_set_help_data (elements->bluemode[SINUS],
-                           _("Use sine-function for this color component"),
-                           NULL);
-  gimp_help_set_help_data (elements->bluemode[COSINUS],
-                           _("Use cosine-function for this color "
-                             "component"), NULL);
-  gimp_help_set_help_data (elements->bluemode[NONE],
-                           _("Use linear mapping instead of any "
-                             "trigonometrical function for this color "
-                             "channel"), NULL);
-  gtk_box_pack_start (GTK_BOX (hbox), frame, TRUE, TRUE, 0);
-  gtk_widget_show (frame);
-
-  toggle_vbox = gtk_bin_get_child (GTK_BIN (frame));
-
-  elements->blueinvert = toggle =
-    gtk_check_button_new_with_label (_("Inversion"));
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON( toggle), wvals.blueinvert);
-  gtk_box_pack_start (GTK_BOX (toggle_vbox), toggle, FALSE, FALSE, 0);
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (explorer_toggle_update),
-                    &wvals.blueinvert);
-  gtk_widget_show (toggle);
-  gimp_help_set_help_data (toggle,
-                           _("If you enable this option higher color values "
-                             "will be swapped with lower ones and vice "
-                             "versa"), NULL);
-
-  /*  Colormode toggle box  */
-  frame = gimp_frame_new (_("Color Mode"));
-  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
-
-  toggle_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-  gtk_container_add (GTK_CONTAINER (frame), toggle_vbox);
-  gtk_widget_show (toggle_vbox);
-
-  toggle = elements->colormode[0] =
-    gtk_radio_button_new_with_label (group, _("As specified above"));
-  group = gtk_radio_button_get_group (GTK_RADIO_BUTTON (toggle));
-  gtk_box_pack_start (GTK_BOX (toggle_vbox), toggle, FALSE, FALSE, 0);
-  g_object_set_data (G_OBJECT (toggle), "gimp-item-data",
-                     GINT_TO_POINTER (0));
-  g_signal_connect (toggle, "toggled",
+  g_signal_connect (config, "notify::fractal-type",
                     G_CALLBACK (explorer_radio_update),
-                    &wvals.colormode);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle),
-                                wvals.colormode == 0);
-  gtk_widget_show (toggle);
-  gimp_help_set_help_data (toggle,
-                           _("Create a color-map with the options you "
-                             "specified above (color density/function). The "
-                             "result is visible in the preview image"), NULL);
+                    config);
+  explorer_radio_update (NULL, NULL);
 
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-  gtk_box_pack_start (GTK_BOX (toggle_vbox), hbox, FALSE, FALSE, 0);
-  gtk_widget_show (hbox);
+  /* Colors Page */
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "n-colors", 1.0);
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "num-colors-label", _("Number of Colors"),
+                                   FALSE, FALSE);
+  gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                      "num-colors-box",
+                                      "n-colors",
+                                      "use-loglog-smoothing",
+                                      NULL);
+  gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "num-colors-frame",
+                                    "num-colors-label", FALSE,
+                                    "num-colors-box");
 
-  toggle = elements->colormode[1] =
-    gtk_radio_button_new_with_label (group,
-                                     _("Apply active gradient to final image"));
-  group = gtk_radio_button_get_group (GTK_RADIO_BUTTON (toggle));
-  gtk_box_pack_start (GTK_BOX (hbox), toggle, TRUE, TRUE, 0);
-  g_object_set_data (G_OBJECT (toggle), "gimp-item-data",
-                     GINT_TO_POINTER (1));
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (explorer_radio_update),
-                    &wvals.colormode);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle),
-                                wvals.colormode == 1);
-  gtk_widget_show (toggle);
-  gimp_help_set_help_data (toggle,
-                           _("Create a color-map using a gradient from "
-                             "the gradient editor"), NULL);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "red-stretch", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "green-stretch", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "blue-stretch", 1.0);
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "color-density-label", _("Color Density"),
+                                   FALSE, FALSE);
+  gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                      "color-density-box",
+                                      "red-stretch",
+                                      "green-stretch",
+                                      "blue-stretch",
+                                      NULL);
+  gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "color-density-frame",
+                                    "color-density-label", FALSE,
+                                    "color-density-box");
 
-  gradient_name = gimp_context_get_gradient ();
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "color-function-label", _("Color Function"),
+                                   FALSE, FALSE);
 
-  gimp_gradient_get_uniform_samples (gradient_name,
-                                     wvals.ncolors,
-                                     wvals.gradinvert,
-                                     &n_gradient_samples,
-                                     &gradient_samples);
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "red-function-label", _("Red"),
+                                   FALSE, FALSE);
+  gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                      "red-function-box",
+                                      "red-mode",
+                                      "red-invert",
+                                      NULL);
+  gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "red-function-frame",
+                                    "red-function-label", FALSE,
+                                    "red-function-box");
 
-  gradient = gimp_gradient_select_button_new (_("FractalExplorer Gradient"),
-                                              gradient_name);
-  g_signal_connect (gradient, "gradient-set",
-                    G_CALLBACK (explorer_gradient_select_callback), NULL);
-  g_free (gradient_name);
-  gtk_box_pack_start (GTK_BOX (hbox), gradient, FALSE, FALSE, 0);
-  gtk_widget_show (gradient);
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "green-function-label", _("Green"),
+                                   FALSE, FALSE);
+  gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                      "green-function-box",
+                                      "green-mode",
+                                      "green-invert",
+                                      NULL);
+  gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "green-function-frame",
+                                    "green-function-label", FALSE,
+                                    "green-function-box");
 
-  abox = gtk_alignment_new (0.5, 0.5, 0.0, 0.0);
-  {
-    gint xsize, ysize;
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "blue-function-label", _("Blue"),
+                                   FALSE, FALSE);
+  gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                      "blue-function-box",
+                                      "blue-mode",
+                                      "blue-invert",
+                                      NULL);
+  gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "blue-function-frame",
+                                    "blue-function-label", FALSE,
+                                    "blue-function-box");
 
-    for (ysize = 1; ysize * ysize * ysize < 8192; ysize++) /**/;
-    xsize = wvals.ncolors / ysize;
-    while (xsize * ysize < 8192) xsize++;
+  hbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "function-hbox",
+                                         "red-function-frame",
+                                         "green-function-frame",
+                                         "blue-function-frame",
+                                         NULL);
+  gtk_orientable_set_orientation (GTK_ORIENTABLE (hbox),
+                                  GTK_ORIENTATION_HORIZONTAL);
 
-    gtk_widget_set_size_request (abox, xsize, ysize * 4);
-  }
-  gtk_box_pack_start (GTK_BOX (toggle_vbox), abox, FALSE, FALSE, 0);
-  gtk_widget_show (abox);
+  gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "color-function-frame",
+                                    "color-function-label", FALSE,
+                                    "function-hbox");
+
+  gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "color-mode", GIMP_TYPE_INT_RADIO_FRAME);
+
+  hbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "color-mode-hbox",
+                                         "color-mode",
+                                         NULL);
+  gtk_orientable_set_orientation (GTK_ORIENTABLE (hbox),
+                                  GTK_ORIENTATION_HORIZONTAL);
+
+  g_object_get (config,
+                "n-colors", &n_colors,
+                NULL);
+  /* Pass NULL to set local gradient data from context. */
+  set_grad_data_cache (NULL, n_colors);
+
+  gradient_button = gimp_gradient_chooser_new (_("FractalExplorer Gradient"), NULL, gradient);
+  g_signal_connect_swapped (gradient_button, "resource-set",
+                            G_CALLBACK (explorer_gradient_select_callback), config);
+  gtk_box_pack_start (GTK_BOX (hbox), gradient_button, TRUE, TRUE, 0);
+  gtk_widget_set_visible (gradient_button, TRUE);
+
+  vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "color-box",
+                                         "num-colors-frame",
+                                         "color-density-frame",
+                                         "color-function-frame",
+                                         "color-mode-hbox",
+                                         NULL);
 
   cmap_preview = gimp_preview_area_new ();
+  gtk_widget_set_halign (cmap_preview, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign (cmap_preview, GTK_ALIGN_CENTER);
   gtk_widget_set_size_request (cmap_preview, 32, 32);
-  gtk_container_add (GTK_CONTAINER (abox), cmap_preview);
+  gtk_box_pack_start (GTK_BOX (vbox), cmap_preview, TRUE, TRUE, 0);
   g_signal_connect (cmap_preview, "size-allocate",
-                    G_CALLBACK (cmap_preview_size_allocate), NULL);
-  gtk_widget_show (cmap_preview);
+                    G_CALLBACK (cmap_preview_size_allocate), config);
+  gtk_widget_set_visible (cmap_preview, TRUE);
 
+  g_signal_connect (config, "notify::n-colors",
+                    G_CALLBACK (explorer_number_of_colors_callback),
+                    config);
+  g_signal_connect (config, "notify::use-loglog-smoothing",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::red-stretch",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::blue-stretch",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::green-stretch",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::red-mode",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::green-mode",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::blue-mode",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::red-invert",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::green-invert",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::blue-invert",
+                    G_CALLBACK (update_previews),
+                    config);
+  g_signal_connect (config, "notify::color-mode",
+                    G_CALLBACK (update_previews),
+                    config);
+  /* Fractal Presets */
+  gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                   "preset-label", _("Presets"),
+                                   FALSE, FALSE);
+  vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "fractal-box",
+                                         "preset-label",
+                                         NULL);
   frame = add_objects_list ();
-  gtk_notebook_append_page (GTK_NOTEBOOK (notebook), frame,
-                            gtk_label_new_with_mnemonic (_("_Fractals")));
-  gtk_widget_show (frame);
+  gtk_box_pack_start (GTK_BOX (vbox), frame, TRUE, TRUE, 2);
+  gtk_widget_set_visible (frame, TRUE);
 
-  gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook), 0);
+  /* Creating layout */
+  gimp_procedure_dialog_fill_notebook (GIMP_PROCEDURE_DIALOG (dialog),
+                                       "main-notebook",
+                                       "parameter-tab", "parameter-box",
+                                       "color-tab", "color-box",
+                                       "fractal-tab", "fractal-box",
+                                       NULL);
+
+  top_hbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                             "top-hbox",
+                                             "main-notebook",
+                                             NULL);
+  gtk_orientable_set_orientation (GTK_ORIENTABLE (top_hbox),
+                                  GTK_ORIENTATION_HORIZONTAL);
+  gtk_widget_set_vexpand (top_hbox, FALSE);
+  gtk_container_set_border_width (GTK_CONTAINER (top_hbox), 12);
+  gtk_box_pack_start (GTK_BOX (top_hbox), left_vbox, FALSE, FALSE, 0);
+  gtk_box_reorder_child (GTK_BOX (top_hbox), left_vbox, 0);
+
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog), "top-hbox", NULL);
 
   gtk_widget_show (dialog);
   ready_now = TRUE;
 
-  set_cmap_preview ();
-  dialog_update_preview ();
+  update_previews (config);
 
-  gtk_main ();
+  wint.run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
+  gtk_widget_destroy (dialog);
 
   g_free (wint.wimage);
 
@@ -1221,7 +1054,7 @@ explorer_dialog (void)
  *********************************************************************/
 
 void
-dialog_update_preview (void)
+dialog_update_preview (GimpProcedureConfig *config)
 {
   gint     ycoord;
   guchar  *p_ul;
@@ -1231,10 +1064,12 @@ dialog_update_preview (void)
 
   if (ready_now && wvals.alwayspreview)
     {
-      xmin = wvals.xmin;
-      xmax = wvals.xmax;
-      ymin = wvals.ymin;
-      ymax = wvals.ymax;
+      g_object_get (config,
+                    "xmin", &xmin,
+                    "xmax", &xmax,
+                    "ymin", &ymin,
+                    "ymax", &ymax,
+                    NULL);
       xbild = preview_width;
       ybild = preview_height;
       xdiff = (xmax - xmin) / xbild;
@@ -1248,7 +1083,8 @@ dialog_update_preview (void)
                                p_ul,
                                ycoord,
                                preview_width,
-                               3);
+                               3,
+                               config);
           p_ul += preview_width * 3;
         }
 
@@ -1260,16 +1096,27 @@ dialog_update_preview (void)
  FUNCTION: cmap_preview_size_allocate()
  *********************************************************************/
 
+/* Handler for size-allocate.
+ * This:
+ *    - transfers internal model colormap to the widget
+ *    - redraws.
+ */
 static void
-cmap_preview_size_allocate (GtkWidget     *widget,
-                            GtkAllocation *allocation)
+cmap_preview_size_allocate (GtkWidget           *widget,
+                            GtkAllocation       *allocation,
+                            GimpProcedureConfig *config)
 {
   gint             i;
   gint             x;
   gint             y;
   gint             j;
+  gint             n_colors;
   guchar          *b;
   GimpPreviewArea *preview = GIMP_PREVIEW_AREA (widget);
+
+  g_object_get (config,
+                "n-colors", &n_colors,
+                NULL);
 
   b = g_new (guchar, allocation->width * allocation->height * 3);
 
@@ -1278,7 +1125,7 @@ cmap_preview_size_allocate (GtkWidget     *widget,
       for (x = 0; x < allocation->width; x++)
         {
           i = x + (y / 4) * allocation->width;
-          if (i > wvals.ncolors)
+          if (i > n_colors)
             {
               for (j = 0; j < 3; j++)
                 b[(y*allocation->width + x) * 3 + j] = 0;
@@ -1305,21 +1152,29 @@ cmap_preview_size_allocate (GtkWidget     *widget,
  *********************************************************************/
 
 void
-set_cmap_preview (void)
+set_cmap_preview (GimpProcedureConfig *config)
 {
-  gint    xsize, ysize;
+  gint xsize;
+  gint ysize;
+  gint n_colors;
+
+  g_object_get (config,
+                "n-colors", &n_colors,
+                NULL);
 
   if (NULL == cmap_preview)
     return;
 
-  make_color_map ();
+  /* Change the internal model.  Does not write to widget's model. */
+  make_color_map (config);
 
-  for (ysize = 1; ysize * ysize * ysize < wvals.ncolors; ysize++)
+  for (ysize = 1; ysize * ysize * ysize < n_colors; ysize++)
     /**/;
-  xsize = wvals.ncolors / ysize;
-  while (xsize * ysize < wvals.ncolors)
+  xsize = n_colors / ysize;
+  while (xsize * ysize < n_colors)
     xsize++;
 
+  /* Set minimum size.  This does not always signal an event that would redraw. */
   gtk_widget_set_size_request (cmap_preview, xsize, ysize * 4);
 }
 
@@ -1328,50 +1183,66 @@ set_cmap_preview (void)
  *********************************************************************/
 
 void
-make_color_map (void)
+make_color_map (GimpProcedureConfig *config)
 {
-  gint     i;
-  gint     r;
-  gint     gr;
-  gint     bl;
-  gdouble  redstretch;
-  gdouble  greenstretch;
-  gdouble  bluestretch;
-  gdouble  pi = atan (1) * 4;
+  const Babl *colormap_format = babl_format ("R'G'B' u8");
+  gint        i;
+  gint        r;
+  gint        gr;
+  gint        bl;
+  gdouble     redstretch;
+  gdouble     greenstretch;
+  gdouble     bluestretch;
+  gdouble     pi = atan (1) * 4;
+  gint        n_colors;
+  gint        color_mode;
+  gint        red_mode;
+  gint        green_mode;
+  gint        blue_mode;
+  gboolean    red_invert;
+  gboolean    green_invert;
+  gboolean    blue_invert;
+
+  g_object_get (config,
+                "n-colors",      &n_colors,
+                "red-stretch",   &redstretch,
+                "green-stretch", &greenstretch,
+                "blue-stretch",  &bluestretch,
+                "red-invert",    &red_invert,
+                "green-invert",  &green_invert,
+                "blue-invert",   &blue_invert,
+                NULL);
+  red_mode    = gimp_procedure_config_get_choice_id (config, "red-mode");
+  green_mode  = gimp_procedure_config_get_choice_id (config, "green-mode");
+  blue_mode   = gimp_procedure_config_get_choice_id (config, "blue-mode");
+  color_mode  = gimp_procedure_config_get_choice_id (config, "color-mode");
 
   /*  get gradient samples if they don't exist -- fixes gradient color
    *  mode for noninteractive use (bug #103470).
    */
   if (gradient_samples == NULL)
     {
-      gchar *gradient_name = gimp_context_get_gradient ();
+      GimpGradient *gradient = gimp_context_get_gradient ();
 
-      gimp_gradient_get_uniform_samples (gradient_name,
-                                         wvals.ncolors,
-                                         wvals.gradinvert,
-                                         &n_gradient_samples,
-                                         &gradient_samples);
-
-      g_free (gradient_name);
+      gradient_samples = gimp_gradient_get_uniform_samples (gradient,
+                                                            n_colors, FALSE);
     }
 
-  redstretch   = wvals.redstretch * 127.5;
-  greenstretch = wvals.greenstretch * 127.5;
-  bluestretch  = wvals.bluestretch * 127.5;
+  redstretch   *= 127.5;
+  greenstretch *= 127.5;
+  bluestretch  *= 127.5;
 
-  for (i = 0; i < wvals.ncolors; i++)
-    if (wvals.colormode == 1)
+  for (i = 0; i < n_colors; i++)
+    if (color_mode == 1)
       {
-        colormap[i].r = (guchar)(gradient_samples[i * 4] * 255.9);
-        colormap[i].g = (guchar)(gradient_samples[i * 4 + 1] * 255.9);
-        colormap[i].b = (guchar)(gradient_samples[i * 4 + 2] * 255.9);
+        gegl_color_get_pixel (gradient_samples[i], colormap_format, (void *) &(colormap[i]));
       }
     else
       {
-        double x = (i*2.0) / wvals.ncolors;
+        double x = (i*2.0) / n_colors;
         r = gr = bl = 0;
 
-        switch (wvals.redmode)
+        switch (red_mode)
           {
           case SINUS:
             r = (int) redstretch *(1.0 + sin((x - 1) * pi));
@@ -1386,7 +1257,7 @@ make_color_map (void)
             break;
           }
 
-        switch (wvals.greenmode)
+        switch (green_mode)
           {
           case SINUS:
             gr = (int) greenstretch *(1.0 + sin((x - 1) * pi));
@@ -1401,7 +1272,7 @@ make_color_map (void)
             break;
           }
 
-        switch (wvals.bluemode)
+        switch (blue_mode)
           {
           case SINUS:
             bl = (int) bluestretch * (1.0 + sin ((x - 1) * pi));
@@ -1420,13 +1291,13 @@ make_color_map (void)
         gr = MIN (gr, 255);
         bl = MIN (bl, 255);
 
-        if (wvals.redinvert)
+        if (red_invert)
           r = 255 - r;
 
-        if (wvals.greeninvert)
+        if (green_invert)
           gr = 255 - gr;
 
-        if (wvals.blueinvert)
+        if (blue_invert)
           bl = 255 - bl;
 
         colormap[i].r = r;
@@ -1436,100 +1307,95 @@ make_color_map (void)
 }
 
 /**********************************************************************
- FUNCTION: dialog_change_scale
- *********************************************************************/
-
-void
-dialog_change_scale (void)
-{
-  ready_now = FALSE;
-
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (elements->xmin), wvals.xmin);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (elements->xmax), wvals.xmax);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (elements->ymin), wvals.ymin);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (elements->ymax), wvals.ymax);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (elements->iter), wvals.iter);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (elements->cx),   wvals.cx);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (elements->cy),   wvals.cy);
-
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (elements->red),  wvals.redstretch);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (elements->green),wvals.greenstretch);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (elements->blue), wvals.bluestretch);
-
-  gtk_toggle_button_set_active
-    (GTK_TOGGLE_BUTTON (elements->type[wvals.fractaltype]), TRUE);
-
-  gtk_toggle_button_set_active
-    (GTK_TOGGLE_BUTTON (elements->redmode[wvals.redmode]), TRUE);
-  gtk_toggle_button_set_active
-    (GTK_TOGGLE_BUTTON (elements->greenmode[wvals.greenmode]), TRUE);
-  gtk_toggle_button_set_active
-    (GTK_TOGGLE_BUTTON (elements->bluemode[wvals.bluemode]), TRUE);
-
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (elements->redinvert),
-                                wvals.redinvert);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (elements->greeninvert),
-                                wvals.greeninvert);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (elements->blueinvert),
-                                wvals.blueinvert);
-
-  gtk_toggle_button_set_active
-    (GTK_TOGGLE_BUTTON (elements->colormode[wvals.colormode]), TRUE);
-
-  ready_now = TRUE;
-}
-
-
-/**********************************************************************
  FUNCTION: save_options
  *********************************************************************/
 
 static void
 save_options (FILE * fp)
 {
-  gchar buf[64];
+  gchar    buf[64];
+  gint     fractal_type;
+  gint     red_mode;
+  gint     green_mode;
+  gint     blue_mode;
+  gint     xmin;
+  gint     xmax;
+  gint     ymin;
+  gint     ymax;
+  gint     iter;
+  gint     cx;
+  gint     cy;
+  gdouble  red_stretch;
+  gdouble  green_stretch;
+  gdouble  blue_stretch;
+  gboolean red_invert;
+  gboolean green_invert;
+  gboolean blue_invert;
+  gint     color_mode;
+
+  g_object_get (wvals.config,
+                "xmin",          &xmin,
+                "xmax",          &xmax,
+                "ymin",          &ymin,
+                "ymax",          &ymax,
+                "iter",          &iter,
+                "cx",            &cx,
+                "cy",            &cy,
+                "red-stretch",   &red_stretch,
+                "green-stretch", &green_stretch,
+                "blue-stretch",  &blue_stretch,
+                "red-invert",    &red_invert,
+                "green-invert",  &green_invert,
+                "blue-invert",   &blue_invert,
+                NULL);
+  fractal_type =
+    gimp_procedure_config_get_choice_id (wvals.config, "fractal-type");
+  red_mode = gimp_procedure_config_get_choice_id (wvals.config, "red-mode");
+  green_mode = gimp_procedure_config_get_choice_id (wvals.config, "green-mode");
+  blue_mode = gimp_procedure_config_get_choice_id (wvals.config, "blue-mode");
+  color_mode = gimp_procedure_config_get_choice_id (wvals.config, "color-mode");
 
   /* Save options */
 
-  fprintf (fp, "fractaltype: %i\n", wvals.fractaltype);
+  fprintf (fp, "fractaltype: %i\n", fractal_type);
 
-  g_ascii_dtostr (buf, sizeof (buf), wvals.xmin);
+  g_ascii_dtostr (buf, sizeof (buf), xmin);
   fprintf (fp, "xmin: %s\n", buf);
 
-  g_ascii_dtostr (buf, sizeof (buf), wvals.xmax);
+  g_ascii_dtostr (buf, sizeof (buf), xmax);
   fprintf (fp, "xmax: %s\n", buf);
 
-  g_ascii_dtostr (buf, sizeof (buf), wvals.ymin);
+  g_ascii_dtostr (buf, sizeof (buf), ymin);
   fprintf (fp, "ymin: %s\n", buf);
 
-  g_ascii_dtostr (buf, sizeof (buf), wvals.ymax);
+  g_ascii_dtostr (buf, sizeof (buf), ymax);
   fprintf (fp, "ymax: %s\n", buf);
 
-  g_ascii_dtostr (buf, sizeof (buf), wvals.iter);
+  g_ascii_dtostr (buf, sizeof (buf), iter);
   fprintf (fp, "iter: %s\n", buf);
 
-  g_ascii_dtostr (buf, sizeof (buf), wvals.cx);
+  g_ascii_dtostr (buf, sizeof (buf), cx);
   fprintf (fp, "cx: %s\n", buf);
 
-  g_ascii_dtostr (buf, sizeof (buf), wvals.cy);
+  g_ascii_dtostr (buf, sizeof (buf), cy);
   fprintf (fp, "cy: %s\n", buf);
 
-  g_ascii_dtostr (buf, sizeof (buf), wvals.redstretch * 128.0);
+  g_ascii_dtostr (buf, sizeof (buf), red_stretch * 128.0);
   fprintf (fp, "redstretch: %s\n", buf);
 
-  g_ascii_dtostr (buf, sizeof (buf), wvals.greenstretch * 128.0);
+  g_ascii_dtostr (buf, sizeof (buf), green_stretch * 128.0);
   fprintf (fp, "greenstretch: %s\n", buf);
 
-  g_ascii_dtostr (buf, sizeof (buf), wvals.bluestretch * 128.0);
+  g_ascii_dtostr (buf, sizeof (buf), blue_stretch * 128.0);
   fprintf (fp, "bluestretch: %s\n", buf);
 
-  fprintf (fp, "redmode: %i\n", wvals.redmode);
-  fprintf (fp, "greenmode: %i\n", wvals.greenmode);
-  fprintf (fp, "bluemode: %i\n", wvals.bluemode);
-  fprintf (fp, "redinvert: %i\n", wvals.redinvert);
-  fprintf (fp, "greeninvert: %i\n", wvals.greeninvert);
-  fprintf (fp, "blueinvert: %i\n", wvals.blueinvert);
-  fprintf (fp, "colormode: %i\n", wvals.colormode);
+  fprintf (fp, "redmode: %i\n", red_mode);
+  fprintf (fp, "greenmode: %i\n", green_mode);
+  fprintf (fp, "bluemode: %i\n", blue_mode);
+  fprintf (fp, "redinvert: %i\n", red_invert);
+  fprintf (fp, "greeninvert: %i\n", green_invert);
+  fprintf (fp, "blueinvert: %i\n", blue_invert);
+  fprintf (fp, "colormode: %i\n", color_mode);
   fputs ("#**********************************************************************\n", fp);
   fprintf(fp, "<EOF>\n");
   fputs ("#**********************************************************************\n", fp);
@@ -1607,6 +1473,8 @@ load_file_chooser_response (GtkFileChooser *chooser,
                             gint            response_id,
                             gpointer        data)
 {
+  GimpProcedureConfig *config = (GimpProcedureConfig *) data;
+
   if (response_id == GTK_RESPONSE_OK)
     {
       filename = gtk_file_chooser_get_filename (chooser);
@@ -1617,9 +1485,7 @@ load_file_chooser_response (GtkFileChooser *chooser,
         }
 
       gtk_widget_show (maindlg);
-      dialog_change_scale ();
-      set_cmap_preview ();
-      dialog_update_preview ();
+      update_previews (config);
     }
 
   gtk_widget_destroy (GTK_WIDGET (chooser));
@@ -1629,7 +1495,12 @@ static void
 create_load_file_chooser (GtkWidget *widget,
                           GtkWidget *dialog)
 {
-  static GtkWidget *window = NULL;
+  static GtkWidget    *window = NULL;
+  GimpProcedureConfig *config;
+
+  g_object_get (GIMP_PROCEDURE_DIALOG (dialog),
+                "config", &config,
+                NULL);
 
   if (!window)
     {
@@ -1645,7 +1516,7 @@ create_load_file_chooser (GtkWidget *widget,
 
       gtk_dialog_set_default_response (GTK_DIALOG (window), GTK_RESPONSE_OK);
 
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (window),
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (window),
                                                GTK_RESPONSE_OK,
                                                GTK_RESPONSE_CANCEL,
                                                -1);
@@ -1657,7 +1528,7 @@ create_load_file_chooser (GtkWidget *widget,
                         &window);
       g_signal_connect (window, "response",
                         G_CALLBACK (load_file_chooser_response),
-                        window);
+                        config);
     }
 
   gtk_window_present (GTK_WINDOW (window));
@@ -1681,7 +1552,7 @@ create_save_file_chooser (GtkWidget *widget,
 
                                      NULL);
 
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (window),
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (window),
                                                GTK_RESPONSE_OK,
                                                GTK_RESPONSE_CANCEL,
                                                -1);
@@ -1707,6 +1578,41 @@ create_save_file_chooser (GtkWidget *widget,
     }
 
   gtk_window_present (GTK_WINDOW (window));
+}
+
+/* Set cache of gradient and samples from it.
+ *
+ * The cache is in 2 global variables:
+ * gradient, gradient_samples.
+ * This keeps the three variables coherent.
+ *
+ * !!! There is one other writer of gradient_samples, see below.
+ * For NON-INTERACTIVE use, global gradient can remain NULL
+ * while gradient_samples is not.
+ *
+ * When in_gradient is NULL, uses gradient from context.
+ *
+ * In some cases, the gradient is a reference to a proxy
+ * received from a temporary procedure callback.
+ * Since we are keeping a reference, and can pass it to a gradient chooser,
+ * the plugin machinery must not destroy the proxy object until this plugin exits.
+ */
+static void
+set_grad_data_cache (GimpGradient *in_gradient,
+                     gint          n_colors)
+{
+  /* Set the global gradient. */
+  if (in_gradient == NULL)
+    gradient = gimp_context_get_gradient ();
+  else
+    gradient = in_gradient;
+
+  /* Refresh the global cache of samples. */
+  if (gradient_samples != NULL)
+    gimp_color_array_free (gradient_samples);
+
+  gradient_samples = gimp_gradient_get_uniform_samples (gradient,
+                                                        n_colors, FALSE);
 }
 
 gchar*
@@ -1753,8 +1659,8 @@ load_options (fractalexplorerOBJ *xxx,
   gchar opt_buf[MAX_LOAD_LINE];
 
   /*  default values  */
-  xxx->opts = standardvals;
-  xxx->opts.gradinvert    = FALSE;
+  xxx->opts            = standardvals;
+  xxx->opts.gradinvert = FALSE;
 
   get_line (load_buf, MAX_LOAD_LINE, fp, 0);
 
@@ -1875,7 +1781,7 @@ explorer_load (void)
       fclose (fp);
       return;
     }
-  if (load_options (current_obj,fp))
+  if (load_options (current_obj, fp))
     {
       g_message (_("'%s' is corrupt. Line %d Option section incorrect"),
                  gimp_filename_to_utf8 (filename), line_no);
@@ -1883,7 +1789,116 @@ explorer_load (void)
       return;
     }
 
-  wvals = current_obj->opts;
+  g_object_set (wvals.config,
+                "xmin",          current_obj->opts.xmin,
+                "xmax",          current_obj->opts.xmax,
+                "ymin",          current_obj->opts.ymin,
+                "ymax",          current_obj->opts.ymax,
+                "iter",          current_obj->opts.iter,
+                "cx",            current_obj->opts.cx,
+                "cy",            current_obj->opts.cy,
+                "red-stretch",   current_obj->opts.redstretch,
+                "green-stretch", current_obj->opts.greenstretch,
+                "blue-stretch",  current_obj->opts.bluestretch,
+                "color-mode",    (current_obj->opts.colormode == 0) ?
+                                 "colormap" : "gradient",
+                "red-invert",    current_obj->opts.redinvert,
+                "green-invert",  current_obj->opts.greeninvert,
+                "blue-invert",   current_obj->opts.blueinvert,
+                NULL);
+
+  switch (current_obj->opts.fractaltype)
+    {
+    case 0:
+      g_object_set (wvals.config, "fractal-type", "mandelbrot", NULL);
+      break;
+
+    case 1:
+      g_object_set (wvals.config, "fractal-type", "julia", NULL);
+      break;
+
+    case 2:
+      g_object_set (wvals.config, "fractal-type", "barnsley-1", NULL);
+      break;
+
+    case 3:
+      g_object_set (wvals.config, "fractal-type", "barnsley-2", NULL);
+      break;
+
+    case 4:
+      g_object_set (wvals.config, "fractal-type", "barnsley-3", NULL);
+      break;
+
+    case 5:
+      g_object_set (wvals.config, "fractal-type", "spider", NULL);
+      break;
+
+    case 6:
+      g_object_set (wvals.config, "fractal-type", "man-o-war", NULL);
+      break;
+
+    case 7:
+      g_object_set (wvals.config, "fractal-type", "lambda", NULL);
+      break;
+
+    case 8:
+      g_object_set (wvals.config, "fractal-type", "sierpinski", NULL);
+      break;
+
+    default:
+      break;
+    }
+  switch (current_obj->opts.redmode)
+    {
+    case 0:
+      g_object_set (wvals.config, "red-mode", "red-sin", NULL);
+      break;
+
+    case 1:
+      g_object_set (wvals.config, "red-mode", "red-cos", NULL);
+      break;
+
+    case 2:
+      g_object_set (wvals.config, "red-mode", "red-none", NULL);
+      break;
+
+    default:
+      break;
+    }
+  switch (current_obj->opts.greenmode)
+    {
+    case 0:
+      g_object_set (wvals.config, "green-mode", "green-sin", NULL);
+      break;
+
+    case 1:
+      g_object_set (wvals.config, "green-mode", "green-cos", NULL);
+      break;
+
+    case 2:
+      g_object_set (wvals.config, "green-mode", "green-none", NULL);
+      break;
+
+    default:
+      break;
+    }
+  switch (current_obj->opts.bluemode)
+    {
+    case 0:
+      g_object_set (wvals.config, "blue-mode", "blue-sin", NULL);
+      break;
+
+    case 1:
+      g_object_set (wvals.config, "blue-mode", "blue-cos", NULL);
+      break;
+
+    case 2:
+      g_object_set (wvals.config, "blue-mode", "blue-none", NULL);
+      break;
+
+    default:
+      break;
+    }
 
   fclose (fp);
 }

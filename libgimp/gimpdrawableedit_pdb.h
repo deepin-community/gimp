@@ -32,27 +32,27 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-gboolean gimp_drawable_edit_clear            (gint32           drawable_ID);
-gboolean gimp_drawable_edit_fill             (gint32           drawable_ID,
-                                              GimpFillType     fill_type);
-gboolean gimp_drawable_edit_bucket_fill      (gint32           drawable_ID,
-                                              GimpFillType     fill_type,
-                                              gdouble          x,
-                                              gdouble          y);
-gboolean gimp_drawable_edit_gradient_fill    (gint32           drawable_ID,
-                                              GimpGradientType gradient_type,
-                                              gdouble          offset,
-                                              gboolean         supersample,
-                                              gint             supersample_max_depth,
-                                              gdouble          supersample_threshold,
-                                              gboolean         dither,
-                                              gdouble          x1,
-                                              gdouble          y1,
-                                              gdouble          x2,
-                                              gdouble          y2);
-gboolean gimp_drawable_edit_stroke_selection (gint32           drawable_ID);
-gboolean gimp_drawable_edit_stroke_item      (gint32           drawable_ID,
-                                              gint32           item_ID);
+gboolean gimp_drawable_edit_clear            (GimpDrawable     *drawable);
+gboolean gimp_drawable_edit_fill             (GimpDrawable     *drawable,
+                                              GimpFillType      fill_type);
+gboolean gimp_drawable_edit_bucket_fill      (GimpDrawable     *drawable,
+                                              GimpFillType      fill_type,
+                                              gdouble           x,
+                                              gdouble           y);
+gboolean gimp_drawable_edit_gradient_fill    (GimpDrawable     *drawable,
+                                              GimpGradientType  gradient_type,
+                                              gdouble           offset,
+                                              gboolean          supersample,
+                                              gint              supersample_max_depth,
+                                              gdouble           supersample_threshold,
+                                              gboolean          dither,
+                                              gdouble           x1,
+                                              gdouble           y1,
+                                              gdouble           x2,
+                                              gdouble           y2);
+gboolean gimp_drawable_edit_stroke_selection (GimpDrawable     *drawable);
+gboolean gimp_drawable_edit_stroke_item      (GimpDrawable     *drawable,
+                                              GimpItem         *item);
 
 
 G_END_DECLS

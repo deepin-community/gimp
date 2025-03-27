@@ -139,7 +139,8 @@ gimp_threshold_tool_initialize (GimpTool     *tool,
   GimpThresholdTool *t_tool      = GIMP_THRESHOLD_TOOL (tool);
   GimpFilterTool    *filter_tool = GIMP_FILTER_TOOL (tool);
   GimpImage         *image       = gimp_display_get_image (display);
-  GimpDrawable      *drawable    = gimp_image_get_active_drawable (image);
+  GList             *drawables;
+  GimpDrawable      *drawable;
   gdouble            low;
   gdouble            high;
   gint               n_bins;
@@ -148,6 +149,22 @@ gimp_threshold_tool_initialize (GimpTool     *tool,
     {
       return FALSE;
     }
+
+  drawables = gimp_image_get_selected_drawables (image);
+  if (g_list_length (drawables) != 1)
+    {
+      if (g_list_length (drawables) > 1)
+        gimp_tool_message_literal (tool, display,
+                                   _("Cannot modify multiple drawables. Select only one."));
+      else
+        gimp_tool_message_literal (tool, display, _("No selected drawables."));
+
+      g_list_free (drawables);
+      return FALSE;
+    }
+
+  drawable = drawables->data;
+  g_list_free (drawables);
 
   g_clear_object (&t_tool->histogram_async);
 
@@ -238,13 +255,10 @@ gimp_threshold_tool_dialog (GimpFilterTool *filter_tool)
                                                        "channel", -1, -1);
   gimp_enum_combo_box_set_icon_prefix (GIMP_ENUM_COMBO_BOX (t_tool->channel_menu),
                                        "gimp-channel");
-
   gimp_int_combo_box_set_sensitivity (GIMP_INT_COMBO_BOX (t_tool->channel_menu),
                                       gimp_threshold_tool_channel_sensitive,
                                       filter_tool, NULL);
-
   gtk_box_pack_start (GTK_BOX (hbox), t_tool->channel_menu, FALSE, FALSE, 0);
-  gtk_widget_show (t_tool->channel_menu);
 
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), t_tool->channel_menu);
 
@@ -252,7 +266,6 @@ gimp_threshold_tool_dialog (GimpFilterTool *filter_tool)
                                        "histogram-scale", "gimp-histogram",
                                        0, 0);
   gtk_box_pack_end (GTK_BOX (hbox), hbox2, FALSE, FALSE, 0);
-  gtk_widget_show (hbox2);
 
   frame_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 4);
   gtk_container_add (GTK_CONTAINER (main_frame), frame_vbox);
@@ -342,11 +355,15 @@ static gboolean
 gimp_threshold_tool_channel_sensitive (gint     value,
                                        gpointer data)
 {
-  GimpDrawable         *drawable = GIMP_TOOL (data)->drawable;
-  GimpHistogramChannel  channel  = value;
+  GList                *drawables = GIMP_TOOL (data)->drawables;
+  GimpDrawable         *drawable;
+  GimpHistogramChannel  channel   = value;
 
-  if (!drawable)
+  if (!drawables)
     return FALSE;
+
+  g_return_val_if_fail (g_list_length (drawables) == 1, FALSE);
+  drawable = drawables->data;
 
   switch (channel)
     {

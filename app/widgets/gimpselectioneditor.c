@@ -67,7 +67,7 @@ static gboolean gimp_selection_view_button_press   (GtkWidget           *widget,
 static void   gimp_selection_editor_drop_color     (GtkWidget           *widget,
                                                     gint                 x,
                                                     gint                 y,
-                                                    const GimpRGB       *color,
+                                                    GeglColor           *color,
                                                     gpointer             data);
 
 static void   gimp_selection_editor_mask_changed   (GimpImage           *image,
@@ -164,9 +164,9 @@ gimp_selection_editor_constructed (GObject *object)
                                    "select-save", NULL);
 
   editor->path_button =
-    gimp_editor_add_action_button (GIMP_EDITOR (editor), "vectors",
-                                   "vectors-selection-to-vectors",
-                                   "vectors-selection-to-vectors-advanced",
+    gimp_editor_add_action_button (GIMP_EDITOR (editor), "paths",
+                                   "paths-selection-to-path",
+                                   "paths-selection-to-path-advanced",
                                    GDK_SHIFT_MASK,
                                    NULL);
 
@@ -245,10 +245,10 @@ gimp_selection_view_button_press (GtkWidget           *widget,
   GimpToolInfo            *tool_info;
   GimpSelectionOptions    *sel_options;
   GimpRegionSelectOptions *options;
-  GimpDrawable            *drawable;
   GimpChannelOps           operation;
+  GList                   *drawables;
   gint                     x, y;
-  GimpRGB                  color;
+  GeglColor               *color;
 
   if (! image_editor->image)
     return TRUE;
@@ -264,9 +264,9 @@ gimp_selection_view_button_press (GtkWidget           *widget,
   sel_options = GIMP_SELECTION_OPTIONS (tool_info->tool_options);
   options     = GIMP_REGION_SELECT_OPTIONS (tool_info->tool_options);
 
-  drawable = gimp_image_get_active_drawable (image_editor->image);
+  drawables = gimp_image_get_selected_drawables (image_editor->image);
 
-  if (! drawable)
+  if (! drawables)
     return TRUE;
 
   operation = gimp_modifiers_to_channel_op (bevent->state);
@@ -274,17 +274,18 @@ gimp_selection_view_button_press (GtkWidget           *widget,
   x = gimp_image_get_width  (image_editor->image) * bevent->x / renderer->width;
   y = gimp_image_get_height (image_editor->image) * bevent->y / renderer->height;
 
-  if (gimp_image_pick_color (image_editor->image, drawable, x, y,
+  color = gegl_color_new ("black");
+  if (gimp_image_pick_color (image_editor->image, drawables, x, y,
                              FALSE, options->sample_merged,
                              FALSE, 0.0,
                              NULL,
                              NULL, &color))
     {
       gimp_channel_select_by_color (gimp_image_get_mask (image_editor->image),
-                                    drawable,
+                                    drawables,
                                     options->sample_merged,
-                                    &color,
-                                    options->threshold,
+                                    color,
+                                    options->threshold / 255.0,
                                     options->select_transparent,
                                     options->select_criterion,
                                     operation,
@@ -295,21 +296,24 @@ gimp_selection_view_button_press (GtkWidget           *widget,
       gimp_image_flush (image_editor->image);
     }
 
+  g_list_free (drawables);
+  g_object_unref (color);
+
   return TRUE;
 }
 
 static void
-gimp_selection_editor_drop_color (GtkWidget     *widget,
-                                  gint           x,
-                                  gint           y,
-                                  const GimpRGB *color,
-                                  gpointer       data)
+gimp_selection_editor_drop_color (GtkWidget *widget,
+                                  gint       x,
+                                  gint       y,
+                                  GeglColor *color,
+                                  gpointer   data)
 {
   GimpImageEditor         *editor = GIMP_IMAGE_EDITOR (data);
   GimpToolInfo            *tool_info;
   GimpSelectionOptions    *sel_options;
   GimpRegionSelectOptions *options;
-  GimpDrawable            *drawable;
+  GList                   *drawables;
 
   if (! editor->image)
     return;
@@ -322,16 +326,16 @@ gimp_selection_editor_drop_color (GtkWidget     *widget,
   sel_options = GIMP_SELECTION_OPTIONS (tool_info->tool_options);
   options     = GIMP_REGION_SELECT_OPTIONS (tool_info->tool_options);
 
-  drawable = gimp_image_get_active_drawable (editor->image);
+  drawables = gimp_image_get_selected_drawables (editor->image);
 
-  if (! drawable)
+  if (! drawables)
     return;
 
   gimp_channel_select_by_color (gimp_image_get_mask (editor->image),
-                                drawable,
+                                drawables,
                                 options->sample_merged,
                                 color,
-                                options->threshold,
+                                options->threshold / 255.0,
                                 options->select_transparent,
                                 options->select_criterion,
                                 sel_options->operation,
@@ -340,6 +344,7 @@ gimp_selection_editor_drop_color (GtkWidget     *widget,
                                 sel_options->feather_radius,
                                 sel_options->feather_radius);
   gimp_image_flush (editor->image);
+  g_list_free (drawables);
 }
 
 static void

@@ -28,10 +28,12 @@
 #include "gegl/gimp-gegl-utils.h"
 
 #include "core/gimp.h"
+#include "core/gimpcontainer.h"
 #include "core/gimpdrawable.h"
 #include "core/gimpdynamics.h"
 #include "core/gimperror.h"
 #include "core/gimpimage.h"
+#include "core/gimpimage-new.h"
 #include "core/gimppickable.h"
 #include "core/gimpsymmetry.h"
 
@@ -44,28 +46,16 @@
 enum
 {
   PROP_0,
-  PROP_SRC_DRAWABLE,
-  PROP_SRC_X,
-  PROP_SRC_Y
 };
 
 
-static void     gimp_source_core_set_property    (GObject           *object,
-                                                  guint              property_id,
-                                                  const GValue      *value,
-                                                  GParamSpec        *pspec);
-static void     gimp_source_core_get_property    (GObject           *object,
-                                                  guint              property_id,
-                                                  GValue            *value,
-                                                  GParamSpec        *pspec);
-
 static gboolean gimp_source_core_start           (GimpPaintCore     *paint_core,
-                                                  GimpDrawable      *drawable,
+                                                  GList             *drawables,
                                                   GimpPaintOptions  *paint_options,
                                                   const GimpCoords  *coords,
                                                   GError           **error);
 static void     gimp_source_core_paint           (GimpPaintCore     *paint_core,
-                                                  GimpDrawable      *drawable,
+                                                  GList             *drawables,
                                                   GimpPaintOptions  *paint_options,
                                                   GimpSymmetry      *sym,
                                                   GimpPaintState     paint_state,
@@ -75,6 +65,7 @@ static void     gimp_source_core_paint           (GimpPaintCore     *paint_core,
 static void     gimp_source_core_motion          (GimpSourceCore    *source_core,
                                                   GimpDrawable      *drawable,
                                                   GimpPaintOptions  *paint_options,
+                                                  gboolean           self_drawable,
                                                   GimpSymmetry      *sym);
 #endif
 
@@ -84,6 +75,7 @@ static GeglBuffer *
                 gimp_source_core_real_get_source (GimpSourceCore    *source_core,
                                                   GimpDrawable      *drawable,
                                                   GimpPaintOptions  *paint_options,
+                                                  gboolean           self_drawable,
                                                   GimpPickable      *src_pickable,
                                                   gint               src_offset_x,
                                                   gint               src_offset_y,
@@ -96,9 +88,6 @@ static GeglBuffer *
                                                   gint              *paint_area_height,
                                                   GeglRectangle     *src_rect);
 
-static void    gimp_source_core_set_src_drawable (GimpSourceCore    *source_core,
-                                                  GimpDrawable      *drawable);
-
 
 G_DEFINE_TYPE (GimpSourceCore, gimp_source_core, GIMP_TYPE_BRUSH_CORE)
 
@@ -108,12 +97,8 @@ G_DEFINE_TYPE (GimpSourceCore, gimp_source_core, GIMP_TYPE_BRUSH_CORE)
 static void
 gimp_source_core_class_init (GimpSourceCoreClass *klass)
 {
-  GObjectClass       *object_class     = G_OBJECT_CLASS (klass);
   GimpPaintCoreClass *paint_core_class = GIMP_PAINT_CORE_CLASS (klass);
   GimpBrushCoreClass *brush_core_class = GIMP_BRUSH_CORE_CLASS (klass);
-
-  object_class->set_property               = gimp_source_core_set_property;
-  object_class->get_property               = gimp_source_core_get_property;
 
   paint_core_class->start                  = gimp_source_core_start;
   paint_core_class->paint                  = gimp_source_core_paint;
@@ -123,97 +108,24 @@ gimp_source_core_class_init (GimpSourceCoreClass *klass)
   klass->use_source                        = gimp_source_core_real_use_source;
   klass->get_source                        = gimp_source_core_real_get_source;
   klass->motion                            = NULL;
-
-  g_object_class_install_property (object_class, PROP_SRC_DRAWABLE,
-                                   g_param_spec_object ("src-drawable",
-                                                        NULL, NULL,
-                                                        GIMP_TYPE_DRAWABLE,
-                                                        GIMP_PARAM_READWRITE));
-
-  g_object_class_install_property (object_class, PROP_SRC_X,
-                                   g_param_spec_int ("src-x", NULL, NULL,
-                                                     0, GIMP_MAX_IMAGE_SIZE,
-                                                     0,
-                                                     GIMP_PARAM_READWRITE));
-
-  g_object_class_install_property (object_class, PROP_SRC_Y,
-                                   g_param_spec_int ("src-y", NULL, NULL,
-                                                     0, GIMP_MAX_IMAGE_SIZE,
-                                                     0,
-                                                     GIMP_PARAM_READWRITE));
 }
 
 static void
 gimp_source_core_init (GimpSourceCore *source_core)
 {
-  source_core->set_source   = FALSE;
+  source_core->set_source    = FALSE;
 
-  source_core->src_drawable = NULL;
-  source_core->src_x        = 0;
-  source_core->src_y        = 0;
+  source_core->orig_src_x    = 0;
+  source_core->orig_src_y    = 0;
 
-  source_core->orig_src_x   = 0;
-  source_core->orig_src_y   = 0;
-
-  source_core->offset_x     = 0;
-  source_core->offset_y     = 0;
-  source_core->first_stroke = TRUE;
-}
-
-static void
-gimp_source_core_set_property (GObject      *object,
-                               guint         property_id,
-                               const GValue *value,
-                               GParamSpec   *pspec)
-{
-  GimpSourceCore *source_core = GIMP_SOURCE_CORE (object);
-
-  switch (property_id)
-    {
-    case PROP_SRC_DRAWABLE:
-      gimp_source_core_set_src_drawable (source_core,
-                                         g_value_get_object (value));
-      break;
-    case PROP_SRC_X:
-      source_core->src_x = g_value_get_int (value);
-      break;
-    case PROP_SRC_Y:
-      source_core->src_y = g_value_get_int (value);
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
-      break;
-    }
-}
-
-static void
-gimp_source_core_get_property (GObject    *object,
-                               guint       property_id,
-                               GValue     *value,
-                               GParamSpec *pspec)
-{
-  GimpSourceCore *source_core = GIMP_SOURCE_CORE (object);
-
-  switch (property_id)
-    {
-    case PROP_SRC_DRAWABLE:
-      g_value_set_object (value, source_core->src_drawable);
-      break;
-    case PROP_SRC_X:
-      g_value_set_int (value, source_core->src_x);
-      break;
-    case PROP_SRC_Y:
-      g_value_set_int (value, source_core->src_y);
-      break;
-    default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
-      break;
-    }
+  source_core->offset_x      = 0;
+  source_core->offset_y      = 0;
+  source_core->first_stroke  = TRUE;
 }
 
 static gboolean
 gimp_source_core_start (GimpPaintCore     *paint_core,
-                        GimpDrawable      *drawable,
+                        GList             *drawables,
                         GimpPaintOptions  *paint_options,
                         const GimpCoords  *coords,
                         GError           **error)
@@ -221,7 +133,7 @@ gimp_source_core_start (GimpPaintCore     *paint_core,
   GimpSourceCore    *source_core = GIMP_SOURCE_CORE (paint_core);
   GimpSourceOptions *options     = GIMP_SOURCE_OPTIONS (paint_options);
 
-  if (! GIMP_PAINT_CORE_CLASS (parent_class)->start (paint_core, drawable,
+  if (! GIMP_PAINT_CORE_CLASS (parent_class)->start (paint_core, drawables,
                                                      paint_options, coords,
                                                      error))
     {
@@ -233,16 +145,24 @@ gimp_source_core_start (GimpPaintCore     *paint_core,
   if (! source_core->set_source &&
       gimp_source_core_use_source (source_core, options))
     {
-      if (! source_core->src_drawable)
+      if (! options->src_drawables)
         {
           g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
                                _("Set a source image first."));
           return FALSE;
         }
+      else if (options->align_mode == GIMP_SOURCE_ALIGN_REGISTERED &&
+               g_list_length (drawables) > 1)
+        {
+          g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                               _("\"Registered\" alignment cannot paint on multiple drawables."));
+          return FALSE;
+        }
 
-      if (options->sample_merged &&
-          gimp_item_get_image (GIMP_ITEM (source_core->src_drawable)) ==
-          gimp_item_get_image (GIMP_ITEM (drawable)))
+      if (options->sample_merged         &&
+          g_list_length (drawables) == 1 &&
+          gimp_item_get_image (GIMP_ITEM (options->src_drawables->data)) ==
+          gimp_item_get_image (GIMP_ITEM (drawables->data)))
         {
           paint_core->use_saved_proj = TRUE;
         }
@@ -253,7 +173,7 @@ gimp_source_core_start (GimpPaintCore     *paint_core,
 
 static void
 gimp_source_core_paint (GimpPaintCore    *paint_core,
-                        GimpDrawable     *drawable,
+                        GList            *drawables,
                         GimpPaintOptions *paint_options,
                         GimpSymmetry     *sym,
                         GimpPaintState    paint_state,
@@ -271,18 +191,22 @@ gimp_source_core_paint (GimpPaintCore    *paint_core,
     case GIMP_PAINT_STATE_INIT:
       if (source_core->set_source)
         {
-          gimp_source_core_set_src_drawable (source_core, drawable);
+          g_object_set (options,
+                        "src-drawables", drawables,
+                        "src-x",         (gint) floor (coords->x),
+                        "src-y",         (gint) floor (coords->y),
+                        NULL);
 
           /* FIXME(?): subpixel source sampling */
-          source_core->src_x = floor (coords->x);
-          source_core->src_y = floor (coords->y);
 
           source_core->first_stroke = TRUE;
         }
       else if (options->align_mode == GIMP_SOURCE_ALIGN_NO)
         {
-          source_core->orig_src_x = source_core->src_x;
-          source_core->orig_src_y = source_core->src_y;
+          g_object_get (options,
+                        "src-x", &source_core->orig_src_x,
+                        "src-y", &source_core->orig_src_y,
+                        NULL);
 
           source_core->first_stroke = TRUE;
         }
@@ -293,8 +217,11 @@ gimp_source_core_paint (GimpPaintCore    *paint_core,
         {
           /*  If the control key is down, move the src target and return */
 
-          source_core->src_x = floor (coords->x);
-          source_core->src_y = floor (coords->y);
+          g_object_set (options,
+                        "src-drawables", drawables,
+                        "src-x",         (gint) floor (coords->x),
+                        "src-y",         (gint) floor (coords->y),
+                        NULL);
 
           source_core->first_stroke = TRUE;
         }
@@ -302,11 +229,19 @@ gimp_source_core_paint (GimpPaintCore    *paint_core,
         {
           /*  otherwise, update the target  */
 
+          gint src_x;
+          gint src_y;
+
           gint dest_x;
           gint dest_y;
 
           dest_x = floor (coords->x);
           dest_y = floor (coords->y);
+
+          g_object_get (options,
+                        "src-x", &src_x,
+                        "src-y", &src_y,
+                        NULL);
 
           if (options->align_mode == GIMP_SOURCE_ALIGN_REGISTERED)
             {
@@ -315,22 +250,28 @@ gimp_source_core_paint (GimpPaintCore    *paint_core,
             }
           else if (options->align_mode == GIMP_SOURCE_ALIGN_FIXED)
             {
-              source_core->offset_x = source_core->src_x - dest_x;
-              source_core->offset_y = source_core->src_y - dest_y;
+              source_core->offset_x = src_x - dest_x;
+              source_core->offset_y = src_y - dest_y;
             }
           else if (source_core->first_stroke)
             {
-              source_core->offset_x = source_core->src_x - dest_x;
-              source_core->offset_y = source_core->src_y - dest_y;
+              source_core->offset_x = src_x - dest_x;
+              source_core->offset_y = src_y - dest_y;
 
               source_core->first_stroke = FALSE;
             }
 
-          source_core->src_x = dest_x + source_core->offset_x;
-          source_core->src_y = dest_y + source_core->offset_y;
+          g_object_set (options,
+                        "src-x", dest_x + source_core->offset_x,
+                        "src-y", dest_y + source_core->offset_y,
+                        NULL);
 
-          gimp_source_core_motion (source_core, drawable, paint_options,
-                                   sym);
+
+          for (GList *iter = drawables; iter; iter = iter->next)
+            gimp_source_core_motion (source_core, iter->data,
+                                     paint_options,
+                                     (g_list_length (drawables) > 1),
+                                     sym);
         }
       break;
 
@@ -338,23 +279,24 @@ gimp_source_core_paint (GimpPaintCore    *paint_core,
       if (options->align_mode == GIMP_SOURCE_ALIGN_NO &&
           ! source_core->first_stroke)
         {
-          source_core->src_x = source_core->orig_src_x;
-          source_core->src_y = source_core->orig_src_y;
+          g_object_set (options,
+                        "src-x", source_core->orig_src_x,
+                        "src-y", source_core->orig_src_y,
+                        NULL);
+
         }
       break;
 
     default:
       break;
     }
-
-  g_object_notify (G_OBJECT (source_core), "src-x");
-  g_object_notify (G_OBJECT (source_core), "src-y");
 }
 
 void
 gimp_source_core_motion (GimpSourceCore   *source_core,
                          GimpDrawable     *drawable,
                          GimpPaintOptions *paint_options,
+                         gboolean          self_drawable,
                          GimpSymmetry     *sym)
 
 {
@@ -381,19 +323,32 @@ gimp_source_core_motion (GimpSourceCore   *source_core,
   gdouble            opacity;
   GimpLayerMode      paint_mode;
   GeglNode          *op;
-  GimpCoords        *origin;
-  GimpCoords        *coords;
+  GimpCoords         origin;
+  GimpCoords         coords;
+  gint               src_off_x = 0;
+  gint               src_off_y = 0;
+  gint               src_x, src_y;
+  gint               off_x, off_y;
   gint               n_strokes;
   gint               i;
 
   fade_point = gimp_paint_options_get_fade (paint_options, image,
                                             paint_core->pixel_dist);
 
-  origin     = gimp_symmetry_get_origin (sym);
+  origin = *(gimp_symmetry_get_origin (sym));
+
+  gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
+
+  coords    = origin;
+  coords.x -= off_x;
+  coords.y -= off_y;
+  gimp_symmetry_set_origin (sym, drawable, &coords);
+  paint_core->sym = sym;
+
   /* Some settings are based on the original stroke. */
   opacity = gimp_dynamics_get_linear_value (dynamics,
                                             GIMP_DYNAMICS_OUTPUT_OPACITY,
-                                            origin,
+                                            &origin,
                                             paint_options,
                                             fade_point);
   if (opacity == 0.0)
@@ -404,12 +359,15 @@ gimp_source_core_motion (GimpSourceCore   *source_core,
 
   if (gimp_source_core_use_source (source_core, options))
     {
-      src_pickable = GIMP_PICKABLE (source_core->src_drawable);
-
-      if (options->sample_merged)
+      if (self_drawable)
         {
-          GimpImage *src_image = gimp_pickable_get_image (src_pickable);
-          gint       off_x, off_y;
+          src_pickable = GIMP_PICKABLE (drawable);
+        }
+      else if (options->sample_merged)
+        {
+          GimpImage *src_image;
+
+          src_image = gimp_pickable_get_image (options->src_drawables->data);
 
           if (! gimp_paint_core_get_show_all (paint_core))
             {
@@ -417,36 +375,42 @@ gimp_source_core_motion (GimpSourceCore   *source_core,
             }
           else
             {
-              src_pickable = GIMP_PICKABLE (
-                gimp_image_get_projection (src_image));
+              src_pickable = GIMP_PICKABLE (gimp_image_get_projection (src_image));
             }
-
-          gimp_item_get_offset (GIMP_ITEM (source_core->src_drawable),
-                                &off_x, &off_y);
-
-          base_src_offset_x += off_x;
-          base_src_offset_y += off_y;
         }
+      else
+        {
+          src_pickable = options->src_pickable;
+        }
+
+      if (GIMP_IS_ITEM (src_pickable))
+        gimp_item_get_offset (GIMP_ITEM (src_pickable),
+                              &src_off_x, &src_off_y);
     }
 
+  g_object_get (options,
+                "src-x", &src_x,
+                "src-y", &src_y,
+                NULL);
+
   gimp_brush_core_eval_transform_dynamics (brush_core,
-                                           drawable,
+                                           image,
                                            paint_options,
-                                           origin);
+                                           &origin);
 
   paint_mode = gimp_context_get_paint_mode (GIMP_CONTEXT (paint_options));
 
   n_strokes  = gimp_symmetry_get_size (sym);
   for (i = 0; i < n_strokes; i++)
     {
-      coords = gimp_symmetry_get_coords (sym, i);
+      coords    = *(gimp_symmetry_get_coords (sym, i));
 
       gimp_brush_core_eval_transform_symmetry (brush_core, sym, i);
 
       paint_buffer = gimp_paint_core_get_paint_buffer (paint_core, drawable,
                                                        paint_options,
                                                        paint_mode,
-                                                       coords,
+                                                       &coords,
                                                        &paint_buffer_x,
                                                        &paint_buffer_y,
                                                        NULL, NULL);
@@ -463,12 +427,13 @@ gimp_source_core_motion (GimpSourceCore   *source_core,
       if (gimp_source_core_use_source (source_core, options))
         {
           /* When using a source, use the same for every stroke. */
-          src_offset_x += floor (origin->x) - floor (coords->x);
-          src_offset_y += floor (origin->y) - floor (coords->y);
+          src_offset_x += floor (origin.x) - floor (coords.x) - src_off_x;
+          src_offset_y += floor (origin.y) - floor (coords.y) - src_off_y;
           src_buffer =
             GIMP_SOURCE_CORE_GET_CLASS (source_core)->get_source (source_core,
                                                                   drawable,
                                                                   paint_options,
+                                                                  self_drawable,
                                                                   src_pickable,
                                                                   src_offset_x,
                                                                   src_offset_y,
@@ -505,8 +470,8 @@ gimp_source_core_motion (GimpSourceCore   *source_core,
           translate_before = gegl_node_new_child (
             node,
             "operation", "gegl:translate",
-            "x",         -(source_core->src_x + 0.5),
-            "y",         -(source_core->src_y + 0.5),
+            "x",         -((gdouble) src_x + 0.5),
+            "y",         -((gdouble) src_y + 0.5),
             NULL);
 
           gegl_node_add_child (node, op);
@@ -514,9 +479,9 @@ gimp_source_core_motion (GimpSourceCore   *source_core,
           translate_after = gegl_node_new_child (
             node,
             "operation", "gegl:translate",
-            "x",         (source_core->src_x + 0.5) +
+            "x",         ((gdouble) src_x + 0.5) +
                          (paint_area_offset_x - src_rect.x),
-            "y",         (source_core->src_y + 0.5) +
+            "y",         ((gdouble) src_y + 0.5) +
                          (paint_area_offset_y - src_rect.y),
             NULL);
 
@@ -537,7 +502,7 @@ gimp_source_core_motion (GimpSourceCore   *source_core,
       GIMP_SOURCE_CORE_GET_CLASS (source_core)->motion (source_core,
                                                         drawable,
                                                         paint_options,
-                                                        coords,
+                                                        &coords,
                                                         op,
                                                         opacity,
                                                         src_pickable,
@@ -578,6 +543,7 @@ static GeglBuffer *
 gimp_source_core_real_get_source (GimpSourceCore   *source_core,
                                   GimpDrawable     *drawable,
                                   GimpPaintOptions *paint_options,
+                                  gboolean          self_drawable,
                                   GimpPickable     *src_pickable,
                                   gint              src_offset_x,
                                   gint              src_offset_y,
@@ -595,8 +561,14 @@ gimp_source_core_real_get_source (GimpSourceCore   *source_core,
   GimpImage         *src_image  = gimp_pickable_get_image (src_pickable);
   GeglBuffer        *src_buffer = gimp_pickable_get_buffer (src_pickable);
   GeglBuffer        *dest_buffer;
+  gboolean           sample_merged;
   gint               x, y;
   gint               width, height;
+
+  /* As a special case, we bypass sample merged value when we request
+   * each drawable to be its own source.
+   */
+  sample_merged = options->sample_merged && (! self_drawable);
 
   if (! gimp_rectangle_intersect (paint_buffer_x + src_offset_x,
                                   paint_buffer_y + src_offset_y,
@@ -618,18 +590,20 @@ gimp_source_core_real_get_source (GimpSourceCore   *source_core,
    *  Otherwise, we need a call to get_orig_image to make sure
    *  we get a copy of the unblemished (offset) image
    */
-  if ((  options->sample_merged && (src_image                 != image)) ||
-      (! options->sample_merged && (source_core->src_drawable != drawable)))
+  if ((  sample_merged && (src_image                 != image)) ||
+      (! sample_merged && (g_list_length (options->src_drawables) != 1 ||
+                           options->src_drawables->data != drawable)))
     {
       dest_buffer = src_buffer;
     }
   else
     {
       /*  get the original image  */
-      if (options->sample_merged)
+      if (sample_merged)
         dest_buffer = gimp_paint_core_get_orig_proj (GIMP_PAINT_CORE (source_core));
       else
-        dest_buffer = gimp_paint_core_get_orig_image (GIMP_PAINT_CORE (source_core));
+        dest_buffer = gimp_paint_core_get_orig_image (GIMP_PAINT_CORE (source_core),
+                                                      drawable);
     }
 
   *paint_area_offset_x = x - (paint_buffer_x + src_offset_x);
@@ -640,40 +614,4 @@ gimp_source_core_real_get_source (GimpSourceCore   *source_core,
   *src_rect = *GEGL_RECTANGLE (x, y, width, height);
 
   return g_object_ref (dest_buffer);
-}
-
-static void
-gimp_source_core_src_drawable_removed (GimpDrawable   *drawable,
-                                       GimpSourceCore *source_core)
-{
-  if (drawable == source_core->src_drawable)
-    {
-      source_core->src_drawable = NULL;
-    }
-
-  g_signal_handlers_disconnect_by_func (drawable,
-                                        gimp_source_core_src_drawable_removed,
-                                        source_core);
-}
-
-static void
-gimp_source_core_set_src_drawable (GimpSourceCore *source_core,
-                                   GimpDrawable   *drawable)
-{
-  if (source_core->src_drawable == drawable)
-    return;
-
-  if (source_core->src_drawable)
-    g_signal_handlers_disconnect_by_func (source_core->src_drawable,
-                                          gimp_source_core_src_drawable_removed,
-                                          source_core);
-
-  source_core->src_drawable = drawable;
-
-  if (source_core->src_drawable)
-    g_signal_connect (source_core->src_drawable, "removed",
-                      G_CALLBACK (gimp_source_core_src_drawable_removed),
-                      source_core);
-
-  g_object_notify (G_OBJECT (source_core), "src-drawable");
 }

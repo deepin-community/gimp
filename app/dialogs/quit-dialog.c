@@ -39,6 +39,7 @@
 #include "display/gimpdisplayshell.h"
 #include "display/gimpimagewindow.h"
 
+#include "widgets/gimpaction.h"
 #include "widgets/gimpcellrendererbutton.h"
 #include "widgets/gimpcontainertreestore.h"
 #include "widgets/gimpcontainertreeview.h"
@@ -47,7 +48,6 @@
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimpmessagebox.h"
 #include "widgets/gimpmessagedialog.h"
-#include "widgets/gimpuimanager.h"
 #include "widgets/gimpviewrenderer.h"
 #include "widgets/gimpwidgets-utils.h"
 
@@ -94,9 +94,9 @@ static void        quit_close_all_dialog_accel_marshal     (GClosure          *c
 static void        quit_close_all_dialog_container_changed (GimpContainer     *images,
                                                             GimpObject        *image,
                                                             QuitDialog        *private);
-static void        quit_close_all_dialog_image_selected    (GimpContainerView *view,
-                                                            GimpImage         *image,
-                                                            gpointer           insert_data,
+static gboolean    quit_close_all_dialog_images_selected   (GimpContainerView *view,
+                                                            GList             *images,
+                                                            GList             *paths,
                                                             QuitDialog        *private);
 static void        quit_close_all_dialog_name_cell_func    (GtkTreeViewColumn *tree_column,
                                                             GtkCellRenderer   *cell,
@@ -147,6 +147,13 @@ quit_close_all_dialog_new (Gimp     *gimp,
   GClosure              *closure;
   gint                   rows;
   gint                   view_size;
+  GdkRectangle           geometry;
+  GdkMonitor            *monitor;
+  gint                   max_rows;
+  gint                   scale_factor;
+  const gfloat           rows_per_height   = 32 / 1440.0f;
+  const gint             greatest_max_rows = 36;
+  const gint             least_max_rows    = 6;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
 
@@ -175,10 +182,10 @@ quit_close_all_dialog_new (Gimp     *gimp,
   private->ok_button = gtk_dialog_add_button (GTK_DIALOG (private->dialog),
                                               "", GTK_RESPONSE_OK);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (private->dialog),
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (private->dialog),
+                                            GTK_RESPONSE_OK,
+                                            GTK_RESPONSE_CANCEL,
+                                            -1);
 
   g_object_weak_ref (G_OBJECT (private->dialog),
                      (GWeakNotify) quit_close_all_dialog_free, private);
@@ -202,8 +209,28 @@ quit_close_all_dialog_new (Gimp     *gimp,
 
   private->box = GIMP_MESSAGE_DIALOG (private->dialog)->box;
 
+  monitor      = gimp_widget_get_monitor (private->dialog);
+  scale_factor = gdk_monitor_get_scale_factor (monitor);
+  gdk_monitor_get_geometry (monitor, &geometry);
+
+  if (scale_factor > 1)
+    {
+      #ifdef GDK_WINDOWING_WIN32
+        max_rows = (geometry.height * scale_factor * rows_per_height)
+                      / (scale_factor + 1);
+      #else
+        max_rows = (geometry.height * rows_per_height) / (scale_factor + 1);
+      #endif
+    }
+  else
+    {
+      max_rows = geometry.height * rows_per_height;
+    }
+
+  max_rows = CLAMP (max_rows, least_max_rows, greatest_max_rows);
+
   view_size = gimp->config->layer_preview_size;
-  rows      = CLAMP (gimp_container_get_n_children (private->images), 3, 6);
+  rows      = CLAMP (gimp_container_get_n_children (private->images), 3, max_rows);
 
   view = gimp_container_tree_view_new (private->images, private->context,
                                        view_size, 1);
@@ -239,13 +266,13 @@ quit_close_all_dialog_new (Gimp     *gimp,
   gtk_box_pack_start (GTK_BOX (private->box), view, TRUE, TRUE, 0);
   gtk_widget_show (view);
 
-  g_signal_connect (view, "select-item",
-                    G_CALLBACK (quit_close_all_dialog_image_selected),
+  g_signal_connect (view, "select-items",
+                    G_CALLBACK (quit_close_all_dialog_images_selected),
                     private);
 
   dnd_widget = gimp_container_view_get_dnd_widget (GIMP_CONTAINER_VIEW (view));
   gimp_dnd_xds_source_add (dnd_widget,
-                           (GimpDndDragViewableFunc) gimp_dnd_get_drag_data,
+                           (GimpDndDragViewableFunc) gimp_dnd_get_drag_viewable,
                            NULL);
 
   g_signal_connect (tree_view->view, "query-tooltip",
@@ -375,7 +402,7 @@ quit_close_all_dialog_container_changed (GimpContainer *images,
        * actions provoking warnings. Let's just close as soon as
        * possible with an idle source.
        * Also the idle source has another benefit: allowing to change
-       * one's mind and not exist after the last save, for instance by
+       * one's mind and not exit after the last save, for instance by
        * hitting Esc quickly while the last save is in progress.
        */
       g_idle_add ((GSourceFunc) quit_close_all_idle, private);
@@ -393,13 +420,15 @@ quit_close_all_dialog_container_changed (GimpContainer *images,
 
       gtk_widget_show (private->lost_label);
 
-      icon = gtk_image_new_from_icon_name ("edit-delete",
+      icon = gtk_image_new_from_icon_name (GIMP_ICON_EDIT_DELETE,
                                            GTK_ICON_SIZE_BUTTON);
       g_object_set (private->ok_button,
                     "label",     _("_Discard Changes"),
                     "use-stock", FALSE,
                     "image",     icon,
                     NULL);
+      gtk_style_context_add_class (gtk_widget_get_style_context (private->ok_button),
+                                   "text-button");
 
       gtk_dialog_set_default_response (GTK_DIALOG (private->dialog),
                                        GTK_RESPONSE_CANCEL);
@@ -414,30 +443,41 @@ quit_close_all_dialog_container_changed (GimpContainer *images,
   g_free (accel_string);
 }
 
-static void
-quit_close_all_dialog_image_selected (GimpContainerView *view,
-                                      GimpImage         *image,
-                                      gpointer           insert_data,
-                                      QuitDialog        *private)
+static gboolean
+quit_close_all_dialog_images_selected (GimpContainerView *view,
+                                       GList             *images,
+                                       GList             *paths,
+                                       QuitDialog        *private)
 {
-  GList *list;
+  /* The signal allows for multiple selection cases, but this specific
+   * dialog only allows one image selected at a time.
+   */
+  g_return_val_if_fail (g_list_length (images) <= 1, FALSE);
 
-  for (list = gimp_get_display_iter (private->gimp);
-       list;
-       list = g_list_next (list))
+  if (images)
     {
-      GimpDisplay *display = list->data;
+      GimpImage *image = images->data;
+      GList     *list;
 
-      if (gimp_display_get_image (display) == image)
+      for (list = gimp_get_display_iter (private->gimp);
+           list;
+           list = g_list_next (list))
         {
-          gimp_display_shell_present (gimp_display_get_shell (display));
+          GimpDisplay *display = list->data;
 
-          /* We only want to update the active shell. Give back keyboard
-           * focus to the quit dialog after this.
-           */
-          gtk_window_present (GTK_WINDOW (private->dialog));
+          if (gimp_display_get_image (display) == image)
+            {
+              gimp_display_shell_present (gimp_display_get_shell (display));
+
+              /* We only want to update the active shell. Give back keyboard
+               * focus to the quit dialog after this.
+               */
+              gtk_window_present (GTK_WINDOW (private->dialog));
+            }
         }
     }
+
+  return TRUE;
 }
 
 static void
@@ -537,9 +577,7 @@ quit_close_all_dialog_save_clicked (GtkCellRenderer *cell,
 
               if (window)
                 {
-                  GimpUIManager *manager;
-
-                  manager = gimp_image_window_get_ui_manager (window);
+                  GAction *action;
 
                   gimp_display_shell_present (shell);
                   /* Make sure the quit dialog kept keyboard focus when
@@ -547,21 +585,21 @@ quit_close_all_dialog_save_clicked (GtkCellRenderer *cell,
                   gtk_window_present (GTK_WINDOW (private->dialog));
 
                   if (state & GDK_SHIFT_MASK)
-                    {
-                      gimp_ui_manager_activate_action (manager, "file",
-                                                       "file-save-as");
-                    }
+                    action = g_action_map_lookup_action (G_ACTION_MAP (private->gimp->app),
+                                                         "file-save-as");
                   else
-                    {
-                      gimp_ui_manager_activate_action (manager, "file",
-                                                       "file-save");
-                    }
+                    action = g_action_map_lookup_action (G_ACTION_MAP (private->gimp->app),
+                                                         "file-save");
+                  g_return_if_fail (GIMP_IS_ACTION (action));
+                  gimp_action_activate (GIMP_ACTION (action));
                 }
 
               break;
             }
         }
     }
+
+  gtk_tree_path_free (path);
 }
 
 static gboolean

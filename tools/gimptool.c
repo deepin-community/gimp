@@ -101,15 +101,19 @@ static void  usage (int exit_status) G_GNUC_NORETURN;
 
 #ifdef G_OS_WIN32
 
-static gchar *
+static const gchar *
 win32_command (const gchar *command)
 {
-  const gchar *comspec = getenv ("COMSPEC");
+  static gchar *cmd     = NULL;
+  const gchar  *comspec = getenv ("COMSPEC");
 
-  if (!comspec)
+  if (comspec == NULL)
     comspec = "cmd.exe";
 
-  return g_strdup_printf ("%s /c %s", comspec, command);
+  g_free (cmd);
+  cmd = g_strdup_printf ("%s /c %s", comspec, command);
+
+  return (const gchar *) cmd;
 }
 
 #endif
@@ -404,7 +408,7 @@ do_cflags_noui (void)
 static gchar *
 get_cflags_nogimpui (void)
 {
-  return pkg_config ("--cflags gimp-" GIMP_PKGCONFIG_VERSION " gtk+-2.0");
+  return pkg_config ("--cflags gimp-" GIMP_PKGCONFIG_VERSION " gtk+-3.0");
 }
 
 static void
@@ -449,7 +453,7 @@ do_libs_noui (void)
 static gchar *
 get_libs_nogimpui (void)
 {
-  return pkg_config ("--libs gimp-" GIMP_PKGCONFIG_VERSION " gtk+-2.0");
+  return pkg_config ("--libs gimp-" GIMP_PKGCONFIG_VERSION " gtk+-3.0");
 }
 
 static void
@@ -993,7 +997,7 @@ main (int    argc,
   if (argc == 1)
     usage (EXIT_SUCCESS);
 
-  /* First scan for flags that affect our behaviour globally, but
+  /* First scan for flags that affect our behavior globally, but
    * are still allowed late on the command line.
    */
   argi = 0;

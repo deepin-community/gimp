@@ -40,16 +40,16 @@
 #include "gimp-intl.h"
 
 
-static void   icons_apply_theme         (Gimp          *gimp,
-                                         const gchar   *icon_theme_name);
-static void   icons_list_icons_foreach  (gpointer       key,
-                                         gpointer       value,
-                                         gpointer       data);
-static gint   icons_name_compare        (const void    *p1,
-                                         const void    *p2);
-static void   icons_theme_change_notify (GimpGuiConfig *config,
-                                         GParamSpec    *pspec,
-                                         Gimp          *gimp);
+static gboolean icons_apply_theme         (Gimp          *gimp,
+                                           const gchar   *icon_theme_name);
+static void     icons_list_icons_foreach  (gpointer       key,
+                                           gpointer       value,
+                                           gpointer       data);
+static gint     icons_name_compare        (const void    *p1,
+                                           const void    *p2);
+static void     icons_theme_change_notify (GimpGuiConfig *config,
+                                           GParamSpec    *pspec,
+                                           Gimp          *gimp);
 
 
 static GHashTable *icon_themes_hash = NULL;
@@ -96,8 +96,8 @@ icon_themes_init (Gimp *gimp)
               while ((info = g_file_enumerator_next_file (enumerator,
                                                           NULL, NULL)))
                 {
-                  if (! g_file_info_get_is_hidden (info) &&
-                      g_file_info_get_file_type (info) == G_FILE_TYPE_DIRECTORY)
+                  if (! g_file_info_get_attribute_boolean (info, G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN) &&
+                      g_file_info_get_attribute_uint32 (info, G_FILE_ATTRIBUTE_STANDARD_TYPE) == G_FILE_TYPE_DIRECTORY)
                     {
                       GFile *file;
                       GFile *index_theme;
@@ -207,11 +207,41 @@ icon_themes_get_theme_dir (Gimp        *gimp,
   return g_hash_table_lookup (icon_themes_hash, icon_theme_name);
 }
 
-static void
+gboolean
+icon_themes_current_prefer_symbolic (Gimp *gimp)
+{
+  GtkIconTheme *icon_theme;
+
+  g_return_val_if_fail (GIMP_IS_GIMP (gimp), FALSE);
+
+  icon_theme = gtk_icon_theme_get_default ();
+
+  /* If the current icon theme is purely symbolic or purely color, we want to
+   * override the "prefer-symbolic-icons" property, not only to avoid
+   * discrepancies, but even more to avoid weird cases where we end up using
+   * icons from the system icon theme while the chosen theme has the right icon
+   * (yet simply not in the prefered style). See Issue #9410.
+   */
+  if (gtk_icon_theme_has_icon (icon_theme, GIMP_ICON_WILBER) &&
+      ! gtk_icon_theme_has_icon (icon_theme, GIMP_ICON_WILBER "-symbolic"))
+    return FALSE;
+  else if (! gtk_icon_theme_has_icon (icon_theme, GIMP_ICON_WILBER) &&
+           gtk_icon_theme_has_icon (icon_theme, GIMP_ICON_WILBER "-symbolic"))
+    return TRUE;
+
+  return GIMP_GUI_CONFIG (gimp->config)->prefer_symbolic_icons;
+}
+
+
+/* Private functions */
+
+static gboolean
 icons_apply_theme (Gimp        *gimp,
                    const gchar *icon_theme_name)
 {
-  g_return_if_fail (GIMP_IS_GIMP (gimp));
+  gboolean applied;
+
+  g_return_val_if_fail (GIMP_IS_GIMP (gimp), FALSE);
 
   if (! icon_theme_name)
     icon_theme_name = GIMP_CONFIG_DEFAULT_ICON_THEME;
@@ -219,7 +249,26 @@ icons_apply_theme (Gimp        *gimp,
   if (gimp->be_verbose)
     g_print ("Loading icon theme '%s'\n", icon_theme_name);
 
-  gimp_icons_set_icon_theme (icon_themes_get_theme_dir (gimp, icon_theme_name));
+  if (g_getenv ("GIMP_TESTING_ABS_TOP_SRCDIR"))
+    {
+      GFile *file;
+      gchar *path;
+
+      path = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_SRCDIR"),
+                               "gimp-data", "icons", icon_theme_name, NULL);
+      file = g_file_new_for_path (path);
+
+      applied = gimp_icons_set_icon_theme (file);
+
+      g_object_unref (file);
+      g_free (path);
+    }
+  else
+    {
+      applied = gimp_icons_set_icon_theme (icon_themes_get_theme_dir (gimp, icon_theme_name));
+    }
+
+  return applied;
 }
 
 static void
@@ -246,5 +295,10 @@ icons_theme_change_notify (GimpGuiConfig *config,
                            GParamSpec    *pspec,
                            Gimp          *gimp)
 {
-  icons_apply_theme (gimp, config->icon_theme);
+  if (! icons_apply_theme (gimp, config->icon_theme))
+    {
+      g_return_if_fail (g_strcmp0 (config->icon_theme, GIMP_CONFIG_DEFAULT_ICON_THEME) != 0);
+
+      g_object_set (config, "icon-theme", GIMP_CONFIG_DEFAULT_ICON_THEME, NULL);
+    }
 }

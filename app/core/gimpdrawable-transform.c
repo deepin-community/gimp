@@ -51,17 +51,6 @@
 #include "gimp-intl.h"
 
 
-#if defined (HAVE_FINITE)
-#define FINITE(x) finite(x)
-#elif defined (HAVE_ISFINITE)
-#define FINITE(x) isfinite(x)
-#elif defined (G_OS_WIN32)
-#define FINITE(x) _finite(x)
-#else
-#error "no FINITE() implementation available?!"
-#endif
-
-
 /*  public functions  */
 
 GeglBuffer *
@@ -208,8 +197,7 @@ gimp_drawable_transform_buffer_flip (GimpDrawable         *drawable,
 
   if (clip_result && (new_x != orig_x || new_y != orig_y))
     {
-      GimpRGB    bg;
-      GeglColor *color;
+      GeglColor *color = NULL;
       gint       clip_x, clip_y;
       gint       clip_width, clip_height;
 
@@ -221,16 +209,15 @@ gimp_drawable_transform_buffer_flip (GimpDrawable         *drawable,
        */
       if (GIMP_IS_CHANNEL (drawable) || babl_format_has_alpha (format))
         {
-          gimp_rgba_set (&bg, 0.0, 0.0, 0.0, 0.0);
+          color = gegl_color_new ("black");
+          gegl_color_set_rgba_with_space (color, 0.0, 0.0, 0.0, 0.0,
+                                          gimp_drawable_get_space (drawable));
         }
       else
         {
-          gimp_context_get_background (context, &bg);
-          gimp_pickable_srgb_to_image_color (GIMP_PICKABLE (drawable),
-                                             &bg, &bg);
+          color = gegl_color_duplicate (gimp_context_get_background (context));
         }
 
-      color = gimp_gegl_color_new (&bg);
       gegl_buffer_set_color (new_buffer, NULL, color);
       g_object_unref (color);
 
@@ -366,17 +353,17 @@ gimp_drawable_transform_rotate_point (gint              x,
 
   switch (rotate_type)
     {
-    case GIMP_ROTATE_90:
+    case GIMP_ROTATE_DEGREES90:
       *new_x = RINT (center_x - (gdouble) y + center_y);
       *new_y = RINT (center_y + (gdouble) x - center_x);
       break;
 
-    case GIMP_ROTATE_180:
+    case GIMP_ROTATE_DEGREES180:
       *new_x = RINT (center_x - ((gdouble) x - center_x));
       *new_y = RINT (center_y - ((gdouble) y - center_y));
       break;
 
-    case GIMP_ROTATE_270:
+    case GIMP_ROTATE_DEGREES270:
       *new_x = RINT (center_x + (gdouble) y - center_y);
       *new_y = RINT (center_y - (gdouble) x + center_x);
       break;
@@ -431,7 +418,7 @@ gimp_drawable_transform_buffer_rotate (GimpDrawable      *drawable,
 
   switch (rotate_type)
     {
-    case GIMP_ROTATE_90:
+    case GIMP_ROTATE_DEGREES90:
       gimp_drawable_transform_rotate_point (orig_x,
                                             orig_y + orig_height,
                                             rotate_type, center_x, center_y,
@@ -440,7 +427,7 @@ gimp_drawable_transform_buffer_rotate (GimpDrawable      *drawable,
       new_height = orig_width;
       break;
 
-    case GIMP_ROTATE_180:
+    case GIMP_ROTATE_DEGREES180:
       gimp_drawable_transform_rotate_point (orig_x + orig_width,
                                             orig_y + orig_height,
                                             rotate_type, center_x, center_y,
@@ -449,7 +436,7 @@ gimp_drawable_transform_buffer_rotate (GimpDrawable      *drawable,
       new_height = orig_height;
       break;
 
-    case GIMP_ROTATE_270:
+    case GIMP_ROTATE_DEGREES270:
       gimp_drawable_transform_rotate_point (orig_x + orig_width,
                                             orig_y,
                                             rotate_type, center_x, center_y,
@@ -469,8 +456,7 @@ gimp_drawable_transform_buffer_rotate (GimpDrawable      *drawable,
                       new_width != orig_width || new_height != orig_height))
 
     {
-      GimpRGB    bg;
-      GeglColor *color;
+      GeglColor *color = NULL;
       gint       clip_x, clip_y;
       gint       clip_width, clip_height;
 
@@ -486,16 +472,15 @@ gimp_drawable_transform_buffer_rotate (GimpDrawable      *drawable,
        */
       if (GIMP_IS_CHANNEL (drawable) || babl_format_has_alpha (format))
         {
-          gimp_rgba_set (&bg, 0.0, 0.0, 0.0, 0.0);
+          color = gegl_color_new ("black");
+          gegl_color_set_rgba_with_space (color, 0.0, 0.0, 0.0, 0.0,
+                                          gimp_drawable_get_space (drawable));
         }
       else
         {
-          gimp_context_get_background (context, &bg);
-          gimp_pickable_srgb_to_image_color (GIMP_PICKABLE (drawable),
-                                             &bg, &bg);
+          color = gegl_color_duplicate (gimp_context_get_background (context));
         }
 
-      color = gimp_gegl_color_new (&bg);
       gegl_buffer_set_color (new_buffer, NULL, color);
       g_object_unref (color);
 
@@ -512,10 +497,10 @@ gimp_drawable_transform_buffer_rotate (GimpDrawable      *drawable,
 
           switch (rotate_type)
             {
-            case GIMP_ROTATE_90:
+            case GIMP_ROTATE_DEGREES90:
               gimp_drawable_transform_rotate_point (clip_x + clip_width,
                                                     clip_y,
-                                                    GIMP_ROTATE_270,
+                                                    GIMP_ROTATE_DEGREES270,
                                                     center_x,
                                                     center_y,
                                                     &orig_x,
@@ -526,17 +511,17 @@ gimp_drawable_transform_buffer_rotate (GimpDrawable      *drawable,
               orig_height  = clip_width;
               break;
 
-            case GIMP_ROTATE_180:
+            case GIMP_ROTATE_DEGREES180:
               orig_x      = clip_x - orig_x;
               orig_y      = clip_y - orig_y;
               orig_width  = clip_width;
               orig_height = clip_height;
               break;
 
-            case GIMP_ROTATE_270:
+            case GIMP_ROTATE_DEGREES270:
               gimp_drawable_transform_rotate_point (clip_x,
                                                     clip_y + clip_height,
-                                                    GIMP_ROTATE_90,
+                                                    GIMP_ROTATE_DEGREES90,
                                                     center_x,
                                                     center_y,
                                                     &orig_x,
@@ -587,7 +572,7 @@ gimp_drawable_transform_buffer_rotate (GimpDrawable      *drawable,
 
   switch (rotate_type)
     {
-    case GIMP_ROTATE_90:
+    case GIMP_ROTATE_DEGREES90:
       {
         guchar *buf = g_new (guchar, new_height * orig_bpp);
         gint    i;
@@ -619,7 +604,7 @@ gimp_drawable_transform_buffer_rotate (GimpDrawable      *drawable,
       }
       break;
 
-    case GIMP_ROTATE_180:
+    case GIMP_ROTATE_DEGREES180:
       {
         guchar *buf = g_new (guchar, new_width * orig_bpp);
         gint    i, j, k;
@@ -665,7 +650,7 @@ gimp_drawable_transform_buffer_rotate (GimpDrawable      *drawable,
       }
       break;
 
-    case GIMP_ROTATE_270:
+    case GIMP_ROTATE_DEGREES270:
       {
         guchar *buf = g_new (guchar, new_width * orig_bpp);
         gint    i;
@@ -711,6 +696,7 @@ gimp_drawable_transform_affine (GimpDrawable           *drawable,
                                 GimpProgress           *progress)
 {
   GimpImage    *image;
+  GList        *drawables;
   GeglBuffer   *orig_buffer;
   gint          orig_offset_x;
   gint          orig_offset_y;
@@ -731,9 +717,11 @@ gimp_drawable_transform_affine (GimpDrawable           *drawable,
                                C_("undo-type", "Transform"));
 
   /* Cut/Copy from the specified drawable */
-  orig_buffer = gimp_drawable_transform_cut (drawable, context,
+  drawables   = g_list_prepend (NULL, drawable);
+  orig_buffer = gimp_drawable_transform_cut (drawables, context,
                                              &orig_offset_x, &orig_offset_y,
                                              &new_layer);
+  g_free (drawables);
 
   if (orig_buffer)
     {
@@ -797,6 +785,7 @@ gimp_drawable_transform_flip (GimpDrawable        *drawable,
                               gboolean             clip_result)
 {
   GimpImage    *image;
+  GList        *drawables;
   GeglBuffer   *orig_buffer;
   gint          orig_offset_x;
   gint          orig_offset_y;
@@ -815,9 +804,11 @@ gimp_drawable_transform_flip (GimpDrawable        *drawable,
                                C_("undo-type", "Flip"));
 
   /* Cut/Copy from the specified drawable */
-  orig_buffer = gimp_drawable_transform_cut (drawable, context,
+  drawables   = g_list_prepend (NULL, drawable);
+  orig_buffer = gimp_drawable_transform_cut (drawables, context,
                                              &orig_offset_x, &orig_offset_y,
                                              &new_layer);
+  g_free (drawables);
 
   if (orig_buffer)
     {
@@ -877,6 +868,7 @@ gimp_drawable_transform_rotate (GimpDrawable     *drawable,
                                 gboolean          clip_result)
 {
   GimpImage    *image;
+  GList        *drawables;
   GeglBuffer   *orig_buffer;
   gint          orig_offset_x;
   gint          orig_offset_y;
@@ -895,9 +887,11 @@ gimp_drawable_transform_rotate (GimpDrawable     *drawable,
                                C_("undo-type", "Rotate"));
 
   /* Cut/Copy from the specified drawable */
-  orig_buffer = gimp_drawable_transform_cut (drawable, context,
+  drawables   = g_list_prepend (NULL, drawable);
+  orig_buffer = gimp_drawable_transform_cut (drawables, context,
                                              &orig_offset_x, &orig_offset_y,
                                              &new_layer);
+  g_free (drawables);
 
   if (orig_buffer)
     {
@@ -951,23 +945,38 @@ gimp_drawable_transform_rotate (GimpDrawable     *drawable,
 }
 
 GeglBuffer *
-gimp_drawable_transform_cut (GimpDrawable *drawable,
+gimp_drawable_transform_cut (GList        *drawables,
                              GimpContext  *context,
                              gint         *offset_x,
                              gint         *offset_y,
                              gboolean     *new_layer)
 {
-  GimpImage  *image;
-  GeglBuffer *buffer;
+  GimpImage  *image  = NULL;
+  GeglBuffer *buffer = NULL;
+  GList      *iter;
+  gboolean    drawables_are_layers = FALSE;
 
-  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
-  g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (drawable)), NULL);
+  g_return_val_if_fail (g_list_length (drawables), NULL);
   g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
   g_return_val_if_fail (offset_x != NULL, NULL);
   g_return_val_if_fail (offset_y != NULL, NULL);
   g_return_val_if_fail (new_layer != NULL, NULL);
 
-  image = gimp_item_get_image (GIMP_ITEM (drawable));
+  for (iter = drawables; iter; iter = iter->next)
+    {
+      g_return_val_if_fail (GIMP_IS_DRAWABLE (iter->data), NULL);
+      g_return_val_if_fail (gimp_item_is_attached (iter->data), NULL);
+
+      if (! image)
+        image = gimp_item_get_image (iter->data);
+      else
+        g_return_val_if_fail (image == gimp_item_get_image (iter->data), NULL);
+
+      if (drawables_are_layers)
+        g_return_val_if_fail (GIMP_IS_LAYER (iter->data), NULL);
+      else if (GIMP_IS_LAYER (iter->data))
+        drawables_are_layers = TRUE;
+    }
 
   /*  extract the selected mask if there is a selection  */
   if (! gimp_channel_is_empty (gimp_image_get_mask (image)))
@@ -978,11 +987,10 @@ gimp_drawable_transform_cut (GimpDrawable *drawable,
        * gimp_layer_new_from_gegl_buffer() later which assumes that
        * the buffer are either RGB or GRAY.  Eeek!!!  (Sven)
        */
-      if (gimp_item_mask_intersect (GIMP_ITEM (drawable), &x, &y, &w, &h))
+      if (gimp_image_mask_intersect (image, drawables, &x, &y, &w, &h))
         {
           buffer = gimp_selection_extract (GIMP_SELECTION (gimp_image_get_mask (image)),
-                                           GIMP_PICKABLE (drawable),
-                                           context,
+                                           drawables, context,
                                            TRUE, FALSE, TRUE,
                                            offset_x, offset_y,
                                            NULL);
@@ -1000,9 +1008,9 @@ gimp_drawable_transform_cut (GimpDrawable *drawable,
   else  /*  otherwise, just copy the layer  */
     {
       buffer = gimp_selection_extract (GIMP_SELECTION (gimp_image_get_mask (image)),
-                                       GIMP_PICKABLE (drawable),
-                                       context,
-                                       FALSE, TRUE, GIMP_IS_LAYER (drawable),
+                                       drawables, context,
+                                       FALSE, TRUE,
+                                       drawables_are_layers,
                                        offset_x, offset_y,
                                        NULL);
 

@@ -16,19 +16,24 @@
 
 # "Perlized" from C source by Manish Singh <yosh@gimp.org>
 
-sub display_is_valid {
-    $blurb = 'Returns TRUE if the display is valid.';
+sub display_id_is_valid {
+    $blurb = 'Returns TRUE if the display ID is valid.';
 
     $help = <<'HELP';
 This procedure checks if the given display ID is valid and refers to an
 existing display.
+
+
+*Note*: in most use cases, you should not use this function. If you got a
+[class@Gimp.Display] from the API, you should trust it is valid. This
+function is mostly for internal usage.
 HELP
 
-    &neo_pdb_misc('2007', '2.4');
+    &neo_pdb_misc('2007', '3.0');
 
     @inargs = (
-	{ name => 'display', type => 'display', no_validate => 1,
-	  desc => 'The display to check' }
+	{ name => 'display_id', type => 'int32',
+	  desc => 'The display ID to check' }
     );
 
     @outargs = (
@@ -39,7 +44,7 @@ HELP
     %invoke = (
 	code => <<'CODE'
 {
-  valid = (display != NULL);
+  valid = (gimp_display_get_by_id (gimp, display_id) != NULL);
 }
 CODE
     );
@@ -74,7 +79,7 @@ HELP
 {
   gimp_image_flush (image);
 
-  display = gimp_create_display (gimp, image, GIMP_UNIT_PIXEL, 1.0, NULL, 0);
+  display = gimp_create_display (gimp, image, gimp_unit_pixel (), 1.0, NULL);
 
   if (display)
     {
@@ -117,14 +122,41 @@ CODE
     );
 }
 
+sub display_present {
+    $blurb = 'Present the specified display.';
+
+    $help = <<'HELP';
+This procedure presents the specified display at the top of the display stack.
+HELP
+
+    &jehan_pdb_misc('2021', '3.0');
+
+    @inargs = (
+	{ name => 'display', type => 'display',
+	  desc => 'The display to present' }
+    );
+
+    %invoke = (
+	code => <<'CODE'
+{
+  gimp_display_present (display);
+}
+CODE
+    );
+}
+
 sub display_get_window_handle {
     $blurb = 'Get a handle to the native window for an image display.';
 
     $help = <<'HELP';
 This procedure returns a handle to the native window for a given image
-display. For example in the X backend of GDK, a native window handle is
-an Xlib XID. A value of 0 is returned for an invalid display or if this
-function is unimplemented for the windowing system that is being used.
+display.
+
+It can be different types of data depending on the platform you are running on.
+For example in the X backend of GDK, a native window handle is an Xlib
+XID whereas on Wayland, it is a string handle. A value of NULL is
+returned for an invalid display or if this function is unimplemented for
+the windowing system that is being used.
 HELP
 
     &neo_pdb_misc('2005', '2.4');
@@ -135,14 +167,14 @@ HELP
     );
 
     @outargs = (
-        { name => 'window', type => 'int32',
-          desc => 'The native window handle or 0' }
+        { name => 'handle', type => 'bytes',
+          desc => 'The native window handle or NULL' }
     );
 
     %invoke = (
 	code => <<'CODE'
 {
-  window = (gint32) gimp_get_display_window_id (gimp, display);
+  handle = gimp_get_display_window_id (gimp, display);
 }
 CODE
     );
@@ -210,13 +242,15 @@ CODE
 }
 
 
-@headers = qw("core/gimp.h");
+@headers = qw("core/gimp.h"
+              "core/gimpdisplay.h");
 
-@procs = qw(display_is_valid
+@procs = qw(display_id_is_valid
             display_new
             display_delete
             display_get_window_handle
-	    displays_flush
+            display_present
+            displays_flush
             displays_reconnect);
 
 %exports = (app => [@procs], lib => [@procs]);

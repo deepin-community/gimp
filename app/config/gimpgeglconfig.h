@@ -45,7 +45,7 @@ struct _GimpGeglConfig
 
 struct _GimpGeglConfigClass
 {
-  GObjectClass           parent_class;
+  GObjectClass  parent_class;
 };
 
 

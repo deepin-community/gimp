@@ -37,7 +37,7 @@
 #include "imap_misc.h"
 #include "imap_mru.h"
 #include "imap_preferences.h"
-#include "imap_table.h"
+#include "imap_ui_grid.h"
 
 #include "libgimp/stdplugins-intl.h"
 
@@ -99,11 +99,12 @@ parse_int(void)
 }
 
 static void
-parse_color(GdkColor *gdk_color)
+parse_color(GdkRGBA *color)
 {
-   gdk_color->red = (guint16) parse_int();
-   gdk_color->green = (guint16) parse_int();
-   gdk_color->blue = (guint16) parse_int();
+  color->red   = (gdouble) parse_int() / 255.0;
+  color->green = (gdouble) parse_int() / 255.0;
+  color->blue  = (gdouble) parse_int() / 255.0;
+  color->alpha = 1.0;
 }
 
 static void
@@ -166,91 +167,111 @@ parse_line(PreferencesData_t *data, char *line)
 gboolean
 preferences_load(PreferencesData_t *data)
 {
-   FILE *in;
-   char buf[256];
-   gchar *filename;
+  FILE *in;
+  char buf[256];
+  GFile *file;
 
-   filename = gimp_personal_rc_file ("imagemaprc");
+  file = gimp_directory_file ("imagemaprc", NULL);
 
-   in = g_fopen(filename, "rb");
-   g_free(filename);
-   if (in) {
-      while (fgets(buf, sizeof(buf), in)) {
-         if (*buf != '\n' && *buf != '#') {
-            parse_line(data, buf);
-         }
-      }
-      fclose(in);
+  in = g_fopen (g_file_peek_path (file), "rb");
+
+  g_object_unref (file);
+
+  if (in)
+    {
+      while (fgets (buf, sizeof (buf), in))
+        {
+          if (*buf != '\n' && *buf != '#')
+            {
+              parse_line (data, buf);
+            }
+        }
+
+      fclose (in);
+
       return TRUE;
-   }
-   return FALSE;
+    }
+
+  return FALSE;
 }
 
 void
 preferences_save(PreferencesData_t *data)
 {
    FILE *out;
-   gchar *filename;
+   GFile *file;
    ColorSelData_t *colors = &data->colors;
 
-   filename = gimp_personal_rc_file ("imagemaprc");
+   file = gimp_directory_file ("imagemaprc", NULL);
 
-   out = g_fopen(filename, "wb");
-   if (out) {
-      fprintf(out, "# Image map plug-in resource file\n\n");
-      if (data->default_map_type == NCSA)
+   out = g_fopen(g_file_peek_path (file), "wb");
+
+   if (out)
+     {
+       fprintf(out, "# Image map plug-in resource file\n\n");
+       if (data->default_map_type == NCSA)
          fprintf(out, "(default-map-type ncsa)\n");
-      else if (data->default_map_type == CERN)
+       else if (data->default_map_type == CERN)
          fprintf(out, "(default-map-type cern)\n");
-      else
+       else
          fprintf(out, "(default-map-type csim)\n");
 
-      fprintf(out, "(prompt-for-area-info %s)\n",
-              (data->prompt_for_area_info) ? "yes" : "no");
-      fprintf(out, "(require-default-url %s)\n",
-              (data->require_default_url) ? "yes" : "no");
-      fprintf(out, "(show-area-handle %s)\n",
-              (data->show_area_handle) ? "yes" : "no");
-      fprintf(out, "(keep-circles-round %s)\n",
-              (data->keep_circles_round) ? "yes" : "no");
-      fprintf(out, "(show-url-tip %s)\n",
-              (data->show_url_tip) ? "yes" : "no");
-      fprintf(out, "(use-doublesized %s)\n",
-              (data->use_doublesized) ? "yes" : "no");
+       fprintf(out, "(prompt-for-area-info %s)\n",
+               (data->prompt_for_area_info) ? "yes" : "no");
+       fprintf(out, "(require-default-url %s)\n",
+               (data->require_default_url) ? "yes" : "no");
+       fprintf(out, "(show-area-handle %s)\n",
+               (data->show_area_handle) ? "yes" : "no");
+       fprintf(out, "(keep-circles-round %s)\n",
+               (data->keep_circles_round) ? "yes" : "no");
+       fprintf(out, "(show-url-tip %s)\n",
+               (data->show_url_tip) ? "yes" : "no");
+       fprintf(out, "(use-doublesized %s)\n",
+               (data->use_doublesized) ? "yes" : "no");
 
-      fprintf(out, "(undo-levels %d)\n", data->undo_levels);
-      fprintf(out, "(mru-size %d)\n", data->mru_size);
+       fprintf(out, "(undo-levels %d)\n", data->undo_levels);
+       fprintf(out, "(mru-size %d)\n", data->mru_size);
 
-      fprintf(out, "(normal-fg-color %d %d %d)\n",
-              colors->normal_fg.red, colors->normal_fg.green,
-              colors->normal_fg.blue);
-      fprintf(out, "(normal-bg-color %d %d %d)\n",
-              colors->normal_bg.red, colors->normal_bg.green,
-              colors->normal_bg.blue);
-      fprintf(out, "(selected-fg-color %d %d %d)\n",
-              colors->selected_fg.red, colors->selected_fg.green,
-              colors->selected_fg.blue);
-      fprintf(out, "(selected-bg-color %d %d %d)\n",
-              colors->selected_bg.red, colors->selected_bg.green,
-              colors->selected_bg.blue);
-      fprintf(out, "(interactive-fg-color %d %d %d)\n",
-              colors->interactive_fg.red, colors->interactive_fg.green,
-              colors->interactive_fg.blue);
-      fprintf(out, "(interactive-bg-color %d %d %d)\n",
-              colors->interactive_bg.red, colors->interactive_bg.green,
-              colors->interactive_bg.blue);
+       fprintf(out, "(normal-fg-color %d %d %d)\n",
+               ROUND (colors->normal_fg.red * 255.0),
+               ROUND (colors->normal_fg.green * 255.0),
+               ROUND (colors->normal_fg.blue * 255.0));
+       fprintf(out, "(normal-bg-color %d %d %d)\n",
+               ROUND (colors->normal_bg.red * 255.0),
+               ROUND (colors->normal_bg.green * 255.0),
+               ROUND (colors->normal_bg.blue * 255.0));
+       fprintf(out, "(selected-fg-color %d %d %d)\n",
+               ROUND (colors->selected_fg.red * 255.0),
+               ROUND (colors->selected_fg.green * 255.0),
+               ROUND (colors->selected_fg.blue * 255.0));
+       fprintf(out, "(selected-bg-color %d %d %d)\n",
+               ROUND (colors->selected_bg.red * 255.0),
+               ROUND (colors->selected_bg.green * 255.0),
+               ROUND (colors->selected_bg.blue * 255.0));
+       fprintf(out, "(interactive-fg-color %d %d %d)\n",
+               ROUND (colors->interactive_fg.red * 255.0),
+               ROUND (colors->interactive_fg.green * 255.0),
+               ROUND (colors->interactive_fg.blue * 255.0));
+       fprintf(out, "(interactive-bg-color %d %d %d)\n",
+               ROUND (colors->interactive_bg.red * 255.0),
+               ROUND (colors->interactive_bg.green * 255.0),
+               ROUND (colors->interactive_bg.blue * 255.0));
 
-      mru_write(get_mru(), out);
+       mru_write(get_mru(), out);
 
-      fclose(out);
-   } else {
-      do_file_error_dialog( _("Couldn't save resource file:"), filename);
-   }
-   g_free(filename);
+       fclose(out);
+     }
+   else
+     {
+       do_file_error_dialog (_("Couldn't save resource file:"),
+                             gimp_file_get_utf8_name (file));
+     }
+
+   g_object_unref (file);
 }
 
 static void
-preferences_ok_cb(gpointer data)
+preferences_ok_cb (gpointer data)
 {
    PreferencesDialog_t *param = (PreferencesDialog_t*) data;
    PreferencesData_t *old_data = param->old_data;
@@ -278,12 +299,11 @@ preferences_ok_cb(gpointer data)
       GTK_TOGGLE_BUTTON(param->use_doublesized));
 
    old_data->mru_size =
-      gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(param->mru_size));
+      gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON(param->mru_size));
    old_data->undo_levels =
-      gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(param->undo_levels));
-   mru_set_size(mru, old_data->mru_size);
-   menu_build_mru_items(mru);
-   command_list_set_undo_level(old_data->undo_levels);
+      gtk_spin_button_get_value_as_int (GTK_SPIN_BUTTON(param->undo_levels));
+   mru_set_size (mru, old_data->mru_size);
+   command_list_set_undo_level (old_data->undo_levels);
 
    get_button_colors (param, colors);
 
@@ -292,13 +312,20 @@ preferences_ok_cb(gpointer data)
 }
 
 static void
-get_button_color (GtkWidget *button, GdkColor *color)
+get_button_color (GtkWidget *button,
+                  GdkRGBA   *rgba)
 {
-  GimpRGB rgb;
-  gimp_color_button_get_color (GIMP_COLOR_BUTTON (button), &rgb);
-  color->red = rgb.r * 0xffff;
-  color->green = rgb.g * 0xffff;
-  color->blue = rgb.b * 0xffff;
+  GeglColor *color;
+  gdouble    rgb[3];
+
+  color = gimp_color_button_get_color (GIMP_COLOR_BUTTON (button));
+  gegl_color_get_pixel (color, babl_format ("R'G'B' double"), rgb);
+  rgba->red   = rgb[0];
+  rgba->green = rgb[1];
+  rgba->blue  = rgb[2];
+  rgba->alpha = 1.0;
+
+  g_object_unref (color);
 }
 
 static void
@@ -313,16 +340,19 @@ get_button_colors(PreferencesDialog_t *dialog, ColorSelData_t *colors)
 }
 
 static void
-set_button_color (GtkWidget *button, GdkColor *color)
+set_button_color (GtkWidget *button,
+                  GdkRGBA   *rgba)
 {
-  GimpRGB rgb;
-  gimp_rgb_set (&rgb, color->red, color->green, color->blue);
-  gimp_rgb_multiply (&rgb, 1.0 / 0xffff);
-  gimp_color_button_set_color (GIMP_COLOR_BUTTON (button), &rgb);
+  GeglColor *color = gegl_color_new (NULL);
+
+  gegl_color_set_rgba_with_space (color, rgba->red, rgba->green, rgba->blue, rgba->alpha, NULL);
+  gimp_color_button_set_color (GIMP_COLOR_BUTTON (button), color);
+  g_object_unref (color);
 }
 
 static void
-set_button_colors(PreferencesDialog_t *dialog, ColorSelData_t *colors)
+set_button_colors(PreferencesDialog_t *dialog,
+                  ColorSelData_t      *colors)
 {
   set_button_color (dialog->normal_fg, &colors->normal_fg);
   set_button_color (dialog->normal_bg, &colors->normal_bg);
@@ -333,37 +363,37 @@ set_button_colors(PreferencesDialog_t *dialog, ColorSelData_t *colors)
 }
 
 static GtkWidget*
-create_tab(GtkWidget *notebook, const gchar *label, gint rows, gint cols)
+create_tab (GtkWidget *notebook, const gchar *label)
 {
-   GtkWidget *table;
+   GtkWidget *grid;
    GtkWidget *vbox;
 
    vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 1);
-   gtk_widget_show(vbox);
+   gtk_widget_show (vbox);
 
-   table = gtk_table_new(rows, cols, FALSE);
-   gtk_box_pack_start(GTK_BOX(vbox), table, FALSE, FALSE, 0);
-   gtk_container_set_border_width(GTK_CONTAINER(table), 12);
-   gtk_table_set_row_spacings(GTK_TABLE(table), 6);
-   gtk_table_set_col_spacings(GTK_TABLE(table), 6);
-   gtk_widget_show(table);
+   grid = gtk_grid_new ();
+   gtk_box_pack_start (GTK_BOX (vbox), grid, FALSE, FALSE, 0);
+   gtk_container_set_border_width (GTK_CONTAINER(grid), 12);
+   gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+   gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+   gtk_widget_show (grid);
 
-   gtk_notebook_append_page(GTK_NOTEBOOK(notebook), vbox,
-                            gtk_label_new_with_mnemonic(label));
+   gtk_notebook_append_page (GTK_NOTEBOOK (notebook), vbox,
+                             gtk_label_new_with_mnemonic (label));
 
-   return table;
+   return grid;
 }
 
 static void
 create_general_tab(PreferencesDialog_t *data, GtkWidget *notebook)
 {
-   GtkWidget *table = create_tab(notebook, _("General"), 7, 2);
+   GtkWidget *grid = create_tab (notebook, _("General"));
    GtkWidget *frame;
    GtkWidget *hbox;
 
    frame = gimp_frame_new( _("Default Map Type"));
    gtk_widget_show(frame);
-   gtk_table_attach_defaults(GTK_TABLE(table), frame, 0, 2, 0, 1);
+   gtk_grid_attach (GTK_GRID (grid), frame, 0, 0, 2, 1);
    hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 1);
    gtk_container_add(GTK_CONTAINER(frame), hbox);
    gtk_widget_show(hbox);
@@ -380,17 +410,17 @@ create_general_tab(PreferencesDialog_t *data, GtkWidget *notebook)
    gtk_widget_show(data->csim);
 
    data->prompt_for_area_info =
-      create_check_button_in_table(table, 1, 0, _("_Prompt for area info"));
+      create_check_button_in_grid (grid, 1, 0, _("_Prompt for area info"));
    data->require_default_url =
-      create_check_button_in_table(table, 2, 0, _("_Require default URL"));
+      create_check_button_in_grid (grid, 2, 0, _("_Require default URL"));
    data->show_area_handle =
-      create_check_button_in_table(table, 3, 0, _("Show area _handles"));
+      create_check_button_in_grid (grid, 3, 0, _("Show area _handles"));
    data->keep_circles_round =
-      create_check_button_in_table(table, 4, 0, _("_Keep NCSA circles true"));
+      create_check_button_in_grid (grid, 4, 0, _("_Keep NCSA circles true"));
    data->show_url_tip =
-      create_check_button_in_table(table, 5, 0, _("Show area URL _tip"));
+      create_check_button_in_grid (grid, 5, 0, _("Show area URL _tip"));
    data->use_doublesized =
-      create_check_button_in_table(table, 6, 0,
+      create_check_button_in_grid (grid, 6, 0,
                                    _("_Use double-sized grab handles"));
    gtk_widget_show(frame);
 }
@@ -398,30 +428,31 @@ create_general_tab(PreferencesDialog_t *data, GtkWidget *notebook)
 static void
 create_menu_tab(PreferencesDialog_t *data, GtkWidget *notebook)
 {
-   GtkWidget *table = create_tab(notebook, _("Menu"), 2, 2);
+   GtkWidget *grid = create_tab (notebook, _("Menu"));
    GtkWidget *label;
 
-   label = create_label_in_table(table, 0, 0,
+   label = create_label_in_grid (grid, 0, 0,
                                  _("Number of _undo levels (1 - 99):"));
-   data->undo_levels = create_spin_button_in_table(table, label, 0, 1, 1, 1,
+   data->undo_levels = create_spin_button_in_grid (grid, label, 0, 1, 1, 1,
                                                    99);
 
-   label = create_label_in_table(table, 1, 0,
+   label = create_label_in_grid (grid, 1, 0,
                                  _("Number of M_RU entries (1 - 16):"));
-   data->mru_size = create_spin_button_in_table(table, label, 1, 1, 1, 1, 16);
+   data->mru_size = create_spin_button_in_grid (grid, label, 1, 1, 1, 1, 16);
 }
 
 static GtkWidget*
-create_color_field(PreferencesDialog_t *data, GtkWidget *table, gint row,
-                   gint col)
+create_color_field (PreferencesDialog_t *data, GtkWidget *grid, gint row,
+                    gint col)
 {
-   GimpRGB color = {0.0, 0.0, 0.0, 1.0};
-   GtkWidget *area = gimp_color_button_new (_("Select Color"), 16, 8, &color,
-                                            GIMP_COLOR_AREA_FLAT);
+   GeglColor *color = gegl_color_new ("black");
+   GtkWidget *area  = gimp_color_button_new (_("Select Color"), 16, 8, color,
+                                             GIMP_COLOR_AREA_FLAT);
    gimp_color_button_set_update (GIMP_COLOR_BUTTON (area), TRUE);
-   gtk_table_attach_defaults (GTK_TABLE (table), area, col, col + 1, row,
-                              row + 1);
+   gtk_grid_attach (GTK_GRID (grid), area, col, row, 1, 1);
    gtk_widget_show (area);
+
+   g_object_unref (color);
 
    return area;
 }
@@ -429,32 +460,32 @@ create_color_field(PreferencesDialog_t *data, GtkWidget *table, gint row,
 static void
 create_colors_tab(PreferencesDialog_t *data, GtkWidget *notebook)
 {
-   GtkWidget *table = create_tab(notebook, _("Colors"), 3, 3);
+   GtkWidget *grid = create_tab (notebook, _("Colors"));
 
-   create_label_in_table(table, 0, 0, _("Normal:"));
-   data->normal_fg = create_color_field(data, table, 0, 1);
-   data->normal_bg = create_color_field(data, table, 0, 2);
+   create_label_in_grid (grid, 0, 0, _("Normal:"));
+   data->normal_fg = create_color_field(data, grid, 0, 1);
+   data->normal_bg = create_color_field(data, grid, 0, 2);
 
-   create_label_in_table(table, 1, 0, _("Selected:"));
-   data->selected_fg = create_color_field(data, table, 1, 1);
-   data->selected_bg = create_color_field(data, table, 1, 2);
+   create_label_in_grid (grid, 1, 0, _("Selected:"));
+   data->selected_fg = create_color_field(data, grid, 1, 1);
+   data->selected_bg = create_color_field(data, grid, 1, 2);
 
-   create_label_in_table(table, 2, 0, _("Interaction:"));
-   data->interactive_fg = create_color_field(data, table, 2, 1);
-   data->interactive_bg = create_color_field(data, table, 2, 2);
+   create_label_in_grid (grid, 2, 0, _("Interaction:"));
+   data->interactive_fg = create_color_field(data, grid, 2, 1);
+   data->interactive_bg = create_color_field(data, grid, 2, 2);
 }
 
 #ifdef _NOT_READY_YET_
 static void
 create_contiguous_regions_tab(PreferencesDialog_t *data, GtkWidget *notebook)
 {
-   GtkWidget *table = create_tab(notebook, _("Co_ntiguous Region"), 2, 2);
+   GtkWidget *grid = create_tab (notebook, _("Co_ntiguous Region"));
    GtkWidget *label;
 
-   label = create_label_in_table(table, 0, 0,
+   label = create_label_in_grid (grid, 0, 0,
                                  _("_Threshold:"));
    data->auto_convert =
-      create_check_button_in_table(table, 1, 0, _("_Automatically convert"));
+      create_check_button_in_grid (grid, 1, 0, _("_Automatically convert"));
 }
 #endif
 
@@ -482,7 +513,9 @@ create_preferences_dialog(void)
 }
 
 void
-do_preferences_dialog(void)
+do_preferences_dialog (GSimpleAction *action,
+                       GVariant      *parameter,
+                       gpointer       user_data)
 {
    static PreferencesDialog_t *dialog;
    PreferencesData_t *old_data;

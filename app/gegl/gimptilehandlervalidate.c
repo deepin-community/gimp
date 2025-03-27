@@ -18,12 +18,14 @@
 #include "config.h"
 
 #include <cairo.h>
+#include <gio/gio.h>
 #include <gegl.h>
+
+#include "libgimpbase/gimpbase.h"
 
 #include "gimp-gegl-types.h"
 
 #include "core/gimpchunkiterator.h"
-#include "core/gimpmarshal.h"
 
 #include "gimp-gegl-loops.h"
 #include "gimp-gegl-utils.h"

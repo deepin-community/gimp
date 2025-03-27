@@ -31,9 +31,9 @@ HELP
 	{ name => 'image', type => 'image',
 	  desc => 'The image' },
 	{ name => 'position_x', type => '0 <= int32',
-	  desc => "The guide'sample points x-offset from left of image" },
+	  desc => "The sample point's x-offset from left of image" },
 	{ name => 'position_y', type => '0 <= int32',
-	  desc => "The guide'sample points y-offset from top of image" }
+	  desc => "The sample point's y-offset from top of image" }
     );
 
     @outargs = (
@@ -51,7 +51,7 @@ HELP
 
       sp = gimp_image_add_sample_point_at_pos (image, position_x, position_y,
                                                TRUE);
-      sample_point = gimp_aux_item_get_ID (GIMP_AUX_ITEM (sp));
+      sample_point = gimp_aux_item_get_id (GIMP_AUX_ITEM (sp));
     }
   else
     success = FALSE;
@@ -125,13 +125,13 @@ HELP
                                                           &success);
 
   if (sp)
-    next_sample_point = gimp_aux_item_get_ID (GIMP_AUX_ITEM (sp));
+    next_sample_point = gimp_aux_item_get_id (GIMP_AUX_ITEM (sp));
 
   if (! success)
     g_set_error (error, GIMP_PDB_ERROR, GIMP_PDB_ERROR_INVALID_ARGUMENT,
                  _("Image '%s' (%d) does not contain sample point with ID %d"),
                  gimp_image_get_display_name (image),
-                 gimp_image_get_ID (image),
+                 gimp_image_get_id (image),
                  sample_point);
 }
 CODE
@@ -159,10 +159,10 @@ HELP
     @outargs = (
 	{ name => 'position_x', type => 'int32',
           libdef => 'G_MININT',
-	  desc => "The sample points's position relative to top of image" },
+	  desc => "The sample point's x-offset relative to left of image" },
 	{ name => 'position_y', type => 'int32',
           libdef => 'G_MININT',
-	  desc => "The sample points's position relative to top of image" }
+	  desc => "The sample point's y-offset relative to top of image" }
     );
 
     %invoke = (

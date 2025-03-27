@@ -36,15 +36,15 @@
 #define NUMGENERALBGRADIO 4
 
 static GtkWidget *general_bg_radio[NUMGENERALBGRADIO];
-static GtkWidget *general_paint_edges      = NULL;
-static GtkObject *general_dark_edge_adjust = NULL;
+static GtkWidget *general_paint_edges     = NULL;
+static GtkWidget *general_dark_edge_scale = NULL;
 static GtkWidget *general_tileable;
-static GtkWidget *general_drop_shadow      = NULL;
+static GtkWidget *general_drop_shadow     = NULL;
 static GtkWidget *general_color_button;
-static GtkObject *general_shadow_adjust    = NULL;
-static GtkObject *general_shadow_depth     = NULL;
-static GtkObject *general_shadow_blur      = NULL;
-static GtkObject *dev_thresh_adjust        = NULL;
+static GtkWidget *general_shadow_scale    = NULL;
+static GtkWidget *general_shadow_depth    = NULL;
+static GtkWidget *general_shadow_blur     = NULL;
+static GtkWidget *dev_thresh_scale        = NULL;
 
 static int
 normalize_bg (int n)
@@ -62,13 +62,13 @@ void
 general_store (void)
 {
   pcvals.general_paint_edges = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (general_paint_edges));
-  pcvals.general_dark_edge = gtk_adjustment_get_value (GTK_ADJUSTMENT (general_dark_edge_adjust));
+  pcvals.general_dark_edge = gimp_label_spin_get_value (GIMP_LABEL_SPIN (general_dark_edge_scale));
   pcvals.general_tileable = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (general_tileable));
   pcvals.general_drop_shadow = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (general_drop_shadow));
-  pcvals.general_shadow_darkness = gtk_adjustment_get_value (GTK_ADJUSTMENT (general_shadow_adjust));
-  pcvals.general_shadow_depth = gtk_adjustment_get_value (GTK_ADJUSTMENT (general_shadow_depth));
-  pcvals.general_shadow_blur = gtk_adjustment_get_value (GTK_ADJUSTMENT (general_shadow_blur));
-  pcvals.devthresh = gtk_adjustment_get_value (GTK_ADJUSTMENT (dev_thresh_adjust));
+  pcvals.general_shadow_darkness = gimp_label_spin_get_value (GIMP_LABEL_SPIN (general_shadow_scale));
+  pcvals.general_shadow_depth = gimp_label_spin_get_value (GIMP_LABEL_SPIN (general_shadow_depth));
+  pcvals.general_shadow_blur = gimp_label_spin_get_value (GIMP_LABEL_SPIN (general_shadow_blur));
+  pcvals.devthresh = gimp_label_spin_get_value (GIMP_LABEL_SPIN (dev_thresh_scale));
 }
 
 int
@@ -86,22 +86,22 @@ general_restore (void)
 
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (general_paint_edges),
                                 pcvals.general_paint_edges);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (general_dark_edge_adjust),
-                            pcvals.general_dark_edge);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (general_shadow_adjust),
-                            pcvals.general_shadow_darkness);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (general_dark_edge_scale),
+                             pcvals.general_dark_edge);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (general_shadow_scale),
+                             pcvals.general_shadow_darkness);
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (general_drop_shadow),
                                 pcvals.general_drop_shadow);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (general_shadow_depth),
-                            pcvals.general_shadow_depth);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (general_shadow_blur),
-                            pcvals.general_shadow_blur);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (general_shadow_depth),
+                             pcvals.general_shadow_depth);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (general_shadow_blur),
+                             pcvals.general_shadow_blur);
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (general_tileable),
                                 pcvals.general_tileable);
   gimp_color_button_set_color (GIMP_COLOR_BUTTON (general_color_button),
-                               &pcvals.color);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (dev_thresh_adjust),
-                            pcvals.devthresh);
+                               pcvals.color);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (dev_thresh_scale),
+                             pcvals.devthresh);
 }
 
 static void
@@ -110,6 +110,14 @@ select_color (GtkWidget *widget, gpointer data)
   gtk_toggle_button_set_active
     (GTK_TOGGLE_BUTTON (general_bg_radio[BG_TYPE_SOLID]),
      TRUE);
+}
+
+static void
+color_changed (GimpColorButton *button,
+               gpointer         data)
+{
+  g_clear_object (&pcvals.color);
+  pcvals.color = gimp_color_button_get_color (button);
 }
 
 static GtkWidget *
@@ -127,7 +135,7 @@ void
 create_generalpage (GtkNotebook *notebook)
 {
   GtkWidget *box1, *box2, *box3, *box4, *thispage;
-  GtkWidget *label, *tmpw, *frame, *table;
+  GtkWidget *label, *tmpw, *frame, *grid;
   GSList    * radio_group = NULL;
 
   label = gtk_label_new_with_mnemonic (_("_General"));
@@ -166,15 +174,17 @@ create_generalpage (GtkNotebook *notebook)
                          _("Solid colored background"),
                          &radio_group);
 
+  pcvals.color = gegl_color_new ("black");
+
   general_color_button = gimp_color_button_new (_("Color"),
                                                 COLORBUTTONWIDTH,
                                                 COLORBUTTONHEIGHT,
-                                                &pcvals.color,
+                                                pcvals.color,
                                                 GIMP_COLOR_AREA_FLAT);
   g_signal_connect (general_color_button, "clicked",
                     G_CALLBACK (select_color), NULL);
   g_signal_connect (general_color_button, "color-changed",
-                    G_CALLBACK (gimp_color_button_get_color),
+                    G_CALLBACK (color_changed),
                     &pcvals.color);
   gtk_box_pack_start (GTK_BOX (box4), general_color_button, FALSE, FALSE, 0);
   gtk_widget_show (general_color_button);
@@ -228,56 +238,52 @@ create_generalpage (GtkNotebook *notebook)
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (tmpw),
                                 pcvals.general_drop_shadow);
 
-  table = gtk_table_new (5, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_box_pack_start (GTK_BOX (box1), table, FALSE, FALSE, 0);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+  gtk_box_pack_start (GTK_BOX (box1), grid, FALSE, FALSE, 0);
+  gtk_widget_show (grid);
 
-  general_dark_edge_adjust =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 0,
-                          _("Edge darken:"),
-                          150, 6, pcvals.general_dark_edge,
-                          0.0, 1.0, 0.01, 0.1, 2,
-                          TRUE, 0, 0,
-                          _("How much to \"darken\" the edges of each brush stroke"),
-                          NULL);
+  general_dark_edge_scale =
+    gimp_scale_entry_new (_("Edge darken:"), pcvals.general_dark_edge, 0.0, 1.0, 2);
+  gimp_help_set_help_data (general_dark_edge_scale,
+                           _("How much to \"darken\" the edges of each brush stroke"),
+                           NULL);
+  gtk_grid_attach (GTK_GRID (grid), general_dark_edge_scale, 0, 0, 3, 1);
+  gtk_widget_show (general_dark_edge_scale);
 
-  general_shadow_adjust =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 1,
-                          _("Shadow darken:"),
-                          150, 6, pcvals.general_shadow_darkness,
-                          0.0, 99.0, 0.1, 1, 2,
-                          TRUE, 0, 0,
-                          _("How much to \"darken\" the drop shadow"),
-                          NULL);
+  general_shadow_scale =
+    gimp_scale_entry_new (_("Shadow darken:"), pcvals.general_shadow_darkness, 0.0, 99.0, 2);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (general_shadow_scale), 0.1, 1.0);
+  gimp_help_set_help_data (general_shadow_scale,
+                           _("How much to \"darken\" the drop shadow"),
+                           NULL);
+  gtk_grid_attach (GTK_GRID (grid), general_shadow_scale, 0, 1, 3, 1);
+  gtk_widget_show (general_shadow_scale);
 
   general_shadow_depth =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 2,
-                          _("Shadow depth:"),
-                          150, 6, pcvals.general_shadow_depth,
-                          0, 99, 1, 5, 0,
-                          TRUE, 0, 0,
-                          _("The depth of the drop shadow, i.e. how far apart from the object it should be"),
-                          NULL);
+    gimp_scale_entry_new (_("Shadow depth:"), pcvals.general_shadow_depth, 0, 99, 0);
+  gimp_help_set_help_data (general_shadow_depth,
+                           _("The depth of the drop shadow, i.e. how far apart from the object it should be"),
+                           NULL);
+  gtk_grid_attach (GTK_GRID (grid), general_shadow_depth, 0, 2, 3, 1);
+  gtk_widget_show (general_shadow_depth);
 
   general_shadow_blur =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 3,
-                          _("Shadow blur:"),
-                          150, 6, pcvals.general_shadow_blur,
-                          0, 99, 1, 5, 0,
-                          TRUE, 0, 0,
-                          _("How much to blur the drop shadow"),
-                          NULL);
+    gimp_scale_entry_new (_("Shadow blur:"), pcvals.general_shadow_blur, 0, 99, 0);
+  gimp_help_set_help_data (general_shadow_blur,
+                           _("How much to blur the drop shadow"),
+                           NULL);
+  gtk_grid_attach (GTK_GRID (grid), general_shadow_blur, 0, 3, 3, 1);
+  gtk_widget_show (general_shadow_blur);
 
-  dev_thresh_adjust =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 4,
-                          _("Deviation threshold:"),
-                          150, 6, pcvals.devthresh,
-                          0.0, 1.0, 0.01, 0.01, 2,
-                          TRUE, 0, 0,
-                          _("A bailout-value for adaptive selections"),
-                          NULL);
+  dev_thresh_scale =
+    gimp_scale_entry_new (_("Deviation threshold:"), pcvals.devthresh, 0.0, 1.0, 2);
+  gimp_help_set_help_data (dev_thresh_scale,
+                           _("A bailout-value for adaptive selections"),
+                           NULL);
+  gtk_grid_attach (GTK_GRID (grid), dev_thresh_scale, 0, 4, 3, 1);
+  gtk_widget_show (dev_thresh_scale);
 
   gtk_notebook_append_page_menu (notebook, thispage, label, NULL);
 }

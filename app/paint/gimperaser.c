@@ -41,7 +41,7 @@
 static gboolean   gimp_eraser_get_color_history_color (GimpPaintbrush            *paintbrush,
                                                        GimpDrawable              *drawable,
                                                        GimpPaintOptions          *paint_options,
-                                                       GimpRGB                   *color);
+                                                       GeglColor                **color);
 static void       gimp_eraser_get_paint_params        (GimpPaintbrush            *paintbrush,
                                                        GimpDrawable              *drawable,
                                                        GimpPaintOptions          *paint_options,
@@ -50,7 +50,7 @@ static void       gimp_eraser_get_paint_params        (GimpPaintbrush           
                                                        GimpLayerMode             *paint_mode,
                                                        GimpPaintApplicationMode  *paint_appl_mode,
                                                        const GimpTempBuf        **paint_pixmap,
-                                                       GimpRGB                   *paint_color);
+                                                       GeglColor                **paint_color);
 
 
 G_DEFINE_TYPE (GimpEraser, gimp_eraser, GIMP_TYPE_PAINTBRUSH)
@@ -83,10 +83,10 @@ gimp_eraser_init (GimpEraser *eraser)
 }
 
 static gboolean
-gimp_eraser_get_color_history_color (GimpPaintbrush   *paintbrush,
-                                     GimpDrawable     *drawable,
-                                     GimpPaintOptions *paint_options,
-                                     GimpRGB          *color)
+gimp_eraser_get_color_history_color (GimpPaintbrush    *paintbrush,
+                                     GimpDrawable      *drawable,
+                                     GimpPaintOptions  *paint_options,
+                                     GeglColor        **color)
 {
   /* Erasing on a drawable without alpha is equivalent to
    * drawing with background color. So let's save history.
@@ -95,7 +95,7 @@ gimp_eraser_get_color_history_color (GimpPaintbrush   *paintbrush,
     {
       GimpContext *context = GIMP_CONTEXT (paint_options);
 
-      gimp_context_get_background (context, color);
+      *color = gimp_context_get_background (context);
 
       return TRUE;
     }
@@ -112,14 +112,12 @@ gimp_eraser_get_paint_params (GimpPaintbrush            *paintbrush,
                               GimpLayerMode             *paint_mode,
                               GimpPaintApplicationMode  *paint_appl_mode,
                               const GimpTempBuf        **paint_pixmap,
-                              GimpRGB                   *paint_color)
+                              GeglColor                **paint_color)
 {
   GimpEraserOptions *options = GIMP_ERASER_OPTIONS (paint_options);
   GimpContext       *context = GIMP_CONTEXT (paint_options);
 
-  gimp_context_get_background (context, paint_color);
-  gimp_pickable_srgb_to_image_color (GIMP_PICKABLE (drawable),
-                                     paint_color, paint_color);
+  *paint_color = gegl_color_duplicate (gimp_context_get_background (context));
 
   if (options->anti_erase)
     *paint_mode = GIMP_LAYER_MODE_ANTI_ERASE;

@@ -1,5 +1,13 @@
-;; font-select
+;; font-map
 ;; Spencer Kimball
+
+;; To test, open the Font tool dialog,
+;; press right mouse button in the list of fonts, choose "Render Font Map"
+
+;; Test cases for font filter regex
+;;   ".*"  expect render all installed fonts
+;;   "foo" expect render blank image (no matching fonts)
+;;   "Sans" expect render subset of installed fonts
 
 (define (script-fu-font-map text
                             use-name
@@ -10,24 +18,25 @@
                             colors)
 
   (define (max-font-width text use-name list-cnt list font-size)
-    (let* ((count    0)
-           (width    0)
-           (maxwidth 0)
-           (font     "")
-           (extents  '()))
+    (let* ((count        0)
+           (width        0)
+           (maxwidth     0)
+           (font         "")
+           (font-object '())
+           (extents     '()))
       (while (< count list-cnt)
-        (set! font (car list))
+        (set! font-object (vector-ref list count))
+        (set! font (car (gimp-resource-get-name font-object)))
 
         (if (= use-name TRUE)
             (set! text font))
-        (set! extents (gimp-text-get-extents-fontname text
-                                                      font-size PIXELS
-                                                      font))
+        (set! extents (gimp-text-get-extents-font     text
+                                                      font-size
+                                                      font-object))
         (set! width (car extents))
         (if (> width maxwidth)
             (set! maxwidth width))
 
-        (set! list (cdr list))
         (set! count (+ count 1))
       )
 
@@ -36,26 +45,27 @@
   )
 
   (define (max-font-height text use-name list-cnt list font-size)
-    (let* ((count     0)
-           (height    0)
-           (maxheight 0)
-           (font      "")
-           (extents   '()))
+    (let* ((count       0)
+           (height      0)
+           (maxheight   0)
+           (font        "")
+           (font-object '())
+           (extents     '()))
       (while (< count list-cnt)
-        (set! font (car list))
+        (set! font-object (vector-ref list count))
+        (set! font (car (gimp-resource-get-name font-object)))
 
         (if (= use-name TRUE)
             (set! text font)
         )
-        (set! extents (gimp-text-get-extents-fontname text
-                                                      font-size PIXELS
-                                                      font))
+        (set! extents (gimp-text-get-extents-font     text
+                                                      font-size
+                                                      font-object))
         (set! height (cadr extents))
         (if (> height maxheight)
             (set! maxheight height)
         )
 
-        (set! list (cdr list))
         (set! count (+ count 1))
       )
 
@@ -64,24 +74,27 @@
   )
 
   (let* (
-        (font-data  (gimp-fonts-get-list font-filter))
-        (font-list  (cadr font-data))
-        (num-fonts  (car font-data))
-        (label-size (/ font-size 2))
-        (border     (+ border (* labels (/ label-size 2))))
-        (y          border)
-        (maxheight  (max-font-height text use-name num-fonts font-list font-size))
-        (maxwidth   (max-font-width  text use-name num-fonts font-list font-size))
-        (width      (+ maxwidth (* 2 border)))
-        (height     (+ (+ (* maxheight num-fonts) (* 2 border))
-                       (* labels (* label-size num-fonts))))
-        (img        (car (gimp-image-new width height (if (= colors 0)
-                                                          GRAY RGB))))
-        (drawable   (car (gimp-layer-new img width height (if (= colors 0)
-                                                              GRAY-IMAGE RGB-IMAGE)
-                                         "Background" 100 LAYER-MODE-NORMAL)))
-        (count      0)
-        (font       "")
+        ; gimp-fonts-get-list returns a one element list of results,
+        ; the only element is itself a list of fonts, possibly empty.
+        (font-list   (car (gimp-fonts-get-list font-filter)))
+        (num-fonts   (vector-length font-list))
+        (label-size  (/ font-size 2))
+        (border      (+ border (* labels (/ label-size 2))))
+        (y           border)
+        (maxheight   (max-font-height text use-name num-fonts font-list font-size))
+        (maxwidth    (max-font-width  text use-name num-fonts font-list font-size))
+        (width       (+ maxwidth (* 2 border)))
+        (height      (+ (+ (* maxheight num-fonts) (* 2 border))
+                        (* labels (* label-size num-fonts))))
+        (img         (car (gimp-image-new width height (if (= colors 0)
+                                                           GRAY RGB))))
+        (drawable    (car (gimp-layer-new img "Background"
+                                          width height (if (= colors 0)
+                                                         GRAY-IMAGE RGB-IMAGE)
+                                          100 LAYER-MODE-NORMAL)))
+        (count       0)
+        (font        "")
+        (font-object '())
         )
 
     (gimp-context-push)
@@ -98,48 +111,48 @@
 
     (if (= labels TRUE)
         (begin
-          (set! drawable (car (gimp-layer-new img width height
+          (set! drawable (car (gimp-layer-new img "Labels" width height
                                               (if (= colors 0)
                                                   GRAYA-IMAGE RGBA-IMAGE)
-                                              "Labels" 100 LAYER-MODE-NORMAL)))
+                                              100 LAYER-MODE-NORMAL)))
           (gimp-image-insert-layer img drawable 0 -1)))
           (gimp-drawable-edit-clear drawable)
 
     (while (< count num-fonts)
-      (set! font (car font-list))
+      (set! font-object (vector-ref font-list count))
+      (set! font (car (gimp-resource-get-name font-object)))
 
       (if (= use-name TRUE)
           (set! text font))
 
-      (gimp-text-fontname img -1
+      (gimp-text-font     img -1
                           border
                           y
                           text
-                          0 TRUE font-size PIXELS
-                          font)
+                          0 TRUE font-size
+                          font-object)
 
       (set! y (+ y maxheight))
 
       (if (= labels TRUE)
           (begin
-            (gimp-floating-sel-anchor (car (gimp-text-fontname img drawable
+            (gimp-floating-sel-anchor (car (gimp-text-font     img drawable
                                                                (- border
                                                                   (/ label-size 2))
                                                                (- y
                                                                   (/ label-size 2))
                                                                font
                                                                0 TRUE
-                                                               label-size PIXELS
-                                                               "Sans")))
+                                                               label-size
+                                                               font-object)))
           (set! y (+ y label-size))
           )
       )
 
-      (set! font-list (cdr font-list))
       (set! count (+ count 1))
     )
 
-    (gimp-image-set-active-layer img drawable)
+    (gimp-image-set-selected-layers img (vector drawable))
 
     (gimp-image-undo-enable img)
     (gimp-display-new img)
@@ -148,13 +161,11 @@
   )
 )
 
-(script-fu-register "script-fu-font-map"
+(script-fu-register-procedure "script-fu-font-map"
   _"Render _Font Map..."
   _"Create an image filled with previews of fonts matching a fontname filter"
   "Spencer Kimball"
-  "Spencer Kimball"
   "1997"
-  ""
   SF-STRING     _"_Text"                  "How quickly daft jumping zebras vex."
   SF-TOGGLE     _"Use font _name as text" FALSE
   SF-TOGGLE     _"_Labels"                TRUE
@@ -165,4 +176,4 @@
 )
 
 (script-fu-menu-register "script-fu-font-map"
-                         "<Fonts>")
+                         "<Fonts>/Fonts Menu")

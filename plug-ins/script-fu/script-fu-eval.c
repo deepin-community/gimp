@@ -19,62 +19,39 @@
 
 #include "libgimp/gimp.h"
 
-#include "scheme-wrapper.h"
 #include "script-fu-eval.h"
 
+#include "script-fu-lib.h"
 #include "script-fu-intl.h"
 
 
-void
-script_fu_eval_run (const gchar      *name,
-                    gint              nparams,
-                    const GimpParam  *params,
-                    gint             *nreturn_vals,
-                    GimpParam       **return_vals)
+GimpValueArray *
+script_fu_eval_run (GimpProcedure        *procedure,
+                    GimpRunMode           run_mode,
+                    const gchar          *code,
+                    GimpProcedureConfig  *config)
 {
-  static GimpParam   values[2];
-  GString           *output = g_string_new (NULL);
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpRunMode        run_mode;
+  script_fu_set_run_mode (run_mode);
 
-  *nreturn_vals = 1;
-  *return_vals  = values;
-
-  values[0].type = GIMP_PDB_STATUS;
-
-  run_mode = params[0].data.d_int32;
-
-  ts_set_run_mode (run_mode);
-  ts_register_output_func (ts_gstring_output_func, output);
+  /* IO writes by script go to stdout. */
+  script_fu_redirect_output_to_stdout ();
 
   switch (run_mode)
     {
     case GIMP_RUN_NONINTERACTIVE:
-      if (ts_interpret_string (params[1].data.d_string) != 0)
-        status = GIMP_PDB_EXECUTION_ERROR;
-      break;
-
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      status        = GIMP_PDB_CALLING_ERROR;
-      g_string_assign (output, _("Script-Fu evaluation mode only allows "
-                                 "non-interactive invocation"));
-      break;
+      if (script_fu_interpret_string (code) != 0)
+        return gimp_procedure_new_return_values (procedure,
+                                                 GIMP_PDB_EXECUTION_ERROR,
+                                                 script_fu_get_gerror ());
+      else
+        return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 
     default:
-      break;
-    }
+      {
+        GError *error = g_error_new_literal (g_quark_from_string ("scriptfu"), 0,
+           _("Script-Fu evaluation mode only allows non-interactive invocation"));
 
-  values[0].data.d_status = status;
-
-  if (status != GIMP_PDB_SUCCESS && output->len > 0)
-    {
-      *nreturn_vals = 2;
-      values[1].type          = GIMP_PDB_STRING;
-      values[1].data.d_string = g_string_free (output, FALSE);
-    }
-  else
-    {
-      g_string_free (output, TRUE);
+        return gimp_procedure_new_return_values (procedure, GIMP_PDB_CALLING_ERROR, error);
+      }
     }
 }

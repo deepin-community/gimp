@@ -51,30 +51,33 @@ typedef struct _StrokeDialog StrokeDialog;
 
 struct _StrokeDialog
 {
-  GimpItem           *item;
-  GimpDrawable       *drawable;
+  GList              *items;
+  GList              *drawables;
   GimpContext        *context;
   GimpStrokeOptions  *options;
   GimpStrokeCallback  callback;
   gpointer            user_data;
 
   GtkWidget          *tool_combo;
+  GtkWidget          *stack;
 };
 
 
 /*  local function prototypes  */
 
-static void  stroke_dialog_free     (StrokeDialog *private);
-static void  stroke_dialog_response (GtkWidget    *dialog,
-                                     gint          response_id,
-                                     StrokeDialog *private);
+static void  stroke_dialog_free        (StrokeDialog *private);
+static void  stroke_dialog_response    (GtkWidget    *dialog,
+                                        gint          response_id,
+                                        StrokeDialog *private);
+static void  stroke_dialog_expand_tabs (GtkWidget    *widget,
+                                        gpointer      data);
 
 
 /*  public function  */
 
 GtkWidget *
-stroke_dialog_new (GimpItem           *item,
-                   GimpDrawable       *drawable,
+stroke_dialog_new (GList              *items,
+                   GList              *drawables,
                    GimpContext        *context,
                    const gchar        *title,
                    const gchar        *icon_name,
@@ -88,26 +91,24 @@ stroke_dialog_new (GimpItem           *item,
   GimpImage    *image;
   GtkWidget    *dialog;
   GtkWidget    *main_vbox;
-  GtkWidget    *radio_box;
-  GtkWidget    *cairo_radio;
-  GtkWidget    *paint_radio;
-  GSList       *group;
+  GtkWidget    *switcher;
+  GtkWidget    *stack;
   GtkWidget    *frame;
 
-  g_return_val_if_fail (GIMP_IS_ITEM (item), NULL);
-  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
+  g_return_val_if_fail (items, NULL);
+  g_return_val_if_fail (drawables, NULL);
   g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
   g_return_val_if_fail (icon_name != NULL, NULL);
   g_return_val_if_fail (help_id != NULL, NULL);
   g_return_val_if_fail (parent == NULL || GTK_IS_WIDGET (parent), NULL);
   g_return_val_if_fail (callback != NULL, NULL);
 
-  image = gimp_item_get_image (item);
+  image = gimp_item_get_image (items->data);
 
   private = g_slice_new0 (StrokeDialog);
 
-  private->item      = item;
-  private->drawable  = drawable;
+  private->items     = g_list_copy (items);
+  private->drawables = g_list_copy (drawables);
   private->context   = context;
   private->options   = gimp_stroke_options_new (context->gimp, context, TRUE);
   private->callback  = callback;
@@ -116,7 +117,7 @@ stroke_dialog_new (GimpItem           *item,
   gimp_config_sync (G_OBJECT (options),
                     G_OBJECT (private->options), 0);
 
-  dialog = gimp_viewable_dialog_new (GIMP_VIEWABLE (item), context,
+  dialog = gimp_viewable_dialog_new (g_list_copy (items), context,
                                      title, "gimp-stroke-options",
                                      icon_name,
                                      _("Choose Stroke Style"),
@@ -130,7 +131,7 @@ stroke_dialog_new (GimpItem           *item,
 
                                      NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            RESPONSE_RESET,
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
@@ -151,44 +152,27 @@ stroke_dialog_new (GimpItem           *item,
                       main_vbox, TRUE, TRUE, 0);
   gtk_widget_show (main_vbox);
 
-  radio_box = gimp_prop_enum_radio_box_new (G_OBJECT (private->options),
-                                            "method", -1, -1);
 
-  group = gtk_radio_button_get_group (g_object_get_data (G_OBJECT (radio_box),
-                                                         "radio-button"));
+  /* switcher */
 
-  cairo_radio = g_object_ref (group->next->data);
-  gtk_container_remove (GTK_CONTAINER (radio_box), cairo_radio);
+  switcher = gtk_stack_switcher_new ();
+  gtk_box_pack_start (GTK_BOX (main_vbox), switcher, TRUE, TRUE, 0);
+  gtk_widget_show (switcher);
 
-  paint_radio = g_object_ref (group->data);
-  gtk_container_remove (GTK_CONTAINER (radio_box), paint_radio);
-
-  g_object_ref_sink (radio_box);
-  g_object_unref (radio_box);
-
-  {
-    PangoFontDescription *font_desc;
-
-    font_desc = pango_font_description_new ();
-    pango_font_description_set_weight (font_desc, PANGO_WEIGHT_BOLD);
-
-    gtk_widget_modify_font (gtk_bin_get_child (GTK_BIN (cairo_radio)),
-                            font_desc);
-    gtk_widget_modify_font (gtk_bin_get_child (GTK_BIN (paint_radio)),
-                            font_desc);
-
-    pango_font_description_free (font_desc);
-  }
-
+  stack = gtk_stack_new ();
+  gtk_stack_switcher_set_stack (GTK_STACK_SWITCHER (switcher),
+                                GTK_STACK (stack));
+  gtk_box_pack_start (GTK_BOX (main_vbox), stack, TRUE, TRUE, 0);
+  gtk_widget_show (stack);
 
   /*  the stroke frame  */
 
   frame = gimp_frame_new (NULL);
-  gtk_box_pack_start (GTK_BOX (main_vbox), frame, FALSE, FALSE, 0);
+  gtk_stack_add_titled (GTK_STACK (stack),
+                        frame,
+                        "stroke-tool",
+                        _("Line"));
   gtk_widget_show (frame);
-
-  gtk_frame_set_label_widget (GTK_FRAME (frame), cairo_radio);
-  g_object_unref (cairo_radio);
 
   {
     GtkWidget *stroke_editor;
@@ -197,24 +181,22 @@ stroke_dialog_new (GimpItem           *item,
 
     gimp_image_get_resolution (image, &xres, &yres);
 
-    stroke_editor = gimp_stroke_editor_new (private->options, yres, FALSE);
+    stroke_editor = gimp_stroke_editor_new (private->options, yres, FALSE,
+                                            FALSE);
     gtk_container_add (GTK_CONTAINER (frame), stroke_editor);
     gtk_widget_show (stroke_editor);
 
-    g_object_bind_property (cairo_radio,   "active",
-                            stroke_editor, "sensitive",
-                            G_BINDING_SYNC_CREATE);
   }
 
 
   /*  the paint tool frame  */
 
   frame = gimp_frame_new (NULL);
-  gtk_box_pack_start (GTK_BOX (main_vbox), frame, FALSE, FALSE, 0);
+  gtk_stack_add_titled (GTK_STACK (stack),
+                        frame,
+                        "paint-tool",
+                        _("Paint tool"));
   gtk_widget_show (frame);
-
-  gtk_frame_set_label_widget (GTK_FRAME (frame), paint_radio);
-  g_object_unref (paint_radio);
 
   {
     GtkWidget *vbox;
@@ -226,10 +208,6 @@ stroke_dialog_new (GimpItem           *item,
     vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
     gtk_container_add (GTK_CONTAINER (frame), vbox);
     gtk_widget_show (vbox);
-
-    g_object_bind_property (paint_radio, "active",
-                            vbox,        "sensitive",
-                            G_BINDING_SYNC_CREATE);
 
     hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
     gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
@@ -245,14 +223,29 @@ stroke_dialog_new (GimpItem           *item,
     gtk_box_pack_start (GTK_BOX (hbox), combo, TRUE, TRUE, 0);
     gtk_widget_show (combo);
 
+    switch (gimp_stroke_options_get_method (private->options))
+      {
+      case GIMP_STROKE_LINE:
+        gtk_stack_set_visible_child_name (GTK_STACK (stack), "stroke-tool");
+        break;
+      case GIMP_STROKE_PAINT_METHOD:
+        gtk_stack_set_visible_child_name (GTK_STACK (stack), "paint-tool");
+        break;
+      }
+
+    private->stack      = stack;
     private->tool_combo = combo;
 
     button = gimp_prop_check_button_new (G_OBJECT (private->options),
                                          "emulate-brush-dynamics",
                                          _("_Emulate brush dynamics"));
     gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-    gtk_widget_show (button);
   }
+
+  /* Setting hexpand property of all tabs to true */
+  gtk_container_foreach (GTK_CONTAINER (switcher),
+                         stroke_dialog_expand_tabs,
+                         NULL);
 
   return dialog;
 }
@@ -264,6 +257,8 @@ static void
 stroke_dialog_free (StrokeDialog *private)
 {
   g_object_unref (private->options);
+  g_list_free (private->drawables);
+  g_list_free (private->items);
 
   g_slice_free (StrokeDialog, private);
 }
@@ -288,16 +283,47 @@ stroke_dialog_response (GtkWidget    *dialog,
       break;
 
     case GTK_RESPONSE_OK:
-      private->callback (dialog,
-                         private->item,
-                         private->drawable,
-                         private->context,
-                         private->options,
-                         private->user_data);
+      {
+        gint        stroke_type;
+        GValue      value = G_VALUE_INIT;
+        GParamSpec *pspec;
+
+        if (g_strcmp0 (gtk_stack_get_visible_child_name (GTK_STACK (private->stack)),
+                       "stroke-tool") == 0)
+          stroke_type = GIMP_STROKE_LINE;
+        else
+          stroke_type = GIMP_STROKE_PAINT_METHOD;
+
+        pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (G_OBJECT (private->options)),
+                                              "method");
+        if (pspec == NULL)
+          {
+            gtk_widget_destroy (dialog);
+            return;
+          }
+
+        g_value_init (&value, pspec->value_type);
+        g_value_set_enum (&value, stroke_type);
+
+        g_object_set_property (G_OBJECT (private->options), "method", &value);
+
+        private->callback (dialog,
+                           private->items,
+                           private->drawables,
+                           private->context,
+                           private->options,
+                           private->user_data);
+      }
       break;
 
     default:
       gtk_widget_destroy (dialog);
       break;
     }
+}
+
+static void
+stroke_dialog_expand_tabs (GtkWidget *widget, gpointer data)
+{
+  gtk_widget_set_hexpand (widget, TRUE);
 }

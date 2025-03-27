@@ -15,20 +15,33 @@
 ; along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 
-(define (script-fu-tile-blur inImage inLayer inRadius inVert inHoriz inType)
+(define (script-fu-tile-blur inImage drawables inRadius inVert inHoriz inType)
 
   (let* (
         (theImage inImage)
-        (theLayer inLayer)
-        (theHeight (car (gimp-drawable-height theLayer)))
-        (theWidth (car (gimp-drawable-width theLayer)))
+        (theLayer (vector-ref (car (gimp-image-get-selected-drawables theImage)) 0))
+        (theHeight (car (gimp-drawable-get-height theLayer)))
+        (theWidth (car (gimp-drawable-get-width theLayer)))
+        (horizontalRadius (* 0.32 inRadius))
+        (verticalRadius (* 0.32 inRadius))
         )
 
+    (if (= inHoriz FALSE)
+        (set! horizontalRadius 0)
+    )
+    (if (= inVert FALSE)
+        (set! verticalRadius 0)
+    )
+
     (define (pasteat xoff yoff)
-      (let ((theFloat (car(gimp-edit-paste theLayer 0))))
-        (gimp-layer-set-offsets theFloat (* xoff theWidth) (* yoff theHeight) )
-        (gimp-floating-sel-anchor theFloat)
-       )
+      (let* (
+             (pasted (car (gimp-edit-paste theLayer FALSE)))
+             (num-pasted (vector-length pasted))
+             (floating-sel (vector-ref pasted (- num-pasted 1)))
+            )
+        (gimp-layer-set-offsets floating-sel (* xoff theWidth) (* yoff theHeight) )
+        (gimp-floating-sel-anchor floating-sel)
+      )
     )
 
     (gimp-context-push)
@@ -38,7 +51,7 @@
     (gimp-layer-resize theLayer (* 3 theWidth) (* 3 theHeight) 0 0)
 
     (gimp-image-select-rectangle theImage CHANNEL-OP-REPLACE 0 0 theWidth theHeight)
-    (gimp-edit-cut theLayer)
+    (gimp-edit-cut (vector theLayer))
 
     (gimp-selection-none theImage)
     (gimp-layer-set-offsets theLayer theWidth theHeight)
@@ -48,12 +61,8 @@
     (pasteat 3 1) (pasteat 3 2) (pasteat 3 3)
 
     (gimp-selection-none theImage)
-    (if (= inType 0)
-        (plug-in-gauss-iir RUN-NONINTERACTIVE
-                           theImage theLayer inRadius inHoriz inVert)
-        (plug-in-gauss-rle RUN-NONINTERACTIVE
-                           theImage theLayer inRadius inHoriz inVert)
-    )
+    (gimp-drawable-merge-new-filter theLayer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0
+                                    "std-dev-x" horizontalRadius "std-dev-y" verticalRadius "filter" "auto")
 
     (gimp-layer-resize theLayer
                        theWidth theHeight (- 0 theWidth) (- 0 theHeight))
@@ -64,19 +73,18 @@
   )
 )
 
-(script-fu-register "script-fu-tile-blur"
+(script-fu-register-filter "script-fu-tile-blur"
   _"_Tileable Blur..."
   _"Blur the edges of an image so the result tiles seamlessly"
   "Chris Gutteridge"
   "1998, Chris Gutteridge / ECS dept, University of Southampton, England."
   "25th April 1998"
   "RGB*"
-  SF-IMAGE       "The Image"         0
-  SF-DRAWABLE    "The Layer"         0
-  SF-ADJUSTMENT _"Radius"            '(5 0 128 1 1 0 0)
-  SF-TOGGLE     _"Blur vertically"   TRUE
-  SF-TOGGLE     _"Blur horizontally" TRUE
-  SF-OPTION     _"Blur type"         '(_"IIR" _"RLE")
+  SF-ONE-DRAWABLE
+  SF-ADJUSTMENT _"Ra_dius"            '(5 0 128 1 5 0 0)
+  SF-TOGGLE     _"Blur _vertically"   TRUE
+  SF-TOGGLE     _"Blur _horizontally" TRUE
+  SF-OPTION     _"Blur _type"         '(_"IIR" _"RLE")
 )
 
 (script-fu-menu-register "script-fu-tile-blur"

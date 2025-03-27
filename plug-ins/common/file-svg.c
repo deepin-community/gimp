@@ -35,7 +35,6 @@
 
 
 #define LOAD_PROC               "file-svg-load"
-#define LOAD_THUMB_PROC         "file-svg-load-thumb"
 #define PLUG_IN_BINARY          "file-svg"
 #define PLUG_IN_ROLE            "gimp-file-svg"
 #define SVG_VERSION             "2.5.0"
@@ -49,277 +48,488 @@ typedef struct
   gdouble    resolution;
   gint       width;
   gint       height;
-  gboolean   import;
-  gboolean   merge;
 } SvgLoadVals;
 
-static SvgLoadVals load_vals =
+
+typedef struct _Svg      Svg;
+typedef struct _SvgClass SvgClass;
+
+struct _Svg
 {
-  SVG_DEFAULT_RESOLUTION,
-  0,
-  0,
-  FALSE,
-  FALSE
+  GimpPlugIn      parent_instance;
+};
+
+struct _SvgClass
+{
+  GimpPlugInClass parent_class;
 };
 
 
-static void  query (void);
-static void  run   (const gchar      *name,
-                    gint              nparams,
-                    const GimpParam  *param,
-                    gint             *nreturn_vals,
-                    GimpParam       **return_vals);
+#define SVG_TYPE  (svg_get_type ())
+#define SVG(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SVG_TYPE, Svg))
 
-static gint32              load_image        (const gchar  *filename,
-                                              GError      **error);
-static GdkPixbuf         * load_rsvg_pixbuf  (const gchar  *filename,
-                                              SvgLoadVals  *vals,
-                                             GError      **error);
-static gboolean            load_rsvg_size    (const gchar  *filename,
-                                              SvgLoadVals  *vals,
-                                              GError      **error);
-static GimpPDBStatusType   load_dialog       (const gchar  *filename,
-                                              GError      **error);
+GType                   svg_get_type         (void) G_GNUC_CONST;
+
+static GList          * svg_query_procedures (GimpPlugIn            *plug_in);
+static GimpProcedure  * svg_create_procedure (GimpPlugIn            *plug_in,
+                                              const gchar           *name);
+
+static GimpUnit      * svg_rsvg_to_gimp_unit (RsvgUnit               unit);
+static gboolean        svg_extract           (GimpProcedure         *procedure,
+                                              GimpRunMode            run_mode,
+                                              GFile                 *file,
+                                              GimpMetadata          *metadata,
+                                              GimpProcedureConfig   *config,
+                                              GimpVectorLoadData    *extracted_dimensions,
+                                              gpointer              *data_for_run,
+                                              GDestroyNotify        *data_for_run_destroy,
+                                              gpointer               extract_data,
+                                              GError               **error);
+static GimpValueArray * svg_load             (GimpProcedure         *procedure,
+                                              GimpRunMode            run_mode,
+                                              GFile                 *file,
+                                              gint                   width,
+                                              gint                   height,
+                                              GimpVectorLoadData     extracted_data,
+                                              GimpMetadata          *metadata,
+                                              GimpMetadataLoadFlags *flags,
+                                              GimpProcedureConfig   *config,
+                                              gpointer               data_from_extract,
+                                              gpointer               run_data);
+
+static GimpImage         * load_image        (GFile                 *file,
+                                              RsvgHandle            *handle,
+                                              gint                   width,
+                                              gint                   height,
+                                              gdouble                resolution,
+                                              GError               **error);
+static GdkPixbuf         * load_rsvg_pixbuf  (RsvgHandle            *handle,
+                                              gint                   width,
+                                              gint                   height,
+                                              gdouble                resolution,
+                                              GError               **error);
+static GimpPDBStatusType   load_dialog       (GFile                 *file,
+                                              RsvgHandle            *handle,
+                                              GimpProcedure         *procedure,
+                                              GimpProcedureConfig   *config,
+                                              GimpVectorLoadData     extracted_data,
+                                              GError               **error);
+
+static void              svg_destroy_surface (guchar                *pixels,
+                                              cairo_surface_t       *surface);
 
 
-const GimpPlugInInfo PLUG_IN_INFO =
-{
-  NULL,
-  NULL,
-  query,
-  run,
-};
 
-MAIN ()
+G_DEFINE_TYPE (Svg, svg, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (SVG_TYPE)
+DEFINE_STD_SET_I18N
 
 
 static void
-query (void)
+svg_class_init (SvgClass *klass)
 {
-  static const GimpParamDef load_args[] =
-  {
-    { GIMP_PDB_INT32,  "run-mode",     "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }"        },
-    { GIMP_PDB_STRING, "filename",     "The name of the file to load"        },
-    { GIMP_PDB_STRING, "raw-filename", "The name of the file to load"        },
-    { GIMP_PDB_FLOAT,  "resolution",
-      "Resolution to use for rendering the SVG (defaults to 90 dpi)"         },
-    { GIMP_PDB_INT32,  "width",
-      "Width (in pixels) to load the SVG in. "
-      "(0 for original width, a negative width to specify a maximum width)"  },
-    { GIMP_PDB_INT32,  "height",
-      "Height (in pixels) to load the SVG in. "
-      "(0 for original height, a negative width to specify a maximum height)"},
-    { GIMP_PDB_INT32,  "paths",
-      "Whether to not import paths (0), import paths individually (1) "
-      "or merge all imported paths (2)"                                      }
-  };
-  static const GimpParamDef load_return_vals[] =
-  {
-    { GIMP_PDB_IMAGE,  "image",        "Output image" }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  static const GimpParamDef thumb_args[] =
-  {
-    { GIMP_PDB_STRING, "filename",     "The name of the file to load"  },
-    { GIMP_PDB_INT32,  "thumb-size",   "Preferred thumbnail size"      }
-  };
-  static const GimpParamDef thumb_return_vals[] =
-  {
-    { GIMP_PDB_IMAGE,  "image",        "Thumbnail image"               },
-    { GIMP_PDB_INT32,  "image-width",  "Width of full-sized image"     },
-    { GIMP_PDB_INT32,  "image-height", "Height of full-sized image"    }
-  };
-
-  gimp_install_procedure (LOAD_PROC,
-                          "Loads files in the SVG file format",
-                          "Renders SVG files to raster graphics using librsvg.",
-                          "Dom Lachowicz, Sven Neumann",
-                          "Dom Lachowicz <cinamod@hotmail.com>",
-                          SVG_VERSION,
-                          N_("SVG image"),
-                          NULL,
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (load_args),
-                          G_N_ELEMENTS (load_return_vals),
-                          load_args, load_return_vals);
-
-  gimp_register_file_handler_mime (LOAD_PROC, "image/svg+xml");
-  gimp_register_magic_load_handler (LOAD_PROC,
-                                    "svg", "",
-                                    "0,string,<?xml,0,string,<svg");
-
-  gimp_install_procedure (LOAD_THUMB_PROC,
-                          "Generates a thumbnail of an SVG image",
-                          "Renders a thumbnail of an SVG file using librsvg.",
-                          "Dom Lachowicz, Sven Neumann",
-                          "Dom Lachowicz <cinamod@hotmail.com>",
-                          SVG_VERSION,
-                          NULL,
-                          NULL,
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (thumb_args),
-                          G_N_ELEMENTS (thumb_return_vals),
-                          thumb_args, thumb_return_vals);
-
-  gimp_register_thumbnail_loader (LOAD_PROC, LOAD_THUMB_PROC);
+  plug_in_class->query_procedures = svg_query_procedures;
+  plug_in_class->create_procedure = svg_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+svg_init (Svg *svg)
 {
-  static GimpParam   values[4];
-  GimpRunMode        run_mode;
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GError            *error  = NULL;
+}
 
-  INIT_I18N ();
+static GList *
+svg_query_procedures (GimpPlugIn *plug_in)
+{
+  GList *list = NULL;
 
-  run_mode = param[0].data.d_int32;
+  list = g_list_append (list, g_strdup (LOAD_PROC));
 
-  *nreturn_vals = 1;
-  *return_vals  = values;
+  return list;
+}
 
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
+static GimpProcedure *
+svg_create_procedure (GimpPlugIn  *plug_in,
+                      const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
 
-  if (strcmp (name, LOAD_PROC) == 0)
+  if (! strcmp (name, LOAD_PROC))
     {
-      gimp_get_data (LOAD_PROC, &load_vals);
+      procedure = gimp_vector_load_procedure_new (plug_in, name,
+                                                  GIMP_PDB_PROC_TYPE_PLUGIN,
+                                                  svg_extract, NULL, NULL,
+                                                  svg_load, NULL, NULL);
 
-      switch (run_mode)
-        {
-        case GIMP_RUN_NONINTERACTIVE:
-          if (nparams > 3)  load_vals.resolution = param[3].data.d_float;
-          if (nparams > 4)  load_vals.width      = param[4].data.d_int32;
-          if (nparams > 5)  load_vals.height     = param[5].data.d_int32;
-          if (nparams > 6)
-            {
-              load_vals.import = param[6].data.d_int32 != FALSE;
-              load_vals.merge  = param[6].data.d_int32 > TRUE;
-            }
-          break;
+      gimp_procedure_set_menu_label (procedure, _("SVG image"));
 
-        case GIMP_RUN_INTERACTIVE:
-          status = load_dialog (param[1].data.d_string, &error);
-          break;
+      gimp_procedure_set_documentation (procedure,
+                                        "Loads files in the SVG file format",
+                                        "Renders SVG files to raster graphics "
+                                        "using librsvg.",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Dom Lachowicz, Sven Neumann",
+                                      "Dom Lachowicz <cinamod@hotmail.com>",
+                                      SVG_VERSION);
 
-        case GIMP_RUN_WITH_LAST_VALS:
-          break;
-        }
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           _("SVG"));
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "image/svg+xml");
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "svg");
+      gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
+                                      "0,string,<?xml,0,string,<svg");
 
-      /* Don't clamp this; insane values are probably not meant to be
-       * used as resolution anyway.
-       */
-      if (load_vals.resolution < GIMP_MIN_RESOLUTION ||
-          load_vals.resolution > GIMP_MAX_RESOLUTION)
-        {
-          load_vals.resolution = SVG_DEFAULT_RESOLUTION;
-        }
-
-      if (status == GIMP_PDB_SUCCESS)
-        {
-          const gchar *filename = param[1].data.d_string;
-          gint32       image_ID = load_image (filename, &error);
-
-          if (image_ID != -1)
-            {
-              if (load_vals.import)
-                {
-                  gint32 *vectors;
-                  gint    num_vectors;
-
-                  gimp_vectors_import_from_file (image_ID, filename,
-                                                 load_vals.merge, TRUE,
-                                                 &num_vectors, &vectors);
-                  if (num_vectors > 0)
-                    g_free (vectors);
-                }
-
-              *nreturn_vals = 2;
-
-              values[1].type         = GIMP_PDB_IMAGE;
-              values[1].data.d_image = image_ID;
-            }
-          else
-            {
-              status = GIMP_PDB_EXECUTION_ERROR;
-            }
-
-          gimp_set_data (LOAD_PROC, &load_vals, sizeof (load_vals));
-        }
+      gimp_procedure_add_choice_argument (procedure, "paths",
+                                          _("_Paths"),
+                                          _("Whether and how to import paths so that they can be used with the path tool"),
+                                          gimp_choice_new_with_values ("no-import",     0, _("Don't import paths"),        NULL,
+                                                                       "import",        0, _("Import paths individually"), NULL,
+                                                                       "import-merged", 0, _("Merge imported paths"),      NULL,
+                                                                       NULL),
+                                          "no-import", G_PARAM_READWRITE);
     }
-  else if (strcmp (name, LOAD_THUMB_PROC) == 0)
+
+  return procedure;
+}
+
+static GimpUnit *
+svg_rsvg_to_gimp_unit (RsvgUnit unit)
+{
+  switch (unit)
     {
-      if (nparams < 2)
+    case RSVG_UNIT_PERCENT:
+      return gimp_unit_percent ();
+    case RSVG_UNIT_PX:
+      return gimp_unit_pixel ();
+    case RSVG_UNIT_IN:
+      return gimp_unit_inch ();
+    case RSVG_UNIT_MM:
+      return gimp_unit_mm ();
+    case RSVG_UNIT_PT:
+      return gimp_unit_point ();
+    case RSVG_UNIT_PC:
+      return gimp_unit_pica ();
+    case RSVG_UNIT_CM:
+    case RSVG_UNIT_EM:
+    case RSVG_UNIT_EX:
+      /*case RSVG_UNIT_CH:*/
+    default:
+      return NULL;
+    }
+}
+
+static gboolean
+svg_extract (GimpProcedure        *procedure,
+             GimpRunMode           run_mode,
+             GFile                *file,
+             GimpMetadata         *metadata,
+             GimpProcedureConfig  *config,
+             GimpVectorLoadData   *extracted_dimensions,
+             gpointer             *data_for_run,
+             GDestroyNotify       *data_for_run_destroy,
+             gpointer              extract_data,
+             GError              **error)
+{
+  RsvgHandle        *handle;
+#if LIBRSVG_CHECK_VERSION(2, 46, 0)
+  gboolean           out_has_width;
+  RsvgLength         out_width;
+  gboolean           out_has_height;
+  RsvgLength         out_height;
+  gboolean           out_has_viewbox;
+  RsvgRectangle      out_viewbox;
+#endif
+#if ! LIBRSVG_CHECK_VERSION(2, 52, 0)
+  RsvgDimensionData  dim;
+#endif
+
+  g_return_val_if_fail (extracted_dimensions != NULL, FALSE);
+  g_return_val_if_fail (data_for_run_destroy != NULL && *data_for_run_destroy == NULL, FALSE);
+  g_return_val_if_fail (data_for_run != NULL && *data_for_run == NULL, FALSE);
+  g_return_val_if_fail (error != NULL && *error == NULL, FALSE);
+
+  handle = rsvg_handle_new_from_gfile_sync (file, RSVG_HANDLE_FLAGS_NONE, NULL, error);
+
+  if (! handle)
+    {
+      if (run_mode == GIMP_RUN_INTERACTIVE)
         {
-          status = GIMP_PDB_CALLING_ERROR;
+          GtkWidget *dialog;
+          GtkWidget *main_hbox;
+          GtkWidget *label;
+          gchar     *text;
+          gboolean   retry;
+
+          /* We need to ask explicitly before using the "unlimited" size
+           * option (XML_PARSE_HUGE in libxml) because it is considered
+           * unsafe, possibly consumming too much memory with malicious XML
+           * files.
+           */
+          dialog = gimp_dialog_new (_("Disable safety size limits?"),
+                                    PLUG_IN_ROLE,
+                                    NULL, 0,
+                                    gimp_standard_help_func, LOAD_PROC,
+
+                                    _("_No"),  GTK_RESPONSE_NO,
+                                    _("_Yes"), GTK_RESPONSE_YES,
+
+                                    NULL);
+
+          gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_NO);
+          gtk_window_set_resizable (GTK_WINDOW (dialog), FALSE);
+          gimp_window_set_transient (GTK_WINDOW (dialog));
+
+          main_hbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
+          gtk_container_set_border_width (GTK_CONTAINER (main_hbox), 12);
+          gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
+                              main_hbox, TRUE, TRUE, 0);
+          gtk_widget_show (main_hbox);
+
+          /* Unfortunately the error returned by librsvg is unclear. While
+           * libxml explicitly returns a "parser error : internal error:
+           * Huge input lookup", librsvg does not seem to relay this error.
+           * It sends a further parsing error, false positive provoked by
+           * the huge input error.
+           * If we were able to single out the huge data error, we could
+           * just directly return from the plug-in as a failure run in other
+           * cases. Instead of this, we need to ask each and every time, in
+           * case it might be the huge data error.
+           */
+          label = gtk_label_new (_("A parsing error occurred.\n"
+                                   "Disabling safety limits may help. "
+                                   "Malicious SVG files may use this to consume too much memory."));
+          gtk_label_set_justify (GTK_LABEL (label), GTK_JUSTIFY_CENTER);
+          gtk_label_set_line_wrap (GTK_LABEL (label), TRUE);
+          gtk_label_set_line_wrap_mode (GTK_LABEL (label), PANGO_WRAP_WORD);
+          gtk_label_set_max_width_chars (GTK_LABEL (label), 80);
+          gtk_box_pack_start (GTK_BOX (main_hbox), label, FALSE, FALSE, 0);
+          gtk_widget_show (label);
+
+          label = gtk_label_new (NULL);
+          text = g_strdup_printf ("<b>%s</b>",
+                                  _("For security reasons, this should only be used for trusted input!"));
+          gtk_label_set_markup (GTK_LABEL (label), text);
+          g_free (text);
+          gtk_label_set_justify (GTK_LABEL (label), GTK_JUSTIFY_CENTER);
+          gtk_box_pack_start (GTK_BOX (main_hbox), label, FALSE, FALSE, 0);
+          gtk_widget_show (label);
+
+          label = gtk_label_new (_("Retry without limits preventing to parse huge data?"));
+          gtk_label_set_justify (GTK_LABEL (label), GTK_JUSTIFY_CENTER);
+          gtk_box_pack_start (GTK_BOX (main_hbox), label, FALSE, FALSE, 0);
+          gtk_widget_show (label);
+
+          gtk_widget_show (dialog);
+
+          retry = (gimp_dialog_run (GIMP_DIALOG (dialog)) == GTK_RESPONSE_YES);
+          gtk_widget_destroy (dialog);
+
+          if (retry)
+            {
+              g_clear_error (error);
+              handle = rsvg_handle_new_from_gfile_sync (file, RSVG_HANDLE_FLAG_UNLIMITED, NULL, error);
+            }
+        }
+
+      if (! handle)
+        return FALSE;
+    }
+
+  /* SVG has no pixel density information */
+  extracted_dimensions->exact_density = TRUE;
+  extracted_dimensions->correct_ratio = TRUE;
+
+#if LIBRSVG_CHECK_VERSION(2, 46, 0)
+  rsvg_handle_get_intrinsic_dimensions (handle,
+                                        &out_has_width, &out_width,
+                                        &out_has_height, &out_height,
+                                        &out_has_viewbox, &out_viewbox);
+
+  if (out_has_width && out_has_height)
+    {
+      /* "width" and "height" present: the viewbox has no importance (it's only
+       * a coordinate remapping.
+       */
+      if (svg_rsvg_to_gimp_unit (out_width.unit)  != NULL &&
+          svg_rsvg_to_gimp_unit (out_height.unit) != NULL)
+        {
+          /* Best case scenario: we know all these units. */
+          extracted_dimensions->width        = out_width.length;
+          extracted_dimensions->width_unit   = svg_rsvg_to_gimp_unit (out_width.unit);
+          extracted_dimensions->height       = out_height.length;
+          extracted_dimensions->height_unit  = svg_rsvg_to_gimp_unit (out_height.unit);
+
+          extracted_dimensions->exact_width  = TRUE;
+          extracted_dimensions->exact_height = TRUE;
         }
       else
         {
-          const gchar *filename = param[0].data.d_string;
-          gint         width    = 0;
-          gint         height   = 0;
-          gint32       image_ID;
-
-          if (load_rsvg_size (filename, &load_vals, NULL))
+          /* Ideally we let GIMP handle the transformation, but for cases where
+           * we don't know how, we let rsvg make a computation to pixel for us.
+           */
+#if LIBRSVG_CHECK_VERSION(2, 52, 0)
+          if (rsvg_handle_get_intrinsic_size_in_pixels (handle,
+                                                        &extracted_dimensions->width,
+                                                        &extracted_dimensions->height))
             {
-              width  = load_vals.width;
-              height = load_vals.height;
-            }
-
-          load_vals.resolution = SVG_DEFAULT_RESOLUTION;
-          load_vals.width      = - param[1].data.d_int32;
-          load_vals.height     = - param[1].data.d_int32;
-
-          image_ID = load_image (filename, &error);
-
-          if (image_ID != -1)
-            {
-              *nreturn_vals = 4;
-              values[1].type         = GIMP_PDB_IMAGE;
-              values[1].data.d_image = image_ID;
-              values[2].type         = GIMP_PDB_INT32;
-              values[2].data.d_int32 = width;
-              values[3].type         = GIMP_PDB_INT32;
-              values[3].data.d_int32 = height;
+              extracted_dimensions->width_unit   = gimp_unit_pixel ();
+              extracted_dimensions->height_unit  = gimp_unit_pixel ();
+              extracted_dimensions->exact_width  = FALSE;
+              extracted_dimensions->exact_height = FALSE;
             }
           else
             {
-              status = GIMP_PDB_EXECUTION_ERROR;
+              /* Honestly at this point, setting 300 PPI is random. */
+              rsvg_handle_set_dpi (handle, 300.0);
+              if (rsvg_handle_get_intrinsic_size_in_pixels (handle,
+                                                            &extracted_dimensions->width,
+                                                            &extracted_dimensions->height))
+                {
+                  extracted_dimensions->width_unit  = gimp_unit_percent ();
+                  extracted_dimensions->height_unit = gimp_unit_percent ();
+                }
+              else if (out_width.unit == out_height.unit)
+                {
+                  /* Odd case which should likely never happen as we have width,
+                   * height and a (fake) pixel density. Just in case though.
+                   */
+                  extracted_dimensions->width       = out_width.length;
+                  extracted_dimensions->height      = out_height.length;
+                  extracted_dimensions->width_unit  = gimp_unit_percent ();
+                  extracted_dimensions->height_unit = gimp_unit_percent ();
+                }
+              else
+                {
+                  /* Should even less happen! */
+                  return FALSE;
+                }
             }
+#else
+          rsvg_handle_get_dimensions (handle, &dim);
+          extracted_dimensions->width         = (gdouble) dim.width;
+          extracted_dimensions->height        = (gdouble) dim.height;
+          extracted_dimensions->exact_width   = FALSE;
+          extracted_dimensions->exact_height  = FALSE;
+          extracted_dimensions->correct_ratio = TRUE;
+#endif
         }
+    }
+  else if (out_has_viewbox)
+    {
+      /* Only a viewbox, so dimensions have a ratio, but no units. */
+      extracted_dimensions->width         = out_width.length;
+      extracted_dimensions->width_unit    = gimp_unit_percent ();
+      extracted_dimensions->exact_width   = FALSE;
+      extracted_dimensions->height        = out_height.length;
+      extracted_dimensions->height_unit   = gimp_unit_percent ();
+      extracted_dimensions->exact_height  = FALSE;
+      extracted_dimensions->correct_ratio = TRUE;
     }
   else
     {
-      status = GIMP_PDB_CALLING_ERROR;
+      /* Neither width nor viewbox. Nothing can be determined. */
+      return FALSE;
     }
 
-  if (status != GIMP_PDB_SUCCESS && error)
-    {
-      *nreturn_vals = 2;
-      values[1].type          = GIMP_PDB_STRING;
-      values[1].data.d_string = error->message;
-    }
+#else
+  rsvg_handle_get_dimensions (handle, &dim);
+  extracted_dimensions->width         = (gdouble) dim.width;
+  extracted_dimensions->height        = (gdouble) dim.height;
+  extracted_dimensions->exact_width   = FALSE;
+  extracted_dimensions->exact_height  = FALSE;
+  extracted_dimensions->correct_ratio = TRUE;
+#endif
 
-  values[0].data.d_status = status;
+  *data_for_run = handle;
+  *data_for_run_destroy = g_object_unref;
+
+  return TRUE;
 }
 
-static gint32
-load_image (const gchar  *filename,
-            GError      **load_error)
+static GimpValueArray *
+svg_load (GimpProcedure         *procedure,
+          GimpRunMode            run_mode,
+          GFile                 *file,
+          gint                   width,
+          gint                   height,
+          GimpVectorLoadData     extracted_data,
+          GimpMetadata          *metadata,
+          GimpMetadataLoadFlags *flags,
+          GimpProcedureConfig   *config,
+          gpointer               data_from_extract,
+          gpointer               run_data)
 {
-  gint32        image;
-  gint32        layer;
-  GdkPixbuf    *pixbuf;
-  gint          width;
-  gint          height;
-  GError       *error = NULL;
+  GimpValueArray    *return_vals;
+  GimpImage         *image;
+  GError            *error      = NULL;
+  GimpPDBStatusType  status;
+  gchar             *import_paths;
+  gdouble            resolution;
 
-  pixbuf = load_rsvg_pixbuf (filename, &load_vals, &error);
+  gegl_init (NULL, NULL);
+
+  if (run_mode == GIMP_RUN_INTERACTIVE)
+    {
+      status = load_dialog (file, RSVG_HANDLE (data_from_extract),
+                            procedure, config, extracted_data, &error);
+      if (status != GIMP_PDB_SUCCESS)
+        return gimp_procedure_new_return_values (procedure, status, error);
+    }
+
+  g_object_get (config,
+                "width",         &width,
+                "height",        &height,
+                "pixel-density", &resolution,
+                NULL);
+  image = load_image (file, RSVG_HANDLE (data_from_extract),
+                      width, height, resolution, &error);
+
+  if (! image)
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_EXECUTION_ERROR,
+                                             error);
+
+  g_object_get (config, "paths", &import_paths, NULL);
+  if (g_strcmp0 (import_paths, "no-import") != 0)
+    {
+      GimpPath **paths = NULL;
+
+      gimp_image_import_paths_from_file (image, file,
+                                         g_strcmp0 (import_paths, "import-merged") == 0,
+                                         TRUE, &paths);
+      g_free (paths);
+    }
+  g_free (import_paths);
+
+  return_vals = gimp_procedure_new_return_values (procedure,
+                                                  GIMP_PDB_SUCCESS,
+                                                  NULL);
+
+  GIMP_VALUES_SET_IMAGE (return_vals, 1, image);
+
+  return return_vals;
+}
+
+static GimpImage *
+load_image (GFile            *file,
+            RsvgHandle       *handle,
+            gint              width,
+            gint              height,
+            gdouble           resolution,
+            GError          **load_error)
+{
+  GimpImage *image;
+  GimpLayer *layer;
+  GdkPixbuf *pixbuf;
+  GError    *error = NULL;
+
+  pixbuf = load_rsvg_pixbuf (handle, width, height, resolution, &error);
 
   if (! pixbuf)
     {
@@ -327,11 +537,11 @@ load_image (const gchar  *filename,
       g_set_error (load_error,
                    error ? error->domain : 0, error ? error->code : 0,
                    _("Could not open '%s' for reading: %s"),
-                   gimp_filename_to_utf8 (filename),
+                   gimp_file_get_utf8_name (file),
                    error ? error->message : _("Unknown reason"));
       g_clear_error (&error);
 
-      return -1;
+      return NULL;
     }
 
   gimp_progress_init (_("Rendering SVG"));
@@ -342,22 +552,33 @@ load_image (const gchar  *filename,
   image = gimp_image_new (width, height, GIMP_RGB);
   gimp_image_undo_disable (image);
 
-  gimp_image_set_filename (image, filename);
-  gimp_image_set_resolution (image,
-                             load_vals.resolution, load_vals.resolution);
+  gimp_image_set_resolution (image, resolution, resolution);
 
   layer = gimp_layer_new_from_pixbuf (image, _("Rendered SVG"), pixbuf,
                                       100,
                                       gimp_image_get_default_new_layer_mode (image),
                                       0.0, 1.0);
-  gimp_image_insert_layer (image, layer, -1, 0);
+  gimp_image_insert_layer (image, layer, NULL, 0);
 
   gimp_image_undo_enable (image);
 
   return image;
 }
 
-/*  This is the callback used from load_rsvg_pixbuf().  */
+#if ! LIBRSVG_CHECK_VERSION(2, 46, 0)
+/* XXX Why we keep old deprecated implementation next to newer librsvg API is
+ * because librsvg uses Rust since version 2.41.0. There are 2 raised problems:
+ * 1. Rust is still not available or well tested on every architecture/OS out
+ *    there yet so unless we decide to have SVG support as optional again, it
+ *    would make GIMP non-available on these.
+ * 2. There are some technical-ideological position against Rust for bundling
+ *    and linking dependencies statically.
+ * While the second point may or may not be a problem we want to take into
+ * account (I guess that it mostly depends on the amount of additional
+ * maintenance work it would imply), the first is definitely enough of a reason
+ * to keep an old version requirement.
+ * See also report #6821.
+ */
 static void
 load_set_size_callback (gint     *width,
                         gint     *height,
@@ -404,101 +625,70 @@ load_set_size_callback (gint     *width,
       vals->height = *height;
     }
 }
+#endif /* ! LIBRSVG_CHECK_VERSION(2, 46, 0) */
 
 /*  This function renders a pixbuf from an SVG file according to vals.  */
 static GdkPixbuf *
-load_rsvg_pixbuf (const gchar  *filename,
-                  SvgLoadVals  *vals,
-                  GError      **error)
+load_rsvg_pixbuf (RsvgHandle  *handle,
+                  gint         width,
+                  gint         height,
+                  gdouble      resolution,
+                  GError     **error)
 {
   GdkPixbuf  *pixbuf  = NULL;
-  RsvgHandle *handle;
-  GFile      *file;
 
-  file = g_file_new_for_path (filename);
+#if LIBRSVG_CHECK_VERSION(2, 46, 0)
+  cairo_surface_t *surface  = NULL;
+  cairo_t         *cr       = NULL;
+  RsvgRectangle    viewport = { 0, };
+  guchar          *src;
+  gint             y;
+#else
+  SvgLoadVals      vals;
+#endif
 
-  handle = rsvg_handle_new_from_gfile_sync (file, RSVG_HANDLE_FLAGS_NONE, NULL, error);
+  g_return_val_if_fail (handle, NULL);
 
-  g_object_unref (file);
+  rsvg_handle_set_dpi (handle, resolution);
+#if LIBRSVG_CHECK_VERSION(2, 46, 0)
+  surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width, height);
+  cr      = cairo_create (surface);
 
-  if (!handle)
+  viewport.width  = width;
+  viewport.height = height;
+
+  rsvg_handle_render_document (handle, cr, &viewport, NULL);
+  pixbuf = gdk_pixbuf_new_from_data (cairo_image_surface_get_data (surface),
+                                     GDK_COLORSPACE_RGB, TRUE, 8, width, height,
+                                     cairo_format_stride_for_width (CAIRO_FORMAT_ARGB32, width),
+                                     (GdkPixbufDestroyNotify) svg_destroy_surface, surface);
+  cairo_destroy (cr);
+
+  /* un-premultiply the data */
+  src = gdk_pixbuf_get_pixels (pixbuf);
+
+  for (y = 0; y < height; y++)
     {
-      return NULL;
+      guchar *s = src;
+      gint    w = width;
+
+      while (w--)
+        {
+          GIMP_CAIRO_ARGB32_GET_PIXEL (s, s[0], s[1], s[2], s[3]);
+          s += 4;
+        }
+
+      src += gdk_pixbuf_get_rowstride (pixbuf);
     }
-
-  rsvg_handle_set_dpi (handle, vals->resolution);
+#else
+  vals.resolution = resolution;
+  vals.width      = width;
+  vals.height     = height;
   rsvg_handle_set_size_callback (handle, load_set_size_callback, vals, NULL);
-
   pixbuf = rsvg_handle_get_pixbuf (handle);
-
-  g_object_unref (handle);
+#endif
 
   return pixbuf;
-}
-
-static GtkWidget *size_label = NULL;
-
-/*  This function retrieves the pixel size from an SVG file.  */
-static gboolean
-load_rsvg_size (const gchar  *filename,
-                SvgLoadVals  *vals,
-                GError      **error)
-{
-  RsvgHandle        *handle;
-  GFile             *file;
-  RsvgDimensionData  dim;
-  gboolean           has_size;
-
-  file = g_file_new_for_path (filename);
-
-  handle = rsvg_handle_new_from_gfile_sync (file, RSVG_HANDLE_FLAGS_NONE, NULL, error);
-
-  g_object_unref (file);
-
-  if (!handle)
-    {
-      return FALSE;
-    }
-
-  rsvg_handle_set_dpi (handle, vals->resolution);
-
-  rsvg_handle_get_dimensions (handle, &dim);
-
-  if (dim.width > 0 && dim.height > 0)
-    {
-      vals->width  = dim.width;
-      vals->height = dim.height;
-      has_size = TRUE;
-    }
-  else
-    {
-      vals->width  = SVG_DEFAULT_SIZE;
-      vals->height = SVG_DEFAULT_SIZE;
-      has_size = FALSE;
-    }
-
-    if (size_label)
-      {
-        if (has_size)
-          {
-            gchar *text = g_strdup_printf (_("%d × %d"),
-                                           vals->width, vals->height);
-            gtk_label_set_text (GTK_LABEL (size_label), text);
-            g_free (text);
-          }
-        else
-          {
-            gtk_label_set_text (GTK_LABEL (size_label),
-                                _("SVG file does not\nspecify a size!"));
-          }
-      }
-
-  g_object_unref (handle);
-
-  if (vals->width  < 1)  vals->width  = 1;
-  if (vals->height < 1)  vals->height = 1;
-
-  return TRUE;
 }
 
 
@@ -556,36 +746,6 @@ load_dialog_ratio_callback (GtkAdjustment *adj,
 }
 
 static void
-load_dialog_resolution_callback (GimpSizeEntry *res,
-                                 const gchar   *filename)
-{
-  SvgLoadVals  vals = { 0.0, 0, 0 };
-
-  load_vals.resolution = vals.resolution = gimp_size_entry_get_refval (res, 0);
-
-  if (!load_rsvg_size (filename, &vals, NULL))
-    return;
-
-  g_signal_handlers_block_by_func (size, load_dialog_size_callback, NULL);
-
-  gimp_size_entry_set_resolution (size, 0, load_vals.resolution, FALSE);
-  gimp_size_entry_set_resolution (size, 1, load_vals.resolution, FALSE);
-
-  g_signal_handlers_unblock_by_func (size, load_dialog_size_callback, NULL);
-
-  if (gimp_size_entry_get_unit (size) != GIMP_UNIT_PIXEL)
-    {
-      ratio_x = gimp_size_entry_get_refval (size, 0) / vals.width;
-      ratio_y = gimp_size_entry_get_refval (size, 1) / vals.height;
-    }
-
-  svg_width  = vals.width;
-  svg_height = vals.height;
-
-  load_dialog_set_ratio (ratio_x, ratio_y);
-}
-
-static void
 load_dialog_set_ratio (gdouble x,
                        gdouble y)
 {
@@ -610,305 +770,32 @@ load_dialog_set_ratio (gdouble x,
 }
 
 static GimpPDBStatusType
-load_dialog (const gchar  *filename,
-             GError      **load_error)
+load_dialog (GFile                *file,
+             RsvgHandle           *handle,
+             GimpProcedure        *procedure,
+             GimpProcedureConfig  *config,
+             GimpVectorLoadData    extracted_data,
+             GError              **load_error)
 {
-  GtkWidget     *dialog;
-  GtkWidget     *frame;
-  GtkWidget     *hbox;
-  GtkWidget     *vbox;
-  GtkWidget     *image;
-  GdkPixbuf     *preview;
-  GtkWidget     *table;
-  GtkWidget     *table2;
-  GtkWidget     *abox;
-  GtkWidget     *res;
-  GtkWidget     *label;
-  GtkWidget     *spinbutton;
-  GtkWidget     *toggle;
-  GtkWidget     *toggle2;
-  GtkAdjustment *adj;
-  gboolean       run;
-  GError        *error = NULL;
-  SvgLoadVals    vals  =
-  {
-    SVG_DEFAULT_RESOLUTION,
-    - SVG_PREVIEW_SIZE,
-    - SVG_PREVIEW_SIZE
-  };
+  GtkWidget *dialog;
+  gboolean   run;
 
-  preview = load_rsvg_pixbuf (filename, &vals, &error);
+  gimp_ui_init (PLUG_IN_BINARY);
 
-  if (! preview)
-    {
-      /*  Do not rely on librsvg setting GError on failure!  */
-      g_set_error (load_error,
-                   error ? error->domain : 0, error ? error->code : 0,
-                   _("Could not open '%s' for reading: %s"),
-                   gimp_filename_to_utf8 (filename),
-                   error ? error->message : _("Unknown reason"));
-      g_clear_error (&error);
-
-      return GIMP_PDB_EXECUTION_ERROR;
-    }
-
-  gimp_ui_init (PLUG_IN_BINARY, FALSE);
-
-  /* Scalable Vector Graphics is SVG, should perhaps not be translated */
-  dialog = gimp_dialog_new (_("Render Scalable Vector Graphics"),
-                            PLUG_IN_ROLE,
-                            NULL, 0,
-                            gimp_standard_help_func, LOAD_PROC,
-
-                            _("_Cancel"), GTK_RESPONSE_CANCEL,
-                            _("_OK"),     GTK_RESPONSE_OK,
-
-                            NULL);
-
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
-
-  gtk_window_set_resizable (GTK_WINDOW (dialog), FALSE);
-
-  gimp_window_set_transient (GTK_WINDOW (dialog));
-
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_container_set_border_width (GTK_CONTAINER (hbox), 12);
-  gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
-                      hbox, TRUE, TRUE, 0);
-  gtk_widget_show (hbox);
-
-  /*  The SVG preview  */
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
-  gtk_box_pack_start (GTK_BOX (hbox), vbox, FALSE, FALSE, 0);
-  gtk_widget_show (vbox);
-
-  abox = gtk_alignment_new (0.5, 0.5, 0.0, 0.0);
-  gtk_box_pack_start (GTK_BOX (vbox), abox, FALSE, FALSE, 0);
-  gtk_widget_show (abox);
-
-  frame = gtk_frame_new (NULL);
-  gtk_frame_set_shadow_type (GTK_FRAME (frame), GTK_SHADOW_IN);
-  gtk_container_add (GTK_CONTAINER (abox), frame);
-  gtk_widget_show (frame);
-
-  image = gtk_image_new_from_pixbuf (preview);
-  gtk_container_add (GTK_CONTAINER (frame), image);
-  gtk_widget_show (image);
-
-  size_label = gtk_label_new (NULL);
-  gtk_label_set_justify (GTK_LABEL (size_label), GTK_JUSTIFY_CENTER);
-  gtk_box_pack_start (GTK_BOX (vbox), size_label, TRUE, TRUE, 4);
-  gtk_widget_show (size_label);
-
-  /*  query the initial size after the size label is created  */
-  vals.resolution = load_vals.resolution;
-
-  load_rsvg_size (filename, &vals, NULL);
-
-  svg_width  = vals.width;
-  svg_height = vals.height;
-
-  table = gtk_table_new (7, 3, FALSE);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 0, 2);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 2, 2);
-  gtk_box_pack_start (GTK_BOX (hbox), table, TRUE, TRUE, 0);
-  gtk_widget_show (table);
-
-  /*  Width and Height  */
-  label = gtk_label_new (_("Width:"));
-  gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 0, 1,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
-  gtk_widget_show (label);
-
-  label = gtk_label_new (_("Height:"));
-  gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 1, 2,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
-  gtk_widget_show (label);
-
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_table_attach (GTK_TABLE (table), hbox, 1, 2, 0, 1,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
-  gtk_widget_show (hbox);
-
-  adj = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
-  spinbutton = gimp_spin_button_new (adj, 1.0, 2);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 10);
-  gtk_box_pack_start (GTK_BOX (hbox), spinbutton, FALSE, FALSE, 0);
-  gtk_widget_show (spinbutton);
-
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_table_attach (GTK_TABLE (table), hbox, 1, 2, 1, 2,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
-  gtk_widget_show (hbox);
-
-  size = GIMP_SIZE_ENTRY (gimp_size_entry_new (1, GIMP_UNIT_PIXEL, "%a",
-                                               TRUE, FALSE, FALSE, 10,
-                                               GIMP_SIZE_ENTRY_UPDATE_SIZE));
-  gtk_table_set_col_spacing (GTK_TABLE (size), 1, 6);
-
-  gimp_size_entry_add_field (size, GTK_SPIN_BUTTON (spinbutton), NULL);
-
-  gtk_box_pack_start (GTK_BOX (hbox), GTK_WIDGET (size), FALSE, FALSE, 0);
-  gtk_widget_show (GTK_WIDGET (size));
-
-  gimp_size_entry_set_refval_boundaries (size, 0,
-                                         GIMP_MIN_IMAGE_SIZE,
-                                         GIMP_MAX_IMAGE_SIZE);
-  gimp_size_entry_set_refval_boundaries (size, 1,
-                                         GIMP_MIN_IMAGE_SIZE,
-                                         GIMP_MAX_IMAGE_SIZE);
-
-  gimp_size_entry_set_refval (size, 0, svg_width);
-  gimp_size_entry_set_refval (size, 1, svg_height);
-
-  gimp_size_entry_set_resolution (size, 0, load_vals.resolution, FALSE);
-  gimp_size_entry_set_resolution (size, 1, load_vals.resolution, FALSE);
-
-  g_signal_connect (size, "value-changed",
-                    G_CALLBACK (load_dialog_size_callback),
-                    NULL);
-
-  /*  Scale ratio  */
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_table_attach (GTK_TABLE (table), hbox, 1, 2, 2, 4,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
-  gtk_widget_show (hbox);
-
-  table2 = gtk_table_new (2, 2, FALSE);
-  gtk_table_set_col_spacing (GTK_TABLE (table2), 0, 2);
-  gtk_table_set_row_spacing (GTK_TABLE (table2), 0, 4);
-  gtk_box_pack_start (GTK_BOX (hbox), table2, FALSE, FALSE, 0);
-
-  xadj = (GtkAdjustment *)
-    gtk_adjustment_new (ratio_x,
-                        (gdouble) GIMP_MIN_IMAGE_SIZE / (gdouble) svg_width,
-                        (gdouble) GIMP_MAX_IMAGE_SIZE / (gdouble) svg_width,
-                        0.01, 0.1, 0);
-  spinbutton = gimp_spin_button_new (xadj, 0.01, 4);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 10);
-  gtk_table_attach_defaults (GTK_TABLE (table2), spinbutton, 0, 1, 0, 1);
-  gtk_widget_show (spinbutton);
-
-  g_signal_connect (xadj, "value-changed",
-                    G_CALLBACK (load_dialog_ratio_callback),
-                    NULL);
-
-  label = gtk_label_new_with_mnemonic (_("_X ratio:"));
-  gtk_label_set_mnemonic_widget (GTK_LABEL (label), spinbutton);
-  gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 2, 3,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
-  gtk_widget_show (label);
-
-  yadj = (GtkAdjustment *)
-    gtk_adjustment_new (ratio_y,
-                        (gdouble) GIMP_MIN_IMAGE_SIZE / (gdouble) svg_height,
-                        (gdouble) GIMP_MAX_IMAGE_SIZE / (gdouble) svg_height,
-                        0.01, 0.1, 0);
-  spinbutton = gimp_spin_button_new (yadj, 0.01, 4);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-  gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 10);
-  gtk_table_attach_defaults (GTK_TABLE (table2), spinbutton, 0, 1, 1, 2);
-  gtk_widget_show (spinbutton);
-
-  g_signal_connect (yadj, "value-changed",
-                    G_CALLBACK (load_dialog_ratio_callback),
-                    NULL);
-
-  label = gtk_label_new_with_mnemonic (_("_Y ratio:"));
-  gtk_label_set_mnemonic_widget (GTK_LABEL (label), spinbutton);
-  gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 3, 4,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
-  gtk_widget_show (label);
-
-  /*  the constrain ratio chainbutton  */
-  constrain = gimp_chain_button_new (GIMP_CHAIN_RIGHT);
-  gimp_chain_button_set_active (GIMP_CHAIN_BUTTON (constrain), TRUE);
-  gtk_table_attach_defaults (GTK_TABLE (table2), constrain, 1, 2, 0, 2);
-  gtk_widget_show (constrain);
-
-  gimp_help_set_help_data (GIMP_CHAIN_BUTTON (constrain)->button,
-                           _("Constrain aspect ratio"), NULL);
-
-  gtk_widget_show (table2);
-
-  /*  Resolution   */
-  label = gtk_label_new (_("Resolution:"));
-  gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 4, 5,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
-  gtk_widget_show (label);
-
-  res = gimp_size_entry_new (1, GIMP_UNIT_INCH, _("pixels/%a"),
-                             FALSE, FALSE, FALSE, 10,
-                             GIMP_SIZE_ENTRY_UPDATE_RESOLUTION);
-  gtk_table_set_col_spacing (GTK_TABLE (res), 1, 6);
-
-  gtk_table_attach (GTK_TABLE (table), res, 1, 2, 4, 5,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
-  gtk_widget_show (res);
-
-  /* don't let the resolution become too small, librsvg tends to
-     crash with very small resolutions */
-  gimp_size_entry_set_refval_boundaries (GIMP_SIZE_ENTRY (res), 0,
-                                         5.0, GIMP_MAX_RESOLUTION);
-  gimp_size_entry_set_refval (GIMP_SIZE_ENTRY (res), 0, load_vals.resolution);
-
-  g_signal_connect (res, "value-changed",
-                    G_CALLBACK (load_dialog_resolution_callback),
-                    (gpointer) filename);
-
-  /*  Path Import  */
-  toggle = gtk_check_button_new_with_mnemonic (_("Import _paths"));
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle), load_vals.import);
-  gtk_table_attach (GTK_TABLE (table), toggle, 0, 2, 5, 6,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
-  gtk_widget_show (toggle);
-
-  gimp_help_set_help_data (toggle,
-                           _("Import path elements of the SVG so they "
-                             "can be used with the GIMP path tool"),
-                           NULL);
-
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (gimp_toggle_button_update),
-                    &load_vals.import);
-
-  toggle2 = gtk_check_button_new_with_mnemonic (_("Merge imported paths"));
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle2), load_vals.merge);
-  gtk_table_attach (GTK_TABLE (table), toggle2, 0, 2, 6, 7,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
-  gtk_widget_show (toggle2);
-
-  g_signal_connect (toggle2, "toggled",
-                    G_CALLBACK (gimp_toggle_button_update),
-                    &load_vals.merge);
-
-  g_object_bind_property (toggle,  "active",
-                          toggle2, "sensitive",
-                          G_BINDING_SYNC_CREATE);
-
-  gtk_widget_show (dialog);
-
-  run = (gimp_dialog_run (GIMP_DIALOG (dialog)) == GTK_RESPONSE_OK);
-
-  if (run)
-    {
-      load_vals.width  = ROUND (gimp_size_entry_get_refval (size, 0));
-      load_vals.height = ROUND (gimp_size_entry_get_refval (size, 1));
-    }
+  dialog = gimp_vector_load_procedure_dialog_new (GIMP_VECTOR_LOAD_PROCEDURE (procedure),
+                                                  GIMP_PROCEDURE_CONFIG (config),
+                                                  &extracted_data, file);
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog), NULL);
+  run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
   gtk_widget_destroy (dialog);
 
   return run ? GIMP_PDB_SUCCESS : GIMP_PDB_CANCEL;
+}
+
+static void
+svg_destroy_surface (guchar          *pixels,
+                     cairo_surface_t *surface)
+{
+  cairo_surface_destroy (surface);
 }

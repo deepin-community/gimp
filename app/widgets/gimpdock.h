@@ -95,26 +95,16 @@ GList             * gimp_dock_get_dockbooks           (GimpDock       *dock);
 gint                gimp_dock_get_n_dockables         (GimpDock       *dock);
 GtkWidget         * gimp_dock_get_main_vbox           (GimpDock       *dock);
 GtkWidget         * gimp_dock_get_vbox                (GimpDock       *dock);
-gint                gimp_dock_get_id                  (GimpDock       *dock);
+
 void                gimp_dock_set_id                  (GimpDock       *dock,
                                                        gint            ID);
-
-void                gimp_dock_add                     (GimpDock       *dock,
-                                                       GimpDockable   *dockable,
-                                                       gint            book,
-                                                       gint            index);
-void                gimp_dock_remove                  (GimpDock       *dock,
-                                                       GimpDockable   *dockable);
+gint                gimp_dock_get_id                  (GimpDock       *dock);
 
 void                gimp_dock_add_book                (GimpDock       *dock,
                                                        GimpDockbook   *dockbook,
                                                        gint            index);
 void                gimp_dock_remove_book             (GimpDock       *dock,
                                                        GimpDockbook   *dockbook);
-void                gimp_dock_temp_add                (GimpDock       *dock,
-                                                       GtkWidget      *widget);
-void                gimp_dock_temp_remove             (GimpDock       *dock,
-                                                       GtkWidget      *widget);
 
 
 #endif /* __GIMP_DOCK_H__ */

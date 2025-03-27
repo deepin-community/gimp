@@ -30,16 +30,21 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-gint32   gimp_selection_float (gint32 image_ID,
-                               gint32 drawable_ID,
-                               gint   offx,
-                               gint   offy);
+#include <libgimp/gimpchannel.h>
 
-GIMP_DEPRECATED_FOR(gimp_selection_none)
-gboolean gimp_selection_clear (gint32 image_ID);
+
+#define GIMP_TYPE_SELECTION (gimp_selection_get_type ())
+G_DECLARE_FINAL_TYPE (GimpSelection, gimp_selection, GIMP, SELECTION, GimpChannel)
+
+
+GimpSelection * gimp_selection_get_by_id (gint32        selection_id);
+
+GimpLayer     * gimp_selection_float     (GimpImage    *image,
+                                          GimpDrawable **drawables,
+                                          gint          offx,
+                                          gint          offy);
 
 
 G_END_DECLS
 
 #endif /* __GIMP_SELECTION_H__ */
-

@@ -206,11 +206,7 @@ gimp_g_value_get_memsize (GValue *value)
     }
   else if (G_VALUE_HOLDS_BOXED (value))
     {
-      if (GIMP_VALUE_HOLDS_RGB (value))
-        {
-          memsize += sizeof (GimpRGB);
-        }
-      else if (GIMP_VALUE_HOLDS_MATRIX2 (value))
+      if (GIMP_VALUE_HOLDS_MATRIX2 (value))
         {
           memsize += sizeof (GimpMatrix2);
         }
@@ -220,10 +216,8 @@ gimp_g_value_get_memsize (GValue *value)
                                                 NULL);
         }
       else if (GIMP_VALUE_HOLDS_ARRAY (value)       ||
-               GIMP_VALUE_HOLDS_INT8_ARRAY (value)  ||
-               GIMP_VALUE_HOLDS_INT16_ARRAY (value) ||
                GIMP_VALUE_HOLDS_INT32_ARRAY (value) ||
-               GIMP_VALUE_HOLDS_FLOAT_ARRAY (value))
+               GIMP_VALUE_HOLDS_DOUBLE_ARRAY (value))
         {
           GimpArray *array = g_value_get_boxed (value);
 
@@ -231,24 +225,40 @@ gimp_g_value_get_memsize (GValue *value)
             memsize += sizeof (GimpArray) +
                        (array->static_data ? 0 : array->length);
         }
-      else if (GIMP_VALUE_HOLDS_STRING_ARRAY (value))
+      else if (G_VALUE_HOLDS (value, G_TYPE_BYTES))
         {
-          GimpArray *array = g_value_get_boxed (value);
+          GBytes *bytes = g_value_get_boxed (value);
+
+          if (bytes)
+            {
+              memsize += g_bytes_get_size (bytes);
+            }
+        }
+      else if (G_VALUE_HOLDS (value, G_TYPE_STRV))
+        {
+          gchar **array = g_value_get_boxed (value);
 
           if (array)
             {
-              memsize += sizeof (GimpArray);
+              guint length = g_strv_length (array);
 
-              if (! array->static_data)
-                {
-                  gchar **tmp = (gchar **) array->data;
-                  gint    i;
+              memsize += (length + 1) * sizeof (gchar *);
+              for (gint i = 0; i < length; i++)
+                memsize += gimp_string_get_memsize (array[i]);
+            }
+        }
+      else if (strcmp ("GimpValueArray", G_VALUE_TYPE_NAME (value)) == 0)
+        {
+          GimpValueArray *array = g_value_get_boxed (value);
 
-                  memsize += array->length * sizeof (gchar *);
+          if (array)
+            {
+              gint n_values = gimp_value_array_length (array), i;
 
-                  for (i = 0; i < array->length; i++)
-                    memsize += gimp_string_get_memsize (tmp[i]);
-                }
+              memsize += /* sizeof (GimpValueArray) */ sizeof (GValue *) + 3 * sizeof (gint);
+
+              for (i = 0; i < n_values; i++)
+                memsize += gimp_g_value_get_memsize (gimp_value_array_index (array, i));
             }
         }
       else
@@ -259,8 +269,16 @@ gimp_g_value_get_memsize (GValue *value)
     }
   else if (G_VALUE_HOLDS_OBJECT (value))
     {
-      g_printerr ("%s: unhandled object value type: %s\n",
-                  G_STRFUNC, G_VALUE_TYPE_NAME (value));
+      if (strcmp ("GimpPattern", G_VALUE_TYPE_NAME (value)) == 0)
+        memsize += gimp_g_object_get_memsize (g_value_get_object (value));
+      else if (strcmp ("GimpFont", G_VALUE_TYPE_NAME (value)) == 0)
+        memsize += gimp_g_object_get_memsize (g_value_get_object (value));
+      else if (strcmp ("GeglColor", G_VALUE_TYPE_NAME (value)) == 0)
+        /* Internal knowledge of contents of private data. */
+        memsize += sizeof (GeglColor) + sizeof (const Babl *) + 48;
+      else
+        g_printerr ("%s: unhandled object value type: %s\n",
+                    G_STRFUNC, G_VALUE_TYPE_NAME (value));
     }
 
   return memsize + sizeof (GValue);

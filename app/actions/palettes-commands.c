@@ -62,9 +62,9 @@ palettes_import_cmd_callback (GimpAction *action,
   return_if_no_widget (widget, data);
 
   gimp_dialog_factory_dialog_new (gimp_dialog_factory_get_singleton (),
-                                  gtk_widget_get_screen (widget),
                                   gimp_widget_get_monitor (widget),
                                   NULL /*ui_manager*/,
+                                  widget,
                                   "gimp-palette-import-dialog", -1, TRUE);
 }
 
@@ -89,7 +89,8 @@ palettes_merge_cmd_callback (GimpAction *action,
                                       _("Enter a name for the merged palette"),
                                       NULL,
                                       G_OBJECT (editor), "destroy",
-                                      palettes_merge_callback, editor);
+                                      palettes_merge_callback,
+                                      editor, NULL);
 
       dialogs_attach_dialog (G_OBJECT (editor), MERGE_DIALOG_KEY, dialog);
     }
@@ -116,7 +117,7 @@ palettes_merge_callback (GtkWidget   *widget,
   context = gimp_container_view_get_context (editor->view);
   factory = gimp_data_factory_view_get_data_factory (view);
 
-  gimp_container_view_get_selected (editor->view, &selected);
+  gimp_container_view_get_selected (editor->view, &selected, NULL);
 
   if (g_list_length (selected) < 2)
     {
@@ -144,7 +145,7 @@ palettes_merge_callback (GtkWidget   *widget,
 
           gimp_palette_add_entry (new_palette, -1,
                                   entry->name,
-                                  &entry->color);
+                                  entry->color);
         }
     }
 

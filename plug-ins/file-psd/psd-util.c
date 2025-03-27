@@ -81,11 +81,11 @@ static const LayerModeMapping layer_mode_map[] =
   { "Difference",    "diff", GIMP_LAYER_MODE_DIFFERENCE_LEGACY,     TRUE },
 
   /* Linear Dodge (cs2) */
-  { "Linear Dodge",  "lddg", GIMP_LAYER_MODE_ADDITION,              TRUE },
+  { "Linear Dodge",  "lddg", GIMP_LAYER_MODE_ADDITION,              FALSE },
   { "Linear Dodge",  "lddg", GIMP_LAYER_MODE_ADDITION_LEGACY,       TRUE },
 
   /* Subtract (??) */
-  { "Subtract",      "fsub", GIMP_LAYER_MODE_SUBTRACT,              TRUE },
+  { "Subtract",      "fsub", GIMP_LAYER_MODE_SUBTRACT,              FALSE },
   { "Subtract",      "fsub", GIMP_LAYER_MODE_SUBTRACT_LEGACY,       TRUE },
 
   /* Darken (ps3) */
@@ -101,7 +101,7 @@ static const LayerModeMapping layer_mode_map[] =
   { "Hue",           "hue ", GIMP_LAYER_MODE_HSV_HUE,               FALSE },
   { "Hue",           "hue ", GIMP_LAYER_MODE_HSV_HUE_LEGACY,        FALSE },
 
-  /* Stauration (ps3) */
+  /* Saturation (ps3) */
   { "Saturation",    "sat ", GIMP_LAYER_MODE_LCH_CHROMA,            FALSE },
   { "Saturation",    "sat ", GIMP_LAYER_MODE_HSV_SATURATION,        FALSE },
   { "Saturation",    "sat ", GIMP_LAYER_MODE_HSV_SATURATION_LEGACY, FALSE },
@@ -118,15 +118,15 @@ static const LayerModeMapping layer_mode_map[] =
   { "Luminosity",    "lum ", GIMP_LAYER_MODE_LUMINANCE,             FALSE },
 
   /* Divide (??) */
-  { "Divide",        "fdiv", GIMP_LAYER_MODE_DIVIDE,                TRUE },
+  { "Divide",        "fdiv", GIMP_LAYER_MODE_DIVIDE,                FALSE },
   { "Divide",        "fdiv", GIMP_LAYER_MODE_DIVIDE_LEGACY,         TRUE },
 
   /* Color Dodge (ps6) */
-  { "Color Dodge",   "div ", GIMP_LAYER_MODE_DODGE,                 TRUE },
+  { "Color Dodge",   "div ", GIMP_LAYER_MODE_DODGE,                 FALSE },
   { "Color Dodge",   "div ", GIMP_LAYER_MODE_DODGE_LEGACY,          TRUE },
 
   /* Color Burn (ps6) */
-  { "Color Burn",    "idiv", GIMP_LAYER_MODE_BURN,                  TRUE },
+  { "Color Burn",    "idiv", GIMP_LAYER_MODE_BURN,                  FALSE },
   { "Color Burn",    "idiv", GIMP_LAYER_MODE_BURN_LEGACY,           TRUE },
 
   /* Hard Light (ps3) */
@@ -145,16 +145,16 @@ static const LayerModeMapping layer_mode_map[] =
   { "Pin Light",     "pLit", GIMP_LAYER_MODE_PIN_LIGHT,             TRUE },
 
   /* Linear Light (ps7)*/
-  { "Linear Light",  "lLit", GIMP_LAYER_MODE_LINEAR_LIGHT,          TRUE },
+  { "Linear Light",  "lLit", GIMP_LAYER_MODE_LINEAR_LIGHT,          FALSE },
 
   /* Hard Mix (CS)*/
-  { "Hard Mix",      "hMix", GIMP_LAYER_MODE_HARD_MIX,              TRUE },
+  { "Hard Mix",      "hMix", GIMP_LAYER_MODE_HARD_MIX,              FALSE },
 
   /* Exclusion (ps6) */
   { "Exclusion",     "smud", GIMP_LAYER_MODE_EXCLUSION,             TRUE },
 
   /* Linear Burn (ps7)*/
-  { "Linear Burn",   "lbrn", GIMP_LAYER_MODE_LINEAR_BURN,           TRUE },
+  { "Linear Burn",   "lbrn", GIMP_LAYER_MODE_LINEAR_BURN,           FALSE },
 
   /* Darker Color (??)*/
   { "Darker Color",  "dkCl", GIMP_LAYER_MODE_LUMA_DARKEN_ONLY,      FALSE },
@@ -169,30 +169,77 @@ static const LayerModeMapping layer_mode_map[] =
 
 /* Utility function */
 void
-psd_set_error (gboolean   file_eof,
-               gint       err_no,
-               GError   **error)
+psd_set_error (GError  **error)
 {
-  if (file_eof)
-    {
-      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                   "%s", _("Unexpected end of file"));
-    }
-  else
-    {
-      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (err_no),
-                   "%s", g_strerror (err_no));
-    }
+  if (! error || ! *error)
+    g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                 _("Error reading data. Most likely unexpected end of file."));
 
   return;
 }
 
+gint
+psd_read (GInputStream  *input,
+          gconstpointer  data,
+          gint           count,
+          GError       **error)
+{
+  gsize bytes_read = 0;
+
+  /* we allow for 'data == NULL && count == 0', which g_input_stream_read_all()
+   * rejects.
+   */
+  if (count > 0)
+    {
+      /* We consider reading less bytes than we want an error. */
+      if (g_input_stream_read_all (input, (void *) data, count,
+                                   &bytes_read, NULL, error) &&
+          bytes_read < count)
+        g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                     _("Unexpected end of file"));
+    }
+
+  return bytes_read;
+}
+
+gboolean
+psd_read_len (GInputStream  *input,
+              guint64       *data,
+              gint           psd_version,
+              GError       **error)
+{
+  gint block_len_size = (psd_version == 1 ? 4 : 8);
+
+  if (psd_read (input, data, block_len_size, error) < block_len_size)
+    {
+      psd_set_error (error);
+      return FALSE;
+    }
+
+  if (psd_version == 1)
+    *data = GUINT32_FROM_BE (*data);
+  else
+    *data = GUINT64_FROM_BE (*data);
+  return TRUE;
+}
+
+gboolean
+psd_seek (GInputStream  *input,
+          goffset        offset,
+          GSeekType      type,
+          GError       **error)
+{
+  return g_seekable_seek (G_SEEKABLE (input),
+                          offset, type,
+                          NULL, error);
+}
+
 gchar *
-fread_pascal_string (gint32   *bytes_read,
-                     gint32   *bytes_written,
-                     guint16   mod_len,
-                     FILE     *f,
-                     GError  **error)
+fread_pascal_string (gint32        *bytes_read,
+                     gint32        *bytes_written,
+                     guint16        mod_len,
+                     GInputStream  *input,
+                     GError       **error)
 {
   /*
    * Reads a pascal string from the file padded to a multiple of mod_len
@@ -201,15 +248,15 @@ fread_pascal_string (gint32   *bytes_read,
 
   gchar        *str;
   gchar        *utf8_str;
-  guchar        len;
+  guchar        len = 0;
   gint32        padded_len;
 
   *bytes_read = 0;
   *bytes_written = -1;
 
-  if (fread (&len, 1, 1, f) < 1)
+  if (psd_read (input, &len, 1, error) < 1)
     {
-      psd_set_error (feof (f), errno, error);
+      psd_set_error (error);
       return NULL;
     }
   (*bytes_read)++;
@@ -217,9 +264,9 @@ fread_pascal_string (gint32   *bytes_read,
 
   if (len == 0)
     {
-      if (fseek (f, mod_len - 1, SEEK_CUR) < 0)
+      if (! psd_seek (input, mod_len - 1, G_SEEK_CUR, error))
         {
-          psd_set_error (feof (f), errno, error);
+          psd_set_error (error);
           return NULL;
         }
       *bytes_read += (mod_len - 1);
@@ -228,9 +275,9 @@ fread_pascal_string (gint32   *bytes_read,
     }
 
   str = g_malloc (len);
-  if (fread (str, len, 1, f) < 1)
+  if (psd_read (input, str, len, error) < len)
     {
-      psd_set_error (feof (f), errno, error);
+      psd_set_error (error);
       g_free (str);
       return NULL;
     }
@@ -241,9 +288,9 @@ fread_pascal_string (gint32   *bytes_read,
       padded_len = len + 1;
       while (padded_len % mod_len != 0)
         {
-          if (fseek (f, 1, SEEK_CUR) < 0)
+          if (! psd_seek (input, 1, G_SEEK_CUR, error))
             {
-              psd_set_error (feof (f), errno, error);
+              psd_set_error (error);
               g_free (str);
               return NULL;
             }
@@ -263,30 +310,34 @@ fread_pascal_string (gint32   *bytes_read,
 }
 
 gint32
-fwrite_pascal_string (const gchar  *src,
-                      guint16       mod_len,
-                      FILE         *f,
-                      GError      **error)
+fwrite_pascal_string (const gchar    *src,
+                      guint16         mod_len,
+                      GOutputStream  *output,
+                      GError        **error)
 {
   /*
    *  Converts utf-8 string to current locale and writes as pascal
    *  string with padding to a multiple of mod_len.
    */
 
-  gchar  *str;
-  gchar  *pascal_str;
-  gchar   null_str = 0x0;
-  guchar  pascal_len;
-  gint32  bytes_written = 0;
-  gsize   len;
+  gchar        *str;
+  gchar        *pascal_str;
+  const gchar   null_str = 0x0;
+  guchar        pascal_len;
+  gsize         bytes_written = 0;
+  gsize         len;
+
+  g_debug ("fwrite_pascal_string %s!", src);
 
   if (src == NULL)
     {
        /* Write null string as two null bytes (0x0) */
-      if (fwrite (&null_str, 1, 1, f) < 1
-          || fwrite (&null_str, 1, 1, f) < 1)
+      if (! g_output_stream_write_all (output, &null_str, 1,
+                                       &bytes_written, NULL, error) ||
+          ! g_output_stream_write_all (output, &null_str, 1,
+                                       &bytes_written, NULL, error))
         {
-          psd_set_error (feof (f), errno, error);
+          psd_set_error (error);
           return -1;
         }
       bytes_written += 2;
@@ -300,16 +351,19 @@ fwrite_pascal_string (const gchar  *src,
         pascal_len = len;
       pascal_str = g_strndup (str, pascal_len);
       g_free (str);
-      if (fwrite (&pascal_len, 1, 1, f) < 1
-          || fwrite (pascal_str, pascal_len, 1, f) < 1)
+
+      if (! g_output_stream_write_all (output, &pascal_len, 1,
+                                       &bytes_written, NULL, error) ||
+          ! g_output_stream_write_all (output, pascal_str, pascal_len,
+                                       &bytes_written, NULL, error))
         {
-          psd_set_error (feof (f), errno, error);
           g_free (pascal_str);
           return -1;
         }
       bytes_written++;
       bytes_written += pascal_len;
-      IFDBG(2) g_debug ("Pascal string: %s, bytes_written: %d",
+
+      IFDBG(2) g_debug ("Pascal string: %s, bytes_written: %" G_GSIZE_FORMAT,
                         pascal_str, bytes_written);
       g_free (pascal_str);
     }
@@ -319,9 +373,10 @@ fwrite_pascal_string (const gchar  *src,
     {
       while (bytes_written % mod_len != 0)
         {
-          if (fwrite (&null_str, 1, 1, f) < 1)
+
+          if (! g_output_stream_write_all (output, &null_str, 1,
+                                           &bytes_written, NULL, error))
             {
-              psd_set_error (feof (f), errno, error);
               return -1;
             }
           bytes_written++;
@@ -332,11 +387,12 @@ fwrite_pascal_string (const gchar  *src,
 }
 
 gchar *
-fread_unicode_string (gint32   *bytes_read,
-                      gint32   *bytes_written,
-                      guint16   mod_len,
-                      FILE     *f,
-                      GError  **error)
+fread_unicode_string (gint32        *bytes_read,
+                      gint32        *bytes_written,
+                      guint16        mod_len,
+                      gboolean       ibm_pc_format,
+                      GInputStream  *input,
+                      GError       **error)
 {
   /*
    * Reads a utf-16 string from the file padded to a multiple of mod_len
@@ -345,7 +401,7 @@ fread_unicode_string (gint32   *bytes_read,
 
   gchar     *utf8_str;
   gunichar2 *utf16_str;
-  gint32     len;
+  gint32     len = 0;
   gint32     i;
   gint32     padded_len;
   glong      utf8_str_len;
@@ -353,20 +409,25 @@ fread_unicode_string (gint32   *bytes_read,
   *bytes_read = 0;
   *bytes_written = -1;
 
-  if (fread (&len, 4, 1, f) < 1)
+  if (psd_read (input, &len, 4, error) < 4)
     {
-      psd_set_error (feof (f), errno, error);
+      psd_set_error (error);
       return NULL;
     }
   *bytes_read += 4;
-  len = GINT32_FROM_BE (len);
+
+  if (! ibm_pc_format)
+    len = GINT32_FROM_BE (len);
+  else
+    len = GINT32_FROM_LE (len);
+
   IFDBG(3) g_debug ("Unicode string length %d", len);
 
   if (len == 0)
     {
-      if (fseek (f, mod_len - 1, SEEK_CUR) < 0)
+      if (! psd_seek (input, mod_len - 1, G_SEEK_CUR, error))
         {
-          psd_set_error (feof (f), errno, error);
+          psd_set_error (error);
           return NULL;
         }
       *bytes_read += (mod_len - 1);
@@ -377,24 +438,27 @@ fread_unicode_string (gint32   *bytes_read,
   utf16_str = g_malloc (len * 2);
   for (i = 0; i < len; ++i)
     {
-      if (fread (&utf16_str[i], 2, 1, f) < 1)
+      if (psd_read (input, &utf16_str[i], 2, error) < 2)
         {
-          psd_set_error (feof (f), errno, error);
+          psd_set_error (error);
           g_free (utf16_str);
           return NULL;
         }
       *bytes_read += 2;
-      utf16_str[i] = GINT16_FROM_BE (utf16_str[i]);
+      if (! ibm_pc_format)
+        utf16_str[i] = GINT16_FROM_BE (utf16_str[i]);
+      else
+        utf16_str[i] = GINT16_FROM_LE (utf16_str[i]);
     }
 
   if (mod_len > 0)
     {
-      padded_len = len + 1;
+      padded_len = *bytes_read;
       while (padded_len % mod_len != 0)
         {
-          if (fseek (f, 1, SEEK_CUR) < 0)
+          if (! psd_seek (input, 1, G_SEEK_CUR, error))
             {
-              psd_set_error (feof (f), errno, error);
+              psd_set_error (error);
               g_free (utf16_str);
               return NULL;
             }
@@ -414,10 +478,10 @@ fread_unicode_string (gint32   *bytes_read,
 }
 
 gint32
-fwrite_unicode_string (const gchar  *src,
-                       guint16       mod_len,
-                       FILE         *f,
-                       GError      **error)
+fwrite_unicode_string (const gchar    *src,
+                       guint16         mod_len,
+                       GOutputStream  *output,
+                       GError        **error)
 {
   /*
    *  Converts utf-8 string to utf-16 and writes 4 byte length
@@ -427,16 +491,16 @@ fwrite_unicode_string (const gchar  *src,
   gunichar2 *utf16_str;
   gchar      null_str = 0x0;
   gint32     utf16_len = 0;
-  gint32     bytes_written = 0;
+  gsize      bytes_written = 0;
   gint       i;
   glong      len;
 
   if (src == NULL)
     {
        /* Write null string as four byte 0 int32 */
-      if (fwrite (&utf16_len, 4, 1, f) < 1)
+      if (! g_output_stream_write_all (output, &utf16_len, 4,
+                                       &bytes_written, NULL, error))
         {
-          psd_set_error (feof (f), errno, error);
           return -1;
         }
       bytes_written += 4;
@@ -450,14 +514,15 @@ fwrite_unicode_string (const gchar  *src,
           utf16_str[i] = GINT16_TO_BE (utf16_str[i]);
       utf16_len = GINT32_TO_BE (utf16_len);
 
-      if (fwrite (&utf16_len, 4, 1, f) < 1
-          || fwrite (utf16_str, 2, utf16_len + 1, f) < utf16_len + 1)
+      if (! g_output_stream_write_all (output, &utf16_len, 4,
+                                       &bytes_written, NULL, error) ||
+          ! g_output_stream_write_all (output, &utf16_str, 2 * (utf16_len + 1),
+                                       &bytes_written, NULL, error))
         {
-          psd_set_error (feof (f), errno, error);
           return -1;
         }
       bytes_written += (4 + 2 * utf16_len + 2);
-      IFDBG(2) g_debug ("Unicode string: %s, bytes_written: %d",
+      IFDBG(2) g_debug ("Unicode string: %s, bytes_written: %" G_GSIZE_FORMAT,
                         src, bytes_written);
     }
 
@@ -466,9 +531,9 @@ fwrite_unicode_string (const gchar  *src,
     {
       while (bytes_written % mod_len != 0)
         {
-          if (fwrite (&null_str, 1, 1, f) < 1)
+          if (! g_output_stream_write_all (output, &null_str, 1,
+                                           &bytes_written, NULL, error))
             {
-              psd_set_error (feof (f), errno, error);
               return -1;
             }
           bytes_written++;
@@ -722,22 +787,38 @@ void
 psd_to_gimp_blend_mode (PSDlayer      *psd_layer,
                         LayerModeInfo *mode_info)
 {
-  gint i;
-
-  mode_info->mode            = GIMP_LAYER_MODE_NORMAL;
+  mode_info->mode  = GIMP_LAYER_MODE_NORMAL;
   /* FIXME: use the image mode to select the correct color spaces.  for now,
    * we use rgb-perceptual blending/compositing unconditionally.
    */
   mode_info->blend_space     = GIMP_LAYER_COLOR_SPACE_RGB_PERCEPTUAL;
   mode_info->composite_space = GIMP_LAYER_COLOR_SPACE_RGB_PERCEPTUAL;
- if (psd_layer->clipping == 1)
+  if (psd_layer->clipping == 1)
     mode_info->composite_mode  = GIMP_LAYER_COMPOSITE_CLIP_TO_BACKDROP;
   else
     mode_info->composite_mode  = GIMP_LAYER_COMPOSITE_UNION;
 
-  for (i = 0; i < G_N_ELEMENTS (layer_mode_map); i++)
+  if (! convert_psd_mode (psd_layer->blend_mode, &mode_info->mode))
     {
-      if (g_ascii_strncasecmp (psd_layer->blend_mode, layer_mode_map[i].psd_mode, 4) == 0)
+      if (CONVERSION_WARNINGS)
+        {
+          gchar *mode_name = g_strndup (psd_layer->blend_mode, 4);
+          g_message ("Unsupported blend mode: %s. Mode reverts to normal",
+                     mode_name);
+          g_free (mode_name);
+        }
+    }
+}
+
+gboolean
+convert_psd_mode (const gchar   *psd_mode,
+                  GimpLayerMode *mode)
+{
+  *mode = GIMP_LAYER_MODE_NORMAL;
+
+  for (gint i = 0; i < G_N_ELEMENTS (layer_mode_map); i++)
+    {
+      if (g_ascii_strncasecmp (psd_mode, layer_mode_map[i].psd_mode, 4) == 0)
         {
           if (! layer_mode_map[i].exact && CONVERSION_WARNINGS)
             {
@@ -746,19 +827,12 @@ psd_to_gimp_blend_mode (PSDlayer      *psd_layer,
                          layer_mode_map[i].name);
             }
 
-          mode_info->mode = layer_mode_map[i].gimp_mode;
-
-          return;
+          *mode = layer_mode_map[i].gimp_mode;
+          return TRUE;
         }
     }
 
-  if (CONVERSION_WARNINGS)
-    {
-      gchar *mode_name = g_strndup (psd_layer->blend_mode, 4);
-      g_message ("Unsupported blend mode: %s. Mode reverts to normal",
-                 mode_name);
-      g_free (mode_name);
-    }
+  return FALSE;
 }
 
 const gchar *
@@ -907,6 +981,7 @@ gimp_to_psd_layer_color_tag (GimpColorTag layer_color_tag)
       if (CONVERSION_WARNINGS)
         g_message ("Photoshop doesn't support GIMP layer color tag: %i. Photoshop layer color tag set to none.",
                    layer_color_tag);
+
       color_tag = 0;
     }
 

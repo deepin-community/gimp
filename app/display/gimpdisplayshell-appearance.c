@@ -27,6 +27,7 @@
 #include "core/gimpimage.h"
 
 #include "widgets/gimpdockcolumns.h"
+#include "widgets/gimpmenumodel.h"
 #include "widgets/gimprender.h"
 #include "widgets/gimpwidgets-utils.h"
 
@@ -64,25 +65,10 @@ gimp_display_shell_appearance_update (GimpDisplayShell *shell)
 
   if (window)
     {
-      GimpDockColumns *left_docks;
-      GimpDockColumns *right_docks;
-      gboolean         fullscreen;
-      gboolean         has_grip;
-
-      fullscreen = gimp_image_window_get_fullscreen (window);
+      gboolean fullscreen = gimp_image_window_get_fullscreen (window);
 
       gimp_display_shell_set_action_active (shell, "view-fullscreen",
                                             fullscreen);
-
-      left_docks  = gimp_image_window_get_left_docks (window);
-      right_docks = gimp_image_window_get_right_docks (window);
-
-      has_grip = (! fullscreen &&
-                  ! (left_docks  && gimp_dock_columns_get_docks (left_docks)) &&
-                  ! (right_docks && gimp_dock_columns_get_docks (right_docks)));
-
-      gtk_statusbar_set_has_resize_grip (GTK_STATUSBAR (shell->statusbar),
-                                         has_grip);
     }
 
   gimp_display_shell_set_show_menubar        (shell,
@@ -108,7 +94,7 @@ gimp_display_shell_appearance_update (GimpDisplayShell *shell)
                                               options->show_sample_points);
   gimp_display_shell_set_padding             (shell,
                                               options->padding_mode,
-                                              &options->padding_color);
+                                              options->padding_color);
   gimp_display_shell_set_padding_in_show_all (shell,
                                               options->padding_in_show_all);
 }
@@ -186,6 +172,8 @@ gimp_display_shell_set_show_rulers (GimpDisplayShell *shell,
   gtk_widget_set_visible (shell->origin, show);
   gtk_widget_set_visible (shell->hrule, show);
   gtk_widget_set_visible (shell->vrule, show);
+  gtk_widget_set_visible (shell->quick_mask_button, show);
+  gtk_widget_set_visible (shell->zoom_button, show);
 
   gimp_display_shell_set_action_active (shell, "view-show-rulers", show);
 }
@@ -478,40 +466,74 @@ gimp_display_shell_get_snap_to_vectors (GimpDisplayShell *shell)
 }
 
 void
-gimp_display_shell_set_padding (GimpDisplayShell      *shell,
-                                GimpCanvasPaddingMode  padding_mode,
-                                const GimpRGB         *padding_color)
+gimp_display_shell_set_snap_to_bbox (GimpDisplayShell *shell,
+                                     gboolean          snap)
 {
   GimpDisplayOptions *options;
-  GimpRGB             color;
 
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
-  g_return_if_fail (padding_color != NULL);
 
   options = appearance_get_options (shell);
-  color   = *padding_color;
+
+  g_object_set (options, "snap-to-bbox", snap, NULL);
+}
+
+gboolean
+gimp_display_shell_get_snap_to_bbox (GimpDisplayShell *shell)
+{
+  g_return_val_if_fail (GIMP_IS_DISPLAY_SHELL (shell), FALSE);
+
+  return appearance_get_options (shell)->snap_to_bbox;
+}
+
+void
+gimp_display_shell_set_snap_to_equidistance (GimpDisplayShell *shell,
+                                             gboolean          snap)
+{
+  GimpDisplayOptions *options;
+
+  g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
+
+  options = appearance_get_options (shell);
+
+  g_object_set (options, "snap-to-equidistance", snap, NULL);
+}
+
+gboolean
+gimp_display_shell_get_snap_to_equidistance (GimpDisplayShell *shell)
+{
+  g_return_val_if_fail (GIMP_IS_DISPLAY_SHELL (shell), FALSE);
+
+  return appearance_get_options (shell)->snap_to_equidistance;
+}
+
+void
+gimp_display_shell_set_padding (GimpDisplayShell      *shell,
+                                GimpCanvasPaddingMode  padding_mode,
+                                GeglColor             *padding_color)
+{
+  GimpImageWindow    *window;
+  GimpMenuModel      *model;
+  GimpDisplayOptions *options;
+  GeglColor          *color;
+
+  g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
+  g_return_if_fail (GEGL_IS_COLOR (padding_color));
+
+  options = appearance_get_options (shell);
+  color   = padding_color;
 
   switch (padding_mode)
     {
     case GIMP_CANVAS_PADDING_MODE_DEFAULT:
-      if (shell->canvas)
-        {
-          GtkStyle *style;
-
-          gtk_widget_ensure_style (shell->canvas);
-
-          style = gtk_widget_get_style (shell->canvas);
-
-          gimp_rgb_set_gdk_color (&color, style->bg + GTK_STATE_NORMAL);
-        }
       break;
 
     case GIMP_CANVAS_PADDING_MODE_LIGHT_CHECK:
-      color = *gimp_render_light_check_color ();
+      color = GEGL_COLOR (gimp_render_check_color1 ());
       break;
 
     case GIMP_CANVAS_PADDING_MODE_DARK_CHECK:
-      color = *gimp_render_dark_check_color ();
+      color = GEGL_COLOR (gimp_render_check_color2 ());
       break;
 
     case GIMP_CANVAS_PADDING_MODE_CUSTOM:
@@ -519,21 +541,30 @@ gimp_display_shell_set_padding (GimpDisplayShell      *shell,
       break;
     }
 
+  color = gegl_color_duplicate (color);
   g_object_set (options,
                 "padding-mode",  padding_mode,
-                "padding-color", &color,
+                "padding-color", color,
                 NULL);
 
-  gimp_canvas_set_bg_color (GIMP_CANVAS (shell->canvas), &color);
+  gimp_canvas_set_padding (GIMP_CANVAS (shell->canvas),
+                           padding_mode, color);
 
-  gimp_display_shell_set_action_color (shell, "view-padding-color-menu",
-                                       &options->padding_color);
+  window = gimp_display_shell_get_window (shell);
+  model  = gimp_image_window_get_menubar_model (window);
+
+  if (padding_mode != GIMP_CANVAS_PADDING_MODE_DEFAULT)
+    gimp_menu_model_set_color (model, "/View/Padding color", options->padding_color);
+  else
+    gimp_menu_model_set_color (model, "/View/Padding color", NULL);
+
+  g_object_unref (color);
 }
 
 void
 gimp_display_shell_get_padding (GimpDisplayShell       *shell,
                                 GimpCanvasPaddingMode  *padding_mode,
-                                GimpRGB                *padding_color)
+                                GeglColor             **padding_color)
 {
   GimpDisplayOptions *options;
 
@@ -545,7 +576,7 @@ gimp_display_shell_get_padding (GimpDisplayShell       *shell,
     *padding_mode = options->padding_mode;
 
   if (padding_color)
-    *padding_color = options->padding_color;
+    *padding_color = gegl_color_duplicate (options->padding_color);
 }
 
 void

@@ -31,7 +31,7 @@
 
 
 GeglNode *
-gimp_gegl_create_flatten_node (const GimpRGB       *background,
+gimp_gegl_create_flatten_node (GeglColor           *background,
                                GimpLayerColorSpace  composite_space)
 {
   GeglNode  *node;
@@ -39,10 +39,10 @@ gimp_gegl_create_flatten_node (const GimpRGB       *background,
   GeglNode  *output;
   GeglNode  *color;
   GeglNode  *mode;
-  GeglColor *c;
 
-  g_return_val_if_fail (background != NULL, NULL);
+  g_return_val_if_fail (GEGL_IS_COLOR (background), NULL);
   g_return_val_if_fail (composite_space == GIMP_LAYER_COLOR_SPACE_RGB_LINEAR ||
+                        composite_space == GIMP_LAYER_COLOR_SPACE_RGB_NON_LINEAR ||
                         composite_space == GIMP_LAYER_COLOR_SPACE_RGB_PERCEPTUAL,
                         NULL);
 
@@ -51,10 +51,9 @@ gimp_gegl_create_flatten_node (const GimpRGB       *background,
   input  = gegl_node_get_input_proxy  (node, "input");
   output = gegl_node_get_output_proxy (node, "output");
 
-  c = gimp_gegl_color_new (background);
   color = gegl_node_new_child (node,
                                "operation", "gegl:color",
-                               "value",     c,
+                               "value",     background,
                                "format",    gimp_layer_mode_get_format (
                                               GIMP_LAYER_MODE_NORMAL,
                                               GIMP_LAYER_COLOR_SPACE_AUTO,
@@ -62,7 +61,6 @@ gimp_gegl_create_flatten_node (const GimpRGB       *background,
                                               GIMP_LAYER_COMPOSITE_AUTO,
                                               NULL),
                                NULL);
-  g_object_unref (c);
 
   gimp_gegl_node_set_underlying_operation (node, color);
 
@@ -75,12 +73,9 @@ gimp_gegl_create_flatten_node (const GimpRGB       *background,
                                 composite_space,
                                 GIMP_LAYER_COMPOSITE_AUTO);
 
-  gegl_node_connect_to (input,  "output",
-                        mode,   "aux");
-  gegl_node_connect_to (color,  "output",
-                        mode,   "input");
-  gegl_node_connect_to (mode,   "output",
-                        output, "input");
+  gegl_node_connect (input,  "output",
+                     mode,   "aux");
+  gegl_node_link_many (color, mode, output, NULL);
 
   return node;
 }
@@ -115,12 +110,9 @@ gimp_gegl_create_apply_opacity_node (GeglBuffer *mask,
                                              mask_offset_x,
                                              mask_offset_y);
 
-  gegl_node_connect_to (input,        "output",
-                        opacity_node, "input");
-  gegl_node_connect_to (mask_source,  "output",
-                        opacity_node, "aux");
-  gegl_node_connect_to (opacity_node, "output",
-                        output,       "input");
+  gegl_node_link_many (input, opacity_node, output, NULL);
+  gegl_node_connect (mask_source,  "output",
+                     opacity_node, "aux");
 
   return node;
 }
@@ -166,8 +158,7 @@ gimp_gegl_add_buffer_source (GeglNode   *parent,
                              "y",         (gdouble) offset_y,
                              NULL);
 
-      gegl_node_connect_to (buffer_source, "output",
-                            translate,     "input");
+      gegl_node_link (buffer_source, translate);
 
       buffer_source = translate;
     }
@@ -203,7 +194,7 @@ gimp_gegl_mode_node_set_mode (GeglNode               *node,
    * all its properties
    */
   gegl_node_set (node,
-                 "operation",       gimp_layer_mode_get_operation (mode),
+                 "operation",       gimp_layer_mode_get_operation_name (mode),
                  "layer-mode",      mode,
                  "opacity",         opacity,
                  "blend-space",     blend_space,
@@ -242,19 +233,13 @@ gimp_gegl_node_set_matrix (GeglNode          *node,
 }
 
 void
-gimp_gegl_node_set_color (GeglNode      *node,
-                          const GimpRGB *color)
+gimp_gegl_node_set_color (GeglNode  *node,
+                          GeglColor *color)
 {
-  GeglColor *gegl_color;
-
   g_return_if_fail (GEGL_IS_NODE (node));
-  g_return_if_fail (color != NULL);
-
-  gegl_color = gimp_gegl_color_new (color);
+  g_return_if_fail (GEGL_IS_COLOR (color));
 
   gegl_node_set (node,
-                 "value", gegl_color,
+                 "value", color,
                  NULL);
-
-  g_object_unref (gegl_color);
 }

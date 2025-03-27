@@ -43,6 +43,8 @@ struct _GimpDisplayConfig
 
   GimpCheckSize       transparency_size;
   GimpCheckType       transparency_type;
+  GeglColor          *transparency_custom_color1;
+  GeglColor          *transparency_custom_color2;
   gint                snap_distance;
   gint                marching_ants_speed;
   gboolean            resize_windows_on_zoom;
@@ -50,6 +52,8 @@ struct _GimpDisplayConfig
   gboolean            default_show_all;
   gboolean            default_dot_for_dot;
   gboolean            initial_zoom_to_fit;
+  GimpDragZoomMode    drag_zoom_mode;
+  gboolean            drag_zoom_speed;
   GimpCursorMode      cursor_mode;
   gboolean            cursor_updating;
   gboolean            show_brush_outline;
@@ -67,6 +71,8 @@ struct _GimpDisplayConfig
   GimpSpaceBarAction  space_bar_action;
   GimpZoomQuality     zoom_quality;
   gboolean            use_event_history;
+
+  GObject            *modifiers_manager;
 };
 
 struct _GimpDisplayConfigClass

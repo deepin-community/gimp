@@ -26,12 +26,12 @@
 #include "imap_default_dialog.h"
 
 typedef struct {
-   GdkColor normal_fg;
-   GdkColor normal_bg;
-   GdkColor selected_fg;
-   GdkColor selected_bg;
-   GdkColor interactive_bg;
-   GdkColor interactive_fg;
+   GdkRGBA normal_fg;
+   GdkRGBA normal_bg;
+   GdkRGBA selected_fg;
+   GdkRGBA selected_bg;
+   GdkRGBA interactive_bg;
+   GdkRGBA interactive_fg;
 } ColorSelData_t;
 
 typedef struct {
@@ -49,8 +49,10 @@ typedef struct {
    ColorSelData_t       colors;
 } PreferencesData_t;
 
-void do_preferences_dialog(void);
-gboolean preferences_load(PreferencesData_t *data);
-void preferences_save(PreferencesData_t *data);
+void     do_preferences_dialog (GSimpleAction     *action,
+                                GVariant          *parameter,
+                                gpointer           user_data);
+gboolean preferences_load      (PreferencesData_t *data);
+void     preferences_save      (PreferencesData_t *data);
 
 #endif /* _IMAP_PREFERENCES_H */

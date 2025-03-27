@@ -47,6 +47,7 @@ struct _ColorselWater
   GimpColorSelector   parent_instance;
 
   GtkWidget          *area;
+  GtkWidget          *label;
 
   gdouble             last_x;
   gdouble             last_y;
@@ -55,7 +56,7 @@ struct _ColorselWater
   guint32             motion_time;
 
   GimpColorConfig    *config;
-  GimpColorTransform *transform;
+  const Babl         *format;
 };
 
 struct _ColorselWaterClass
@@ -64,18 +65,17 @@ struct _ColorselWaterClass
 };
 
 
-static GType      colorsel_water_get_type          (void);
+GType             colorsel_water_get_type          (void);
 
 static void       colorsel_water_dispose           (GObject           *object);
 
+static void       colorsel_water_set_format        (GimpColorSelector *selector,
+                                                    const Babl        *format);
 static void       colorsel_water_set_config        (GimpColorSelector *selector,
                                                     GimpColorConfig   *config);
 
-static void       colorsel_water_create_transform  (ColorselWater     *water);
-static void       colorsel_water_destroy_transform (ColorselWater     *water);
-
-static gboolean   select_area_expose               (GtkWidget         *widget,
-                                                    GdkEventExpose    *event,
+static gboolean   select_area_draw                 (GtkWidget         *widget,
+                                                    cairo_t           *cr,
                                                     ColorselWater     *water);
 static gboolean   button_press_event               (GtkWidget         *widget,
                                                     GdkEventButton    *event,
@@ -130,7 +130,10 @@ colorsel_water_class_init (ColorselWaterClass *klass)
   selector_class->name       = _("Watercolor");
   selector_class->help_id    = "gimp-colorselector-watercolor";
   selector_class->icon_name  = GIMP_ICON_COLOR_SELECTOR_WATER;
+  selector_class->set_format = colorsel_water_set_format;
   selector_class->set_config = colorsel_water_set_config;
+
+  gtk_widget_class_set_css_name (GTK_WIDGET_CLASS (klass), "ColorselWater");
 }
 
 static void
@@ -146,8 +149,6 @@ colorsel_water_init (ColorselWater *water)
   GtkAdjustment *adj;
   GtkWidget     *scale;
 
-  colorsel_water_get_type (); /* useless function call to silence compiler */
-
   water->pressure_adjust = 1.0;
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 2);
@@ -159,8 +160,8 @@ colorsel_water_init (ColorselWater *water)
 
   water->area = gtk_drawing_area_new ();
   gtk_container_add (GTK_CONTAINER (frame), water->area);
-  g_signal_connect (water->area, "expose-event",
-                    G_CALLBACK (select_area_expose),
+  g_signal_connect (water->area, "draw",
+                    G_CALLBACK (select_area_draw),
                     water);
 
   /* Event signals */
@@ -182,14 +183,10 @@ colorsel_water_init (ColorselWater *water)
                          GDK_POINTER_MOTION_HINT_MASK |
                          GDK_PROXIMITY_OUT_MASK);
 
-  /* The following call enables tracking and processing of extension
-   * events for the drawing area
-   */
-  gtk_widget_set_extension_events (water->area, GDK_EXTENSION_EVENTS_ALL);
   gtk_widget_grab_focus (water->area);
 
-  adj = GTK_ADJUSTMENT (gtk_adjustment_new (200.0 - water->pressure_adjust * 100.0,
-                                            0.0, 200.0, 1.0, 1.0, 0.0));
+  adj = gtk_adjustment_new (200.0 - water->pressure_adjust * 100.0,
+                            0.0, 200.0, 1.0, 1.0, 0.0);
   g_signal_connect (adj, "value-changed",
                     G_CALLBACK (pressure_adjust_update),
                     water);
@@ -202,9 +199,13 @@ colorsel_water_init (ColorselWater *water)
 
   gtk_widget_show_all (hbox);
 
-  gimp_widget_track_monitor (GTK_WIDGET (water),
-                             G_CALLBACK (colorsel_water_destroy_transform),
-                             NULL);
+  water->label = gtk_label_new (NULL);
+  gtk_widget_set_halign (water->label, GTK_ALIGN_START);
+  gtk_widget_set_vexpand (water->label, FALSE);
+  gtk_label_set_justify (GTK_LABEL (water->label), GTK_JUSTIFY_LEFT);
+  gtk_label_set_text (GTK_LABEL (water->label), _("Profile: sRGB"));
+  gtk_box_pack_start (GTK_BOX (water), water->label, FALSE, FALSE, 0);
+  gtk_widget_show (water->label);
 }
 
 static gdouble
@@ -227,72 +228,72 @@ colorsel_water_dispose (GObject *object)
 }
 
 static void
+colorsel_water_set_format (GimpColorSelector *selector,
+                           const Babl        *format)
+{
+  ColorselWater *water = COLORSEL_WATER (selector);
+
+  if (water->format != format)
+    {
+      water->format = format;
+
+      if (format == NULL || babl_format_get_space (format) == babl_space ("sRGB"))
+        {
+          gtk_label_set_text (GTK_LABEL (water->label), _("Profile: sRGB"));
+          gimp_help_set_help_data (water->label, NULL, NULL);
+        }
+      else
+        {
+          GimpColorProfile *profile = NULL;
+          const gchar      *icc;
+          gint              icc_len;
+
+          icc = babl_space_get_icc (babl_format_get_space (format), &icc_len);
+          profile = gimp_color_profile_new_from_icc_profile ((const guint8 *) icc, icc_len, NULL);
+
+          if (profile != NULL)
+            {
+              gchar *text;
+
+              text = g_strdup_printf (_("Profile: %s"), gimp_color_profile_get_label (profile));
+              gtk_label_set_text (GTK_LABEL (water->label), text);
+              gimp_help_set_help_data (water->label,
+                                       gimp_color_profile_get_summary (profile),
+                                       NULL);
+              g_free (text);
+            }
+          else
+            {
+              gtk_label_set_markup (GTK_LABEL (water->label), _("Profile: <i>unknown</i>"));
+              gimp_help_set_help_data (water->label, NULL, NULL);
+            }
+
+          g_clear_object (&profile);
+        }
+      gtk_widget_queue_draw (GTK_WIDGET (water));
+    }
+}
+
+static void
 colorsel_water_set_config (GimpColorSelector *selector,
                            GimpColorConfig   *config)
 {
   ColorselWater *water = COLORSEL_WATER (selector);
 
   if (config != water->config)
-    {
-      if (water->config)
-        {
-          g_signal_handlers_disconnect_by_func (water->config,
-                                                colorsel_water_destroy_transform,
-                                                water);
-
-          colorsel_water_destroy_transform (water);
-        }
-
-      g_set_object (&water->config, config);
-
-      if (water->config)
-        {
-          g_signal_connect_swapped (water->config, "notify",
-                                    G_CALLBACK (colorsel_water_destroy_transform),
-                                    water);
-        }
-    }
-}
-
-static void
-colorsel_water_create_transform (ColorselWater *water)
-{
-  if (water->config)
-    {
-      static GimpColorProfile *profile = NULL;
-
-      const Babl *format = babl_format ("cairo-RGB24");
-
-      if (G_UNLIKELY (! profile))
-        profile = gimp_color_profile_new_rgb_srgb ();
-
-      water->transform = gimp_widget_get_color_transform (water->area,
-                                                          water->config,
-                                                          profile,
-                                                          format,
-                                                          format);
-    }
-}
-
-static void
-colorsel_water_destroy_transform (ColorselWater *water)
-{
-  if (water->transform)
-    {
-      g_object_unref (water->transform);
-      water->transform = NULL;
-    }
-
-  gtk_widget_queue_draw (GTK_WIDGET (water->area));
+    g_set_object (&water->config, config);
 }
 
 static gboolean
-select_area_expose (GtkWidget      *widget,
-                    GdkEventExpose *event,
-                    ColorselWater  *water)
+select_area_draw (GtkWidget     *widget,
+                  cairo_t       *cr,
+                  ColorselWater *water)
 {
-  cairo_t         *cr;
+  const Babl      *render_space;
+  const Babl      *render_fish;
+  GdkRectangle     area;
   GtkAllocation    allocation;
+  gdouble          x1, y1, x2, y2;
   gdouble          dx;
   gdouble          dy;
   cairo_surface_t *surface;
@@ -300,27 +301,30 @@ select_area_expose (GtkWidget      *widget,
   gdouble          y;
   gint             j;
 
-  cr = gdk_cairo_create (event->window);
+  cairo_clip_extents (cr, &x1, &y1, &x2, &y2);
 
-  gdk_cairo_region (cr, event->region);
-  cairo_clip (cr);
+  area.x      = floor (x1);
+  area.y      = floor (y1);
+  area.width  = ceil (x2) - area.x;
+  area.height = ceil (y2) - area.y;
 
   gtk_widget_get_allocation (widget, &allocation);
 
   dx = 1.0 / allocation.width;
   dy = 1.0 / allocation.height;
 
+  render_space = gimp_widget_get_render_space (widget, water->config);
+  render_fish = babl_fish (babl_format_with_space ("cairo-RGB24", water->format),
+                           babl_format_with_space ("cairo-RGB24", render_space)),
+
   surface = cairo_image_surface_create (CAIRO_FORMAT_RGB24,
-                                        event->area.width,
-                                        event->area.height);
+                                        area.width,
+                                        area.height);
 
   dest = cairo_image_surface_get_data (surface);
 
-  if (! water->transform)
-    colorsel_water_create_transform (water);
-
-  for (j = 0, y = event->area.y / allocation.height;
-       j < event->area.height;
+  for (j = 0, y = area.y / allocation.height;
+       j < area.height;
        j++, y += dy)
     {
       guchar  *d  = dest;
@@ -335,11 +339,11 @@ select_area_expose (GtkWidget      *widget,
 
       gint     i;
 
-      r += event->area.x * dr;
-      g += event->area.x * dg;
-      b += event->area.x * db;
+      r += area.x * dr;
+      g += area.x * dg;
+      b += area.x * db;
 
-      for (i = 0; i < event->area.width ; i++)
+      for (i = 0; i < area.width; i++)
         {
           GIMP_CAIRO_RGB24_SET_PIXEL (d,
                                       CLAMP ((gint) r, 0, 255),
@@ -353,25 +357,15 @@ select_area_expose (GtkWidget      *widget,
           d += 4;
         }
 
-      if (water->transform)
-        gimp_color_transform_process_pixels (water->transform,
-                                             babl_format ("cairo-RGB24"),
-                                             dest,
-                                             babl_format ("cairo-RGB24"),
-                                             dest,
-                                             event->area.width);
-
+      babl_process (render_fish, dest, dest, area.width);
       dest += cairo_image_surface_get_stride (surface);
     }
 
   cairo_surface_mark_dirty (surface);
-  cairo_set_source_surface (cr, surface,
-                            event->area.x, event->area.y);
+  cairo_set_source_surface (cr, surface, area.x, area.y);
   cairo_surface_destroy (surface);
 
   cairo_paint (cr);
-
-  cairo_destroy (cr);
 
   return FALSE;
 }
@@ -384,14 +378,20 @@ add_pigment (ColorselWater *water,
              gdouble        much)
 {
   GimpColorSelector *selector = GIMP_COLOR_SELECTOR (water);
+  GeglColor         *color    = gimp_color_selector_get_color (selector);
+  gdouble            rgb[3];
 
   much *= (gdouble) water->pressure_adjust;
 
+  /* TODO: both render (draw() function) and selecting colors should navigate
+   * the target color space, not sRGB.
+   */
+  gegl_color_get_pixel (color, babl_format ("R'G'B' double"), rgb);
   if (erase)
     {
-      selector->rgb.r = 1.0 - (1.0 - selector->rgb.r) * (1.0 - much);
-      selector->rgb.g = 1.0 - (1.0 - selector->rgb.g) * (1.0 - much);
-      selector->rgb.b = 1.0 - (1.0 - selector->rgb.b) * (1.0 - much);
+      rgb[0] = 1.0 - (1.0 - rgb[0]) * (1.0 - much);
+      rgb[1] = 1.0 - (1.0 - rgb[1]) * (1.0 - much);
+      rgb[2] = 1.0 - (1.0 - rgb[2]) * (1.0 - much);
     }
   else
     {
@@ -399,16 +399,19 @@ add_pigment (ColorselWater *water,
       gdouble g = calc (x, y, 120) / 256.0;
       gdouble b = calc (x, y, 240) / 256.0;
 
-      selector->rgb.r *= (1.0 - (1.0 - r) * much);
-      selector->rgb.g *= (1.0 - (1.0 - g) * much);
-      selector->rgb.b *= (1.0 - (1.0 - b) * much);
+      rgb[0] *= (1.0 - (1.0 - r) * much);
+      rgb[1] *= (1.0 - (1.0 - g) * much);
+      rgb[2] *= (1.0 - (1.0 - b) * much);
     }
 
-  gimp_rgb_clamp (&selector->rgb);
+  rgb[0] = CLAMP (rgb[0], 0.0, 1.0);
+  rgb[1] = CLAMP (rgb[1], 0.0, 1.0);
+  rgb[2] = CLAMP (rgb[2], 0.0, 1.0);
+  gegl_color_set_pixel (color, babl_format ("R'G'B' double"), rgb);
 
-  gimp_rgb_to_hsv (&selector->rgb, &selector->hsv);
+  gimp_color_selector_set_color (selector, color);
 
-  gimp_color_selector_color_changed (selector);
+  g_object_unref (color);
 }
 
 static void

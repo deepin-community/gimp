@@ -72,14 +72,7 @@
  *     one fully transparent color is allowed in INDEXEDA mode).
  */
 
-/* Set these for debugging. */
-/* #define PROFILE 1 */
-
 #include "config.h"
-
-#ifdef PROFILE
-# include <sys/times.h>
-#endif
 
 #include <errno.h>
 #include <string.h>
@@ -93,9 +86,10 @@
 
 
 #define LOAD_PROC      "file-tga-load"
-#define SAVE_PROC      "file-tga-save"
+#define EXPORT_PROC    "file-tga-export"
 #define PLUG_IN_BINARY "file-tga"
 #define PLUG_IN_ROLE   "gimp-file-tga"
+
 
 typedef enum
 {
@@ -103,25 +97,6 @@ typedef enum
   ORIGIN_BOTTOM_LEFT = 1
 } TgaOrigin;
 
-typedef struct _TgaSaveVals
-{
-  gboolean   rle;
-  TgaOrigin  origin;
-} TgaSaveVals;
-
-static TgaSaveVals tsvals =
-{
-  TRUE,                 /* rle    */
-  ORIGIN_BOTTOM_LEFT    /* origin */
-};
-
-
- /* TRUEVISION-XFILE magic signature string */
-static guchar magic[18] =
-{
-  0x54, 0x52, 0x55, 0x45, 0x56, 0x49, 0x53, 0x49, 0x4f,
-  0x4e, 0x2d, 0x58, 0x46, 0x49, 0x4c, 0x45, 0x2e, 0x0
-};
 
 typedef struct tga_info_struct
 {
@@ -176,276 +151,282 @@ typedef struct tga_info_struct
 } tga_info;
 
 
-/* Declare some local functions.
- */
-static void      query         (void);
-static void      run           (const gchar      *name,
-                                gint              nparams,
-                                const GimpParam  *param,
-                                gint             *nreturn_vals,
-                                GimpParam       **return_vals);
+typedef struct _Tga      Tga;
+typedef struct _TgaClass TgaClass;
 
-static gint32    load_image    (const gchar      *filename,
-                                GError          **error);
-static gint      save_image    (const gchar      *filename,
-                                gint32            image_ID,
-                                gint32            drawable_ID,
-                                GError          **error);
-
-static gboolean  save_dialog   (void);
-
-static gint32    ReadImage     (FILE             *fp,
-                                tga_info         *info,
-                                const gchar      *filename);
-
-
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _Tga
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
+  GimpPlugIn      parent_instance;
+};
+
+struct _TgaClass
+{
+  GimpPlugInClass parent_class;
 };
 
 
-MAIN ()
+#define TGA_TYPE  (tga_get_type ())
+#define TGA(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), TGA_TYPE, Tga))
+
+GType                   tga_get_type         (void) G_GNUC_CONST;
+
+static GList          * tga_query_procedures (GimpPlugIn            *plug_in);
+static GimpProcedure  * tga_create_procedure (GimpPlugIn            *plug_in,
+                                               const gchar           *name);
+
+static GimpValueArray * tga_load             (GimpProcedure         *procedure,
+                                              GimpRunMode            run_mode,
+                                              GFile                 *file,
+                                              GimpMetadata          *metadata,
+                                              GimpMetadataLoadFlags *flags,
+                                              GimpProcedureConfig   *config,
+                                              gpointer               run_data);
+static GimpValueArray * tga_export           (GimpProcedure         *procedure,
+                                              GimpRunMode            run_mode,
+                                              GimpImage             *image,
+                                              GFile                 *file,
+                                              GimpExportOptions     *options,
+                                              GimpMetadata          *metadata,
+                                              GimpProcedureConfig   *config,
+                                              gpointer               run_data);
+
+static GimpImage      * load_image           (GFile                 *file,
+                                              GError               **error);
+static gboolean         export_image         (GFile                 *file,
+                                              GimpImage             *image,
+                                              GimpDrawable          *drawable,
+                                              GObject               *config,
+                                              GError               **error);
+
+static gboolean         save_dialog          (GimpImage             *image,
+                                              GimpProcedure         *procedure,
+                                              GObject               *config);
+
+static GimpImage      * ReadImage            (FILE                  *fp,
+                                              tga_info              *info,
+                                              GFile                 *file);
+
+
+G_DEFINE_TYPE (Tga, tga, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (TGA_TYPE)
+DEFINE_STD_SET_I18N
+
+
+/* TRUEVISION-XFILE magic signature string */
+static guchar magic[18] =
+{
+  0x54, 0x52, 0x55, 0x45, 0x56, 0x49, 0x53, 0x49, 0x4f,
+  0x4e, 0x2d, 0x58, 0x46, 0x49, 0x4c, 0x45, 0x2e, 0x0
+};
+
 
 static void
-query (void)
+tga_class_init (TgaClass *klass)
 {
-  static const GimpParamDef load_args[] =
-  {
-    { GIMP_PDB_INT32,  "run-mode",     "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_STRING, "filename",     "The name of the file to load" },
-    { GIMP_PDB_STRING, "raw-filename", "The name entered"             }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  static const GimpParamDef load_return_vals[] =
-  {
-    { GIMP_PDB_IMAGE, "image", "Output image" }
-  };
-
-  static const GimpParamDef save_args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode",     "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",        "Input image"                  },
-    { GIMP_PDB_DRAWABLE, "drawable",     "Drawable to export"           },
-    { GIMP_PDB_STRING,   "filename",     "The name of the file to export the image in" },
-    { GIMP_PDB_STRING,   "raw-filename", "The name of the file to export the image in" },
-    { GIMP_PDB_INT32,    "rle",          "Use RLE compression"          },
-    { GIMP_PDB_INT32,    "origin",       "Image origin (0 = top-left, 1 = bottom-left)"}
-  } ;
-
-  gimp_install_procedure (LOAD_PROC,
-                          "Loads files of Targa file format",
-                          "FIXME: write help for tga_load",
-                          "Raphael FRANCOIS, Gordon Matzigkeit",
-                          "Raphael FRANCOIS, Gordon Matzigkeit",
-                          "1997,2000,2007",
-                          N_("TarGA image"),
-                          NULL,
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (load_args),
-                          G_N_ELEMENTS (load_return_vals),
-                          load_args, load_return_vals);
-
-  gimp_register_file_handler_mime (LOAD_PROC, "image/x-tga");
-  gimp_register_magic_load_handler (LOAD_PROC,
-                                    "tga,vda,icb,vst",
-                                    "",
-                                    "-18&,string,TRUEVISION-XFILE.,-1,byte,0");
-
-  gimp_install_procedure (SAVE_PROC,
-                          "exports files in the Targa file format",
-                          "FIXME: write help for tga_save",
-                          "Raphael FRANCOIS, Gordon Matzigkeit",
-                          "Raphael FRANCOIS, Gordon Matzigkeit",
-                          "1997,2000",
-                          N_("TarGA image"),
-                          "RGB*, GRAY*, INDEXED*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (save_args), 0,
-                          save_args, NULL);
-
-  gimp_register_file_handler_mime (SAVE_PROC, "image/x-tga");
-  gimp_register_save_handler (SAVE_PROC, "tga", "");
+  plug_in_class->query_procedures = tga_query_procedures;
+  plug_in_class->create_procedure = tga_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+tga_init (Tga *tga)
 {
-  static GimpParam   values[2];
-  GimpRunMode        run_mode;
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  gint32             image_ID;
-  gint32             drawable_ID;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
-  GError            *error  = NULL;
+}
 
-#ifdef PROFILE
-  struct tms tbuf1, tbuf2;
-#endif
+static GList *
+tga_query_procedures (GimpPlugIn *plug_in)
+{
+  GList *list = NULL;
 
-  INIT_I18N ();
+  list = g_list_append (list, g_strdup (LOAD_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
+
+  return list;
+}
+
+static GimpProcedure *
+tga_create_procedure (GimpPlugIn  *plug_in,
+                      const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, LOAD_PROC))
+    {
+      procedure = gimp_load_procedure_new (plug_in, name,
+                                           GIMP_PDB_PROC_TYPE_PLUGIN,
+                                           tga_load, NULL, NULL);
+
+      gimp_procedure_set_menu_label (procedure, _("TarGA image"));
+
+      gimp_procedure_set_documentation (procedure,
+                                        "Loads files of Targa file format",
+                                        "FIXME: write help for tga_load",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Raphael FRANCOIS, Gordon Matzigkeit",
+                                      "Raphael FRANCOIS, Gordon Matzigkeit",
+                                      "1997,2000,2007");
+
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "image/x-tga");
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "tga,vda,icb,vst");
+      gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
+                                      "-18&,string,TRUEVISION-XFILE.,-1,byte,0");
+    }
+  else if (! strcmp (name, EXPORT_PROC))
+    {
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, tga_export, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "*");
+
+      gimp_procedure_set_menu_label (procedure, _("TarGA image"));
+
+      gimp_procedure_set_documentation (procedure,
+                                        "Exports files in the Targa file format",
+                                        "FIXME: write help for tga_export",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Raphael FRANCOIS, Gordon Matzigkeit",
+                                      "Raphael FRANCOIS, Gordon Matzigkeit",
+                                      "1997,2000");
+
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           _("TGA"));
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "image/x-tga");
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "tga");
+
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA,
+                                              NULL, NULL, NULL);
+
+      gimp_procedure_add_boolean_argument (procedure, "rle",
+                                           _("_Use RLE compression"),
+                                           _("Use RLE compression"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_choice_argument (procedure, "origin",
+                                          _("Ori_gin"),
+                                          _("Image origin"),
+                                          gimp_choice_new_with_values ("bottom-left", ORIGIN_BOTTOM_LEFT, _("Bottom left"), NULL,
+                                                                       "top-left",    ORIGIN_TOP_LEFT,    _("Top left"),    NULL,
+                                                                       NULL),
+                                          "bottom-left",
+                                          G_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+tga_load (GimpProcedure         *procedure,
+          GimpRunMode            run_mode,
+          GFile                 *file,
+          GimpMetadata          *metadata,
+          GimpMetadataLoadFlags *flags,
+          GimpProcedureConfig   *config,
+          gpointer               run_data)
+{
+  GimpValueArray *return_vals;
+  GimpImage      *image;
+  GError         *error = NULL;
+
   gegl_init (NULL, NULL);
 
-  run_mode = param[0].data.d_int32;
+  image = load_image (file, &error);
 
-  *nreturn_vals = 1;
-  *return_vals  = values;
+  if (! image)
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_EXECUTION_ERROR,
+                                             error);
 
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
+  return_vals = gimp_procedure_new_return_values (procedure,
+                                                  GIMP_PDB_SUCCESS,
+                                                  NULL);
 
-  if (strcmp (name, LOAD_PROC) == 0)
+  GIMP_VALUES_SET_IMAGE (return_vals, 1, image);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+tga_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
+{
+  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GList             *drawables;
+  GError            *error  = NULL;
+
+  gegl_init (NULL, NULL);
+
+  if (run_mode == GIMP_RUN_INTERACTIVE)
     {
-#ifdef PROFILE
-      times (&tbuf1);
-#endif
+      gimp_ui_init (PLUG_IN_BINARY);
 
-      image_ID = load_image (param[1].data.d_string, &error);
+      if (! save_dialog (image, procedure, G_OBJECT (config)))
+        status = GIMP_PDB_CANCEL;
+    }
 
-      if (image_ID != -1)
-        {
-          *nreturn_vals = 2;
-          values[1].type         = GIMP_PDB_IMAGE;
-          values[1].data.d_image = image_ID;
-        }
-      else
+  export = gimp_export_options_get_image (options, &image);
+  drawables = gimp_image_list_layers (image);
+
+  if (status == GIMP_PDB_SUCCESS)
+    {
+      if (! export_image (file, image, drawables->data, G_OBJECT (config),
+                          &error))
         {
           status = GIMP_PDB_EXECUTION_ERROR;
         }
     }
-  else if (strcmp (name, SAVE_PROC) == 0)
-    {
-      gimp_ui_init (PLUG_IN_BINARY, FALSE);
 
-      image_ID     = param[1].data.d_int32;
-      drawable_ID  = param[2].data.d_int32;
+  if (export == GIMP_EXPORT_EXPORT)
+    gimp_image_delete (image);
 
-      /*  eventually export the image */
-      switch (run_mode)
-        {
-        case GIMP_RUN_INTERACTIVE:
-        case GIMP_RUN_WITH_LAST_VALS:
-          export = gimp_export_image (&image_ID, &drawable_ID, "TGA",
-                                      GIMP_EXPORT_CAN_HANDLE_RGB     |
-                                      GIMP_EXPORT_CAN_HANDLE_GRAY    |
-                                      GIMP_EXPORT_CAN_HANDLE_INDEXED |
-                                      GIMP_EXPORT_CAN_HANDLE_ALPHA);
-
-          if (export == GIMP_EXPORT_CANCEL)
-            {
-              values[0].data.d_status = GIMP_PDB_CANCEL;
-              return;
-            }
-          break;
-        default:
-          break;
-        }
-
-      switch (run_mode)
-        {
-        case GIMP_RUN_INTERACTIVE:
-          /*  Possibly retrieve data  */
-          gimp_get_data (SAVE_PROC, &tsvals);
-
-          /*  First acquire information with a dialog  */
-          if (! save_dialog ())
-            status = GIMP_PDB_CANCEL;
-          break;
-
-        case GIMP_RUN_NONINTERACTIVE:
-          /*  Make sure all the arguments are there!  */
-          if (nparams != 7)
-            {
-              status = GIMP_PDB_CALLING_ERROR;
-            }
-          else
-            {
-              tsvals.rle = (param[5].data.d_int32) ? TRUE : FALSE;
-            }
-          break;
-
-        case GIMP_RUN_WITH_LAST_VALS:
-          /*  Possibly retrieve data  */
-          gimp_get_data (SAVE_PROC, &tsvals);
-          break;
-
-        default:
-          break;
-        }
-
-#ifdef PROFILE
-      times (&tbuf1);
-#endif
-
-      if (status == GIMP_PDB_SUCCESS)
-        {
-          if (save_image (param[3].data.d_string, image_ID, drawable_ID,
-                          &error))
-            {
-              /*  Store psvals data  */
-              gimp_set_data (SAVE_PROC, &tsvals, sizeof (tsvals));
-            }
-          else
-            {
-              status = GIMP_PDB_EXECUTION_ERROR;
-            }
-        }
-
-      if (export == GIMP_EXPORT_EXPORT)
-        gimp_image_delete (image_ID);
-    }
-  else
-    {
-      status = GIMP_PDB_CALLING_ERROR;
-    }
-
-  if (status != GIMP_PDB_SUCCESS && error)
-    {
-      *nreturn_vals = 2;
-      values[1].type          = GIMP_PDB_STRING;
-      values[1].data.d_string = error->message;
-    }
-
-  values[0].data.d_status = status;
-
-#ifdef PROFILE
-  times (&tbuf2);
-  printf ("TGA: %s profile: %ld user %ld system\n", name,
-          (long) tbuf2.tms_utime - tbuf1.tms_utime,
-          (long) tbuf2.tms_stime - tbuf2.tms_stime);
-#endif
+  g_list_free (drawables);
+  return gimp_procedure_new_return_values (procedure, status, error);
 }
 
-static gint32
-load_image (const gchar  *filename,
-            GError      **error)
+static GimpImage *
+load_image (GFile   *file,
+            GError **error)
 {
-  FILE     *fp;
-  tga_info  info;
-  guchar    header[18];
-  guchar    footer[26];
-  guchar    extension[495];
-  long      offset;
-  gint32    image_ID = -1;
+  FILE      *fp;
+  tga_info   info;
+  guchar     header[18];
+  guchar     footer[26];
+  guchar     extension[495];
+  long       offset;
+  GimpImage *image = NULL;
 
   gimp_progress_init_printf (_("Opening '%s'"),
-                             gimp_filename_to_utf8 (filename));
+                             gimp_file_get_utf8_name (file));
 
-  fp = g_fopen (filename, "rb");
+  fp = g_fopen (g_file_peek_path (file), "rb");
 
   if (! fp)
     {
       g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
                    _("Could not open '%s' for reading: %s"),
-                   gimp_filename_to_utf8 (filename), g_strerror (errno));
-      return -1;
+                   gimp_file_get_utf8_name (file), g_strerror (errno));
+      return NULL;
     }
 
   /* Is file big enough for a footer? */
@@ -454,9 +435,9 @@ load_image (const gchar  *filename,
       if (fread (footer, sizeof (footer), 1, fp) != 1)
         {
           g_message (_("Cannot read footer from '%s'"),
-                     gimp_filename_to_utf8 (filename));
+                     gimp_file_get_utf8_name (file));
           fclose (fp);
-          return -1;
+          return NULL;
         }
       else if (memcmp (footer + 8, magic, sizeof (magic)) == 0)
         {
@@ -473,9 +454,9 @@ load_image (const gchar  *filename,
                   fread (extension, sizeof (extension), 1, fp) != 1)
                 {
                   g_message (_("Cannot read extension from '%s'"),
-                             gimp_filename_to_utf8 (filename));
+                             gimp_file_get_utf8_name (file));
                   fclose (fp);
-                  return -1;
+                  return NULL;
                 }
               /* Eventually actually handle version 2 TGA here */
             }
@@ -486,9 +467,9 @@ load_image (const gchar  *filename,
       fread (header, sizeof (header), 1, fp) != 1)
     {
       g_message (_("Cannot read header from '%s'"),
-                 gimp_filename_to_utf8 (filename));
+                 gimp_file_get_utf8_name (file));
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
   switch (header[2])
@@ -566,13 +547,13 @@ load_image (const gchar  *filename,
   switch (info.imageType)
     {
       case TGA_TYPE_MAPPED:
-        if (info.bpp != 8)
+        if (info.bpp != 8 || !info.colorMapLength)
           {
             g_message ("Unhandled sub-format in '%s' (type = %u, bpp = %u)",
-                       gimp_filename_to_utf8 (filename),
+                       gimp_file_get_utf8_name (file),
                        info.imageType, info.bpp);
             fclose (fp);
-            return -1;
+            return NULL;
           }
         break;
       case TGA_TYPE_COLOR:
@@ -585,10 +566,10 @@ load_image (const gchar  *filename,
             (info.bpp == 32 && info.alphaBits != 8))
           {
             g_message ("Unhandled sub-format in '%s' (type = %u, bpp = %u, alpha = %u)",
-                       gimp_filename_to_utf8 (filename),
+                       gimp_file_get_utf8_name (file),
                        info.imageType, info.bpp, info.alphaBits);
             fclose (fp);
-            return -1;
+            return NULL;
           }
         break;
       case TGA_TYPE_GRAY:
@@ -596,28 +577,28 @@ load_image (const gchar  *filename,
             (info.alphaBits != 8 || (info.bpp != 16 && info.bpp != 15)))
           {
             g_message ("Unhandled sub-format in '%s' (type = %u, bpp = %u)",
-                       gimp_filename_to_utf8 (filename),
+                       gimp_file_get_utf8_name (file),
                        info.imageType, info.bpp);
             fclose (fp);
-            return -1;
+            return NULL;
           }
         break;
 
       default:
         g_message ("Unknown image type %u for '%s'",
-                   info.imageType, gimp_filename_to_utf8 (filename));
+                   info.imageType, gimp_file_get_utf8_name (file));
         fclose (fp);
-        return -1;
+        return NULL;
     }
 
   /* Plausible but unhandled formats */
   if (info.bytes * 8 != info.bpp && info.bpp != 15)
     {
       g_message ("Unhandled sub-format in '%s' (type = %u, bpp = %u)",
-                 gimp_filename_to_utf8 (filename),
+                 gimp_file_get_utf8_name (file),
                  info.imageType, info.bpp);
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
   /* Check that we have a color map only when we need it. */
@@ -626,30 +607,30 @@ load_image (const gchar  *filename,
       g_message ("Indexed image has invalid color map type %u",
                  info.colorMapType);
       fclose (fp);
-      return -1;
+      return NULL;
     }
   else if (info.imageType != TGA_TYPE_MAPPED && info.colorMapType != 0)
     {
       g_message ("Non-indexed image has invalid color map type %u",
                  info.colorMapType);
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
   /* Skip the image ID field. */
   if (info.idLength && fseek (fp, info.idLength, SEEK_CUR))
     {
       g_message ("File '%s' is truncated or corrupted",
-                 gimp_filename_to_utf8 (filename));
+                 gimp_file_get_utf8_name (file));
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
-  image_ID = ReadImage (fp, &info, filename);
+  image = ReadImage (fp, &info, file);
 
   fclose (fp);
 
-  return image_ID;
+  return image;
 }
 
 static void
@@ -889,32 +870,46 @@ apply_colormap (guchar       *dest,
                 guint         width,
                 const guchar *cmap,
                 gboolean      alpha,
-                guint16       index)
+                guint16       colorMapIndex,
+                guint16       colorMapLength)
 {
   guint x;
+  gint  errcnt = 0;
 
-  if (alpha)
+  for (x = 0; x < width; x++)
     {
-      for (x = 0; x < width; x++)
-        {
-          *(dest++) = cmap[(*src - index) * 4];
-          *(dest++) = cmap[(*src - index) * 4 + 1];
-          *(dest++) = cmap[(*src - index) * 4 + 2];
-          *(dest++) = cmap[(*src - index) * 4 + 3];
+      guchar entryIndex = src[x] - colorMapIndex;
 
-          src++;
-        }
-    }
-  else
-    {
-      for (x = 0; x < width; x++)
-        {
-          *(dest++) = cmap[(*src - index) * 3];
-          *(dest++) = cmap[(*src - index) * 3 + 1];
-          *(dest++) = cmap[(*src - index) * 3 + 2];
+      if (src[x] < colorMapIndex || entryIndex >= colorMapLength) {
+        /* On Windows the error console can run out of resources when
+         * producing a huge amount of messages. This can happen when using
+         * fuzzed test images. This causes unresponsiveness at first and
+         * finally crashes GIMP. Eventually this needs to be fixed at the
+         * source, but for now let's limit the error messages to 10
+         * per line (this function is called once per read_line). */
+        if (errcnt < 10)
+          {
+            g_message ("Unsupported colormap entry: %u",
+                       src[x]);
+          }
+        else if (errcnt == 10)
+          {
+            g_message ("Too many colormap errors. Image may be corrupt.");
+          }
+        errcnt++;
+        entryIndex = 0;
+      }
 
-          src++;
-        }
+      if (alpha) {
+          *(dest++) = cmap[entryIndex * 4];
+          *(dest++) = cmap[entryIndex * 4 + 1];
+          *(dest++) = cmap[entryIndex * 4 + 2];
+          *(dest++) = cmap[entryIndex * 4 + 3];
+      } else {
+          *(dest++) = cmap[entryIndex * 3];
+          *(dest++) = cmap[entryIndex * 3 + 1];
+          *(dest++) = cmap[entryIndex * 3 + 2];
+      }
     }
 }
 
@@ -970,7 +965,7 @@ read_line (FILE         *fp,
       gboolean has_alpha = (info->alphaBits > 0);
 
       apply_colormap (row, buf, info->width, convert_cmap, has_alpha,
-                      info->colorMapIndex);
+                      info->colorMapIndex, info->colorMapLength);
     }
   else if (info->imageType == TGA_TYPE_MAPPED)
     {
@@ -980,17 +975,17 @@ read_line (FILE         *fp,
     }
   else
     {
-      memcpy (row, buf, info->width * bpp);
+      memcpy (row, buf, info->width * info->bytes);
     }
 }
 
-static gint32
-ReadImage (FILE        *fp,
-           tga_info    *info,
-           const gchar *filename)
+static GimpImage *
+ReadImage (FILE     *fp,
+           tga_info *info,
+           GFile    *file)
 {
-  static gint32      image_ID;
-  gint32             layer_ID;
+  GimpImage         *image;
+  GimpLayer         *layer;
   GeglBuffer        *buffer;
   guchar            *data, *buf, *row;
   GimpImageType      dtype = 0;
@@ -1009,9 +1004,9 @@ ReadImage (FILE        *fp,
       cmap_bytes = (info->colorMapSize + 7 ) / 8;
       tga_cmap = g_new (guchar, info->colorMapLength * cmap_bytes);
 
-      if (info->colorMapSize > 24)
+      if (info->colorMapSize > 24 || info->alphaBits > 0)
         {
-          /* indexed + full alpha => promoted to RGBA */
+          /* indexed + full alpha, or alpha exists => promoted to RGBA */
           itype = GIMP_RGB;
           dtype = GIMP_RGBA_IMAGE;
           convert_cmap = g_new (guchar, info->colorMapLength * 4);
@@ -1022,13 +1017,6 @@ ReadImage (FILE        *fp,
           itype = GIMP_RGB;
           dtype = GIMP_RGB_IMAGE;
           convert_cmap = g_new (guchar, info->colorMapLength * 3);
-        }
-      else if (info->alphaBits > 0)
-        {
-          /* if alpha exists here, promote to RGB */
-          itype = GIMP_RGB;
-          dtype = GIMP_RGBA_IMAGE;
-          convert_cmap = g_new (guchar, info->colorMapLength * 4);
         }
       else
         {
@@ -1079,7 +1067,7 @@ ReadImage (FILE        *fp,
                 {
                   g_message ("Unsupported colormap depth: %u",
                              info->colorMapSize);
-                  return -1;
+                  return NULL;
                 }
             }
           else
@@ -1094,36 +1082,35 @@ ReadImage (FILE        *fp,
                 {
                   g_message ("Unsupported colormap depth: %u",
                              info->colorMapSize);
-                  return -1;
+                  return NULL;
                 }
             }
         }
       else
         {
           g_message ("File '%s' is truncated or corrupted",
-                     gimp_filename_to_utf8 (filename));
-          return -1;
+                     gimp_file_get_utf8_name (file));
+          return NULL;
         }
     }
 
-  image_ID = gimp_image_new (info->width, info->height, itype);
-  gimp_image_set_filename (image_ID, filename);
+  image = gimp_image_new (info->width, info->height, itype);
 
   if (gimp_cmap)
-    gimp_image_set_colormap (image_ID, gimp_cmap, info->colorMapLength);
+    gimp_palette_set_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), gimp_cmap, info->colorMapLength * 3);
 
-  layer_ID = gimp_layer_new (image_ID,
-                             _("Background"),
-                             info->width, info->height,
-                             dtype,
-                             100,
-                             gimp_image_get_default_new_layer_mode (image_ID));
+  layer = gimp_layer_new (image,
+                          _("Background"),
+                          info->width, info->height,
+                          dtype,
+                          100,
+                          gimp_image_get_default_new_layer_mode (image));
 
-  gimp_image_insert_layer (image_ID, layer_ID, -1, 0);
+  gimp_image_insert_layer (image, layer, NULL, 0);
 
-  buffer = gimp_drawable_get_buffer (layer_ID);
+  buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
 
-  bpp = gimp_drawable_bpp (layer_ID);
+  bpp = gimp_drawable_get_bpp (GIMP_DRAWABLE (layer));
 
   /* Allocate the data. */
   max_tileheight = gimp_tile_height ();
@@ -1185,15 +1172,16 @@ ReadImage (FILE        *fp,
 
   gimp_progress_update (1.0);
 
-  return image_ID;
+  return image;
 }
 
 
 static gboolean
-save_image (const gchar  *filename,
-            gint32        image_ID,
-            gint32        drawable_ID,
-            GError      **error)
+export_image (GFile         *file,
+              GimpImage     *image,
+              GimpDrawable  *drawable,
+              GObject       *config,
+              GError       **error)
 {
   GeglBuffer    *buffer;
   const Babl    *format = NULL;
@@ -1210,22 +1198,32 @@ save_image (const gchar  *filename,
   guchar        *data;
   gint           num_colors;
   guchar        *gimp_cmap = NULL;
+  gboolean       rle;
+  TgaOrigin      origin;
 
-  buffer = gimp_drawable_get_buffer (drawable_ID);
+  g_object_get (config,
+                "rle", &rle,
+                NULL);
+  origin = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                "origin");
 
-  dtype = gimp_drawable_type (drawable_ID);
+  buffer = gimp_drawable_get_buffer (drawable);
+
+  dtype = gimp_drawable_type (drawable);
 
   width  = gegl_buffer_get_width  (buffer);
   height = gegl_buffer_get_height (buffer);
 
   gimp_progress_init_printf (_("Exporting '%s'"),
-                             gimp_filename_to_utf8 (filename));
+                             gimp_file_get_utf8_name (file));
 
-  if ((fp = g_fopen (filename, "wb")) == NULL)
+  fp = g_fopen (g_file_peek_path (file), "wb");
+
+  if (! fp)
     {
       g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
                    _("Could not open '%s' for writing: %s"),
-                   gimp_filename_to_utf8 (filename), g_strerror (errno));
+                   gimp_file_get_utf8_name (file), g_strerror (errno));
       return FALSE;
     }
 
@@ -1233,10 +1231,10 @@ save_image (const gchar  *filename,
 
   if (dtype == GIMP_INDEXED_IMAGE)
     {
-      gimp_cmap = gimp_image_get_colormap (image_ID, &num_colors);
+      gimp_cmap = gimp_palette_get_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), &num_colors, NULL);
 
       header[1] = 1; /* cmap type */
-      header[2] = (tsvals.rle) ? 9 : 1;
+      header[2] = rle ? 9 : 1;
       header[3] = header[4] = 0; /* no offset */
       header[5] = num_colors % 256;
       header[6] = num_colors / 256;
@@ -1244,10 +1242,10 @@ save_image (const gchar  *filename,
     }
   else if (dtype == GIMP_INDEXEDA_IMAGE)
     {
-      gimp_cmap = gimp_image_get_colormap (image_ID, &num_colors);
+      gimp_cmap = gimp_palette_get_colormap (gimp_image_get_palette (image), babl_format ("R'G'B' u8"), &num_colors, NULL);
 
       header[1] = 1; /* cmap type */
-      header[2] = (tsvals.rle) ? 9 : 1;
+      header[2] = rle ? 9 : 1;
       header[3] = header[4] = 0; /* no offset */
       header[5] = (num_colors + 1) % 256;
       header[6] = (num_colors + 1) / 256;
@@ -1259,19 +1257,19 @@ save_image (const gchar  *filename,
 
       if (dtype == GIMP_RGB_IMAGE || dtype == GIMP_RGBA_IMAGE)
         {
-          header[2]= (tsvals.rle) ? 10 : 2;
+          header[2]= rle ? 10 : 2;
         }
       else
         {
-          header[2]= (tsvals.rle) ? 11 : 3;
+          header[2]= rle ? 11 : 3;
         }
 
       header[3] = header[4] = header[5] = header[6] = header[7] = 0;
     }
 
   header[8]  = header[9] = 0;                           /* xorigin */
-  header[10] = tsvals.origin ? 0 : (height % 256);      /* yorigin */
-  header[11] = tsvals.origin ? 0 : (height / 256);      /* yorigin */
+  header[10] = origin ? 0 : (height % 256);      /* yorigin */
+  header[11] = origin ? 0 : (height / 256);      /* yorigin */
 
 
   header[12] = width % 256;
@@ -1287,35 +1285,35 @@ save_image (const gchar  *filename,
       format  = NULL;
       out_bpp = 1;
       header[16] = 8; /* bpp */
-      header[17] = tsvals.origin ? 0 : 0x20; /* alpha + orientation */
+      header[17] = origin ? 0 : 0x20; /* alpha + orientation */
       break;
 
     case GIMP_GRAY_IMAGE:
       format  = babl_format ("Y' u8");
       out_bpp = 1;
       header[16] = 8; /* bpp */
-      header[17] = tsvals.origin ? 0 : 0x20; /* alpha + orientation */
+      header[17] = origin ? 0 : 0x20; /* alpha + orientation */
       break;
 
     case GIMP_GRAYA_IMAGE:
       format  = babl_format ("Y'A u8");
       out_bpp = 2;
       header[16] = 16; /* bpp */
-      header[17] = tsvals.origin ? 8 : 0x28; /* alpha + orientation */
+      header[17] = origin ? 8 : 0x28; /* alpha + orientation */
       break;
 
     case GIMP_RGB_IMAGE:
       format  = babl_format ("R'G'B' u8");
       out_bpp = 3;
       header[16] = 24; /* bpp */
-      header[17] = tsvals.origin ? 0 : 0x20; /* alpha + orientation */
+      header[17] = origin ? 0 : 0x20; /* alpha + orientation */
       break;
 
     case GIMP_RGBA_IMAGE:
       format  = babl_format ("R'G'B'A u8");
       out_bpp = 4;
       header[16] = 32; /* bpp */
-      header[17] = tsvals.origin ? 8 : 0x28; /* alpha + orientation */
+      header[17] = origin ? 8 : 0x28; /* alpha + orientation */
       break;
     }
 
@@ -1357,7 +1355,7 @@ save_image (const gchar  *filename,
 
   for (row = 0; row < height; ++row)
     {
-      if (tsvals.origin)
+      if (origin)
         {
           gegl_buffer_get (buffer,
                            GEGL_RECTANGLE (0, height - (row + 1), width, 1), 1.0,
@@ -1395,7 +1393,7 @@ save_image (const gchar  *filename,
           memcpy (data, pixels, width * out_bpp);
         }
 
-      if (tsvals.rle)
+      if (rle)
         {
           rle_write (fp, data, width, out_bpp);
         }
@@ -1426,59 +1424,32 @@ save_image (const gchar  *filename,
 }
 
 static gboolean
-save_dialog (void)
+save_dialog (GimpImage     *image,
+             GimpProcedure *procedure,
+             GObject       *config)
 {
-  GtkWidget *dialog;
-  GtkWidget *label;
-  GtkWidget *toggle;
-  GtkWidget *combo;
-  GtkWidget *vbox;
-  GtkWidget *hbox;
-  gboolean   run;
+  GtkWidget    *dialog;
+  GtkWidget    *vbox;
+  gboolean      run;
 
-  dialog = gimp_export_dialog_new (_("TGA"), PLUG_IN_BINARY, SAVE_PROC);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-  gtk_container_set_border_width (GTK_CONTAINER (vbox), 12);
-  gtk_box_pack_start (GTK_BOX (gimp_export_dialog_get_content_area (dialog)),
-                      vbox, TRUE, TRUE, 0);
-  gtk_widget_show (vbox);
+  vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "tga-save-vbox",
+                                         "rle",
+                                         "origin",
+                                         NULL);
+  gtk_box_set_spacing (GTK_BOX (vbox), 12);
 
-  /*  rle  */
-  toggle = gtk_check_button_new_with_mnemonic (_("_RLE compression"));
-  gtk_box_pack_start (GTK_BOX (vbox), toggle, FALSE, FALSE, 0);
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle), tsvals.rle);
-  gtk_widget_show (toggle);
-
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (gimp_toggle_button_update),
-                    &tsvals.rle);
-
-  /*  origin  */
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
-  gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
-  gtk_widget_show (hbox);
-
-  label = gtk_label_new_with_mnemonic (_("Or_igin:"));
-  gtk_box_pack_start (GTK_BOX (hbox), label, FALSE, FALSE, 0);
-  gtk_widget_show (label);
-
-  combo = gimp_int_combo_box_new (_("Bottom left"), ORIGIN_BOTTOM_LEFT,
-                                  _("Top left"),    ORIGIN_TOP_LEFT,
-                                  NULL);
-  gtk_box_pack_start (GTK_BOX (hbox), combo, TRUE, TRUE, 0);
-  gtk_widget_show (combo);
-
-  gtk_label_set_mnemonic_widget (GTK_LABEL (label), combo);
-
-  gimp_int_combo_box_connect (GIMP_INT_COMBO_BOX (combo),
-                              tsvals.origin,
-                              G_CALLBACK (gimp_int_combo_box_get_active),
-                              &tsvals.origin);
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
+                              "tga-save-vbox",
+                              NULL);
 
   gtk_widget_show (dialog);
 
-  run = (gimp_dialog_run (GIMP_DIALOG (dialog)) == GTK_RESPONSE_OK);
+  run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
   gtk_widget_destroy (dialog);
 

@@ -228,6 +228,7 @@ gimp_data_loader_factory_new (Gimp                    *gimp,
                               GType                    data_type,
                               const gchar             *path_property_name,
                               const gchar             *writable_property_name,
+                              const gchar             *ext_property_name,
                               GimpDataNewFunc          new_func,
                               GimpDataGetStandardFunc  get_standard_func)
 {
@@ -235,12 +236,14 @@ gimp_data_loader_factory_new (Gimp                    *gimp,
   g_return_val_if_fail (g_type_is_a (data_type, GIMP_TYPE_DATA), NULL);
   g_return_val_if_fail (path_property_name != NULL, NULL);
   g_return_val_if_fail (writable_property_name != NULL, NULL);
+  g_return_val_if_fail (ext_property_name != NULL, NULL);
 
   return g_object_new (GIMP_TYPE_DATA_LOADER_FACTORY,
                        "gimp",                   gimp,
                        "data-type",              data_type,
                        "path-property-name",     path_property_name,
                        "writable-property-name", writable_property_name,
+                       "ext-property-name",      ext_property_name,
                        "new-func",               new_func,
                        "get-standard-func",      get_standard_func,
                        NULL);
@@ -312,12 +315,27 @@ gimp_data_loader_factory_load (GimpDataFactory *factory,
                                GimpContext     *context,
                                GHashTable      *cache)
 {
-  GList *path;
-  GList *writable_path;
-  GList *list;
+  const GList *ext_path;
+  GList       *path;
+  GList       *writable_path;
+  GList       *list;
 
   path          = gimp_data_factory_get_data_path          (factory);
   writable_path = gimp_data_factory_get_data_path_writable (factory);
+  ext_path      = gimp_data_factory_get_data_path_ext      (factory);
+
+  for (list = (GList *) ext_path; list; list = g_list_next (list))
+    {
+      /* Adding data from extensions.
+       * Consider these always non-writable (even when the directory is
+       * writable, since writability of extension is only taken into
+       * account for extension update).
+       */
+      gimp_data_loader_factory_load_directory (factory, context, cache,
+                                               FALSE,
+                                               list->data,
+                                               list->data);
+    }
 
   for (list = path; list; list = g_list_next (list))
     {
@@ -364,13 +382,13 @@ gimp_data_loader_factory_load_directory (GimpDataFactory *factory,
           GFileType  file_type;
           GFile     *child;
 
-          if (g_file_info_get_is_hidden (info))
+          if (g_file_info_get_attribute_boolean (info, G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN))
             {
               g_object_unref (info);
               continue;
             }
 
-          file_type = g_file_info_get_file_type (info);
+          file_type = g_file_info_get_attribute_uint32 (info, G_FILE_ATTRIBUTE_STANDARD_TYPE);
           child     = g_file_enumerator_get_child (enumerator, info);
 
           if (file_type == G_FILE_TYPE_DIRECTORY)

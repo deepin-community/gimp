@@ -34,7 +34,6 @@
 #include "gimp.h"
 #include "gimpcontext.h"
 #include "gimpdashpattern.h"
-#include "gimpmarshal.h"
 #include "gimppaintinfo.h"
 #include "gimpparamspecs.h"
 #include "gimpstrokeoptions.h"
@@ -80,7 +79,7 @@ struct _GimpStrokeOptionsPrivate
 
   /*  options for method == LIBART  */
   gdouble           width;
-  GimpUnit          unit;
+  GimpUnit         *unit;
 
   GimpCapStyle      cap_style;
   GimpJoinStyle     join_style;
@@ -145,8 +144,7 @@ gimp_stroke_options_class_init (GimpStrokeOptionsClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpStrokeOptionsClass, dash_info_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__ENUM,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_DASH_PRESET);
 
@@ -169,7 +167,7 @@ gimp_stroke_options_class_init (GimpStrokeOptionsClass *klass)
                          "unit",
                          _("Unit"),
                          NULL,
-                         TRUE, FALSE, GIMP_UNIT_PIXEL,
+                         TRUE, FALSE, gimp_unit_pixel (),
                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_CAP_STYLE,
@@ -280,7 +278,7 @@ gimp_stroke_options_set_property (GObject      *object,
       private->width = g_value_get_double (value);
       break;
     case PROP_UNIT:
-      private->unit = g_value_get_int (value);
+      private->unit = g_value_get_object (value);
       break;
     case PROP_CAP_STYLE:
       private->cap_style = g_value_get_enum (value);
@@ -338,7 +336,7 @@ gimp_stroke_options_get_property (GObject    *object,
       g_value_set_double (value, private->width);
       break;
     case PROP_UNIT:
-      g_value_set_int (value, private->unit);
+      g_value_set_object (value, private->unit);
       break;
     case PROP_CAP_STYLE:
       g_value_set_enum (value, private->cap_style);
@@ -425,6 +423,7 @@ gimp_stroke_options_new (Gimp        *gimp,
     {
       gimp_context_define_properties (GIMP_CONTEXT (options),
                                       GIMP_CONTEXT_PROP_MASK_FOREGROUND |
+                                      GIMP_CONTEXT_PROP_MASK_BACKGROUND |
                                       GIMP_CONTEXT_PROP_MASK_PATTERN,
                                       FALSE);
 
@@ -451,10 +450,10 @@ gimp_stroke_options_get_width (GimpStrokeOptions *options)
   return GET_PRIVATE (options)->width;
 }
 
-GimpUnit
+GimpUnit *
 gimp_stroke_options_get_unit (GimpStrokeOptions *options)
 {
-  g_return_val_if_fail (GIMP_IS_STROKE_OPTIONS (options), GIMP_UNIT_PIXEL);
+  g_return_val_if_fail (GIMP_IS_STROKE_OPTIONS (options), gimp_unit_pixel ());
 
   return GET_PRIVATE (options)->unit;
 }

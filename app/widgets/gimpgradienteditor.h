@@ -60,11 +60,13 @@ struct _GimpGradientEditor
   GtkWidget              *control;
 
   /*  Zoom and scrollbar  */
-  guint                   zoom_factor;
+  gdouble                 zoom_factor;
   GtkAdjustment          *scroll_data;
+  GtkGesture             *zoom_gesture;
+  gdouble                 last_zoom_scale;
 
   /*  Gradient view  */
-  gint                    view_last_x;
+  gint                    view_last_x;          /* -1 if mouse has left focus */
   gboolean                view_button_down;
 
   /*  Gradient control  */
@@ -74,14 +76,14 @@ struct _GimpGradientEditor
   GradientEditorDragMode  control_drag_mode;    /* What is being dragged? */
   guint32                 control_click_time;   /* Time when mouse was pressed */
   gboolean                control_compress;     /* Compressing/expanding handles */
-  gint                    control_last_x;       /* Last mouse position when dragging */
+  gint                    control_last_x;       /* Last mouse position, -1 if out of focus */
   gdouble                 control_last_gx;      /* Last position (wrt gradient) when dragging */
   gdouble                 control_orig_pos;     /* Original click position when dragging */
 
   GimpGradientBlendColorSpace  blend_color_space;
 
   /*  Saved colors  */
-  GimpRGB                 saved_colors[GRAD_NUM_COLORS];
+  GeglColor              *saved_colors[GRAD_NUM_COLORS];
 
   /*  Color dialog  */
   GtkWidget              *color_dialog;
@@ -112,7 +114,9 @@ void        gimp_gradient_editor_edit_left_color  (GimpGradientEditor   *editor)
 void        gimp_gradient_editor_edit_right_color (GimpGradientEditor   *editor);
 
 void        gimp_gradient_editor_zoom             (GimpGradientEditor   *editor,
-                                                   GimpZoomType          zoom_type);
+                                                   GimpZoomType          zoom_type,
+                                                   gdouble               delta,
+                                                   gdouble               zoom_focus_x);
 
 
 #endif  /* __GIMP_GRADIENT_EDITOR_H__ */

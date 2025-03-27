@@ -26,6 +26,7 @@
 #include <gegl.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 
 #include "core-types.h"
@@ -335,25 +336,25 @@ gimp_mirror_update_strokes (GimpSymmetry *sym,
 
   g_list_free_full (sym->strokes, g_free);
   strokes = g_list_prepend (strokes,
-                            g_memdup (origin, sizeof (GimpCoords)));
+                            g_memdup2 (origin, sizeof (GimpCoords)));
 
   if (mirror->horizontal_mirror)
     {
-      coords = g_memdup (origin, sizeof (GimpCoords));
+      coords = g_memdup2 (origin, sizeof (GimpCoords));
       coords->y = 2.0 * mirror_position_y - origin->y;
       strokes = g_list_prepend (strokes, coords);
     }
 
   if (mirror->vertical_mirror)
     {
-      coords = g_memdup (origin, sizeof (GimpCoords));
+      coords = g_memdup2 (origin, sizeof (GimpCoords));
       coords->x = 2.0 * mirror_position_x - origin->x;
       strokes = g_list_prepend (strokes, coords);
     }
 
   if (mirror->point_symmetry)
     {
-      coords = g_memdup (origin, sizeof (GimpCoords));
+      coords = g_memdup2 (origin, sizeof (GimpCoords));
       coords->x = 2.0 * mirror_position_x - origin->x;
       coords->y = 2.0 * mirror_position_y - origin->y;
       strokes = g_list_prepend (strokes, coords);
@@ -434,7 +435,7 @@ gimp_mirror_add_guide (GimpMirror          *mirror,
   gimp  = image->gimp;
 
   guide = gimp_guide_custom_new (orientation,
-                                 gimp->next_guide_ID++,
+                                 gimp->next_guide_id++,
                                  GIMP_GUIDE_STYLE_MIRROR);
 
   if (orientation == GIMP_ORIENTATION_HORIZONTAL)

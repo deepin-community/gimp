@@ -31,7 +31,7 @@
 #define NUMCOLORRADIO 2
 
 static GtkWidget *colorradio[NUMCOLORRADIO];
-static GtkObject *colornoiseadjust = NULL;
+static GtkWidget *colornoiseadjust = NULL;
 
 void
 color_restore (void)
@@ -39,8 +39,8 @@ color_restore (void)
   gtk_toggle_button_set_active
     (GTK_TOGGLE_BUTTON (colorradio[pcvals.color_type]), TRUE);
 
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (colornoiseadjust),
-                            pcvals.color_noise);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (colornoiseadjust),
+                             pcvals.color_noise);
 }
 
 int
@@ -53,7 +53,7 @@ void
 create_colorpage (GtkNotebook *notebook)
 {
   GtkWidget *vbox;
-  GtkWidget *label, *table;
+  GtkWidget *label;
   GtkWidget *frame;
 
   label = gtk_label_new_with_mnemonic (_("Co_lor"));
@@ -64,7 +64,7 @@ create_colorpage (GtkNotebook *notebook)
 
   frame = gimp_int_radio_group_new (TRUE, _("Color"),
                                     G_CALLBACK (gimp_radio_button_update),
-                                    &pcvals.color_type, 0,
+                                    &pcvals.color_type, NULL, 0,
 
                                     _("A_verage under brush"),
                                     COLOR_TYPE_AVERAGE, &colorradio[COLOR_TYPE_AVERAGE],
@@ -83,22 +83,17 @@ create_colorpage (GtkNotebook *notebook)
   gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
 
-  table = gtk_table_new (1, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_box_pack_start (GTK_BOX (vbox), table, FALSE, FALSE, 0);
-  gtk_widget_show (table);
-
   colornoiseadjust =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 0,
-                          _("Color _noise:"),
-                          100, -1, pcvals.color_noise,
-                          0.0, 100.0, 1.0, 5.0, 0,
-                          TRUE, 0, 0,
-                          _("Adds random noise to the color"),
-                          NULL);
+    gimp_scale_entry_new (_("Color _noise:"), pcvals.color_noise, 0.0, 100.0, 0);
+  gimp_help_set_help_data (colornoiseadjust,
+                           _("Adds random noise to the color"),
+                           NULL);
   g_signal_connect (colornoiseadjust, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
+                    G_CALLBACK (gimpressionist_scale_entry_update_double),
                     &pcvals.color_noise);
+  gtk_box_pack_start (GTK_BOX (vbox), colornoiseadjust, FALSE, FALSE, 6);
+  gtk_widget_show (colornoiseadjust);
+
 
   color_restore ();
 

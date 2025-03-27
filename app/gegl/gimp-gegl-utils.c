@@ -22,16 +22,48 @@
 
 #include <string.h>
 
+#include <cairo.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
 #include <gegl-plugin.h>
 
+#include "libgimpcolor/gimpcolor.h"
+
 #include "gimp-gegl-types.h"
 
+#include "core/gimppattern.h"
 #include "core/gimpprogress.h"
 
+#include "gimp-babl.h"
 #include "gimp-gegl-loops.h"
 #include "gimp-gegl-utils.h"
 
+
+/*  local function prototypes  */
+
+static gboolean   gimp_gegl_op_blacklisted    (const gchar        *name,
+                                               const gchar        *categories);
+static GList    * gimp_gegl_get_op_subclasses (GType               type,
+                                               GList              *classes);
+static gint       gimp_gegl_compare_op_names  (GeglOperationClass *a,
+                                               GeglOperationClass *b);
+
+
+/*  public functions  */
+
+GList *
+gimp_gegl_get_op_classes (void)
+{
+  GList *operations;
+
+  operations = gimp_gegl_get_op_subclasses (GEGL_TYPE_OPERATION, NULL);
+
+  operations = g_list_sort (operations,
+                            (GCompareFunc)
+                            gimp_gegl_compare_op_names);
+
+  return operations;
+}
 
 GType
 gimp_gegl_get_op_enum_type (const gchar *operation,
@@ -59,19 +91,6 @@ gimp_gegl_get_op_enum_type (const gchar *operation,
   g_object_unref (op);
 
   return G_TYPE_FROM_CLASS (G_PARAM_SPEC_ENUM (pspec)->enum_class);
-}
-
-GeglColor *
-gimp_gegl_color_new (const GimpRGB *rgb)
-{
-  GeglColor *color;
-
-  g_return_val_if_fail (rgb != NULL, NULL);
-
-  color = gegl_color_new (NULL);
-  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), rgb);
-
-  return color;
 }
 
 static void
@@ -106,13 +125,25 @@ gimp_gegl_progress_connect (GeglNode     *node,
   g_return_if_fail (GIMP_IS_PROGRESS (progress));
   g_return_if_fail (text != NULL);
 
-  g_signal_connect (node, "progress",
-                    G_CALLBACK (gimp_gegl_progress_callback),
-                    progress);
+  g_signal_connect_object (node, "progress",
+                           G_CALLBACK (gimp_gegl_progress_callback),
+                           progress, 0);
 
   g_object_set_data_full (G_OBJECT (node),
                           "gimp-progress-text", g_strdup (text),
                           (GDestroyNotify) g_free);
+}
+
+void
+gimp_gegl_progress_disconnect (GeglNode     *node,
+                               GimpProgress *progress)
+{
+  g_return_if_fail (GEGL_IS_NODE (node));
+  g_return_if_fail (GIMP_IS_PROGRESS (progress));
+
+  g_signal_handlers_disconnect_by_func (node,
+                                        gimp_gegl_progress_callback,
+                                        progress);
 }
 
 gboolean
@@ -304,6 +335,96 @@ gimp_gegl_buffer_dup (GeglBuffer *buffer)
   return new_buffer;
 }
 
+GeglBuffer *
+gimp_gegl_buffer_resize (GeglBuffer   *buffer,
+                         gint          new_width,
+                         gint          new_height,
+                         gint          offset_x,
+                         gint          offset_y,
+                         GeglColor    *color,
+                         GimpPattern  *pattern,
+                         gint          pattern_offset_x,
+                         gint          pattern_offset_y)
+{
+  GeglBuffer          *new_buffer;
+  gboolean             intersect;
+  GeglRectangle        copy_rect;
+  const GeglRectangle *extent;
+  const Babl          *format;
+
+  g_return_val_if_fail (GEGL_IS_BUFFER (buffer), NULL);
+
+  extent     = gegl_buffer_get_extent (buffer);
+  format     = gegl_buffer_get_format (buffer);
+  new_buffer = gegl_buffer_new (GEGL_RECTANGLE (0, 0, new_width, new_height),
+                                format);
+
+  intersect = gegl_rectangle_intersect (&copy_rect,
+                                        GEGL_RECTANGLE (0, 0, extent->width,
+                                                        extent->height),
+                                        GEGL_RECTANGLE (offset_x, offset_y,
+                                                        new_width, new_height));
+
+  if (! intersect                   ||
+      copy_rect.width  != new_width ||
+      copy_rect.height != new_height)
+    {
+      /*  Clear the new buffer if needed and color/pattern is given */
+      if (pattern)
+        {
+          GeglBuffer       *src_buffer;
+          GeglBuffer       *dest_buffer;
+          GimpColorProfile *src_profile;
+          GimpColorProfile *dest_profile;
+
+          src_buffer = gimp_pattern_create_buffer (pattern);
+
+          src_profile  = gimp_babl_format_get_color_profile (
+                           gegl_buffer_get_format (src_buffer));
+          dest_profile = gimp_babl_format_get_color_profile (
+                           gegl_buffer_get_format (new_buffer));
+
+          if (gimp_color_transform_can_gegl_copy (src_profile, dest_profile))
+            {
+              dest_buffer = g_object_ref (src_buffer);
+            }
+          else
+            {
+              dest_buffer = gegl_buffer_new (gegl_buffer_get_extent (src_buffer),
+                                             gegl_buffer_get_format (new_buffer));
+
+              gimp_gegl_convert_color_profile (src_buffer,  NULL, src_profile,
+                                               dest_buffer, NULL, dest_profile,
+                                               GIMP_COLOR_RENDERING_INTENT_PERCEPTUAL,
+                                               TRUE, NULL);
+            }
+
+          g_object_unref (src_profile);
+          g_object_unref (dest_profile);
+
+          gegl_buffer_set_pattern (new_buffer, NULL, dest_buffer,
+                                   pattern_offset_x, pattern_offset_y);
+
+          g_object_unref (src_buffer);
+          g_object_unref (dest_buffer);
+        }
+      else if (color)
+        {
+          gegl_buffer_set_color (new_buffer, NULL, color);
+        }
+    }
+
+  if (intersect && copy_rect.width && copy_rect.height)
+    {
+      /*  Copy the pixels in the intersection  */
+      gimp_gegl_buffer_copy (buffer, &copy_rect, GEGL_ABYSS_NONE, new_buffer,
+                             GEGL_RECTANGLE (copy_rect.x - offset_x,
+                                             copy_rect.y - offset_y, 0, 0));
+    }
+
+  return new_buffer;
+}
+
 gboolean
 gimp_gegl_buffer_set_extent (GeglBuffer          *buffer,
                              const GeglRectangle *extent)
@@ -345,4 +466,262 @@ gimp_gegl_buffer_set_extent (GeglBuffer          *buffer,
     }
 
   return gegl_buffer_set_extent (buffer, extent);
+}
+
+
+/*  private functions  */
+
+static gboolean
+gimp_gegl_op_blacklisted (const gchar *name,
+                          const gchar *categories_str)
+{
+  static const gchar * const category_blacklist[] =
+  {
+    "compositors",
+    "core",
+    "debug",
+    "display",
+    "hidden",
+    "input",
+    "output",
+    "programming",
+    "transform",
+    "video"
+  };
+  static const gchar * const name_blacklist[] =
+  {
+    /* these ops are already added to the menus via filters-actions */
+    "gegl:alien-map",
+    "gegl:antialias",
+    "gegl:apply-lens",
+    "gegl:bayer-matrix",
+    "gegl:bloom",
+    "gegl:bump-map",
+    "gegl:c2g",
+    "gegl:cartoon",
+    "gegl:cell-noise",
+    "gegl:channel-mixer",
+    "gegl:checkerboard",
+    "gegl:color",
+    "gegl:color-enhance",
+    "gegl:color-exchange",
+    "gegl:color-rotate",
+    "gegl:color-temperature",
+    "gegl:color-to-alpha",
+    "gegl:component-extract",
+    "gegl:convolution-matrix",
+    "gegl:cubism",
+    "gegl:deinterlace",
+    "gegl:difference-of-gaussians",
+    "gegl:diffraction-patterns",
+    "gegl:displace",
+    "gegl:distance-transform",
+    "gegl:dither",
+    "gegl:dropshadow",
+    "gegl:edge",
+    "gegl:edge-laplace",
+    "gegl:edge-neon",
+    "gegl:edge-sobel",
+    "gegl:emboss",
+    "gegl:engrave",
+    "gegl:exposure",
+    "gegl:fattal02",
+    "gegl:focus-blur",
+    "gegl:fractal-trace",
+    "gegl:gaussian-blur",
+    "gegl:gaussian-blur-selective",
+    "gegl:gegl",
+    "gegl:grid",
+    "gegl:high-pass",
+    "gegl:hue-chroma",
+    "gegl:illusion",
+    "gegl:json:dropshadow2",
+    "gegl:json:grey2",
+    "gegl:image-gradient",
+    "gegl:invert-linear",
+    "gegl:invert-gamma",
+    "gegl:lens-blur",
+    "gegl:lens-distortion",
+    "gegl:lens-flare",
+    "gegl:linear-sinusoid",
+    "gegl:long-shadow",
+    "gegl:mantiuk06",
+    "gegl:maze",
+    "gegl:mean-curvature-blur",
+    "gegl:median-blur",
+    "gegl:mirrors",
+    "gegl:mono-mixer",
+    "gegl:mosaic",
+    "gegl:motion-blur-circular",
+    "gegl:motion-blur-linear",
+    "gegl:motion-blur-zoom",
+    "gegl:newsprint",
+    "gegl:noise-cie-lch",
+    "gegl:noise-hsv",
+    "gegl:noise-hurl",
+    "gegl:noise-pick",
+    "gegl:noise-reduction",
+    "gegl:noise-rgb",
+    "gegl:noise-slur",
+    "gegl:noise-solid",
+    "gegl:noise-spread",
+    "gegl:normal-map",
+    "gegl:oilify",
+    "gegl:panorama-projection",
+    "gegl:perlin-noise",
+    "gegl:photocopy",
+    "gegl:pixelize",
+    "gegl:plasma",
+    "gegl:polar-coordinates",
+    "gegl:recursive-transform",
+    "gegl:red-eye-removal",
+    "gegl:reinhard05",
+    "gegl:rgb-clip",
+    "gegl:ripple",
+    "gegl:saturation",
+    "gegl:sepia",
+    "gegl:shadows-highlights",
+    "gegl:shift",
+    "gegl:simplex-noise",
+    "gegl:sinus",
+    "gegl:slic",
+    "gegl:snn-mean",
+    "gegl:softglow",
+    "gegl:spherize",
+    "gegl:spiral",
+    "gegl:stereographic-projection",
+    "gegl:stretch-contrast",
+    "gegl:stretch-contrast-hsv",
+    "gegl:stress",
+    "gegl:supernova",
+    "gegl:texturize-canvas",
+    "gegl:tile-glass",
+    "gegl:tile-paper",
+    "gegl:tile-seamless",
+    "gegl:unsharp-mask",
+    "gegl:value-invert",
+    "gegl:value-propagate",
+    "gegl:variable-blur",
+    "gegl:video-degradation",
+    "gegl:vignette",
+    "gegl:waterpixels",
+    "gegl:wavelet-blur",
+    "gegl:waves",
+    "gegl:whirl-pinch",
+    "gegl:wind",
+
+    /* these ops are blacklisted for other reasons */
+    "gegl:contrast-curve",
+    "gegl:convert-format", /* pointless */
+    "gegl:ditto", /* pointless */
+    "gegl:fill-path",
+    "gegl:gray", /* we use gimp's op */
+    "gegl:hstack", /* deleted from GEGL and replaced by gegl:pack */
+    "gegl:introspect", /* pointless */
+    "gegl:layer", /* we use gimp's ops */
+    "gegl:lcms-from-profile", /* not usable here */
+    "gegl:linear-gradient", /* we use the blend tool */
+    "gegl:map-absolute", /* pointless */
+    "gegl:map-relative", /* pointless */
+    "gegl:matting-global", /* used in the foreground select tool */
+    "gegl:matting-levin", /* used in the foreground select tool */
+    "gegl:opacity", /* poinless */
+    "gegl:pack", /* pointless */
+    "gegl:path",
+    "gegl:posterize", /* we use gimp's op */
+    "gegl:radial-gradient", /* we use the blend tool */
+    "gegl:rectangle", /* pointless */
+    "gegl:seamless-clone", /* used in the seamless clone tool */
+    "gegl:text", /* we use gimp's text rendering */
+    "gegl:threshold", /* we use gimp's op */
+    "gegl:tile", /* pointless */
+    "gegl:unpremul", /* pointless */
+    "gegl:vector-stroke",
+  };
+
+  gchar **categories;
+  gint    i;
+
+  /* Operations with no name are abstract base classes */
+  if (! name)
+    return TRUE;
+
+  /* use this flag to include all ops for testing */
+  if (g_getenv ("GIMP_TESTING_NO_GEGL_BLACKLIST"))
+    return FALSE;
+
+  if (g_str_has_prefix (name, "gimp"))
+    return TRUE;
+
+  for (i = 0; i < G_N_ELEMENTS (name_blacklist); i++)
+    {
+      if (! strcmp (name, name_blacklist[i]))
+        return TRUE;
+    }
+
+  if (! categories_str)
+    return FALSE;
+
+  categories = g_strsplit (categories_str, ":", 0);
+
+  for (i = 0; i < G_N_ELEMENTS (category_blacklist); i++)
+    {
+      gint j;
+
+      for (j = 0; categories[j]; j++)
+        if (! strcmp (categories[j], category_blacklist[i]))
+          {
+            g_strfreev (categories);
+            return TRUE;
+          }
+    }
+
+  g_strfreev (categories);
+
+  return FALSE;
+}
+
+/* Builds a GList of the class structures of all subtypes of type.
+ */
+static GList *
+gimp_gegl_get_op_subclasses (GType  type,
+                             GList *classes)
+{
+  GeglOperationClass *klass;
+  GType              *ops;
+  const gchar        *categories;
+  guint               n_ops;
+  gint                i;
+
+  if (! type)
+    return classes;
+
+  klass = GEGL_OPERATION_CLASS (g_type_class_ref (type));
+  ops = g_type_children (type, &n_ops);
+
+  categories = gegl_operation_class_get_key (klass, "categories");
+
+  if (! gimp_gegl_op_blacklisted (klass->name, categories))
+    classes = g_list_prepend (classes, klass);
+
+  for (i = 0; i < n_ops; i++)
+    classes = gimp_gegl_get_op_subclasses (ops[i], classes);
+
+  if (ops)
+    g_free (ops);
+
+  return classes;
+}
+
+static gint
+gimp_gegl_compare_op_names (GeglOperationClass *a,
+                            GeglOperationClass *b)
+{
+  const gchar *name_a = gegl_operation_class_get_key (a, "title");
+  const gchar *name_b = gegl_operation_class_get_key (b, "title");
+
+  if (! name_a) name_a = a->name;
+  if (! name_b) name_b = b->name;
+
+  return strcmp (name_a, name_b);
 }

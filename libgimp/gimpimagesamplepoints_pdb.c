@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -36,9 +38,9 @@
 
 /**
  * gimp_image_add_sample_point:
- * @image_ID: The image.
- * @position_x: The guide'sample points x-offset from left of image.
- * @position_y: The guide'sample points y-offset from top of image.
+ * @image: The image.
+ * @position_x: The sample point's x-offset from left of image.
+ * @position_y: The sample point's y-offset from top of image.
  *
  * Add a sample point to an image.
  *
@@ -50,34 +52,38 @@
  *
  * Since: 2.10
  **/
-gint32
-gimp_image_add_sample_point (gint32 image_ID,
-                             gint   position_x,
-                             gint   position_y)
+guint
+gimp_image_add_sample_point (GimpImage *image,
+                             gint       position_x,
+                             gint       position_y)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 sample_point_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  guint sample_point = 0;
 
-  return_vals = gimp_run_procedure ("gimp-image-add-sample-point",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, position_x,
-                                    GIMP_PDB_INT32, position_y,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_INT, position_x,
+                                          G_TYPE_INT, position_y,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    sample_point_ID = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-add-sample-point",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    sample_point = GIMP_VALUES_GET_UINT (return_vals, 1);
 
-  return sample_point_ID;
+  gimp_value_array_unref (return_vals);
+
+  return sample_point;
 }
 
 /**
  * gimp_image_delete_sample_point:
- * @image_ID: The image.
- * @sample_point_ID: The ID of the sample point to be removed.
+ * @image: The image.
+ * @sample_point: The ID of the sample point to be removed.
  *
  * Deletes a sample point from an image.
  *
@@ -89,30 +95,34 @@ gimp_image_add_sample_point (gint32 image_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_image_delete_sample_point (gint32 image_ID,
-                                gint32 sample_point_ID)
+gimp_image_delete_sample_point (GimpImage *image,
+                                guint      sample_point)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-delete-sample-point",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, sample_point_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_UINT, sample_point,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-delete-sample-point",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_find_next_sample_point:
- * @image_ID: The image.
- * @sample_point_ID: The ID of the current sample point (0 if first invocation).
+ * @image: The image.
+ * @sample_point: The ID of the current sample point (0 if first invocation).
  *
  * Find next sample point on an image.
  *
@@ -127,33 +137,37 @@ gimp_image_delete_sample_point (gint32 image_ID,
  *
  * Since: 2.10
  **/
-gint32
-gimp_image_find_next_sample_point (gint32 image_ID,
-                                   gint32 sample_point_ID)
+guint
+gimp_image_find_next_sample_point (GimpImage *image,
+                                   guint      sample_point)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 next_sample_point_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  guint next_sample_point = 0;
 
-  return_vals = gimp_run_procedure ("gimp-image-find-next-sample-point",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, sample_point_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_UINT, sample_point,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    next_sample_point_ID = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-find-next-sample-point",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    next_sample_point = GIMP_VALUES_GET_UINT (return_vals, 1);
 
-  return next_sample_point_ID;
+  gimp_value_array_unref (return_vals);
+
+  return next_sample_point;
 }
 
 /**
  * gimp_image_get_sample_point_position:
- * @image_ID: The image.
- * @sample_point_ID: The guide.
- * @position_y: The sample points's position relative to top of image.
+ * @image: The image.
+ * @sample_point: The guide.
+ * @position_y: (out): The sample point's y-offset relative to top of image.
  *
  * Get position of a sample point on an image.
  *
@@ -161,32 +175,36 @@ gimp_image_find_next_sample_point (gint32 image_ID,
  * returns the position of the sample point relative to the top and
  * left of the image.
  *
- * Returns: The sample points's position relative to top of image.
+ * Returns: The sample point's x-offset relative to left of image.
  *
  * Since: 2.10
  **/
 gint
-gimp_image_get_sample_point_position (gint32  image_ID,
-                                      gint32  sample_point_ID,
-                                      gint   *position_y)
+gimp_image_get_sample_point_position (GimpImage *image,
+                                      guint      sample_point,
+                                      gint      *position_y)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gint position_x = G_MININT;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-sample-point-position",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, sample_point_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_UINT, sample_point,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-sample-point-position",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
     {
-      position_x = return_vals[1].data.d_int32;
-      *position_y = return_vals[2].data.d_int32;
+      position_x = GIMP_VALUES_GET_INT (return_vals, 1);
+      *position_y = GIMP_VALUES_GET_INT (return_vals, 2);
     }
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return position_x;
 }

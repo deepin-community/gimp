@@ -145,7 +145,6 @@ gimp_gradient_select_run_callback (GimpPdbDialog  *dialog,
   GimpGradientSegment *seg      = NULL;
   gdouble             *values, *pv;
   gdouble              pos, delta;
-  GimpRGB              color;
   gint                 i;
   GimpArray           *array;
   GimpValueArray      *return_vals;
@@ -159,17 +158,19 @@ gimp_gradient_select_run_callback (GimpPdbDialog  *dialog,
 
   while (i--)
     {
+      GeglColor *color = NULL;
+
       seg = gimp_gradient_get_color_at (gradient, dialog->caller_context,
                                         seg, pos, FALSE,
                                         GIMP_GRADIENT_BLEND_RGB_PERCEPTUAL,
                                         &color);
 
-      *pv++ = color.r;
-      *pv++ = color.g;
-      *pv++ = color.b;
-      *pv++ = color.a;
+      gegl_color_get_pixel (color, babl_format ("R'G'B'A double"), pv);
 
+      pv  += 4;
       pos += delta;
+
+      g_object_unref (color);
     }
 
   array = gimp_array_new ((guint8 *) values,
@@ -183,10 +184,9 @@ gimp_gradient_select_run_callback (GimpPdbDialog  *dialog,
                                         dialog->caller_context,
                                         NULL, error,
                                         dialog->callback_name,
-                                        G_TYPE_STRING,         gimp_object_get_name (object),
-                                        GIMP_TYPE_INT32,       array->length / sizeof (gdouble),
-                                        GIMP_TYPE_FLOAT_ARRAY, array,
-                                        GIMP_TYPE_INT32,       closing,
+                                        GIMP_TYPE_RESOURCE,     object,
+                                        GIMP_TYPE_DOUBLE_ARRAY, array,
+                                        G_TYPE_BOOLEAN,         closing,
                                         G_TYPE_NONE);
 
   gimp_array_free (array);

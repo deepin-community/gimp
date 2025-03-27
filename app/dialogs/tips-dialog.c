@@ -42,24 +42,13 @@ enum
   RESPONSE_NEXT     = 2
 };
 
-
-/* eek, see bug 762279 */
-GtkLinkButtonUriFunc
-gtk_link_button_set_uri_hook      (GtkLinkButtonUriFunc func,
-                                   gpointer             data,
-                                   GDestroyNotify       destroy);
-static void  tips_uri_hook        (GtkLinkButton *button,
-                                   const gchar   *link_,
-                                   gpointer       user_data);
-
-
-static void  tips_dialog_set_tip  (GimpTip       *tip);
-static void  tips_dialog_response (GtkWidget     *dialog,
-                                   gint           response);
-static void  tips_dialog_destroy  (GtkWidget     *widget,
-                                   GimpGuiConfig *config);
-static void  more_button_clicked  (GtkWidget     *button,
-                                   Gimp          *gimp);
+static void     tips_dialog_set_tip  (GimpTip       *tip);
+static void     tips_dialog_response (GtkWidget     *dialog,
+                                      gint           response);
+static void     tips_dialog_destroy  (GtkWidget     *widget,
+                                      GimpGuiConfig *config);
+static gboolean more_button_clicked  (GtkWidget     *button,
+                                      Gimp          *gimp);
 
 
 static GtkWidget *tips_dialog = NULL;
@@ -138,20 +127,23 @@ tips_dialog_create (Gimp *gimp)
 
   tips_dialog = gimp_dialog_new (_("GIMP Tip of the Day"),
                                  "gimp-tip-of-the-day",
-                                 NULL, 0, NULL, NULL,
+                                 NULL, 0, gimp_standard_help_func,
+                                 GIMP_HELP_TIPS_DIALOG,
                                  NULL);
 
   button = gtk_dialog_add_button (GTK_DIALOG (tips_dialog),
                                   _("_Previous Tip"), RESPONSE_PREVIOUS);
-  gtk_button_set_image (GTK_BUTTON (button),
-                        gtk_image_new_from_icon_name (GIMP_ICON_GO_PREVIOUS,
-                                                      GTK_ICON_SIZE_BUTTON));
+  image = gtk_image_new_from_icon_name (GIMP_ICON_GO_PREVIOUS,
+                                        GTK_ICON_SIZE_BUTTON);
+  gtk_button_set_image (GTK_BUTTON (button), image);
+  gtk_widget_set_visible (image, TRUE);
 
   button = gtk_dialog_add_button (GTK_DIALOG (tips_dialog),
                                   _("_Next Tip"), RESPONSE_NEXT);
-  gtk_button_set_image (GTK_BUTTON (button),
-                        gtk_image_new_from_icon_name (GIMP_ICON_GO_NEXT,
-                                                      GTK_ICON_SIZE_BUTTON));
+  image = gtk_image_new_from_icon_name (GIMP_ICON_GO_NEXT,
+                                        GTK_ICON_SIZE_BUTTON);
+  gtk_button_set_image (GTK_BUTTON (button), image);
+  gtk_widget_set_visible (image, TRUE);
 
   gtk_dialog_set_response_sensitive (GTK_DIALOG (tips_dialog),
                                      RESPONSE_NEXT, tips_count > 1);
@@ -182,13 +174,12 @@ tips_dialog_create (Gimp *gimp)
 
   image = gtk_image_new_from_icon_name (GIMP_ICON_DIALOG_INFORMATION,
                                         GTK_ICON_SIZE_DIALOG);
-  gtk_misc_set_alignment (GTK_MISC (image), 0.5, 0.0);
+  gtk_widget_set_valign (image, GTK_ALIGN_START);
   gtk_box_pack_start (GTK_BOX (hbox), image, FALSE, FALSE, 0);
   gtk_widget_show (image);
 
-  gtk_container_set_focus_chain (GTK_CONTAINER (hbox), NULL);
-
   tip_label = gtk_label_new (NULL);
+  gtk_label_set_max_width_chars (GTK_LABEL (tip_label), 70);
   gtk_label_set_selectable (GTK_LABEL (tip_label), TRUE);
   gtk_label_set_justify (GTK_LABEL (tip_label), GTK_JUSTIFY_LEFT);
   gtk_label_set_line_wrap (GTK_LABEL (tip_label), TRUE);
@@ -206,10 +197,7 @@ tips_dialog_create (Gimp *gimp)
   gtk_widget_show (more_button);
   gtk_box_pack_start (GTK_BOX (hbox), more_button, FALSE, FALSE, 0);
 
-  /* this is deprecated but better than showing two URIs, see bug #762279 */
-  gtk_link_button_set_uri_hook (tips_uri_hook, NULL, NULL);
-
-  g_signal_connect (more_button, "clicked",
+  g_signal_connect (more_button, "activate-link",
                     G_CALLBACK (more_button_clicked),
                     gimp);
 
@@ -268,22 +256,15 @@ tips_dialog_set_tip (GimpTip *tip)
   gtk_widget_set_sensitive (more_button, tip->help_id != NULL);
 }
 
-static void
+static gboolean
 more_button_clicked (GtkWidget *button,
                      Gimp      *gimp)
 {
   GimpTip *tip = current_tip->data;
 
-  g_signal_stop_emission_by_name (button, "clicked");
-
   if (tip->help_id)
     gimp_help (gimp, NULL, NULL, tip->help_id);
-}
 
-static void
-tips_uri_hook (GtkLinkButton *button,
-               const gchar   *link_,
-               gpointer       user_data)
-{
-  /* do nothing */
+  /* Do not run the link set at construction. */
+  return TRUE;
 }

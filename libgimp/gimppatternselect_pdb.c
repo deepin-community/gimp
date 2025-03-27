@@ -22,49 +22,59 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
 /**
  * SECTION: gimppatternselect
  * @title: gimppatternselect
- * @short_description: Functions providing a pattern selection dialog.
+ * @short_description: Methods of a pattern chooser dialog
  *
- * Functions providing a pattern selection dialog.
+ * A dialog letting a user choose a pattern.  Read more at
+ * gimpfontselect.
  **/
 
 
 /**
  * gimp_patterns_popup:
- * @pattern_callback: The callback PDB proc to call when pattern selection is made.
+ * @pattern_callback: The callback PDB proc to call when the user chooses a pattern.
  * @popup_title: Title of the pattern selection dialog.
- * @initial_pattern: The name of the pattern to set as the first selected.
+ * @initial_pattern: (nullable): The pattern to set as the initial choice.
+ * @parent_window: (nullable): An optional parent window handle for the popup to be set transient to.
  *
  * Invokes the Gimp pattern selection.
  *
- * This procedure opens the pattern selection dialog.
+ * Opens the pattern selection dialog.
  *
  * Returns: TRUE on success.
  **/
 gboolean
 gimp_patterns_popup (const gchar *pattern_callback,
                      const gchar *popup_title,
-                     const gchar *initial_pattern)
+                     GimpPattern *initial_pattern,
+                     GBytes      *parent_window)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-patterns-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, pattern_callback,
-                                    GIMP_PDB_STRING, popup_title,
-                                    GIMP_PDB_STRING, initial_pattern,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, pattern_callback,
+                                          G_TYPE_STRING, popup_title,
+                                          GIMP_TYPE_PATTERN, initial_pattern,
+                                          G_TYPE_BYTES, parent_window,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-patterns-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -75,25 +85,29 @@ gimp_patterns_popup (const gchar *pattern_callback,
  *
  * Close the pattern selection dialog.
  *
- * This procedure closes an opened pattern selection dialog.
+ * Closes an open pattern selection dialog.
  *
  * Returns: TRUE on success.
  **/
 gboolean
 gimp_patterns_close_popup (const gchar *pattern_callback)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-patterns-close-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, pattern_callback,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, pattern_callback,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-patterns-close-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -101,7 +115,7 @@ gimp_patterns_close_popup (const gchar *pattern_callback)
 /**
  * gimp_patterns_set_popup:
  * @pattern_callback: The name of the callback registered for this pop-up.
- * @pattern_name: The name of the pattern to set as selected.
+ * @pattern: The pattern to set as selected.
  *
  * Sets the current pattern in a pattern selection dialog.
  *
@@ -111,21 +125,25 @@ gimp_patterns_close_popup (const gchar *pattern_callback)
  **/
 gboolean
 gimp_patterns_set_popup (const gchar *pattern_callback,
-                         const gchar *pattern_name)
+                         GimpPattern *pattern)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-patterns-set-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, pattern_callback,
-                                    GIMP_PDB_STRING, pattern_name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, pattern_callback,
+                                          GIMP_TYPE_PATTERN, pattern,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-patterns-set-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

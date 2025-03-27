@@ -24,8 +24,8 @@
 #include "config/gimpdisplayconfig.h"
 
 
-#define GIMP_CONFIG_DEFAULT_THEME          "Dark"
-#define GIMP_CONFIG_DEFAULT_ICON_THEME     "Symbolic"
+#define GIMP_CONFIG_DEFAULT_THEME          "Default"
+#define GIMP_CONFIG_DEFAULT_ICON_THEME     "Default"
 
 
 #define GIMP_TYPE_GUI_CONFIG            (gimp_gui_config_get_type ())
@@ -39,53 +39,53 @@ typedef struct _GimpGuiConfigClass GimpGuiConfigClass;
 
 struct _GimpGuiConfig
 {
-  GimpDisplayConfig      parent_instance;
+  GimpDisplayConfig    parent_instance;
 
-  gboolean               edit_non_visible;
-  gboolean               move_tool_changes_active;
-  gint                   filter_tool_max_recent;
-  gboolean               filter_tool_use_last_settings;
-  gboolean               filter_tool_show_color_options;
-  gboolean               trust_dirty_flag;
-  gboolean               save_device_status;
-  gboolean               devices_share_tool;
-  gboolean               save_session_info;
-  gboolean               restore_session;
-  gboolean               restore_monitor;
-  gboolean               save_tool_options;
-  gboolean               compact_sliders;
-  gboolean               show_tooltips;
-  gboolean               tearoff_menus;
-  gboolean               can_change_accels;
-  gboolean               save_accels;
-  gboolean               restore_accels;
-  gint                   last_opened_size;
-  guint64                max_new_image_size;
-  gboolean               toolbox_color_area;
-  gboolean               toolbox_foo_area;
-  gboolean               toolbox_image_area;
-  gboolean               toolbox_wilber;
-  gboolean               toolbox_groups;
-  GimpToolGroupMenuMode  toolbox_group_menu_mode;
-  gchar                 *theme_path;
-  gchar                 *theme;
-  gchar                 *icon_theme_path;
-  gchar                 *icon_theme;
-  GimpIconSize           icon_size;
-  gboolean               use_help;
-  gboolean               show_help_button;
-  gchar                 *help_locales;
-  GimpHelpBrowserType    help_browser;
-  gboolean               user_manual_online;
-  gchar                 *user_manual_online_uri;
-  gboolean               search_show_unavailable;
-  gint                   action_history_size;
-  GimpWindowHint         dock_window_hint;
-  GimpHandedness         cursor_handedness;
+  gboolean             edit_non_visible;
+  gboolean             move_tool_changes_active;
+  gint                 filter_tool_max_recent;
+  gboolean             filter_tool_use_last_settings;
+  gboolean             trust_dirty_flag;
+  gboolean             save_device_status;
+  gboolean             devices_share_tool;
+  gboolean             save_session_info;
+  gboolean             restore_session;
+  gboolean             restore_monitor;
+  gboolean             save_tool_options;
+  gboolean             save_accels;
+  gboolean             restore_accels;
+  gint                 last_opened_size;
+  guint64              max_new_image_size;
+  gboolean             toolbox_color_area;
+  gboolean             toolbox_foo_area;
+  gboolean             toolbox_image_area;
+  gboolean             toolbox_wilber;
+  gboolean             toolbox_groups;
+  gchar               *theme_path;
+  gchar               *theme;
+  GimpThemeScheme      theme_scheme;
+  gchar               *icon_theme_path;
+  gchar               *icon_theme;
+  gboolean             prefer_symbolic_icons;
+  gdouble              font_relative_size;
+  gboolean             override_icon_size;
+  GimpIconSize         custom_icon_size;
+  gboolean             use_help;
+  gboolean             show_help_button;
+  gchar               *help_locales;
+  GimpHelpBrowserType  help_browser;
+  gboolean             user_manual_online;
+  gchar               *user_manual_online_uri;
+  gint                 action_history_size;
+  GimpWindowHint       dock_window_hint;
+  GimpHandedness       cursor_handedness;
+  gboolean             custom_title_bar;
+  gboolean             show_welcome_dialog;
 
   /* experimental playground */
   gboolean             playground_npd_tool;
   gboolean             playground_seamless_clone_tool;
+  gboolean             playground_paint_select_tool;
 
   /* saved in sessionrc */
   gboolean             hide_docks;
@@ -93,18 +93,20 @@ struct _GimpGuiConfig
   gboolean             show_tabs;
   GimpPosition         tabs_position;
   gint                 last_tip_shown;
+
+  /* Currently ignored since "gtk-can-change-accels" settings got deprecated in
+   * GTK+ 3.10.
+   */
+  gboolean             can_change_accels;
 };
 
 struct _GimpGuiConfigClass
 {
   GimpDisplayConfigClass  parent_class;
-
-  void (* size_changed) (GimpGuiConfig *config);
 };
 
 
 GType  gimp_gui_config_get_type (void) G_GNUC_CONST;
 
-GimpIconSize gimp_gui_config_detect_icon_size (GimpGuiConfig *config);
 
 #endif /* GIMP_GUI_CONFIG_H__ */

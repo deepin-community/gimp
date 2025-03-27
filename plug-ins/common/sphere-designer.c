@@ -66,21 +66,6 @@
 #define MAXATMOS 1
 #define MAXCOLPERGRADIENT 5
 
-static void query (void);
-static void run   (const gchar      *name,
-                   gint              nparams,
-                   const GimpParam  *param,
-                   gint             *nreturn_vals,
-                   GimpParam       **return_vals);
-
-const GimpPlugInInfo PLUG_IN_INFO =
-{
-  NULL,   /* init_proc  */
-  NULL,   /* quit_proc  */
-  query,  /* query_proc */
-  run,    /* run_proc   */
-};
-
 enum
 {
   TRIANGLE,
@@ -271,6 +256,63 @@ struct camera_t
   double fov, tilt;
 };
 
+
+typedef struct _Designer      Designer;
+typedef struct _DesignerClass DesignerClass;
+
+struct _Designer
+{
+  GimpPlugIn parent_instance;
+};
+
+struct _DesignerClass
+{
+  GimpPlugInClass parent_class;
+};
+
+
+#define DESIGNER_TYPE  (designer_get_type ())
+#define DESIGNER(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), DESIGNER_TYPE, Designer))
+
+GType                   designer_get_type         (void) G_GNUC_CONST;
+
+static GList          * designer_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * designer_create_procedure (GimpPlugIn           *plug_in,
+                                                   const gchar          *name);
+
+static GimpValueArray * designer_run              (GimpProcedure        *procedure,
+                                                   GimpRunMode           run_mode,
+                                                   GimpImage            *image,
+                                                   GimpDrawable        **drawables,
+                                                   GimpProcedureConfig  *config,
+                                                   gpointer              run_data);
+
+static inline void vset          (GimpVector4          *v,
+                                  gdouble               a,
+                                  gdouble               b,
+                                  gdouble               c);
+static void        restartrender (void);
+static void        drawcolor1    (GtkWidget            *widget);
+static void        drawcolor2    (GtkWidget            *widget);
+static gboolean    render        (void);
+static void        realrender    (GimpDrawable         *drawable);
+static void        fileselect    (GtkFileChooserAction  action,
+                                  GtkWidget            *parent);
+static gint        traceray      (ray                  *r,
+                                  GimpVector4          *col,
+                                  gint                  level,
+                                  gdouble               imp);
+static gdouble     turbulence    (gdouble              *point,
+                                  gdouble               lofreq,
+                                  gdouble               hifreq);
+
+
+G_DEFINE_TYPE (Designer, designer, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (DESIGNER_TYPE)
+DEFINE_STD_SET_I18N
+
+
 static GtkWidget *drawarea = NULL;
 
 static guchar          *img;
@@ -302,38 +344,18 @@ static struct textures_t textures[] =
   { 0, NULL,          0       }
 };
 
-static inline void vset        (GimpVector4          *v,
-                                gdouble               a,
-                                gdouble               b,
-                                gdouble               c);
-static void      restartrender (void);
-static void      drawcolor1    (GtkWidget            *widget);
-static void      drawcolor2    (GtkWidget            *widget);
-static gboolean  render        (void);
-static void      realrender    (gint32                drawable_ID);
-static void      fileselect    (GtkFileChooserAction  action,
-                                GtkWidget            *parent);
-static gint      traceray      (ray                  *r,
-                                GimpVector4          *col,
-                                gint                  level,
-                                gdouble               imp);
-static gdouble   turbulence    (gdouble              *point,
-                                gdouble               lofreq,
-                                gdouble               hifreq);
-
-
 #define COLORBUTTONWIDTH  30
 #define COLORBUTTONHEIGHT 20
 
 static GtkTreeView *texturelist = NULL;
 
-static GtkObject *scalexscale, *scaleyscale, *scalezscale;
-static GtkObject *rotxscale, *rotyscale, *rotzscale;
-static GtkObject *posxscale, *posyscale, *poszscale;
-static GtkObject *scalescale;
-static GtkObject *turbulencescale;
-static GtkObject *amountscale;
-static GtkObject *expscale;
+static GtkWidget *scalexscale, *scaleyscale, *scalezscale;
+static GtkWidget *rotxscale, *rotyscale, *rotzscale;
+static GtkWidget *posxscale, *posyscale, *poszscale;
+static GtkWidget *scalescale;
+static GtkWidget *turbulencescale;
+static GtkWidget *amountscale;
+static GtkWidget *expscale;
 static GtkWidget *typemenu;
 static GtkWidget *texturemenu;
 
@@ -346,6 +368,69 @@ static gdouble   g[B + B + 2][3];
 static gboolean  start = TRUE;
 static GRand    *gr;
 
+
+static void
+designer_class_init (DesignerClass *klass)
+{
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
+
+  plug_in_class->query_procedures = designer_query_procedures;
+  plug_in_class->create_procedure = designer_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
+}
+
+static void
+designer_init (Designer *designer)
+{
+}
+
+static GList *
+designer_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (PLUG_IN_PROC));
+}
+
+static GimpProcedure *
+designer_create_procedure (GimpPlugIn  *plug_in,
+                           const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, PLUG_IN_PROC))
+    {
+      procedure = gimp_image_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            designer_run, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "RGB*, GRAY*");
+      gimp_procedure_set_sensitivity_mask (procedure,
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLE);
+
+      gimp_procedure_set_menu_label (procedure, _("Sphere _Designer..."));
+      gimp_procedure_add_menu_path (procedure, "<Image>/Filters/Render");
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Create an image of a textured "
+                                          "sphere"),
+                                        "This plug-in can be used to create "
+                                        "textured and/or bumpmapped spheres, "
+                                        "and uses a small lightweight "
+                                        "raytracer to perform the task with "
+                                        "good quality",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Vidar Madsen",
+                                      "Vidar Madsen",
+                                      "1999");
+
+      gimp_procedure_add_bytes_aux_argument (procedure, "settings-data",
+                                             "Settings data",
+                                             "TODO: eventually we must implement proper args for every settings",
+                                             GIMP_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
 
 static void
 init (void)
@@ -1445,11 +1530,11 @@ calcphong (common * obj, ray * r2, GimpVector4 * col)
 static int
 traceray (ray * r, GimpVector4 * col, gint level, gdouble imp)
 {
-  gint     i, b = -1;
-  gdouble  t = -1.0, min = 0.0;
-  common  *obj, *bobj = NULL;
-  gint     hits = 0;
-  GimpVector4   p;
+  gint         i, b = -1;
+  gdouble      t = -1.0, min = 0.0;
+  common      *obj, *bobj = NULL;
+  gint         hits = 0;
+  GimpVector4  p = { 0, 0, 0, 0 };
 
   if ((level == 0) || (imp < 0.005))
     {
@@ -1746,22 +1831,22 @@ mklabel (texture * t)
   static gchar tmps[100];
 
   if (t->majtype == 0)
-    strcpy (tmps, _("Texture"));
+    g_strlcpy (tmps, _("Texture"), sizeof(tmps));
   else if (t->majtype == 1)
-    strcpy (tmps, _("Bumpmap"));
+    g_strlcpy (tmps, _("Bumpmap"), sizeof(tmps));
   else if (t->majtype == 2)
-    strcpy (tmps, _("Light"));
+    g_strlcpy (tmps, _("Light"), sizeof(tmps));
   else
-    strcpy (tmps, "<unknown>");
+    g_strlcpy (tmps, "<unknown>", sizeof(tmps));
   if ((t->majtype == 0) || (t->majtype == 1))
     {
-      strcat (tmps, " / ");
+      g_strlcat (tmps, " / ", sizeof(tmps));
       l = textures;
       while (l->s)
         {
           if (t->type == l->n)
             {
-              strcat (tmps, gettext (l->s));
+              g_strlcat (tmps, gettext (l->s), sizeof(tmps));
               break;
             }
           l++;
@@ -1823,25 +1908,24 @@ setvals (texture *t)
     return;
 
   noupdate = TRUE;
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (amountscale), t->amount);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (amountscale), t->amount);
 
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (scalescale), t->oscale);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (scalescale), t->oscale);
 
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (scalexscale), t->scale.x);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (scaleyscale), t->scale.y);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (scalezscale), t->scale.z);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (scalexscale), t->scale.x);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (scaleyscale), t->scale.y);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (scalezscale), t->scale.z);
 
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (rotxscale), t->rotate.x);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (rotyscale), t->rotate.y);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (rotzscale), t->rotate.z);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (rotxscale), t->rotate.x);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (rotyscale), t->rotate.y);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (rotzscale), t->rotate.z);
 
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (posxscale), t->translate.x);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (posyscale), t->translate.y);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (poszscale), t->translate.z);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (posxscale), t->translate.x);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (posyscale), t->translate.y);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (poszscale), t->translate.z);
 
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (turbulencescale),
-                            t->turbulence.x);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (expscale), t->exp);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (turbulencescale), t->turbulence.x);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (expscale), t->exp);
 
   drawcolor1 (NULL);
   drawcolor2 (NULL);
@@ -2212,7 +2296,7 @@ fileselect (GtkFileChooserAction  action,
 
                                      NULL);
 
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                                GTK_RESPONSE_OK,
                                                GTK_RESPONSE_CANCEL,
                                                -1);
@@ -2298,21 +2382,12 @@ initworld (void)
 }
 
 static gboolean
-expose_event (GtkWidget      *widget,
-              GdkEventExpose *event)
+draw (GtkWidget *widget,
+      cairo_t   *cr)
 {
-  cairo_t *cr;
-
-  cr = gdk_cairo_create (gtk_widget_get_window (widget));
-
-  gdk_cairo_region (cr, event->region);
-  cairo_clip (cr);
-
   cairo_set_source_surface (cr, buffer, 0.0, 0.0);
 
   cairo_paint (cr);
-
-  cairo_destroy (cr);
 
   return TRUE;
 }
@@ -2378,25 +2453,25 @@ getscales (GtkWidget *widget,
   if (!t)
     return;
 
-  t->amount = gtk_adjustment_get_value (GTK_ADJUSTMENT (amountscale));
-  t->exp = gtk_adjustment_get_value (GTK_ADJUSTMENT (expscale));
+  t->amount = gimp_label_spin_get_value (GIMP_LABEL_SPIN (amountscale));
+  t->exp = gimp_label_spin_get_value (GIMP_LABEL_SPIN (expscale));
 
-  f = gtk_adjustment_get_value (GTK_ADJUSTMENT (turbulencescale));
+  f = gimp_label_spin_get_value (GIMP_LABEL_SPIN (turbulencescale));
   vset (&t->turbulence, f, f, f);
 
-  t->oscale = gtk_adjustment_get_value (GTK_ADJUSTMENT (scalescale));
+  t->oscale = gimp_label_spin_get_value (GIMP_LABEL_SPIN (scalescale));
 
-  t->scale.x = gtk_adjustment_get_value (GTK_ADJUSTMENT (scalexscale));
-  t->scale.y = gtk_adjustment_get_value (GTK_ADJUSTMENT (scaleyscale));
-  t->scale.z = gtk_adjustment_get_value (GTK_ADJUSTMENT (scalezscale));
+  t->scale.x = gimp_label_spin_get_value (GIMP_LABEL_SPIN (scalexscale));
+  t->scale.y = gimp_label_spin_get_value (GIMP_LABEL_SPIN (scaleyscale));
+  t->scale.z = gimp_label_spin_get_value (GIMP_LABEL_SPIN (scalezscale));
 
-  t->rotate.x = gtk_adjustment_get_value (GTK_ADJUSTMENT (rotxscale));
-  t->rotate.y = gtk_adjustment_get_value (GTK_ADJUSTMENT (rotyscale));
-  t->rotate.z = gtk_adjustment_get_value (GTK_ADJUSTMENT (rotzscale));
+  t->rotate.x = gimp_label_spin_get_value (GIMP_LABEL_SPIN (rotxscale));
+  t->rotate.y = gimp_label_spin_get_value (GIMP_LABEL_SPIN (rotyscale));
+  t->rotate.z = gimp_label_spin_get_value (GIMP_LABEL_SPIN (rotzscale));
 
-  t->translate.x = gtk_adjustment_get_value (GTK_ADJUSTMENT (posxscale));
-  t->translate.y = gtk_adjustment_get_value (GTK_ADJUSTMENT (posyscale));
-  t->translate.z = gtk_adjustment_get_value (GTK_ADJUSTMENT (poszscale));
+  t->translate.x = gimp_label_spin_get_value (GIMP_LABEL_SPIN (posxscale));
+  t->translate.y = gimp_label_spin_get_value (GIMP_LABEL_SPIN (posyscale));
+  t->translate.z = gimp_label_spin_get_value (GIMP_LABEL_SPIN (poszscale));
 
   restartrender ();
 }
@@ -2409,16 +2484,20 @@ color1_changed (GimpColorButton *button)
 
   if (t)
     {
-      GimpRGB color;
+      GeglColor *color;
+      gdouble    rgba[4];
 
-      gimp_color_button_get_color (button, &color);
+      color = gimp_color_button_get_color (button);
+      gegl_color_get_pixel (color, babl_format ("R'G'B'A double"), rgba);
 
-      t->color1.x = color.r;
-      t->color1.y = color.g;
-      t->color1.z = color.b;
-      t->color1.w = color.a;
+      t->color1.x = rgba[0];
+      t->color1.y = rgba[1];
+      t->color1.z = rgba[2];
+      t->color1.w = rgba[3];
 
       restartrender ();
+
+      g_object_unref (color);
     }
 }
 
@@ -2429,16 +2508,20 @@ color2_changed (GimpColorButton *button)
 
   if (t)
     {
-      GimpRGB color;
+      GeglColor *color;
+      gdouble    rgba[4];
 
-      gimp_color_button_get_color (button, &color);
+      color = gimp_color_button_get_color (button);
+      gegl_color_get_pixel (color, babl_format ("R'G'B'A double"), rgba);
 
-      t->color2.x = color.r;
-      t->color2.y = color.g;
-      t->color2.z = color.b;
-      t->color2.w = color.a;
+      t->color2.x = rgba[0];
+      t->color2.y = rgba[1];
+      t->color2.z = rgba[2];
+      t->color2.w = rgba[3];
 
       restartrender ();
+
+      g_object_unref (color);
     }
 }
 
@@ -2446,9 +2529,9 @@ static void
 drawcolor1 (GtkWidget *w)
 {
   static GtkWidget *lastw = NULL;
-
-  GimpRGB  color;
-  texture *t = currenttexture ();
+  GeglColor        *color;
+  gdouble           rgba[4];
+  texture          *t = currenttexture ();
 
   if (w)
     lastw = w;
@@ -2460,19 +2543,24 @@ drawcolor1 (GtkWidget *w)
   if (!t)
     return;
 
-  gimp_rgba_set (&color,
-                 t->color1.x, t->color1.y, t->color1.z, t->color1.w);
+  color = gegl_color_new (NULL);
+  rgba[0] = t->color1.x;
+  rgba[1] = t->color1.y;
+  rgba[2] = t->color1.z;
+  rgba[3] = t->color1.w;
+  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), rgba);
 
-  gimp_color_button_set_color (GIMP_COLOR_BUTTON (w), &color);
+  gimp_color_button_set_color (GIMP_COLOR_BUTTON (w), color);
+  g_object_unref (color);
 }
 
 static void
 drawcolor2 (GtkWidget *w)
 {
   static GtkWidget *lastw = NULL;
-
-  GimpRGB  color;
-  texture *t = currenttexture ();
+  GeglColor        *color;
+  gdouble           rgba[4];
+  texture          *t = currenttexture ();
 
   if (w)
     lastw = w;
@@ -2484,10 +2572,15 @@ drawcolor2 (GtkWidget *w)
   if (!t)
     return;
 
-  gimp_rgba_set (&color,
-                 t->color2.x, t->color2.y, t->color2.z, t->color2.w);
+  color = gegl_color_new (NULL);
+  rgba[0] = t->color2.x;
+  rgba[1] = t->color2.y;
+  rgba[2] = t->color2.z;
+  rgba[3] = t->color2.w;
+  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), rgba);
 
-  gimp_color_button_set_color (GIMP_COLOR_BUTTON (w), &color);
+  gimp_color_button_set_color (GIMP_COLOR_BUTTON (w), color);
+  g_object_unref (color);
 }
 
 static gboolean do_run = FALSE;
@@ -2544,14 +2637,14 @@ makewindow (void)
   GtkWidget  *window;
   GtkWidget  *main_hbox;
   GtkWidget  *main_vbox;
-  GtkWidget  *table;
+  GtkWidget  *grid;
   GtkWidget  *frame;
   GtkWidget  *scrolled;
   GtkWidget  *hbox;
   GtkWidget  *vbox;
   GtkWidget  *button;
   GtkWidget  *list;
-  GimpRGB     rgb = { 0, 0, 0, 0 };
+  GeglColor  *color = gegl_color_new ("transparent");
 
   window = gimp_dialog_new (_("Sphere Designer"), PLUG_IN_ROLE,
                             NULL, 0,
@@ -2563,7 +2656,7 @@ makewindow (void)
 
                             NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (window),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (window),
                                            RESPONSE_RESET,
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
@@ -2599,8 +2692,8 @@ makewindow (void)
   gtk_widget_set_size_request (drawarea, PREVIEWSIZE, PREVIEWSIZE);
   gtk_widget_show (drawarea);
 
-  g_signal_connect (drawarea, "expose-event",
-                    G_CALLBACK (expose_event), NULL);
+  g_signal_connect (drawarea, "draw",
+                    G_CALLBACK (draw), NULL);
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
   gtk_box_set_homogeneous (GTK_BOX (hbox), TRUE);
@@ -2695,12 +2788,11 @@ makewindow (void)
   gtk_container_add (GTK_CONTAINER (frame), vbox);
   gtk_widget_show (vbox);
 
-  table = gtk_table_new (7, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 2);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 2, 12);
-  gtk_box_pack_start (GTK_BOX (vbox), table, FALSE, FALSE, 0);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 2);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+  gtk_box_pack_start (GTK_BOX (vbox), grid, FALSE, FALSE, 0);
+  gtk_widget_show (grid);
 
   typemenu = gimp_int_combo_box_new (_("Texture"), 0,
                                      _("Bump"),    1,
@@ -2708,11 +2800,11 @@ makewindow (void)
                                      NULL);
   gimp_int_combo_box_connect (GIMP_INT_COMBO_BOX (typemenu), 0,
                               G_CALLBACK (selecttype),
-                              NULL);
+                              NULL, NULL);
 
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 0,
-                             _("Type:"), 0.0, 0.5,
-                             typemenu, 2, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, 0,
+                            _("Type:"), 0.0, 0.5,
+                            typemenu, 2);
 
   texturemenu = g_object_new (GIMP_TYPE_INT_COMBO_BOX, NULL);
   {
@@ -2727,20 +2819,20 @@ makewindow (void)
 
   gimp_int_combo_box_connect (GIMP_INT_COMBO_BOX (texturemenu), 0,
                               G_CALLBACK (selecttexture),
-                              NULL);
+                              NULL, NULL);
 
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 1,
-                             _("Texture:"), 0.0, 0.5,
-                             texturemenu, 2, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, 1,
+                            _("Texture:"), 0.0, 0.5,
+                            texturemenu, 2);
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 2,
-                             _("Colors:"), 0.0, 0.5,
-                             hbox, 2, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, 2,
+                            _("Colors:"), 0.0, 0.5,
+                            hbox, 2);
 
   button = gimp_color_button_new (_("Color Selection Dialog"),
-                                  COLORBUTTONWIDTH, COLORBUTTONHEIGHT, &rgb,
-                                  GIMP_COLOR_AREA_FLAT);
+                                  COLORBUTTONWIDTH, COLORBUTTONHEIGHT,
+                                  color, GIMP_COLOR_AREA_FLAT);
   gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
   gtk_widget_show (button);
   drawcolor1 (button);
@@ -2750,8 +2842,8 @@ makewindow (void)
                     NULL);
 
   button = gimp_color_button_new (_("Color Selection Dialog"),
-                                  COLORBUTTONWIDTH, COLORBUTTONHEIGHT, &rgb,
-                                  GIMP_COLOR_AREA_FLAT);
+                                  COLORBUTTONWIDTH, COLORBUTTONHEIGHT,
+                                  color, GIMP_COLOR_AREA_FLAT);
   gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
   gtk_widget_show (button);
   drawcolor2 (button);
@@ -2760,34 +2852,35 @@ makewindow (void)
                     G_CALLBACK (color2_changed),
                     NULL);
 
-  scalescale = gimp_scale_entry_new (GTK_TABLE (table), 0, 3, _("Scale:"),
-                                     100, -1, 1.0, 0.0, 10.0, 0.1, 1.0, 1,
-                                     TRUE, 0.0, 0.0, NULL, NULL);
+  scalescale = gimp_scale_entry_new (_("Scale:"), 1.0, 0.0, 10.0, 1);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (scalescale), 0.1, 1.0);
   g_signal_connect (scalescale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
+  gtk_grid_attach (GTK_GRID (grid), scalescale, 0, 3, 3, 1);
+  gtk_widget_show (scalescale);
 
-  turbulencescale = gimp_scale_entry_new (GTK_TABLE (table), 0, 4,
-                                          _("Turbulence:"),
-                                          100, -1, 1.0, 0.0, 10.0, 0.1, 1.0, 1,
-                                          TRUE, 0.0, 0.0, NULL, NULL);
+  turbulencescale = gimp_scale_entry_new (_("Turbulence:"), 1.0, 0.0, 10.0, 1);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (turbulencescale), 0.1, 1.0);
   g_signal_connect (turbulencescale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
+  gtk_grid_attach (GTK_GRID (grid), turbulencescale, 0, 4, 3, 1);
+  gtk_widget_show (turbulencescale);
 
-  amountscale = gimp_scale_entry_new (GTK_TABLE (table), 0, 5, _("Amount:"),
-                                       100, -1, 1.0, 0.0, 1.0, 0.01, 0.1, 2,
-                                       TRUE, 0.0, 0.0, NULL, NULL);
+  amountscale = gimp_scale_entry_new (_("Amount:"), 1.0, 0.0, 1.0, 2);
   g_signal_connect (amountscale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
+  gtk_grid_attach (GTK_GRID (grid), amountscale, 0, 5, 3, 1);
+  gtk_widget_show (amountscale);
 
-  expscale = gimp_scale_entry_new (GTK_TABLE (table), 0, 6, _("Exp.:"),
-                                   100, -1, 1.0, 0.0, 1.0, 0.01, 0.1, 2,
-                                   TRUE, 0.0, 0.0, NULL, NULL);
+  expscale = gimp_scale_entry_new (_("Exp.:"), 1.0, 0.0, 1.0, 2);
   g_signal_connect (expscale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
+  gtk_grid_attach (GTK_GRID (grid), expscale, 0, 6, 3, 1);
+  gtk_widget_show (expscale);
 
   frame = gimp_frame_new (_("Transformations"));
   gtk_box_pack_start (GTK_BOX (main_hbox), frame, TRUE, TRUE, 0);
@@ -2797,77 +2890,90 @@ makewindow (void)
   gtk_container_add (GTK_CONTAINER (frame), vbox);
   gtk_widget_show (vbox);
 
-  table = gtk_table_new (9, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 2);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 2, 12);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 5, 12);
-  gtk_box_pack_start (GTK_BOX (vbox), table, FALSE, FALSE, 0);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 2);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+  gtk_box_pack_start (GTK_BOX (vbox), grid, FALSE, FALSE, 0);
+  gtk_widget_show (grid);
 
-  scalexscale = gimp_scale_entry_new (GTK_TABLE (table), 0, 0, _("Scale X:"),
-                                      100, -1, 1.0, 0.0, 10.0, 0.1, 1.0, 2,
-                                      TRUE, 0.0, 0.0, NULL, NULL);
+  scalexscale = gimp_scale_entry_new (_("Scale X:"), 1.0, 0.0, 10.0, 2);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (scalexscale), 0.1, 1.0);
   g_signal_connect (scalexscale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
+  gtk_grid_attach (GTK_GRID (grid), scalexscale, 0, 0, 3, 1);
+  gtk_widget_show (scalexscale);
 
-  scaleyscale = gimp_scale_entry_new (GTK_TABLE (table), 0, 1, _("Scale Y:"),
-                                      100, -1, 1.0, 0.0, 10.0, 0.1, 1.0, 2,
-                                      TRUE, 0.0, 0.0, NULL, NULL);
+  scaleyscale = gimp_scale_entry_new (_("Scale Y:"), 1.0, 0.0, 10.0, 2);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (scaleyscale), 0.1, 1.0);
   g_signal_connect (scaleyscale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
-  scalezscale = gimp_scale_entry_new (GTK_TABLE (table), 0, 2, _("Scale Z:"),
-                                      100, -1, 1.0, 0.0, 10.0, 0.1, 1.0, 2,
-                                      TRUE, 0.0, 0.0, NULL, NULL);
+  gtk_grid_attach (GTK_GRID (grid), scaleyscale, 0, 1, 3, 1);
+  gtk_widget_show (scaleyscale);
+
+  scalezscale = gimp_scale_entry_new (_("Scale Z:"), 1.0, 0.0, 10.0, 2);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (scalezscale), 0.1, 1.0);
+  gtk_widget_set_margin_bottom (gimp_labeled_get_label (GIMP_LABELED (scalezscale)), 6);
+  gtk_widget_set_margin_bottom (gimp_scale_entry_get_range (GIMP_SCALE_ENTRY (scalezscale)), 6);
+  gtk_widget_set_margin_bottom (gimp_label_spin_get_spin_button (GIMP_LABEL_SPIN (scalezscale)), 6);
   g_signal_connect (scalezscale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
+  gtk_grid_attach (GTK_GRID (grid), scalezscale, 0, 2, 3, 1);
+  gtk_widget_show (scalezscale);
 
-  rotxscale = gimp_scale_entry_new (GTK_TABLE (table), 0, 3, _("Rotate X:"),
-                                    100, -1, 0.0, 0.0, 360.0, 1.0, 10.0, 1,
-                                    TRUE, 0.0, 0.0, NULL, NULL);
+  rotxscale = gimp_scale_entry_new (_("Rotate X:"), 0.0, 0.0, 360.0, 1);
   g_signal_connect (rotxscale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
+  gtk_grid_attach (GTK_GRID (grid), rotxscale, 0, 3, 3, 1);
+  gtk_widget_show (rotxscale);
 
-  rotyscale = gimp_scale_entry_new (GTK_TABLE (table), 0, 4, _("Rotate Y:"),
-                                    100, -1, 0.0, 0.0, 360.0, 1.0, 10.0, 1,
-                                    TRUE, 0.0, 0.0, NULL, NULL);
+  rotyscale = gimp_scale_entry_new (_("Rotate Y:"), 0.0, 0.0, 360.0, 1);
   g_signal_connect (rotyscale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
+  gtk_grid_attach (GTK_GRID (grid), rotyscale, 0, 4, 3, 1);
+  gtk_widget_show (rotyscale);
 
-  rotzscale = gimp_scale_entry_new (GTK_TABLE (table), 0, 5, _("Rotate Z:"),
-                                    100, -1, 0.0, 0.0, 360.0, 1.0, 10.0, 1,
-                                    TRUE, 0.0, 0.0, NULL, NULL);
+  rotzscale = gimp_scale_entry_new (_("Rotate Z:"), 0.0, 0.0, 360.0, 1);
+  gtk_widget_set_margin_bottom (gimp_labeled_get_label (GIMP_LABELED (rotzscale)), 6);
+  gtk_widget_set_margin_bottom (gimp_scale_entry_get_range (GIMP_SCALE_ENTRY (rotzscale)), 6);
+  gtk_widget_set_margin_bottom (gimp_label_spin_get_spin_button (GIMP_LABEL_SPIN (rotzscale)), 6);
   g_signal_connect (rotzscale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
+  gtk_grid_attach (GTK_GRID (grid), rotzscale, 0, 5, 3, 1);
+  gtk_widget_show (rotzscale);
 
-  posxscale = gimp_scale_entry_new (GTK_TABLE (table), 0, 6, _("Position X:"),
-                                    100, -1, 0.0, -20.0, 20.0, 0.1, 1.0, 1,
-                                    TRUE, 0.0, 0.0, NULL, NULL);
+  posxscale = gimp_scale_entry_new (_("Position X:"), 0.0, -20.0, 20.0, 1);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (posxscale), 0.1, 1.0);
   g_signal_connect (posxscale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
+  gtk_grid_attach (GTK_GRID (grid), posxscale, 0, 6, 3, 1);
+  gtk_widget_show (posxscale);
 
-  posyscale = gimp_scale_entry_new (GTK_TABLE (table), 0, 7, _("Position Y:"),
-                                    100, -1, 0.0, -20.0, 20.0, 0.1, 1.0, 1,
-                                    TRUE, 0.0, 0.0, NULL, NULL);
+  posyscale = gimp_scale_entry_new (_("Position Y:"), 0.0, -20.0, 20.0, 1);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (posyscale), 0.1, 1.0);
   g_signal_connect (posyscale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
+  gtk_grid_attach (GTK_GRID (grid), posyscale, 0, 7, 3, 1);
+  gtk_widget_show (posyscale);
 
-  poszscale = gimp_scale_entry_new (GTK_TABLE (table), 0, 8, _("Position Z:"),
-                                    100, -1, 0.0, -20.0, 20.0, 0.1, 1.0, 1,
-                                    TRUE, 0.0, 0.0, NULL, NULL);
+  poszscale = gimp_scale_entry_new (_("Position Z:"), 0.0, -20.0, 20.0, 1);
+  gimp_label_spin_set_increments (GIMP_LABEL_SPIN (poszscale), 0.1, 1.0);
   g_signal_connect (poszscale, "value-changed",
                     G_CALLBACK (getscales),
                     NULL);
+  gtk_grid_attach (GTK_GRID (grid), poszscale, 0, 8, 3, 1);
+  gtk_widget_show (poszscale);
 
   gtk_widget_show (window);
+
+  g_object_unref (color);
 
   return window;
 }
@@ -2943,7 +3049,7 @@ render (void)
 }
 
 static void
-realrender (gint32 drawable_ID)
+realrender (GimpDrawable *drawable)
 {
   GeglBuffer  *src_buffer;
   GeglBuffer  *dest_buffer;
@@ -2962,23 +3068,23 @@ realrender (gint32 drawable_ID)
   r.v1.z = -10.0;
   r.v2.z = 0.0;
 
-  if (! gimp_drawable_mask_intersect (drawable_ID,
+  if (! gimp_drawable_mask_intersect (drawable,
                                       &x1, &y1, &width, &height))
     return;
 
-  src_buffer  = gimp_drawable_get_buffer (drawable_ID);
-  dest_buffer = gimp_drawable_get_shadow_buffer (drawable_ID);
+  src_buffer  = gimp_drawable_get_buffer (drawable);
+  dest_buffer = gimp_drawable_get_shadow_buffer (drawable);
 
-  if (gimp_drawable_is_rgb (drawable_ID))
+  if (gimp_drawable_is_rgb (drawable))
     {
-      if (gimp_drawable_has_alpha (drawable_ID))
+      if (gimp_drawable_has_alpha (drawable))
         format = babl_format ("R'G'B'A u8");
       else
         format = babl_format ("R'G'B' u8");
     }
   else
     {
-      if (gimp_drawable_has_alpha (drawable_ID))
+      if (gimp_drawable_has_alpha (drawable))
         format = babl_format ("Y'A u8");
       else
         format = babl_format ("Y' u8");
@@ -3037,41 +3143,14 @@ realrender (gint32 drawable_ID)
   g_object_unref (src_buffer);
   g_object_unref (dest_buffer);
 
-  gimp_drawable_merge_shadow (drawable_ID, TRUE);
-  gimp_drawable_update (drawable_ID, x1, y1, width, height);
-}
-
-static void
-query (void)
-{
-  static const GimpParamDef args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode", "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",    "Input image (unused)"         },
-    { GIMP_PDB_DRAWABLE, "drawable", "Input drawable"               }
-  };
-
-  gimp_install_procedure (PLUG_IN_PROC,
-                          N_("Create an image of a textured sphere"),
-                          "This plug-in can be used to create textured and/or "
-                          "bumpmapped spheres, and uses a small lightweight "
-                          "raytracer to perform the task with good quality",
-                          "Vidar Madsen",
-                          "Vidar Madsen",
-                          "1999",
-                          N_("Sphere _Designer..."),
-                          "RGB*, GRAY*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args), 0,
-                          args, NULL);
-
-  gimp_plugin_menu_register (PLUG_IN_PROC, "<Image>/Filters/Render");
+  gimp_drawable_merge_shadow (drawable, TRUE);
+  gimp_drawable_update (drawable, x1, y1, width, height);
 }
 
 static gboolean
-sphere_main (gint32 drawable_ID)
+sphere_main (GimpDrawable *drawable)
 {
-  gimp_ui_init (PLUG_IN_BINARY, TRUE);
+  gimp_ui_init (PLUG_IN_BINARY);
 
   img_stride = cairo_format_stride_for_width (CAIRO_FORMAT_RGB24, PREVIEWSIZE);
   img = g_malloc0 (img_stride * PREVIEWSIZE);
@@ -3102,65 +3181,85 @@ sphere_main (gint32 drawable_ID)
   return do_run;
 }
 
-static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+static GimpValueArray *
+designer_run (GimpProcedure        *procedure,
+              GimpRunMode           run_mode,
+              GimpImage            *image,
+              GimpDrawable        **drawables,
+              GimpProcedureConfig  *config,
+              gpointer              run_data)
 {
-  static GimpParam   values[1];
-  GimpRunMode        run_mode;
-  gint32             drawable_ID;
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  gint               x, y, w, h;
+  GBytes       *settings_bytes = NULL;
+  GimpDrawable *drawable;
+  gint          x, y, w, h;
 
-  INIT_I18N ();
   gegl_init (NULL, NULL);
 
-  *nreturn_vals = 1;
-  *return_vals  = values;
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
+    {
+      GError *error = NULL;
 
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
+      g_set_error (&error, GIMP_PLUG_IN_ERROR, 0,
+                   _("Procedure '%s' only works with one drawable."),
+                   PLUG_IN_PROC);
 
-  run_mode    = param[0].data.d_int32;
-  drawable_ID = param[2].data.d_drawable;
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_CALLING_ERROR,
+                                               error);
+    }
+  else
+    {
+      drawable = drawables[0];
+    }
 
-  if (! gimp_drawable_mask_intersect (drawable_ID, &x, &y, &w, &h))
+  if (! gimp_drawable_mask_intersect (drawable, &x, &y, &w, &h))
     {
       g_message (_("Region selected for plug-in is empty"));
-      return;
+
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_SUCCESS,
+                                               NULL);
     }
+
+  s.com.numtexture = 0;
+  /* Temporary code replacing legacy gimp_[gs]et_data() using an AUX argument.
+   * This doesn't actually fix the "Reset to initial values|factory defaults"
+   * features, but at least makes per-run value storage work.
+   * TODO: eventually we want proper separate arguments as a complete fix.
+   */
+  g_object_get (config, "settings-data", &settings_bytes, NULL);
+  if (settings_bytes != NULL && g_bytes_get_size (settings_bytes) == sizeof (sphere))
+    s = *((sphere *) g_bytes_get_data (settings_bytes, NULL));
+  g_bytes_unref (settings_bytes);
 
   switch (run_mode)
     {
     case GIMP_RUN_INTERACTIVE:
-      s.com.numtexture = 0;
-      gimp_get_data (PLUG_IN_PROC, &s);
-      if (! sphere_main (drawable_ID))
-        return;
+      if (! sphere_main (drawable))
+        return gimp_procedure_new_return_values (procedure,
+                                                 GIMP_PDB_CANCEL,
+                                                 NULL);
       break;
 
     case GIMP_RUN_WITH_LAST_VALS:
-      s.com.numtexture = 0;
-      gimp_get_data (PLUG_IN_PROC, &s);
       if (s.com.numtexture == 0)
-        return;
+        return gimp_procedure_new_return_values (procedure,
+                                                 GIMP_PDB_EXECUTION_ERROR,
+                                                 NULL);
       break;
 
     case GIMP_RUN_NONINTERACTIVE:
-    default:
-      /* Not implemented yet... */
-      return;
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_EXECUTION_ERROR,
+                                               NULL);
     }
 
-  gimp_set_data (PLUG_IN_PROC, &s, sizeof (s));
+  settings_bytes = g_bytes_new (&s, sizeof (sphere));
+  g_object_set (config, "settings-data", settings_bytes, NULL);
+  g_bytes_unref (settings_bytes);
 
-  realrender (drawable_ID);
+  realrender (drawable);
   gimp_displays_flush ();
 
-  values[0].data.d_status = status;
+  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }
-
-MAIN ()

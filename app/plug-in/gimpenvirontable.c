@@ -170,8 +170,8 @@ gimp_environ_table_load (GimpEnvironTable *environ_table,
           while ((info = g_file_enumerator_next_file (enumerator,
                                                       NULL, NULL)))
             {
-              if (! g_file_info_get_is_hidden (info) &&
-                  g_file_info_get_file_type (info) == G_FILE_TYPE_REGULAR)
+              if (! g_file_info_get_attribute_boolean (info, G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN) &&
+                  g_file_info_get_attribute_uint32 (info, G_FILE_ATTRIBUTE_STANDARD_TYPE) == G_FILE_TYPE_REGULAR)
                 {
                   GFile *file = g_file_enumerator_get_child (enumerator, info);
 
@@ -341,6 +341,11 @@ gimp_environ_table_load_env_file (GimpEnvironTable *environ_table,
 
           separator = name;
           name = q + 1;
+
+#ifdef G_OS_WIN32
+          if (g_strcmp0 (separator, ":") == 0)
+            separator = ";";
+#endif
         }
 
       if (! gimp_environ_table_legal_name (name))

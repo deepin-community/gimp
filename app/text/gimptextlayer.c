@@ -39,8 +39,8 @@
 
 #include "core/gimp.h"
 #include "core/gimp-utils.h"
-#include "core/gimpcontext.h"
 #include "core/gimpcontainer.h"
+#include "core/gimpcontext.h"
 #include "core/gimpdatafactory.h"
 #include "core/gimpimage.h"
 #include "core/gimpimage-color-profile.h"
@@ -48,10 +48,11 @@
 #include "core/gimpimage-undo-push.h"
 #include "core/gimpitemtree.h"
 #include "core/gimpparasitelist.h"
+#include "core/gimppattern.h"
+#include "core/gimptempbuf.h"
 
 #include "gimptext.h"
 #include "gimptextlayer.h"
-#include "gimptextlayer-transform.h"
 #include "gimptextlayout.h"
 #include "gimptextlayout-render.h"
 
@@ -107,6 +108,7 @@ static void       gimp_text_layer_push_undo      (GimpDrawable      *drawable,
 static void       gimp_text_layer_convert_type   (GimpLayer         *layer,
                                                   GimpImage         *dest_image,
                                                   const Babl        *new_format,
+                                                  GimpColorProfile  *src_profile,
                                                   GimpColorProfile  *dest_profile,
                                                   GeglDitherMethod   layer_dither_type,
                                                   GeglDitherMethod   mask_dither_type,
@@ -188,9 +190,10 @@ gimp_text_layer_class_init (GimpTextLayerClass *klass)
 static void
 gimp_text_layer_init (GimpTextLayer *layer)
 {
-  layer->text          = NULL;
-  layer->text_parasite = NULL;
-  layer->private       = gimp_text_layer_get_instance_private (layer);
+  layer->text                 = NULL;
+  layer->text_parasite        = NULL;
+  layer->text_parasite_is_old = FALSE;
+  layer->private              = gimp_text_layer_get_instance_private (layer);
 }
 
 static void
@@ -297,7 +300,10 @@ gimp_text_layer_duplicate (GimpItem *item,
 
       /*  this is just the parasite name, not a pointer to the parasite  */
       if (layer->text_parasite)
-        new_layer->text_parasite = layer->text_parasite;
+        {
+          new_layer->text_parasite        = layer->text_parasite;
+          new_layer->text_parasite_is_old = layer->text_parasite_is_old;
+        }
 
       new_layer->private->base_dir = layer->private->base_dir;
     }
@@ -382,6 +388,7 @@ static void
 gimp_text_layer_convert_type (GimpLayer         *layer,
                               GimpImage         *dest_image,
                               const Babl        *new_format,
+                              GimpColorProfile  *src_profile,
                               GimpColorProfile  *dest_profile,
                               GeglDitherMethod   layer_dither_type,
                               GeglDitherMethod   mask_dither_type,
@@ -397,6 +404,7 @@ gimp_text_layer_convert_type (GimpLayer         *layer,
     {
       GIMP_LAYER_CLASS (parent_class)->convert_type (layer, dest_image,
                                                      new_format,
+                                                     src_profile,
                                                      dest_profile,
                                                      layer_dither_type,
                                                      mask_dither_type,
@@ -426,7 +434,7 @@ gimp_text_layer_convert_type (GimpLayer         *layer,
  *
  * Creates a new text layer.
  *
- * Return value: a new #GimpTextLayer or %NULL in case of a problem
+ * Returns: (nullable): a new #GimpTextLayer or %NULL in case of a problem
  **/
 GimpLayer *
 gimp_text_layer_new (GimpImage *image,
@@ -612,7 +620,8 @@ gimp_text_layer_text_changed (GimpTextLayer *layer)
        */
       gimp_item_parasite_detach (GIMP_ITEM (layer), layer->text_parasite,
                                  FALSE);
-      layer->text_parasite = NULL;
+      layer->text_parasite        = NULL;
+      layer->text_parasite_is_old = FALSE;
     }
 
   if (layer->text->box_mode == GIMP_TEXT_BOX_DYNAMIC)
@@ -715,7 +724,7 @@ gimp_text_layer_render (GimpTextLayer *layer)
 
   gimp_image_get_resolution (image, &xres, &yres);
 
-  layout = gimp_text_layout_new (layer->text, xres, yres, &error);
+  layout = gimp_text_layout_new (layer->text, image, xres, yres, &error);
   if (error)
     {
       gimp_message_literal (image->gimp, NULL, GIMP_MESSAGE_ERROR, error->message);
@@ -797,14 +806,128 @@ gimp_text_layer_render (GimpTextLayer *layer)
 }
 
 static void
+gimp_text_layer_set_dash_info (cairo_t      *cr,
+                               gdouble       width,
+                               gdouble       dash_offset,
+                               const GArray *dash_info)
+{
+  if (dash_info && dash_info->len >= 2)
+    {
+      gint     n_dashes = dash_info->len;
+      gdouble *dashes   = g_new (gdouble, dash_info->len);
+      gint     i;
+
+      dash_offset = dash_offset * MAX (width, 1.0);
+
+      for (i = 0; i < n_dashes; i++)
+        dashes[i] = MAX (width, 1.0) * g_array_index (dash_info, gdouble, i);
+
+      /* correct 0.0 in the first element (starts with a gap) */
+
+      if (dashes[0] == 0.0)
+        {
+          gdouble first;
+
+          first = dashes[1];
+
+          /* shift the pattern to really starts with a dash and
+           * use the offset to skip into it.
+           */
+          for (i = 0; i < n_dashes - 2; i++)
+            {
+              dashes[i] = dashes[i + 2];
+              dash_offset += dashes[i];
+            }
+
+          if (n_dashes % 2 == 1)
+            {
+              dashes[n_dashes - 2] = first;
+              n_dashes--;
+            }
+          else if (dash_info->len > 2)
+            {
+              dashes[n_dashes - 3] += first;
+              n_dashes -= 2;
+            }
+        }
+
+      /* correct odd number of dash specifiers */
+
+      if (n_dashes % 2 == 1)
+        {
+          gdouble last = dashes[n_dashes - 1];
+
+          dashes[0] += last;
+          dash_offset += last;
+          n_dashes--;
+        }
+
+      if (n_dashes >= 2)
+        cairo_set_dash (cr,
+                        dashes,
+                        n_dashes,
+                        dash_offset);
+
+      g_free (dashes);
+    }
+}
+
+static cairo_surface_t *
+gimp_temp_buf_create_cairo_surface (GimpTempBuf *temp_buf)
+{
+  cairo_surface_t *surface;
+  gboolean         has_alpha;
+  const Babl      *format;
+  const Babl      *fish = NULL;
+  const guchar    *data;
+  gint             width;
+  gint             height;
+  gint             bpp;
+  guchar          *pixels;
+  gint             rowstride;
+  gint             i;
+
+  g_return_val_if_fail (temp_buf != NULL, NULL);
+
+  data      = gimp_temp_buf_get_data (temp_buf);
+  format    = gimp_temp_buf_get_format (temp_buf);
+  width     = gimp_temp_buf_get_width (temp_buf);
+  height    = gimp_temp_buf_get_height (temp_buf);
+  bpp       = babl_format_get_bytes_per_pixel (format);
+  has_alpha = babl_format_has_alpha (format);
+
+  surface = cairo_image_surface_create (has_alpha ?
+                                        CAIRO_FORMAT_ARGB32 : CAIRO_FORMAT_RGB24,
+                                        width, height);
+
+  pixels    = cairo_image_surface_get_data (surface);
+  rowstride = cairo_image_surface_get_stride (surface);
+
+  if (format != babl_format (has_alpha ? "cairo-ARGB32" : "cairo-RGB24"))
+    fish = babl_fish (format, babl_format (has_alpha ? "cairo-ARGB32" : "cairo-RGB24"));
+
+  for (i = 0; i < height; i++)
+    {
+      if (fish)
+        babl_process (fish, data, pixels, width);
+      else
+        memcpy (pixels, data, width * bpp);
+
+      data += width * bpp;
+      pixels += rowstride;
+    }
+
+  return surface;
+}
+
+static void
 gimp_text_layer_render_layout (GimpTextLayer  *layer,
                                GimpTextLayout *layout)
 {
   GimpDrawable       *drawable = GIMP_DRAWABLE (layer);
   GimpItem           *item     = GIMP_ITEM (layer);
-  GimpImage          *image    = gimp_item_get_image (item);
+  const Babl         *format;
   GeglBuffer         *buffer;
-  GimpColorTransform *transform;
   cairo_t            *cr;
   cairo_surface_t    *surface;
   gint                width;
@@ -816,7 +939,11 @@ gimp_text_layer_render_layout (GimpTextLayer  *layer,
   width  = gimp_item_get_width  (item);
   height = gimp_item_get_height (item);
 
+#if CAIRO_VERSION >= CAIRO_VERSION_ENCODE(1, 17, 2)
+  surface = cairo_image_surface_create (CAIRO_FORMAT_RGBA128F, width, height);
+#else
   surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, width, height);
+#endif
   status = cairo_surface_status (surface);
 
   if (status != CAIRO_STATUS_SUCCESS)
@@ -831,28 +958,95 @@ gimp_text_layer_render_layout (GimpTextLayer  *layer,
     }
 
   cr = cairo_create (surface);
-  gimp_text_layout_render (layout, cr, layer->text->base_dir, FALSE);
+  if (layer->text->outline != GIMP_TEXT_OUTLINE_STROKE_ONLY)
+    {
+      cairo_save (cr);
+
+      gimp_text_layout_render (layout, cr, layer->text->base_dir, FALSE);
+
+      cairo_restore (cr);
+    }
+
+  if (layer->text->outline != GIMP_TEXT_OUTLINE_NONE)
+    {
+      GimpText *text = layer->text;
+
+      cairo_save (cr);
+
+      cairo_set_antialias (cr, text->outline_antialias ?
+                           CAIRO_ANTIALIAS_GRAY : CAIRO_ANTIALIAS_NONE);
+      cairo_set_line_cap (cr,
+                          text->outline_cap_style == GIMP_CAP_BUTT ? CAIRO_LINE_CAP_BUTT :
+                          text->outline_cap_style == GIMP_CAP_ROUND ? CAIRO_LINE_CAP_ROUND :
+                          CAIRO_LINE_CAP_SQUARE);
+      cairo_set_line_join (cr, text->outline_join_style == GIMP_JOIN_MITER ? CAIRO_LINE_JOIN_MITER :
+                               text->outline_join_style == GIMP_JOIN_ROUND ? CAIRO_LINE_JOIN_ROUND :
+                               CAIRO_LINE_JOIN_BEVEL);
+      cairo_set_miter_limit (cr, text->outline_miter_limit);
+
+      if (text->outline_dash_info)
+        gimp_text_layer_set_dash_info (cr, text->outline_width, text->outline_dash_offset, text->outline_dash_info);
+
+      if (text->outline_style == GIMP_CUSTOM_STYLE_PATTERN && text->outline_pattern)
+        {
+          GimpTempBuf     *tempbuf = gimp_pattern_get_mask (text->outline_pattern);
+          cairo_surface_t *surface = gimp_temp_buf_create_cairo_surface (tempbuf);
+
+          cairo_set_source_surface (cr, surface, 0.0, 0.0);
+          cairo_surface_destroy (surface);
+
+          cairo_pattern_set_extend (cairo_get_source (cr), CAIRO_EXTEND_REPEAT);
+        }
+      else
+        {
+          GeglColor  *col = text->outline_foreground;
+          gdouble     color[3];
+
+          format = gimp_text_layout_get_format (layout, "double");
+          gegl_color_get_pixel (col, format, color);
+          /* Text layout can be either grayscale or RGB without alpha. */
+          if (! babl_space_is_gray (babl_format_get_space (format)))
+            cairo_set_source_rgba (cr, color[0], color[1], color[2], 1.0);
+          else
+            cairo_set_source_rgba (cr, color[0], color[0], color[0], 1.0);
+        }
+
+      cairo_set_line_width (cr, text->outline_width * 2);
+
+      gimp_text_layout_render (layout, cr, text->base_dir, TRUE);
+      cairo_clip_preserve (cr);
+      cairo_stroke (cr);
+
+      cairo_restore (cr);
+    }
+
   cairo_destroy (cr);
 
   cairo_surface_flush (surface);
 
-  buffer = gimp_cairo_surface_create_buffer (surface);
-
-  transform = gimp_image_get_color_transform_from_srgb_u8 (image);
-
-  if (transform)
+#if CAIRO_VERSION >= CAIRO_VERSION_ENCODE(1, 17, 2)
+  /* The CAIRO_FORMAT_RGBA128F surface maps to the layout TRC and space. */
+  switch (gimp_text_layout_get_trc (layout))
     {
-      gimp_color_transform_process_buffer (transform,
-                                           buffer,
-                                           NULL,
-                                           gimp_drawable_get_buffer (drawable),
-                                           NULL);
+    case GIMP_TRC_LINEAR:
+      format = babl_format_with_space ("RaGaBaA float", gimp_text_layout_get_space (layout));
+      break;
+    case GIMP_TRC_NON_LINEAR:
+      format = babl_format_with_space ("R'aG'aB'aA float", gimp_text_layout_get_space (layout));
+      break;
+    case GIMP_TRC_PERCEPTUAL:
+      format = babl_format_with_space ("R~aG~aB~aA float", gimp_text_layout_get_space (layout));
+      break;
+    default:
+      g_return_if_reached ();
     }
-  else
-    {
-      gimp_gegl_buffer_copy (buffer, NULL, GEGL_ABYSS_NONE,
-                             gimp_drawable_get_buffer (drawable), NULL);
-    }
+#else
+  format = babl_format_with_space ("cairo-ARGB32", gimp_text_layout_get_space (layout));
+#endif
+  buffer = gimp_cairo_surface_create_buffer (surface, format);
+
+  gimp_gegl_buffer_copy (buffer, NULL, GEGL_ABYSS_NONE,
+                         gimp_drawable_get_buffer (drawable), NULL);
 
   g_object_unref (buffer);
   cairo_surface_destroy (surface);

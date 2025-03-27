@@ -34,18 +34,17 @@ typedef struct _GimpWindowPrivate GimpWindowPrivate;
 
 struct _GimpWindow
 {
-  GtkWindow          parent_instance;
+  GtkApplicationWindow  parent_instance;
 
-  GimpWindowPrivate *private;
+  GimpWindowPrivate    *private;
 };
 
 struct _GimpWindowClass
 {
-  GtkWindowClass  parent_class;
+  GtkApplicationWindowClass  parent_class;
 
   void (* monitor_changed) (GimpWindow *window,
-                            GdkScreen  *screen,
-                            gint        monitor);
+                            GdkMonitor *monitor);
 };
 
 

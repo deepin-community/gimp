@@ -82,10 +82,20 @@ sub declare_args {
 
 	    unless (exists $_->{no_declare} || exists $_->{dead}) {
 		if ($outargs) {
-		    $result .= "  $arg->{type}$_->{name} = $arg->{init_value}";
+                    if (exists $arg->{app_type}) {
+                        $result .= "  $arg->{app_type}$_->{name} = $arg->{init_value}";
+                    }
+                    else {
+                        $result .= "  $arg->{type}$_->{name} = $arg->{init_value}";
+                    }
 		}
 		else {
-		    $result .= "  $arg->{const_type}$_->{name}";
+                    if (exists $arg->{app_const_type}) {
+                        $result .= "  $arg->{app_const_type}$_->{name}";
+                    }
+                    else {
+                        $result .= "  $arg->{const_type}$_->{name}";
+                    }
 		}
 		$result .= ";\n";
 
@@ -116,7 +126,22 @@ sub marshal_inargs {
 	my $value;
 
 	$value = "gimp_value_array_index (args, $argc)";
-	if (!exists $_->{dead}) {
+        if (exists $_->{nopdb}) {
+            $argc--;
+        }
+        elsif (!exists $_->{dead}) {
+	    my $var_len;
+
+	    if (exists $_->{array}) {
+		my $arrayarg = $_->{array};
+
+		if (exists $arrayarg->{name}) {
+		    $var_len = $arrayarg->{name};
+		}
+		else {
+		    $var_len = 'num_' . $_->{name};
+		}
+	    }
 	    $result .= eval qq/"  $arg->{get_value_func};\n"/;
 	}
 
@@ -160,20 +185,25 @@ CODE
 
 	    $argc++;
 
-	    $value = "gimp_value_array_index (return_vals, $argc)";
+            if (exists $_->{nopdb}) {
+                $argc--;
+            }
+            else {
+                $value = "gimp_value_array_index (return_vals, $argc)";
 
-	    if (exists $_->{array}) {
-		my $arrayarg = $_->{array};
+                if (exists $_->{array}) {
+                    my $arrayarg = $_->{array};
 
-		if (exists $arrayarg->{name}) {
-		    $var_len = $arrayarg->{name};
-		}
-		else {
-		    $var_len = 'num_' . $_->{name};
-		}
-	    }
+                    if (exists $arrayarg->{name}) {
+                        $var_len = $arrayarg->{name};
+                    }
+                    else {
+                        $var_len = 'num_' . $_->{name};
+                    }
+                }
 
-	    $outargs .= eval qq/"  $arg->{set_value_func};\n"/;
+                $outargs .= eval qq/"  $arg->{take_value_func};\n"/;
+            }
 	}
 
 	$outargs =~ s/^/' ' x 2/meg if $success;
@@ -222,91 +252,214 @@ sub generate_pspec {
     if ($pdbtype eq 'image') {
 	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
 	$pspec = <<CODE;
-gimp_param_spec_image_id ("$name",
+gimp_param_spec_image ("$name",
+                       "$nick",
+                       "$blurb",
+                       $none_ok,
+                       $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'resource') {
+	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+	$default = exists $arg->{default} ? $arg->{default} : NULL;
+	$pspec = <<CODE;
+gimp_param_spec_resource ("$name",
                           "$nick",
                           "$blurb",
-                          pdb->gimp, $none_ok,
+                          GIMP_TYPE_RESOURCE,
+                          $none_ok,
+                          $default,
+                          FALSE,
                           $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'brush') {
+	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+	$default = exists $arg->{default} ? $arg->{default} : NULL;
+	$default_to_context = exists $arg->{default_to_context} ? 'TRUE' : 'FALSE';
+	$pspec = <<CODE;
+gimp_param_spec_brush ("$name",
+                       "$nick",
+                       "$blurb",
+                       $none_ok,
+                       $default,
+                       $default_to_context,
+                       $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'font') {
+  $none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+  $default = exists $arg->{default} ? $arg->{default} : NULL;
+  $default_to_context = exists $arg->{default_to_context} ? 'TRUE' : 'FALSE';
+  $pspec = <<CODE;
+gimp_param_spec_font ("$name",
+                      "$nick",
+                      "$blurb",
+                      $none_ok,
+                      $default,
+                      $default_to_context,
+                      $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'gradient') {
+  $none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+  $default = exists $arg->{default} ? $arg->{default} : NULL;
+  $default_to_context = exists $arg->{default_to_context} ? 'TRUE' : 'FALSE';
+  $pspec = <<CODE;
+gimp_param_spec_gradient ("$name",
+                          "$nick",
+                          "$blurb",
+                          $none_ok,
+                          $default,
+                          $default_to_context,
+                          $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'palette') {
+  $none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+  $default = exists $arg->{default} ? $arg->{default} : NULL;
+  $default_to_context = exists $arg->{default_to_context} ? 'TRUE' : 'FALSE';
+  $pspec = <<CODE;
+gimp_param_spec_palette ("$name",
+                         "$nick",
+                         "$blurb",
+                         $none_ok,
+                         $default,
+                         $default_to_context,
+                         $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'pattern') {
+  $none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+  $default = exists $arg->{default} ? $arg->{default} : NULL;
+  $default_to_context = exists $arg->{default_to_context} ? 'TRUE' : 'FALSE';
+  $pspec = <<CODE;
+gimp_param_spec_pattern ("$name",
+                         "$nick",
+                         "$blurb",
+                         $none_ok,
+                         $default,
+                         $default_to_context,
+                         $flags)
 CODE
     }
     elsif ($pdbtype eq 'item') {
 	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
 	$pspec = <<CODE;
-gimp_param_spec_item_id ("$name",
-                         "$nick",
-                         "$blurb",
-                         pdb->gimp, $none_ok,
-                         $flags)
+gimp_param_spec_item ("$name",
+                      "$nick",
+                      "$blurb",
+                      $none_ok,
+                      $flags)
 CODE
     }
     elsif ($pdbtype eq 'drawable') {
 	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
 	$pspec = <<CODE;
-gimp_param_spec_drawable_id ("$name",
+gimp_param_spec_drawable ("$name",
+                          "$nick",
+                          "$blurb",
+                          $none_ok,
+                          $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'group_layer') {
+	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+	$pspec = <<CODE;
+gimp_param_spec_group_layer ("$name",
                              "$nick",
                              "$blurb",
-                             pdb->gimp, $none_ok,
+                             $none_ok,
                              $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'text_layer') {
+	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+	$pspec = <<CODE;
+gimp_param_spec_text_layer ("$name",
+                            "$nick",
+                            "$blurb",
+                            $none_ok,
+                            $flags)
 CODE
     }
     elsif ($pdbtype eq 'layer') {
 	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
 	$pspec = <<CODE;
-gimp_param_spec_layer_id ("$name",
-                          "$nick",
-                          "$blurb",
-                          pdb->gimp, $none_ok,
-                          $flags)
+gimp_param_spec_layer ("$name",
+                       "$nick",
+                       "$blurb",
+                       $none_ok,
+                       $flags)
 CODE
     }
     elsif ($pdbtype eq 'channel') {
 	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
 	$pspec = <<CODE;
-gimp_param_spec_channel_id ("$name",
-                            "$nick",
-                            "$blurb",
-                            pdb->gimp, $none_ok,
-                            $flags)
+gimp_param_spec_channel ("$name",
+                         "$nick",
+                         "$blurb",
+                         $none_ok,
+                         $flags)
 CODE
     }
     elsif ($pdbtype eq 'layer_mask') {
 	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
 	$pspec = <<CODE;
-gimp_param_spec_layer_mask_id ("$name",
-                               "$nick",
-                               "$blurb",
-                               pdb->gimp, $none_ok,
-                               $flags)
+gimp_param_spec_layer_mask ("$name",
+                            "$nick",
+                            "$blurb",
+                            $none_ok,
+                            $flags)
 CODE
     }
     elsif ($pdbtype eq 'selection') {
 	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
 	$pspec = <<CODE;
-gimp_param_spec_selection_id ("$name",
-                              "$nick",
-                              "$blurb",
-                              pdb->gimp, $none_ok,
-                              $flags)
+gimp_param_spec_selection ("$name",
+                           "$nick",
+                           "$blurb",
+                           $none_ok,
+                           $flags)
 CODE
     }
-    elsif ($pdbtype eq 'vectors') {
+    elsif ($pdbtype eq 'path') {
 	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
 	$pspec = <<CODE;
-gimp_param_spec_vectors_id ("$name",
-                            "$nick",
-                            "$blurb",
-                            pdb->gimp, $none_ok,
-                            $flags)
+gimp_param_spec_path ("$name",
+                      "$nick",
+                      "$blurb",
+                      $none_ok,
+                      $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'filter') {
+	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+	$pspec = <<CODE;
+gimp_param_spec_drawable_filter ("$name",
+                                 "$nick",
+                                 "$blurb",
+                                 $none_ok,
+                                 $flags)
 CODE
     }
     elsif ($pdbtype eq 'display') {
 	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
 	$pspec = <<CODE;
-gimp_param_spec_display_id ("$name",
-                            "$nick",
-                            "$blurb",
-                            pdb->gimp, $none_ok,
-                            $flags)
+gimp_param_spec_display ("$name",
+                         "$nick",
+                         "$blurb",
+                         $none_ok,
+                         $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'file') {
+	$pspec = <<CODE;
+g_param_spec_object ("$name",
+                     "$nick",
+                     "$blurb",
+                     G_TYPE_FILE,
+                     $flags)
 CODE
     }
     elsif ($pdbtype eq 'tattoo') {
@@ -336,7 +489,15 @@ g_param_spec_uint ("$name",
                    $flags)
 CODE
     }
-    elsif ($pdbtype eq 'float') {
+    elsif ($pdbtype eq 'export_options') {
+	$pspec = <<CODE;
+gimp_param_spec_export_options ("$name",
+                                "$nick",
+                                "$blurb",
+                                $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'double') {
 	$min = defined $typeinfo[0] ? $typeinfo[0] : -G_MAXDOUBLE;
 	$max = defined $typeinfo[2] ? $typeinfo[2] : G_MAXDOUBLE;
 	$default = exists $arg->{default} ? $arg->{default} : defined $typeinfo[0] ? $typeinfo[0] : 0.0;
@@ -346,6 +507,28 @@ g_param_spec_double ("$name",
                      "$blurb",
                      $min, $max, $default,
                      $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'size') {
+	if (defined $typeinfo[0]) {
+	    $min = ($typeinfo[1] eq '<') ? ($typeinfo[0] + 1) : $typeinfo[0];
+	}
+	else {
+	    $min = G_MINSIZE;
+	}
+	if (defined $typeinfo[2]) {
+	    $max = ($typeinfo[3] eq '<') ? ($typeinfo[2] - 1) : $typeinfo[2];
+	}
+	else {
+	    $max = G_MAXSIZE;
+	}
+	$default = exists $arg->{default} ? $arg->{default} : defined $typeinfo[0] ? $typeinfo[0] : 0;
+	$pspec = <<CODE;
+g_param_spec_size ("$name",
+                   "$nick",
+                   "$blurb",
+                   $min, $max, $default,
+                   $flags)
 CODE
     }
     elsif ($pdbtype eq 'int32') {
@@ -363,11 +546,11 @@ CODE
 	}
 	$default = exists $arg->{default} ? $arg->{default} : defined $typeinfo[0] ? $typeinfo[0] : 0;
 	$pspec = <<CODE;
-gimp_param_spec_int32 ("$name",
-                       "$nick",
-                       "$blurb",
-                       $min, $max, $default,
-                       $flags)
+g_param_spec_int ("$name",
+                  "$nick",
+                  "$blurb",
+                  $min, $max, $default,
+                  $flags)
 CODE
     }
     elsif ($pdbtype eq 'int16') {
@@ -385,33 +568,11 @@ CODE
 	}
 	$default = exists $arg->{default} ? $arg->{default} : defined $typeinfo[0] ? $typeinfo[0] : 0;
 	$pspec = <<CODE;
-gimp_param_spec_int16 ("$name",
-                       "$nick",
-                       "$blurb",
-                       $min, $max, $default,
-                       $flags)
-CODE
-    }
-    elsif ($pdbtype eq 'int8') {
-	if (defined $typeinfo[0]) {
-	    $min = ($typeinfo[1] eq '<') ? ($typeinfo[0] + 1) : $typeinfo[0];
-	}
-	else {
-	    $min = 0;
-	}
-	if (defined $typeinfo[2]) {
-	    $max = ($typeinfo[3] eq '<') ? ($typeinfo[2] - 1) : $typeinfo[2];
-	}
-	else {
-	    $max = G_MAXUINT8;
-	}
-	$default = exists $arg->{default} ? $arg->{default} : defined $typeinfo[0] ? $typeinfo[0] : 0;
-	$pspec = <<CODE;
-gimp_param_spec_int8 ("$name",
-                      "$nick",
-                      "$blurb",
-                      $min, $max, $default,
-                      $flags)
+g_param_spec_int ("$name",
+                  "$nick",
+                  "$blurb",
+                  $min, $max, $default,
+                  $flags)
 CODE
     }
     elsif ($pdbtype eq 'boolean') {
@@ -426,14 +587,14 @@ CODE
     }
     elsif ($pdbtype eq 'string') {
 	$allow_non_utf8 = exists $arg->{allow_non_utf8} ? 'TRUE' : 'FALSE';
-	$null_ok = exists $arg->{null_ok} ? 'TRUE' : 'FALSE';
+	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
 	$non_empty = exists $arg->{non_empty} ? 'TRUE' : 'FALSE';
 	$default = exists $arg->{default} ? $arg->{default} : NULL;
 	$pspec = <<CODE;
 gimp_param_spec_string ("$name",
                         "$nick",
                         "$blurb",
-                        $allow_non_utf8, $null_ok, $non_empty,
+                        $allow_non_utf8, $none_ok, $non_empty,
                         $default,
                         $flags)
 CODE
@@ -476,30 +637,38 @@ CODE
         }
     }
     elsif ($pdbtype eq 'unit') {
-	$typeinfo[0] = 'GIMP_UNIT_PIXEL' unless defined $typeinfo[0];
-	$allow_pixels = $typeinfo[0] eq 'GIMP_UNIT_PIXEL' ? TRUE : FALSE;
+	$allow_pixel = exists $arg->{allow_pixel} ? TRUE : FALSE;
 	$allow_percent = exists $arg->{allow_percent} ? TRUE : FALSE;
-	$default = exists $arg->{default} ? $arg->{default} : $typeinfo[0];
+	$default = exists $arg->{default} ? $arg->{default} : 'gimp_unit_inch ()';
 	$pspec = <<CODE;
 gimp_param_spec_unit ("$name",
                       "$nick",
                       "$blurb",
-                      $allow_pixels,
+                      $allow_pixel,
                       $allow_percent,
                       $default,
                       $flags)
 CODE
     }
-    elsif ($pdbtype eq 'color') {
+    elsif ($pdbtype eq 'geglcolor') {
 	$has_alpha = exists $arg->{has_alpha} ? TRUE : FALSE;
 	$default = exists $arg->{default} ? $arg->{default} : NULL;
 	$pspec = <<CODE;
-gimp_param_spec_rgb ("$name",
-                     "$nick",
-                     "$blurb",
-                     $has_alpha,
-                     $default,
-                     $flags)
+gimp_param_spec_color ("$name",
+                       "$nick",
+                       "$blurb",
+                       $has_alpha,
+                       $default,
+                       $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'format') {
+	$pspec = <<CODE;
+g_param_spec_boxed ("$name",
+                    "$nick",
+                    "$blurb",
+                    GIMP_TYPE_BABL_FORMAT,
+                    $flags)
 CODE
     }
     elsif ($pdbtype eq 'parasite') {
@@ -510,6 +679,15 @@ gimp_param_spec_parasite ("$name",
                           $flags)
 CODE
     }
+    elsif ($pdbtype eq 'param') {
+	$pspec = <<CODE;
+g_param_spec_param ("$name",
+                    "$nick",
+                    "$blurb",
+                    G_TYPE_PARAM,
+                    $flags)
+CODE
+    }
     elsif ($pdbtype eq 'int32array') {
 	$pspec = <<CODE;
 gimp_param_spec_int32_array ("$name",
@@ -518,43 +696,164 @@ gimp_param_spec_int32_array ("$name",
                              $flags)
 CODE
     }
-    elsif ($pdbtype eq 'int16array') {
+    elsif ($pdbtype eq 'doublearray') {
 	$pspec = <<CODE;
-gimp_param_spec_int16_array ("$name",
-                             "$nick",
-                             "$blurb",
-                             $flags)
-CODE
-    }
-    elsif ($pdbtype eq 'int8array') {
-	$pspec = <<CODE;
-gimp_param_spec_int8_array ("$name",
-                            "$nick",
-                            "$blurb",
-                            $flags)
-CODE
-    }
-    elsif ($pdbtype eq 'floatarray') {
-	$pspec = <<CODE;
-gimp_param_spec_float_array ("$name",
-                             "$nick",
-                             "$blurb",
-                             $flags)
-CODE
-    }
-    elsif ($pdbtype eq 'stringarray') {
-	$pspec = <<CODE;
-gimp_param_spec_string_array ("$name",
+gimp_param_spec_double_array ("$name",
                               "$nick",
                               "$blurb",
                               $flags)
 CODE
     }
+    elsif ($pdbtype eq 'bytes') {
+	$pspec = <<CODE;
+g_param_spec_boxed ("$name",
+                    "$nick",
+                    "$blurb",
+                    G_TYPE_BYTES,
+                    $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'strv') {
+	$pspec = <<CODE;
+g_param_spec_boxed ("$name",
+                    "$nick",
+                    "$blurb",
+                    G_TYPE_STRV,
+                    $flags)
+CODE
+    }
     elsif ($pdbtype eq 'colorarray') {
 	$pspec = <<CODE;
-gimp_param_spec_color_array ("$name",
+g_param_spec_boxed ("$name",
+                    "$nick",
+                    "$blurb",
+                    GIMP_TYPE_COLOR_ARRAY,
+                    $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'imagearray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_IMAGE,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'itemarray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_ITEM,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'drawablearray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_DRAWABLE,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'layerarray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_LAYER,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'channelarray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_CHANNEL,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'patharray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_PATH,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'filterarray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_DRAWABLE_FILTER,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'resourcearray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_RESOURCE,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'brusharray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_BRUSH,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'fontarray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_FONT,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'gradientarray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_GRADIENT,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'palettearray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_PALETTE,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'patternarray') {
+	$pspec = <<CODE;
+gimp_param_spec_core_object_array ("$name",
+                                   "$nick",
+                                   "$blurb",
+                                   GIMP_TYPE_PATTERN,
+                                   $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'valuearray') {
+	$pspec = <<CODE;
+gimp_param_spec_value_array ("$name",
                              "$nick",
                              "$blurb",
+                             NULL,
                              $flags)
 CODE
     }
@@ -589,6 +888,7 @@ sub generate {
 	my $help = $proc->{help};
 
 	my $procedure_name;
+	my $procedure_is_private;
 
 	local $success = 0;
 
@@ -623,41 +923,59 @@ sub generate {
 
 	$out->{pcount}++; $total++;
 
+        if ($proc->{lib_private}) {
+            $procedure_is_private = "TRUE";
+        } else {
+            $procedure_is_private = "FALSE";
+        }
+
 	$out->{register} .= <<CODE;
 
   /*
    * gimp-$proc->{canonical_name}
    */
-  procedure = gimp_procedure_new (${name}_invoker);
+  procedure = gimp_procedure_new (${name}_invoker, $procedure_is_private);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "$procedure_name");
-  gimp_procedure_set_static_strings (procedure,
-                                     "$procedure_name",
-                                     @{[ &quotewrap($blurb, 2, 37) ]},
-                                     @{[ &quotewrap($help,  2, 37) ]},
-                                     "$proc->{author}",
-                                     "$proc->{copyright}",
-                                     "$proc->{date}",
-                                     @{[$proc->{deprecated} ? "\"$proc->{deprecated}\"" : 'NULL']});
+  gimp_procedure_set_static_help (procedure,
+                                  @{[ &quotewrap($blurb, 2, 34) ]},
+                                  @{[ &quotewrap($help,  2, 34) ]},
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "$proc->{author}",
+                                         "$proc->{copyright}",
+                                         "$proc->{date}");
 CODE
 
-        $argc = 0;
+        if ($proc->{deprecated}) {
+	    $out->{register} .= <<CODE;
+  gimp_procedure_set_deprecated (procedure,
+                                 "\"$proc->{deprecated}\"");
+CODE
+	}
+
+	$argc = 0;
 
         foreach $arg (@inargs) {
 	    my ($pspec, $postproc) = &generate_pspec($arg);
 
-	    $pspec =~ s/^/' ' x length("  gimp_procedure_add_argument (")/meg;
+            if (exists $arg->{nopdb}) {
+                $argc--;
+            }
+            else {
+                $pspec =~ s/^/' ' x length("  gimp_procedure_add_argument (")/meg;
 
-	    $out->{register} .= <<CODE;
+                $out->{register} .= <<CODE;
   gimp_procedure_add_argument (procedure,
 ${pspec});
 CODE
 
-            if ($postproc ne '') {
-		$pspec = "procedure->args[$argc]";
-		$postproc =~ s/^/'  '/meg;
-		$out->{register} .= eval qq/"$postproc"/;
-	    }
+                if ($postproc ne '') {
+                    $pspec = "procedure->args[$argc]";
+                    $postproc =~ s/^/'  '/meg;
+                    $out->{register} .= eval qq/"$postproc"/;
+                }
+            }
 
 	    $argc++;
 	}
@@ -668,18 +986,23 @@ CODE
 	    my ($pspec, $postproc) = &generate_pspec($arg);
 	    my $argc = 0;
 
-	    $pspec =~ s/^/' ' x length("  gimp_procedure_add_return_value (")/meg;
+            if (exists $arg->{nopdb}) {
+                $argc--;
+            }
+            else {
+                $pspec =~ s/^/' ' x length("  gimp_procedure_add_return_value (")/meg;
 
-	    $out->{register} .= <<CODE;
+                $out->{register} .= <<CODE;
   gimp_procedure_add_return_value (procedure,
 ${pspec});
 CODE
 
-            if ($postproc ne '') {
-		$pspec = "procedure->values[$argc]";
-		$postproc =~ s/^/'  '/meg;
-		$out->{register} .= eval qq/"$postproc"/;
-	    }
+                if ($postproc ne '') {
+                    $pspec = "procedure->values[$argc]";
+                    $postproc =~ s/^/'  '/meg;
+                    $out->{register} .= eval qq/"$postproc"/;
+                }
+            }
 
 	    $argc++;
 	}
@@ -710,7 +1033,7 @@ CODE
 	}
 	else {
 	    my $invoker = "";
-	
+
 	    $invoker .= ' ' x 2 . "GimpValueArray *return_vals;\n" if scalar @outargs;
 	    $invoker .= &declare_args($proc, $out, 0, qw(inargs));
 	    $invoker .= &declare_args($proc, $out, 1, qw(outargs));
@@ -862,6 +1185,7 @@ GPL
 	open CFILE, "> $cfile" or die "Can't open $cfile: $!\n";
 	print CFILE $gpl;
 	print CFILE qq/#include "config.h"\n\n/;
+	print CFILE qq/#include "stamp-pdbgen.h"\n\n/;
 	print CFILE $headers, "\n";
 	print CFILE $extra->{decls}, "\n" if exists $extra->{decls};
 	print CFILE "\n", $extra->{code} if exists $extra->{code};
@@ -908,6 +1232,7 @@ HEADER
 	open IFILE, "> $internal" or die "Can't open $internal: $!\n";
 	print IFILE $gpl;
 	print IFILE qq@#include "config.h"\n\n@;
+	print IFILE qq/#include "stamp-pdbgen.h"\n\n/;
 	print IFILE qq@#include <glib-object.h>\n\n@;
 	print IFILE qq@#include "pdb-types.h"\n\n@;
 	print IFILE qq@#include "gimppdb.h"\n\n@;

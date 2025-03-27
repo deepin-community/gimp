@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -37,7 +39,7 @@
 
 /**
  * gimp_drawable_brightness_contrast:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @brightness: Brightness adjustment.
  * @contrast: Contrast adjustment.
  *
@@ -52,31 +54,35 @@
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_brightness_contrast (gint32  drawable_ID,
-                                   gdouble brightness,
-                                   gdouble contrast)
+gimp_drawable_brightness_contrast (GimpDrawable *drawable,
+                                   gdouble       brightness,
+                                   gdouble       contrast)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-brightness-contrast",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_FLOAT, brightness,
-                                    GIMP_PDB_FLOAT, contrast,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_DOUBLE, brightness,
+                                          G_TYPE_DOUBLE, contrast,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-brightness-contrast",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_color_balance:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @transfer_mode: Transfer mode.
  * @preserve_lum: Preserve luminosity values at each pixel.
  * @cyan_red: Cyan-Red color balance.
@@ -99,37 +105,41 @@ gimp_drawable_brightness_contrast (gint32  drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_color_balance (gint32           drawable_ID,
-                             GimpTransferMode transfer_mode,
-                             gboolean         preserve_lum,
-                             gdouble          cyan_red,
-                             gdouble          magenta_green,
-                             gdouble          yellow_blue)
+gimp_drawable_color_balance (GimpDrawable     *drawable,
+                             GimpTransferMode  transfer_mode,
+                             gboolean          preserve_lum,
+                             gdouble           cyan_red,
+                             gdouble           magenta_green,
+                             gdouble           yellow_blue)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-color-balance",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, transfer_mode,
-                                    GIMP_PDB_INT32, preserve_lum,
-                                    GIMP_PDB_FLOAT, cyan_red,
-                                    GIMP_PDB_FLOAT, magenta_green,
-                                    GIMP_PDB_FLOAT, yellow_blue,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_TRANSFER_MODE, transfer_mode,
+                                          G_TYPE_BOOLEAN, preserve_lum,
+                                          G_TYPE_DOUBLE, cyan_red,
+                                          G_TYPE_DOUBLE, magenta_green,
+                                          G_TYPE_DOUBLE, yellow_blue,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-color-balance",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_colorize_hsl:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @hue: Hue in degrees.
  * @saturation: Saturation in percent.
  * @lightness: Lightness in percent.
@@ -146,36 +156,40 @@ gimp_drawable_color_balance (gint32           drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_colorize_hsl (gint32  drawable_ID,
-                            gdouble hue,
-                            gdouble saturation,
-                            gdouble lightness)
+gimp_drawable_colorize_hsl (GimpDrawable *drawable,
+                            gdouble       hue,
+                            gdouble       saturation,
+                            gdouble       lightness)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-colorize-hsl",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_FLOAT, hue,
-                                    GIMP_PDB_FLOAT, saturation,
-                                    GIMP_PDB_FLOAT, lightness,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_DOUBLE, hue,
+                                          G_TYPE_DOUBLE, saturation,
+                                          G_TYPE_DOUBLE, lightness,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-colorize-hsl",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_curves_explicit:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @channel: The channel to modify.
  * @num_values: The number of values in the new curve.
- * @values: The explicit curve.
+ * @values: (array length=num_values) (element-type gdouble): The explicit curve.
  *
  * Modifies the intensity curve(s) for specified drawable.
  *
@@ -183,44 +197,51 @@ gimp_drawable_colorize_hsl (gint32  drawable_ID,
  * drawable. The channel can be either an intensity component, or the
  * value. The 'values' parameter is an array of doubles which
  * explicitly defines how each pixel value in the drawable will be
- * modified. Use the gimp_curves_spline() function to modify intensity
- * levels with Catmull Rom splines.
+ * modified. Use the gimp_drawable_curves_spline() function to modify
+ * intensity levels with Catmull Rom splines.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_curves_explicit (gint32                drawable_ID,
+gimp_drawable_curves_explicit (GimpDrawable         *drawable,
                                GimpHistogramChannel  channel,
-                               gint                  num_values,
+                               gsize                 num_values,
                                const gdouble        *values)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-curves-explicit",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, channel,
-                                    GIMP_PDB_INT32, num_values,
-                                    GIMP_PDB_FLOATARRAY, values,
-                                    GIMP_PDB_END);
+  g_return_val_if_fail (num_values >= 256, FALSE);
+  g_return_val_if_fail (num_values <= 2096, FALSE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_HISTOGRAM_CHANNEL, channel,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
+                                          G_TYPE_NONE);
+  gimp_value_set_double_array (gimp_value_array_index (args, 2), values, num_values);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-curves-explicit",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_curves_spline:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @channel: The channel to modify.
  * @num_points: The number of values in the control point array.
- * @points: The spline control points: { cp1.x, cp1.y, cp2.x, cp2.y, ... }.
+ * @points: (array length=num_points) (element-type gdouble): The spline control points: { cp1.x, cp1.y, cp2.x, cp2.y, ... }.
  *
  * Modifies the intensity curve(s) for specified drawable.
  *
@@ -228,41 +249,49 @@ gimp_drawable_curves_explicit (gint32                drawable_ID,
  * drawable. The channel can be either an intensity component, or the
  * value. The 'points' parameter is an array of doubles which define a
  * set of control points which describe a Catmull Rom spline which
- * yields the final intensity curve. Use the gimp_curves_explicit()
- * function to explicitly modify intensity levels.
+ * yields the final intensity curve. Use the
+ * gimp_drawable_curves_explicit() function to explicitly modify
+ * intensity levels.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_curves_spline (gint32                drawable_ID,
+gimp_drawable_curves_spline (GimpDrawable         *drawable,
                              GimpHistogramChannel  channel,
-                             gint                  num_points,
+                             gsize                 num_points,
                              const gdouble        *points)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-curves-spline",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, channel,
-                                    GIMP_PDB_INT32, num_points,
-                                    GIMP_PDB_FLOATARRAY, points,
-                                    GIMP_PDB_END);
+  g_return_val_if_fail (num_points >= 4, FALSE);
+  g_return_val_if_fail (num_points <= 2048, FALSE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_HISTOGRAM_CHANNEL, channel,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
+                                          G_TYPE_NONE);
+  gimp_value_set_double_array (gimp_value_array_index (args, 2), points, num_points);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-curves-spline",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_extract_component:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @component: Component (RGB Red (0), RGB Green (1), RGB Blue (2), Hue (3), HSV Saturation (4), HSV Value (5), HSL Saturation (6), HSL Lightness (7), CMYK Cyan (8), CMYK Magenta (9), CMYK Yellow (10), CMYK Key (11), Y'CbCr Y' (12), Y'CbCr Cb (13), Y'CbCr Cr (14), LAB L (15), LAB A (16), LAB B (17), LCH C(ab) (18), LCH H(ab) (19), Alpha (20)).
  * @invert: Invert the extracted component.
  * @linear: Use linear output instead of gamma corrected.
@@ -276,33 +305,37 @@ gimp_drawable_curves_spline (gint32                drawable_ID,
  * Since: 2.10.34
  **/
 gboolean
-gimp_drawable_extract_component (gint32   drawable_ID,
-                                 guint8   component,
-                                 gboolean invert,
-                                 gboolean linear)
+gimp_drawable_extract_component (GimpDrawable *drawable,
+                                 gint          component,
+                                 gboolean      invert,
+                                 gboolean      linear)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-extract-component",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT8, component,
-                                    GIMP_PDB_INT32, invert,
-                                    GIMP_PDB_INT32, linear,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_INT, component,
+                                          G_TYPE_BOOLEAN, invert,
+                                          G_TYPE_BOOLEAN, linear,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-extract-component",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_desaturate:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @desaturate_mode: The formula to use to desaturate.
  *
  * Desaturate the contents of the specified drawable, with the
@@ -317,29 +350,33 @@ gimp_drawable_extract_component (gint32   drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_desaturate (gint32             drawable_ID,
-                          GimpDesaturateMode desaturate_mode)
+gimp_drawable_desaturate (GimpDrawable       *drawable,
+                          GimpDesaturateMode  desaturate_mode)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-desaturate",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, desaturate_mode,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_DESATURATE_MODE, desaturate_mode,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-desaturate",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_equalize:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @mask_only: Equalization option.
  *
  * Equalize the contents of the specified drawable.
@@ -357,38 +394,42 @@ gimp_drawable_desaturate (gint32             drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_equalize (gint32   drawable_ID,
-                        gboolean mask_only)
+gimp_drawable_equalize (GimpDrawable *drawable,
+                        gboolean      mask_only)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-equalize",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, mask_only,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_BOOLEAN, mask_only,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-equalize",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_histogram:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @channel: The channel to query.
  * @start_range: Start of the intensity measurement range.
  * @end_range: End of the intensity measurement range.
- * @mean: Mean intensity value.
- * @std_dev: Standard deviation of intensity values.
- * @median: Median intensity value.
- * @pixels: Alpha-weighted pixel count for entire image.
- * @count: Alpha-weighted pixel count for range.
- * @percentile: Percentile that range falls under.
+ * @mean: (out): Mean intensity value.
+ * @std_dev: (out): Standard deviation of intensity values.
+ * @median: (out): Median intensity value.
+ * @pixels: (out): Alpha-weighted pixel count for entire image.
+ * @count: (out): Alpha-weighted pixel count for range.
+ * @percentile: (out): Percentile that range falls under.
  *
  * Returns information on the intensity histogram for the specified
  * drawable.
@@ -414,7 +455,7 @@ gimp_drawable_equalize (gint32   drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_histogram (gint32                drawable_ID,
+gimp_drawable_histogram (GimpDrawable         *drawable,
                          GimpHistogramChannel  channel,
                          gdouble               start_range,
                          gdouble               end_range,
@@ -425,17 +466,21 @@ gimp_drawable_histogram (gint32                drawable_ID,
                          gdouble              *count,
                          gdouble              *percentile)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-histogram",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, channel,
-                                    GIMP_PDB_FLOAT, start_range,
-                                    GIMP_PDB_FLOAT, end_range,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_HISTOGRAM_CHANNEL, channel,
+                                          G_TYPE_DOUBLE, start_range,
+                                          G_TYPE_DOUBLE, end_range,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-histogram",
+                                               args);
+  gimp_value_array_unref (args);
 
   *mean = 0.0;
   *std_dev = 0.0;
@@ -444,26 +489,26 @@ gimp_drawable_histogram (gint32                drawable_ID,
   *count = 0.0;
   *percentile = 0.0;
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
   if (success)
     {
-      *mean = return_vals[1].data.d_float;
-      *std_dev = return_vals[2].data.d_float;
-      *median = return_vals[3].data.d_float;
-      *pixels = return_vals[4].data.d_float;
-      *count = return_vals[5].data.d_float;
-      *percentile = return_vals[6].data.d_float;
+      *mean = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+      *std_dev = GIMP_VALUES_GET_DOUBLE (return_vals, 2);
+      *median = GIMP_VALUES_GET_DOUBLE (return_vals, 3);
+      *pixels = GIMP_VALUES_GET_DOUBLE (return_vals, 4);
+      *count = GIMP_VALUES_GET_DOUBLE (return_vals, 5);
+      *percentile = GIMP_VALUES_GET_DOUBLE (return_vals, 6);
     }
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_hue_saturation:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @hue_range: Range of affected hues.
  * @hue_offset: Hue offset in degrees.
  * @lightness: Lightness modification.
@@ -483,37 +528,41 @@ gimp_drawable_histogram (gint32                drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_hue_saturation (gint32       drawable_ID,
-                              GimpHueRange hue_range,
-                              gdouble      hue_offset,
-                              gdouble      lightness,
-                              gdouble      saturation,
-                              gdouble      overlap)
+gimp_drawable_hue_saturation (GimpDrawable *drawable,
+                              GimpHueRange  hue_range,
+                              gdouble       hue_offset,
+                              gdouble       lightness,
+                              gdouble       saturation,
+                              gdouble       overlap)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-hue-saturation",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, hue_range,
-                                    GIMP_PDB_FLOAT, hue_offset,
-                                    GIMP_PDB_FLOAT, lightness,
-                                    GIMP_PDB_FLOAT, saturation,
-                                    GIMP_PDB_FLOAT, overlap,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_HUE_RANGE, hue_range,
+                                          G_TYPE_DOUBLE, hue_offset,
+                                          G_TYPE_DOUBLE, lightness,
+                                          G_TYPE_DOUBLE, saturation,
+                                          G_TYPE_DOUBLE, overlap,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-hue-saturation",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_invert:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @linear: Whether to invert in linear space.
  *
  * Invert the contents of the specified drawable.
@@ -528,29 +577,33 @@ gimp_drawable_hue_saturation (gint32       drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_invert (gint32   drawable_ID,
-                      gboolean linear)
+gimp_drawable_invert (GimpDrawable *drawable,
+                      gboolean      linear)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-invert",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, linear,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_BOOLEAN, linear,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-invert",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_levels:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @channel: The channel to modify.
  * @low_input: Intensity of lowest input.
  * @high_input: Intensity of highest input.
@@ -580,43 +633,47 @@ gimp_drawable_invert (gint32   drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_levels (gint32               drawable_ID,
-                      GimpHistogramChannel channel,
-                      gdouble              low_input,
-                      gdouble              high_input,
-                      gboolean             clamp_input,
-                      gdouble              gamma,
-                      gdouble              low_output,
-                      gdouble              high_output,
-                      gboolean             clamp_output)
+gimp_drawable_levels (GimpDrawable         *drawable,
+                      GimpHistogramChannel  channel,
+                      gdouble               low_input,
+                      gdouble               high_input,
+                      gboolean              clamp_input,
+                      gdouble               gamma,
+                      gdouble               low_output,
+                      gdouble               high_output,
+                      gboolean              clamp_output)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-levels",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, channel,
-                                    GIMP_PDB_FLOAT, low_input,
-                                    GIMP_PDB_FLOAT, high_input,
-                                    GIMP_PDB_INT32, clamp_input,
-                                    GIMP_PDB_FLOAT, gamma,
-                                    GIMP_PDB_FLOAT, low_output,
-                                    GIMP_PDB_FLOAT, high_output,
-                                    GIMP_PDB_INT32, clamp_output,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_HISTOGRAM_CHANNEL, channel,
+                                          G_TYPE_DOUBLE, low_input,
+                                          G_TYPE_DOUBLE, high_input,
+                                          G_TYPE_BOOLEAN, clamp_input,
+                                          G_TYPE_DOUBLE, gamma,
+                                          G_TYPE_DOUBLE, low_output,
+                                          G_TYPE_DOUBLE, high_output,
+                                          G_TYPE_BOOLEAN, clamp_output,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-levels",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_levels_stretch:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  *
  * Automatically modifies intensity levels in the specified drawable.
  *
@@ -629,27 +686,31 @@ gimp_drawable_levels (gint32               drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_levels_stretch (gint32 drawable_ID)
+gimp_drawable_levels_stretch (GimpDrawable *drawable)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-levels-stretch",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-levels-stretch",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_shadows_highlights:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @shadows: Adjust exposure of shadows.
  * @highlights: Adjust exposure of highlights.
  * @whitepoint: Shift white point.
@@ -669,41 +730,45 @@ gimp_drawable_levels_stretch (gint32 drawable_ID)
  * Since: 2.10.34
  **/
 gboolean
-gimp_drawable_shadows_highlights (gint32  drawable_ID,
-                                  gdouble shadows,
-                                  gdouble highlights,
-                                  gdouble whitepoint,
-                                  gdouble radius,
-                                  gdouble compress,
-                                  gdouble shadows_ccorrect,
-                                  gdouble highlights_ccorrect)
+gimp_drawable_shadows_highlights (GimpDrawable *drawable,
+                                  gdouble       shadows,
+                                  gdouble       highlights,
+                                  gdouble       whitepoint,
+                                  gdouble       radius,
+                                  gdouble       compress,
+                                  gdouble       shadows_ccorrect,
+                                  gdouble       highlights_ccorrect)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-shadows-highlights",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_FLOAT, shadows,
-                                    GIMP_PDB_FLOAT, highlights,
-                                    GIMP_PDB_FLOAT, whitepoint,
-                                    GIMP_PDB_FLOAT, radius,
-                                    GIMP_PDB_FLOAT, compress,
-                                    GIMP_PDB_FLOAT, shadows_ccorrect,
-                                    GIMP_PDB_FLOAT, highlights_ccorrect,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_DOUBLE, shadows,
+                                          G_TYPE_DOUBLE, highlights,
+                                          G_TYPE_DOUBLE, whitepoint,
+                                          G_TYPE_DOUBLE, radius,
+                                          G_TYPE_DOUBLE, compress,
+                                          G_TYPE_DOUBLE, shadows_ccorrect,
+                                          G_TYPE_DOUBLE, highlights_ccorrect,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-shadows-highlights",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_posterize:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @levels: Levels of posterization.
  *
  * Posterize the specified drawable.
@@ -716,29 +781,33 @@ gimp_drawable_shadows_highlights (gint32  drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_posterize (gint32 drawable_ID,
-                         gint   levels)
+gimp_drawable_posterize (GimpDrawable *drawable,
+                         gint          levels)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-posterize",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, levels,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_INT, levels,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-posterize",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_drawable_threshold:
- * @drawable_ID: The drawable.
+ * @drawable: The drawable.
  * @channel: The channel to base the threshold on.
  * @low_threshold: The low threshold value.
  * @high_threshold: The high threshold value.
@@ -755,26 +824,30 @@ gimp_drawable_posterize (gint32 drawable_ID,
  * Since: 2.10
  **/
 gboolean
-gimp_drawable_threshold (gint32               drawable_ID,
-                         GimpHistogramChannel channel,
-                         gdouble              low_threshold,
-                         gdouble              high_threshold)
+gimp_drawable_threshold (GimpDrawable         *drawable,
+                         GimpHistogramChannel  channel,
+                         gdouble               low_threshold,
+                         gdouble               high_threshold)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-drawable-threshold",
-                                    &nreturn_vals,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_INT32, channel,
-                                    GIMP_PDB_FLOAT, low_threshold,
-                                    GIMP_PDB_FLOAT, high_threshold,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          GIMP_TYPE_HISTOGRAM_CHANNEL, channel,
+                                          G_TYPE_DOUBLE, low_threshold,
+                                          G_TYPE_DOUBLE, high_threshold,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-drawable-threshold",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

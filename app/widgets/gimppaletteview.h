@@ -57,7 +57,7 @@ struct _GimpPaletteViewClass
                             GimpPaletteEntry *entry);
   void (* color_dropped)   (GimpPaletteView  *view,
                             GimpPaletteEntry *entry,
-                            const GimpRGB    *color);
+                            GeglColor        *color);
 };
 
 
@@ -65,6 +65,12 @@ GType   gimp_palette_view_get_type     (void) G_GNUC_CONST;
 
 void    gimp_palette_view_select_entry (GimpPaletteView  *view,
                                         GimpPaletteEntry *entry);
+
+GimpPaletteEntry * gimp_palette_view_get_selected_entry (GimpPaletteView *view);
+
+void               gimp_palette_view_get_entry_rect     (GimpPaletteView  *view,
+                                                         GimpPaletteEntry *entry,
+                                                         GdkRectangle     *rect);
 
 
 #endif /* __GIMP_PALETTE_VIEW_H__ */

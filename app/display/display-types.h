@@ -28,7 +28,6 @@ typedef struct _GimpCanvas               GimpCanvas;
 typedef struct _GimpCanvasGroup          GimpCanvasGroup;
 typedef struct _GimpCanvasItem           GimpCanvasItem;
 
-typedef struct _GimpDisplay              GimpDisplay;
 typedef struct _GimpDisplayShell         GimpDisplayShell;
 typedef struct _GimpMotionBuffer         GimpMotionBuffer;
 
@@ -48,6 +47,8 @@ typedef struct _GimpToolWidgetGroup      GimpToolWidgetGroup;
 
 typedef struct _GimpDisplayXfer          GimpDisplayXfer;
 typedef struct _Selection                Selection;
+
+typedef struct _GimpModifiersManager     GimpModifiersManager;
 
 
 #endif /* __DISPLAY_TYPES_H__ */

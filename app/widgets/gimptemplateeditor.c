@@ -24,6 +24,7 @@
 
 #include "libgimpmath/gimpmath.h"
 #include "libgimpbase/gimpbase.h"
+#include "libgimpcolor/gimpcolor.h"
 #include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
@@ -35,6 +36,7 @@
 
 #include "core/gimp.h"
 #include "core/gimptemplate.h"
+#include "core/gimp-utils.h"
 
 #include "gimppropwidgets.h"
 #include "gimptemplateeditor.h"
@@ -75,6 +77,9 @@ struct _GimpTemplateEditorPrivate
   GtkWidget     *chain_button;
   GtkWidget     *precision_combo;
   GtkWidget     *profile_combo;
+  GtkWidget     *simulation_profile_combo;
+  GtkWidget     *simulation_intent_combo;
+  GtkWidget     *simulation_bpc_toggle;
 };
 
 #define GET_PRIVATE(editor) \
@@ -94,6 +99,13 @@ static void    gimp_template_editor_get_property   (GObject            *object,
 
 static void gimp_template_editor_precision_changed (GtkWidget          *widget,
                                                     GimpTemplateEditor *editor);
+static void gimp_template_editor_simulation_intent_changed
+                                                   (GtkWidget          *widget,
+                                                    GimpTemplateEditor *editor);
+static void gimp_template_editor_simulation_bpc_toggled
+                                                   (GtkWidget          *widget,
+                                                    GimpTemplateEditor *editor);
+
 static void gimp_template_editor_aspect_callback   (GtkWidget          *widget,
                                                     GimpTemplateEditor *editor);
 static void gimp_template_editor_template_notify   (GimpTemplate       *template,
@@ -149,7 +161,7 @@ gimp_template_editor_constructed (GObject *object)
   GtkWidget                 *frame;
   GtkWidget                 *hbox;
   GtkWidget                 *vbox;
-  GtkWidget                 *table;
+  GtkWidget                 *grid;
   GtkWidget                 *label;
   GtkAdjustment             *adjustment;
   GtkWidget                 *width;
@@ -157,12 +169,10 @@ gimp_template_editor_constructed (GObject *object)
   GtkWidget                 *xres;
   GtkWidget                 *yres;
   GtkWidget                 *combo;
-  GtkWidget                 *toggle;
   GtkWidget                 *scrolled_window;
   GtkWidget                 *text_view;
   GtkTextBuffer             *text_buffer;
   GtkListStore              *store;
-  GList                     *focus_chain = NULL;
   gchar                     *text;
   gint                       row;
 
@@ -178,19 +188,18 @@ gimp_template_editor_constructed (GObject *object)
   gtk_box_pack_start (GTK_BOX (editor), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
 
-  table = gtk_table_new (3, 2, FALSE);
-  gtk_table_set_col_spacing (GTK_TABLE (table), 0, 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 0, 2);
-  gtk_container_add (GTK_CONTAINER (frame), table);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+  gtk_container_add (GTK_CONTAINER (frame), grid);
+  gtk_widget_show (grid);
 
-  adjustment = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  adjustment = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   width = gimp_spin_button_new (adjustment, 1.0, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (width), TRUE);
   gtk_entry_set_width_chars (GTK_ENTRY (width), SB_WIDTH);
 
-  adjustment = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  adjustment = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   height = gimp_spin_button_new (adjustment, 1.0, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (height), TRUE);
   gtk_entry_set_width_chars (GTK_ENTRY (height), SB_WIDTH);
@@ -199,42 +208,37 @@ gimp_template_editor_constructed (GObject *object)
   label = gtk_label_new_with_mnemonic (_("_Width:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), width);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 0, 1,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 1, 1);
   gtk_widget_show (label);
 
   label = gtk_label_new_with_mnemonic (_("H_eight:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), height);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 1, 2,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 1, 1, 1);
   gtk_widget_show (label);
 
   /*  create the sizeentry which keeps it all together  */
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_table_attach_defaults (GTK_TABLE (table), hbox, 1, 2, 0, 2);
+  gtk_grid_attach (GTK_GRID (grid), hbox, 1, 0, 1, 2);
   gtk_widget_show (hbox);
 
   private->size_se = gimp_size_entry_new (0,
                                           gimp_template_get_unit (template),
-                                          _("%p"),
+                                          _("%n"),
                                           TRUE, FALSE, FALSE, SB_WIDTH,
                                           GIMP_SIZE_ENTRY_UPDATE_SIZE);
-
-  gtk_table_set_row_spacing (GTK_TABLE (private->size_se), 0, 2);
-  gtk_table_set_col_spacing (GTK_TABLE (private->size_se), 1, 6);
 
   gtk_box_pack_start (GTK_BOX (hbox), private->size_se, FALSE, FALSE, 0);
   gtk_widget_show (private->size_se);
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (private->size_se),
                              GTK_SPIN_BUTTON (height), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (private->size_se), height, 0, 1, 1, 2);
+  gtk_grid_attach (GTK_GRID (private->size_se), height, 0, 1, 1, 1);
   gtk_widget_show (height);
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (private->size_se),
                              GTK_SPIN_BUTTON (width), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (private->size_se), width, 0, 1, 0, 1);
+  gtk_grid_attach (GTK_GRID (private->size_se), width, 0, 0, 1, 1);
   gtk_widget_show (width);
 
   gimp_prop_coordinates_connect (G_OBJECT (template),
@@ -244,7 +248,7 @@ gimp_template_editor_constructed (GObject *object)
                                  gimp_template_get_resolution_y (template));
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_table_attach_defaults (GTK_TABLE (table), hbox, 1, 3, 2, 3);
+  gtk_grid_attach (GTK_GRID (grid), hbox, 1, 2, 2, 1);
   gtk_widget_show (hbox);
 
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
@@ -254,7 +258,7 @@ gimp_template_editor_constructed (GObject *object)
   aspect_box = gimp_enum_icon_box_new (GIMP_TYPE_ASPECT_TYPE,
                                        "gimp", GTK_ICON_SIZE_MENU,
                                        G_CALLBACK (gimp_template_editor_aspect_callback),
-                                       editor,
+                                       editor, NULL,
                                        &private->aspect_button);
   gtk_widget_hide (private->aspect_button); /* hide "square" */
 
@@ -307,19 +311,29 @@ gimp_template_editor_constructed (GObject *object)
   gtk_container_add (GTK_CONTAINER (private->expander), frame);
   gtk_widget_show (frame);
 
-  table = gtk_table_new (9, 2, FALSE);
-  gtk_table_set_col_spacing (GTK_TABLE (table), 0, 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacing (GTK_TABLE (table), 0, 2);
-  gtk_container_add (GTK_CONTAINER (frame), table);
-  gtk_widget_show (table);
+  scrolled_window = gtk_scrolled_window_new (NULL, NULL);
+  gtk_widget_set_size_request (scrolled_window, -1, 300);
+  gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (scrolled_window),
+                                       GTK_SHADOW_OUT);
+  gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled_window),
+                                  GTK_POLICY_NEVER,
+                                  GTK_POLICY_AUTOMATIC);
+  gtk_container_add (GTK_CONTAINER (frame), scrolled_window);
+  gtk_widget_show (scrolled_window);
 
-  adjustment = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  grid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+  gtk_container_set_border_width (GTK_CONTAINER (grid), 16);
+  gtk_container_add (GTK_CONTAINER (scrolled_window), grid);
+  gtk_widget_show (grid);
+
+  adjustment = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   xres = gimp_spin_button_new (adjustment, 1.0, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (xres), TRUE);
   gtk_entry_set_width_chars (GTK_ENTRY (xres), SB_WIDTH);
 
-  adjustment = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  adjustment = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   yres = gimp_spin_button_new (adjustment, 1.0, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (yres), TRUE);
   gtk_entry_set_width_chars (GTK_ENTRY (yres), SB_WIDTH);
@@ -328,46 +342,38 @@ gimp_template_editor_constructed (GObject *object)
   label = gtk_label_new_with_mnemonic (_("_X resolution:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), xres);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 0, 1,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 1, 1);
   gtk_widget_show (label);
 
   label = gtk_label_new_with_mnemonic (_("_Y resolution:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), yres);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 1, 2,
-                    GTK_SHRINK | GTK_FILL, GTK_SHRINK | GTK_FILL, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 1, 1, 1);
   gtk_widget_show (label);
 
   /*  the resolution sizeentry  */
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-  gtk_table_attach_defaults (GTK_TABLE (table), hbox, 1, 2, 0, 2);
+  gtk_grid_attach (GTK_GRID (grid), hbox, 1, 0, 1, 2);
   gtk_widget_show (hbox);
 
   private->resolution_se =
     gimp_size_entry_new (0,
                          gimp_template_get_resolution_unit (template),
-                         _("pixels/%s"),
+                         _("pixels/%a"),
                          FALSE, FALSE, FALSE, SB_WIDTH,
                          GIMP_SIZE_ENTRY_UPDATE_RESOLUTION);
-
-  gtk_table_set_row_spacing (GTK_TABLE (private->resolution_se), 0, 2);
-  gtk_table_set_col_spacing (GTK_TABLE (private->resolution_se), 1, 2);
-  gtk_table_set_col_spacing (GTK_TABLE (private->resolution_se), 2, 2);
 
   gtk_box_pack_start (GTK_BOX (hbox), private->resolution_se, FALSE, FALSE, 0);
   gtk_widget_show (private->resolution_se);
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (private->resolution_se),
                              GTK_SPIN_BUTTON (yres), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (private->resolution_se), yres,
-                             0, 1, 1, 2);
+  gtk_grid_attach (GTK_GRID (private->resolution_se), yres, 0, 1, 1, 1);
   gtk_widget_show (yres);
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (private->resolution_se),
                              GTK_SPIN_BUTTON (xres), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (private->resolution_se), xres,
-                             0, 1, 0, 1);
+  gtk_grid_attach (GTK_GRID (private->resolution_se), xres, 0, 0, 1, 1);
   gtk_widget_show (xres);
 
   gimp_size_entry_set_resolution (GIMP_SIZE_ENTRY (private->size_se), 0,
@@ -379,8 +385,7 @@ gimp_template_editor_constructed (GObject *object)
 
   /*  the resolution chainbutton  */
   private->chain_button = gimp_chain_button_new (GIMP_CHAIN_RIGHT);
-  gtk_table_attach_defaults (GTK_TABLE (private->resolution_se),
-                             private->chain_button, 1, 2, 0, 2);
+  gtk_grid_attach (GTK_GRID (private->resolution_se), private->chain_button, 1, 0, 1, 2);
   gtk_widget_show (private->chain_button);
 
   gimp_prop_coordinates_connect (G_OBJECT (template),
@@ -389,24 +394,14 @@ gimp_template_editor_constructed (GObject *object)
                                  private->resolution_se, private->chain_button,
                                  1.0, 1.0);
 
-  focus_chain = g_list_prepend (focus_chain,
-                                GIMP_SIZE_ENTRY (private->resolution_se)->unitmenu);
-  focus_chain = g_list_prepend (focus_chain, private->chain_button);
-  focus_chain = g_list_prepend (focus_chain, yres);
-  focus_chain = g_list_prepend (focus_chain, xres);
-
-  gtk_container_set_focus_chain (GTK_CONTAINER (private->resolution_se),
-                                 focus_chain);
-  g_list_free (focus_chain);
-
   row = 2;
 
   combo = gimp_prop_enum_combo_box_new (G_OBJECT (template),
                                         "image-type",
                                         GIMP_RGB, GIMP_GRAY);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, row++,
-                             _("Color _space:"), 0.0, 0.5,
-                             combo, 1, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("Color _space:"), 0.0, 0.5,
+                            combo, 1);
 
   /* construct the precision combo manually, instead of using
    * gimp_prop_enum_combo_box_new(), so that we only reset the gamma combo when
@@ -421,9 +416,9 @@ gimp_template_editor_constructed (GObject *object)
                                            NULL);
   g_object_unref (store);
 
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, row++,
-                             _("_Precision:"), 0.0, 0.5,
-                             private->precision_combo, 1, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("_Precision:"), 0.0, 0.5,
+                            private->precision_combo, 1);
 
   gimp_int_combo_box_set_active (GIMP_INT_COMBO_BOX (private->precision_combo),
                                  gimp_babl_component_type (
@@ -433,20 +428,12 @@ gimp_template_editor_constructed (GObject *object)
                     G_CALLBACK (gimp_template_editor_precision_changed),
                     editor);
 
-  combo = gimp_prop_boolean_combo_box_new (G_OBJECT (template),
-                                           "linear",
-                                           _("Linear light"),
-                                           _("Perceptual gamma (sRGB)"));
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, row++,
-                             _("_Gamma:"), 0.0, 0.5,
-                             combo, 1, FALSE);
-
-  toggle = gimp_prop_check_button_new (G_OBJECT (template),
-                                       "color-managed",
-                                       _("Color _manage this image"));
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, row++,
-                             NULL, 0.0, 0.5,
-                             toggle, 1, FALSE);
+  combo = gimp_prop_enum_combo_box_new (G_OBJECT (template), "trc",
+                                        GIMP_TRC_LINEAR,
+                                        GIMP_TRC_NON_LINEAR);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("_Gamma:"), 0.0, 0.5,
+                            combo, 1);
 
   private->profile_combo =
     gimp_prop_profile_combo_box_new (G_OBJECT (template),
@@ -455,16 +442,52 @@ gimp_template_editor_constructed (GObject *object)
                                      _("Choose A Color Profile"),
                                      G_OBJECT (private->gimp->config),
                                      "color-profile-path");
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, row++,
-                             _("Co_lor profile:"), 0.0, 0.5,
-                             private->profile_combo, 1, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("Co_lor profile:"), 0.0, 0.5,
+                            private->profile_combo, 1);
+
+  private->simulation_profile_combo =
+    gimp_prop_profile_combo_box_new (G_OBJECT (template),
+                                     "simulation-profile",
+                                     NULL,
+                                     _("Choose A Soft-Proofing Color Profile"),
+                                     G_OBJECT (private->gimp->config),
+                                     "color-profile-path");
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("_Soft-proofing color profile:"), 0.0, 0.5,
+                            private->simulation_profile_combo, 1);
+
+  private->simulation_intent_combo =
+    gimp_prop_enum_combo_box_new (G_OBJECT (template),
+                                  "simulation-intent",
+                                  0, 0);
+
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("_Soft-proofing rendering intent:"), 0.0, 0.5,
+                            private->simulation_intent_combo, 1);
+
+  g_signal_connect (private->simulation_intent_combo, "changed",
+                    G_CALLBACK (gimp_template_editor_simulation_intent_changed),
+                    editor);
+
+  private->simulation_bpc_toggle =
+    gimp_prop_check_button_new (G_OBJECT (template), "simulation-bpc",
+                                _("_Use Black Point Compensation"));
+
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            NULL, 0.0, 0.5,
+                            private->simulation_bpc_toggle, 1);
+
+  g_signal_connect (private->simulation_bpc_toggle, "toggled",
+                    G_CALLBACK (gimp_template_editor_simulation_bpc_toggled),
+                    editor);
 
   combo = gimp_prop_enum_combo_box_new (G_OBJECT (template),
                                         "fill-type",
                                         0, 0);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, row++,
-                             _("_Fill with:"), 0.0, 0.5,
-                             combo, 1, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                            _("_Fill with:"), 0.0, 0.5,
+                            combo, 1);
 
   scrolled_window = gtk_scrolled_window_new (NULL, NULL);
   gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (scrolled_window),
@@ -472,9 +495,9 @@ gimp_template_editor_constructed (GObject *object)
   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled_window),
                                   GTK_POLICY_AUTOMATIC,
                                   GTK_POLICY_AUTOMATIC);
-  label = gimp_table_attach_aligned (GTK_TABLE (table), 0, row++,
-                                     _("Comme_nt:"), 0.0, 0.0,
-                                     scrolled_window, 1, FALSE);
+  label = gimp_grid_attach_aligned (GTK_GRID (grid), 0, row++,
+                                    _("Comme_nt:"), 0.0, 0.0,
+                                    scrolled_window, 1);
 
   text_buffer = gimp_prop_text_buffer_new (G_OBJECT (template),
                                            "comment", MAX_COMMENT_LENGTH);
@@ -574,28 +597,28 @@ gimp_template_editor_new (GimpTemplate *template,
 
   if (edit_template)
     {
-      GtkWidget   *table;
+      GtkWidget   *grid;
       GtkWidget   *entry;
       GtkWidget   *icon_picker;
 
-      table = gtk_table_new (2, 2, FALSE);
-      gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-      gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-      gtk_box_pack_start (GTK_BOX (editor), table, FALSE, FALSE, 0);
-      gtk_box_reorder_child (GTK_BOX (editor), table, 0);
-      gtk_widget_show (table);
+      grid = gtk_grid_new ();
+      gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+      gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+      gtk_box_pack_start (GTK_BOX (editor), grid, FALSE, FALSE, 0);
+      gtk_box_reorder_child (GTK_BOX (editor), grid, 0);
+      gtk_widget_show (grid);
 
       entry = gimp_prop_entry_new (G_OBJECT (private->template), "name", 128);
 
-      gimp_table_attach_aligned (GTK_TABLE (table), 0, 0,
-                                 _("_Name:"), 1.0, 0.5,
-                                 entry, 1, FALSE);
+      gimp_grid_attach_aligned (GTK_GRID (grid), 0, 0,
+                                _("_Name:"), 1.0, 0.5,
+                                entry, 1);
 
       icon_picker = gimp_prop_icon_picker_new (GIMP_VIEWABLE (private->template),
                                                gimp);
-      gimp_table_attach_aligned (GTK_TABLE (table), 0, 1,
-                                 _("_Icon:"), 1.0, 0.5,
-                                 icon_picker, 1, TRUE);
+      gimp_grid_attach_aligned (GTK_GRID (grid), 0, 1,
+                                _("_Icon:"), 1.0, 0.5,
+                                icon_picker, 1);
     }
 
   return GTK_WIDGET (editor);
@@ -655,41 +678,50 @@ gimp_template_editor_precision_changed (GtkWidget          *widget,
 {
   GimpTemplateEditorPrivate *private = GET_PRIVATE (editor);
   GimpComponentType          component_type;
+  GimpTRCType                trc;
 
   gimp_int_combo_box_get_active (GIMP_INT_COMBO_BOX (widget),
                                  (gint *) &component_type);
 
-  g_object_set (private->template,
-                "component-type", component_type,
+  g_object_get (private->template,
+                "trc", &trc,
                 NULL);
 
-  /* when changing this logic, also change the same switch()
-   * in convert-precision-dialog.c
-   */
-  switch (component_type)
-    {
-    case GIMP_COMPONENT_TYPE_U8:
-      /* default to gamma for 8 bit */
-      g_object_set (private->template,
-                    "linear", FALSE,
-                    NULL);
-      break;
+  trc = gimp_suggest_trc_for_component_type (component_type, trc);
 
-    case GIMP_COMPONENT_TYPE_U16:
-    case GIMP_COMPONENT_TYPE_U32:
-    default:
-      /* leave gamma alone by default for 16/32 bit int */
-      break;
+  g_object_set (private->template,
+                "component-type", component_type,
+                "trc",            trc,
+                NULL);
+}
 
-    case GIMP_COMPONENT_TYPE_HALF:
-    case GIMP_COMPONENT_TYPE_FLOAT:
-    case GIMP_COMPONENT_TYPE_DOUBLE:
-      /* default to linear for floating point */
-      g_object_set (private->template,
-                    "linear", TRUE,
-                    NULL);
-      break;
-    }
+static void
+gimp_template_editor_simulation_intent_changed (GtkWidget          *widget,
+                                                GimpTemplateEditor *editor)
+{
+  GimpTemplateEditorPrivate *private = GET_PRIVATE (editor);
+  GimpColorRenderingIntent   intent;
+
+  gimp_int_combo_box_get_active (GIMP_INT_COMBO_BOX (widget),
+                                 (gint *) &intent);
+
+  g_object_set (private->template,
+                "simulation-intent", intent,
+                NULL);
+}
+
+static void
+gimp_template_editor_simulation_bpc_toggled (GtkWidget          *widget,
+                                             GimpTemplateEditor *editor)
+{
+  GimpTemplateEditorPrivate *private = GET_PRIVATE (editor);
+  gboolean                   bpc     = FALSE;
+
+  bpc = gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (widget));
+
+  g_object_set (private->template,
+                "simulation-bpc", bpc,
+                NULL);
 }
 
 static void
@@ -842,13 +874,14 @@ gimp_template_editor_template_notify (GimpTemplate       *template,
       ! strcmp (param_spec->name, "image-type") ||
       ! strcmp (param_spec->name, "precision"))
     {
-      GtkListStore *profile_store;
-      GFile        *profile;
-      gchar        *filename;
+      GimpColorProfile        *profile;
+      GtkListStore            *profile_store;
+      GFile                   *file;
+      gchar                   *path;
 
-      filename = gimp_personal_rc_file ("profilerc");
-      profile_store = gimp_color_profile_store_new (filename);
-      g_free (filename);
+      file = gimp_directory_file ("profilerc", NULL);
+      profile_store = gimp_color_profile_store_new (file);
+      g_object_unref (file);
 
       gimp_color_profile_store_add_defaults (GIMP_COLOR_PROFILE_STORE (profile_store),
                                              private->gimp->config->color_management,
@@ -858,16 +891,56 @@ gimp_template_editor_template_notify (GimpTemplate       *template,
 
       gtk_combo_box_set_model (GTK_COMBO_BOX (private->profile_combo),
                                GTK_TREE_MODEL (profile_store));
+
+      /* Simulation Profile should not be set by default */
+      file = gimp_directory_file ("profilerc", NULL);
+      profile_store = gimp_color_profile_store_new (file);
+      g_object_unref (file);
+
+      gimp_color_profile_store_add_file (GIMP_COLOR_PROFILE_STORE (profile_store),
+                                         NULL, NULL);
+      /* Add Preferred CMYK profile if it exists */
+      profile =
+        gimp_color_config_get_cmyk_color_profile (GIMP_COLOR_CONFIG (private->gimp->config->color_management),
+                                                  NULL);
+      if (profile)
+        {
+          g_object_get (G_OBJECT (private->gimp->config->color_management),
+                        "cmyk-profile", &path, NULL);
+          file = gimp_file_new_for_config_path (path, NULL);
+          g_free (path);
+          text = g_strdup_printf (_("Preferred CMYK (%s)"),
+                                  gimp_color_profile_get_label (profile));
+          g_object_unref (profile);
+          gimp_color_profile_store_add_file (GIMP_COLOR_PROFILE_STORE (profile_store),
+                                             file, text);
+          g_object_unref (file);
+          g_free (text);
+        }
+
+      gtk_combo_box_set_model (GTK_COMBO_BOX (private->simulation_profile_combo),
+                               GTK_TREE_MODEL (profile_store));
+
       g_object_unref (profile_store);
 
       g_object_get (template,
-                    "color-profile", &profile,
+                    "color-profile", &file,
                     NULL);
 
       gimp_color_profile_combo_box_set_active_file (GIMP_COLOR_PROFILE_COMBO_BOX (private->profile_combo),
-                                                    profile, NULL);
+                                                    file, NULL);
 
-      if (profile)
-        g_object_unref (profile);
+      if (file)
+        g_object_unref (file);
+
+      g_object_get (template,
+                    "simulation-profile", &file,
+                    NULL);
+
+      gimp_color_profile_combo_box_set_active_file (GIMP_COLOR_PROFILE_COMBO_BOX (private->simulation_profile_combo),
+                                                    file, NULL);
+
+      if (file)
+        g_object_unref (file);
     }
 }

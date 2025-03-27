@@ -28,10 +28,11 @@
 #include "libgimpbase/gimpprotocol.h"
 #include "libgimpbase/gimpwire.h"
 
+#include "libgimp/gimpgpparams.h"
+
 #include "plug-in-types.h"
 
 #include "gegl/gimp-babl.h"
-#include "gegl/gimp-babl-compat.h"
 #include "gegl/gimp-gegl-tile-compat.h"
 
 #include "core/gimp.h"
@@ -49,7 +50,6 @@
 #include "gimpplugindef.h"
 #include "gimppluginshm.h"
 #include "gimptemporaryprocedure.h"
-#include "plug-in-params.h"
 
 #include "gimp-intl.h"
 
@@ -178,7 +178,7 @@ gimp_plug_in_handle_tile_request (GimpPlugIn *plug_in,
 {
   g_return_if_fail (request != NULL);
 
-  if (request->drawable_ID == -1)
+  if (request->drawable_id == -1)
     gimp_plug_in_handle_tile_put (plug_in, request);
   else
     gimp_plug_in_handle_tile_get (plug_in, request);
@@ -196,7 +196,7 @@ gimp_plug_in_handle_tile_put (GimpPlugIn *plug_in,
   const Babl      *format;
   GeglRectangle    tile_rect;
 
-  tile_data.drawable_ID = -1;
+  tile_data.drawable_id = -1;
   tile_data.tile_num    = 0;
   tile_data.shadow      = 0;
   tile_data.bpp         = 0;
@@ -231,8 +231,8 @@ gimp_plug_in_handle_tile_put (GimpPlugIn *plug_in,
 
   tile_info = msg.data;
 
-  drawable = (GimpDrawable *) gimp_item_get_by_ID (plug_in->manager->gimp,
-                                                   tile_info->drawable_ID);
+  drawable = (GimpDrawable *) gimp_item_get_by_id (plug_in->manager->gimp,
+                                                   tile_info->drawable_id);
 
   if (! GIMP_IS_DRAWABLE (drawable))
     {
@@ -241,7 +241,7 @@ gimp_plug_in_handle_tile_put (GimpPlugIn *plug_in,
                     "tried writing to invalid drawable %d (killing)",
                     gimp_object_get_name (plug_in),
                     gimp_file_get_utf8_name (plug_in->file),
-                    tile_info->drawable_ID);
+                    tile_info->drawable_id);
       gimp_plug_in_close (plug_in, TRUE);
       return;
     }
@@ -253,7 +253,7 @@ gimp_plug_in_handle_tile_put (GimpPlugIn *plug_in,
                     "from the image (killing)",
                     gimp_object_get_name (plug_in),
                     gimp_file_get_utf8_name (plug_in->file),
-                    tile_info->drawable_ID);
+                    tile_info->drawable_id);
       gimp_plug_in_close (plug_in, TRUE);
       return;
     }
@@ -272,14 +272,14 @@ gimp_plug_in_handle_tile_put (GimpPlugIn *plug_in,
     }
   else
     {
-      if (gimp_item_is_content_locked (GIMP_ITEM (drawable)))
+      if (gimp_item_is_content_locked (GIMP_ITEM (drawable), NULL))
         {
           gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_ERROR,
                         "Plug-in \"%s\"\n(%s)\n\n"
                         "tried writing to a locked drawable %d (killing)",
                         gimp_object_get_name (plug_in),
                         gimp_file_get_utf8_name (plug_in->file),
-                        tile_info->drawable_ID);
+                        tile_info->drawable_id);
           gimp_plug_in_close (plug_in, TRUE);
           return;
         }
@@ -290,7 +290,7 @@ gimp_plug_in_handle_tile_put (GimpPlugIn *plug_in,
                         "tried writing to a group layer %d (killing)",
                         gimp_object_get_name (plug_in),
                         gimp_file_get_utf8_name (plug_in->file),
-                        tile_info->drawable_ID);
+                        tile_info->drawable_id);
           gimp_plug_in_close (plug_in, TRUE);
           return;
         }
@@ -306,19 +306,15 @@ gimp_plug_in_handle_tile_put (GimpPlugIn *plug_in,
     {
       gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_ERROR,
                     "Plug-in \"%s\"\n(%s)\n\n"
-                    "requested invalid tile (killing)",
+                    "requested invalid tile #%d for writing (killing)",
                     gimp_object_get_name (plug_in),
-                    gimp_file_get_utf8_name (plug_in->file));
+                    gimp_file_get_utf8_name (plug_in->file),
+                    tile_info->tile_num);
       gimp_plug_in_close (plug_in, TRUE);
       return;
     }
 
   format = gegl_buffer_get_format (buffer);
-
-  if (! gimp_plug_in_precision_enabled (plug_in))
-    {
-      format = gimp_babl_compat_u8_format (format);
-    }
 
   if (tile_data.use_shm)
     {
@@ -356,8 +352,8 @@ gimp_plug_in_handle_tile_get (GimpPlugIn *plug_in,
   GeglRectangle    tile_rect;
   gint             tile_size;
 
-  drawable = (GimpDrawable *) gimp_item_get_by_ID (plug_in->manager->gimp,
-                                                   request->drawable_ID);
+  drawable = (GimpDrawable *) gimp_item_get_by_id (plug_in->manager->gimp,
+                                                   request->drawable_id);
 
   if (! GIMP_IS_DRAWABLE (drawable))
     {
@@ -366,7 +362,7 @@ gimp_plug_in_handle_tile_get (GimpPlugIn *plug_in,
                     "tried reading from invalid drawable %d (killing)",
                     gimp_object_get_name (plug_in),
                     gimp_file_get_utf8_name (plug_in->file),
-                    request->drawable_ID);
+                    request->drawable_id);
       gimp_plug_in_close (plug_in, TRUE);
       return;
     }
@@ -378,7 +374,7 @@ gimp_plug_in_handle_tile_get (GimpPlugIn *plug_in,
                     "from the image (killing)",
                     gimp_object_get_name (plug_in),
                     gimp_file_get_utf8_name (plug_in->file),
-                    request->drawable_ID);
+                    request->drawable_id);
       gimp_plug_in_close (plug_in, TRUE);
       return;
     }
@@ -402,24 +398,20 @@ gimp_plug_in_handle_tile_get (GimpPlugIn *plug_in,
     {
       gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_ERROR,
                     "Plug-in \"%s\"\n(%s)\n\n"
-                    "requested invalid tile (killing)",
+                    "requested invalid tile #%d for reading (killing)",
                     gimp_object_get_name (plug_in),
-                    gimp_file_get_utf8_name (plug_in->file));
+                    gimp_file_get_utf8_name (plug_in->file),
+                    request->tile_num);
       gimp_plug_in_close (plug_in, TRUE);
       return;
     }
 
   format = gegl_buffer_get_format (buffer);
 
-  if (! gimp_plug_in_precision_enabled (plug_in))
-    {
-      format = gimp_babl_compat_u8_format (format);
-    }
-
   tile_size = (babl_format_get_bytes_per_pixel (format) *
                tile_rect.width * tile_rect.height);
 
-  tile_data.drawable_ID = request->drawable_ID;
+  tile_data.drawable_id = request->drawable_id;
   tile_data.tile_num    = request->tile_num;
   tile_data.shadow      = request->shadow;
   tile_data.bpp         = babl_format_get_bytes_per_pixel (format);
@@ -577,10 +569,12 @@ gimp_plug_in_handle_proc_run (GimpPlugIn *plug_in,
   if (! proc_name)
     proc_name = canonical;
 
-  args = plug_in_params_to_args (procedure ? procedure->args     : NULL,
-                                 procedure ? procedure->num_args : 0,
-                                 proc_run->params, proc_run->nparams,
-                                 FALSE, FALSE);
+  args = _gimp_gp_params_to_value_array (plug_in->manager->gimp,
+                                         procedure ? procedure->args     : NULL,
+                                         procedure ? procedure->num_args : 0,
+                                         proc_run->params,
+                                         proc_run->n_params,
+                                         FALSE);
 
   /*  Execute the procedure even if gimp_pdb_lookup_procedure()
    *  returned NULL, gimp_pdb_execute_procedure_by_name_args() will
@@ -619,9 +613,9 @@ gimp_plug_in_handle_proc_run (GimpPlugIn *plug_in,
        *  since proc_name may have been remapped by gimp->procedural_compat_ht
        *  and canonical may be different too.
        */
-      proc_return.name    = proc_run->name;
-      proc_return.nparams = gimp_value_array_length (return_vals);
-      proc_return.params  = plug_in_args_to_params (return_vals, FALSE);
+      proc_return.name     = proc_run->name;
+      proc_return.n_params = gimp_value_array_length (return_vals);
+      proc_return.params   = _gimp_value_array_to_gp_params (return_vals, FALSE);
 
       if (! gp_proc_return_write (plug_in->my_write, &proc_return, plug_in))
         {
@@ -630,7 +624,7 @@ gimp_plug_in_handle_proc_run (GimpPlugIn *plug_in,
           gimp_plug_in_close (plug_in, TRUE);
         }
 
-      g_free (proc_return.params);
+      _gimp_gp_params_free (proc_return.params, proc_return.n_params, FALSE);
     }
 
   gimp_value_array_unref (return_vals);
@@ -645,11 +639,12 @@ gimp_plug_in_handle_proc_return (GimpPlugIn   *plug_in,
   g_return_if_fail (proc_return != NULL);
 
   proc_frame->return_vals =
-    plug_in_params_to_args (proc_frame->procedure->values,
-                            proc_frame->procedure->num_values,
-                            proc_return->params,
-                            proc_return->nparams,
-                            TRUE, TRUE);
+    _gimp_gp_params_to_value_array (plug_in->manager->gimp,
+                                    proc_frame->procedure->values,
+                                    proc_frame->procedure->num_values,
+                                    proc_return->params,
+                                    proc_return->n_params,
+                                    TRUE);
 
   if (proc_frame->main_loop)
     {
@@ -680,11 +675,12 @@ gimp_plug_in_handle_temp_proc_return (GimpPlugIn   *plug_in,
       GimpPlugInProcFrame *proc_frame = plug_in->temp_proc_frames->data;
 
       proc_frame->return_vals =
-        plug_in_params_to_args (proc_frame->procedure->values,
-                                proc_frame->procedure->num_values,
-                                proc_return->params,
-                                proc_return->nparams,
-                                TRUE, TRUE);
+        _gimp_gp_params_to_value_array (plug_in->manager->gimp,
+                                        proc_frame->procedure->values,
+                                        proc_frame->procedure->num_values,
+                                        proc_return->params,
+                                        proc_return->n_params,
+                                        TRUE);
 
       gimp_plug_in_main_loop_quit (plug_in);
       gimp_plug_in_proc_frame_pop (plug_in);
@@ -707,86 +703,58 @@ gimp_plug_in_handle_proc_install (GimpPlugIn    *plug_in,
 {
   GimpPlugInProcedure *proc       = NULL;
   GimpProcedure       *procedure  = NULL;
-  gchar               *canonical;
   gboolean             null_name  = FALSE;
-  gboolean             valid_utf8 = FALSE;
+  gboolean             valid_utf8 = TRUE;
   gint                 i;
 
   g_return_if_fail (proc_install != NULL);
   g_return_if_fail (proc_install->name != NULL);
 
-  canonical = gimp_canonicalize_identifier (proc_install->name);
-
-  /*  Sanity check for array arguments  */
-
-  for (i = 1; i < proc_install->nparams; i++)
+  if (! gimp_is_canonical_identifier (proc_install->name))
     {
-      if ((proc_install->params[i].type == GIMP_PDB_INT32ARRAY ||
-           proc_install->params[i].type == GIMP_PDB_INT8ARRAY  ||
-           proc_install->params[i].type == GIMP_PDB_FLOATARRAY ||
-           proc_install->params[i].type == GIMP_PDB_STRINGARRAY ||
-           proc_install->params[i].type == GIMP_PDB_COLORARRAY)
-          &&
-          proc_install->params[i - 1].type != GIMP_PDB_INT32)
-        {
-          gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_ERROR,
-                        "Plug-in \"%s\"\n(%s)\n\n"
-                        "attempted to install procedure \"%s\" "
-                        "which fails to comply with the array parameter "
-                        "passing standard.  Argument %d is noncompliant.",
-                        gimp_object_get_name (plug_in),
-                        gimp_file_get_utf8_name (plug_in->file),
-                        canonical, i);
-          g_free (canonical);
-          return;
-        }
+      gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_ERROR,
+                    "Plug-in \"%s\"\n(%s)\n\n"
+                    "attempted to install procedure \"%s\" with a "
+                    "non-canonical name.",
+                    gimp_object_get_name (plug_in),
+                    gimp_file_get_utf8_name (plug_in->file),
+                    proc_install->name);
+      return;
     }
 
   /*  Sanity check strings for UTF-8 validity  */
 
-#define VALIDATE(str)         (g_utf8_validate ((str), -1, NULL))
-#define VALIDATE_OR_NULL(str) ((str) == NULL || g_utf8_validate ((str), -1, NULL))
+#define VALIDATE(str) ((str) == NULL || g_utf8_validate ((str), -1, NULL))
 
-  if (VALIDATE_OR_NULL (proc_install->menu_path) &&
-      VALIDATE         (canonical)               &&
-      VALIDATE_OR_NULL (proc_install->blurb)     &&
-      VALIDATE_OR_NULL (proc_install->help)      &&
-      VALIDATE_OR_NULL (proc_install->author)    &&
-      VALIDATE_OR_NULL (proc_install->copyright) &&
-      VALIDATE_OR_NULL (proc_install->date))
+  for (i = 0; i < proc_install->n_params && valid_utf8 && ! null_name; i++)
     {
-      null_name  = FALSE;
-      valid_utf8 = TRUE;
-
-      for (i = 0; i < proc_install->nparams && valid_utf8 && !null_name; i++)
+      if (! proc_install->params[i].name)
         {
-          if (! proc_install->params[i].name)
-            {
-              null_name = TRUE;
-            }
-          else if (! (VALIDATE         (proc_install->params[i].name) &&
-                      VALIDATE_OR_NULL (proc_install->params[i].description)))
-            {
-              valid_utf8 = FALSE;
-            }
+          null_name = TRUE;
         }
-
-      for (i = 0; i < proc_install->nreturn_vals && valid_utf8 && !null_name; i++)
+      else if (! (VALIDATE (proc_install->params[i].name) &&
+                  VALIDATE (proc_install->params[i].nick) &&
+                  VALIDATE (proc_install->params[i].blurb)))
         {
-          if (! proc_install->return_vals[i].name)
-            {
-              null_name = TRUE;
-            }
-          else if (! (VALIDATE         (proc_install->return_vals[i].name) &&
-                      VALIDATE_OR_NULL (proc_install->return_vals[i].description)))
-            {
-              valid_utf8 = FALSE;
-            }
+          valid_utf8 = FALSE;
+        }
+    }
+
+  for (i = 0; i < proc_install->n_return_vals && valid_utf8 && !null_name; i++)
+    {
+      if (! proc_install->return_vals[i].name)
+        {
+          null_name = TRUE;
+        }
+      else if (! (VALIDATE (proc_install->return_vals[i].name) &&
+                  VALIDATE (proc_install->return_vals[i].nick) &&
+                  VALIDATE (proc_install->return_vals[i].blurb)))
+        {
+          valid_utf8 = FALSE;
         }
     }
 
 #undef VALIDATE
-#undef VALIDATE_OR_NULL
 
   if (null_name)
     {
@@ -796,8 +764,7 @@ gimp_plug_in_handle_proc_install (GimpPlugIn    *plug_in,
                     "NULL parameter name.",
                     gimp_object_get_name (plug_in),
                     gimp_file_get_utf8_name (plug_in->file),
-                    canonical);
-      g_free (canonical);
+                    proc_install->name);
       return;
     }
 
@@ -809,35 +776,21 @@ gimp_plug_in_handle_proc_install (GimpPlugIn    *plug_in,
                     "invalid UTF-8 strings.",
                     gimp_object_get_name (plug_in),
                     gimp_file_get_utf8_name (plug_in->file),
-                    canonical);
-      g_free (canonical);
+                    proc_install->name);
       return;
-    }
-
-  if (proc_install->menu_path && strlen (proc_install->menu_path) &&
-      proc_install->menu_path[0] == '<')
-    {
-      g_printerr ("Plug-in \"%s\"\n(%s) "
-                  "is installing procedure \"%s\" with a full "
-                  "menu path \"%s\" as menu label, this deprecated and will "
-                  "be an error in GIMP 3.0\n",
-                  gimp_object_get_name (plug_in),
-                  gimp_file_get_utf8_name (plug_in->file),
-                  canonical,
-                  proc_install->menu_path);
     }
 
   /*  Create the procedure object  */
 
   switch (proc_install->type)
     {
-    case GIMP_PLUGIN:
-    case GIMP_EXTENSION:
+    case GIMP_PDB_PROC_TYPE_PLUGIN:
+    case GIMP_PDB_PROC_TYPE_PERSISTENT:
       procedure = gimp_plug_in_procedure_new (proc_install->type,
                                               plug_in->file);
       break;
 
-    case GIMP_TEMPORARY:
+    case GIMP_PDB_PROC_TYPE_TEMPORARY:
       procedure = gimp_temporary_procedure_new (plug_in);
       break;
     }
@@ -847,156 +800,36 @@ gimp_plug_in_handle_proc_install (GimpPlugIn    *plug_in,
   proc->mtime                 = time (NULL);
   proc->installed_during_init = (plug_in->call_mode == GIMP_PLUG_IN_CALL_INIT);
 
-  gimp_object_take_name (GIMP_OBJECT (procedure), canonical);
-  gimp_procedure_set_strings (procedure,
-                              proc_install->name,
-                              proc_install->blurb,
-                              proc_install->help,
-                              proc_install->author,
-                              proc_install->copyright,
-                              proc_install->date,
-                              NULL);
+  gimp_object_set_name (GIMP_OBJECT (procedure), proc_install->name);
 
-  gimp_plug_in_procedure_set_image_types (proc, proc_install->image_types);
-
-  for (i = 0; i < proc_install->nparams; i++)
+  for (i = 0; i < proc_install->n_params; i++)
     {
-      GParamSpec *pspec;
-      gboolean    name_valid;
+      GParamSpec *pspec =
+        _gimp_gp_param_def_to_param_spec (&proc_install->params[i]);
 
-      pspec = gimp_pdb_compat_param_spec (plug_in->manager->gimp,
-                                          proc_install->params[i].type,
-                                          proc_install->params[i].name,
-                                          proc_install->params[i].description,
-                                          &name_valid);
-
-      gimp_procedure_add_argument (procedure, pspec);
-
-      if (pspec && ! name_valid)
-        {
-          switch (plug_in->manager->gimp->pdb_compat_mode)
-            {
-            case GIMP_PDB_COMPAT_ON:
-              break;
-
-            case GIMP_PDB_COMPAT_WARN:
-              gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_WARNING,
-                            "Plug-in \"%s\"\n(%s)\n"
-                            "attempted to install procedure \"%s\" "
-                            "with invalid parameter name \"%s\".\n"
-                            "This is deprecated.\n"
-                            "The parameter name was changed to \"%s\".",
-                            gimp_object_get_name (plug_in),
-                            gimp_file_get_utf8_name (plug_in->file),
-                            gimp_object_get_name (proc),
-                            proc_install->params[i].name,
-                            pspec->name);
-              break;
-
-            case GIMP_PDB_COMPAT_OFF:
-              gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_ERROR,
-                            "Plug-in \"%s\"\n(%s)\n"
-                            "attempted to install procedure \"%s\" "
-                            "with invalid parameter name \"%s\".\n"
-                            "This is not allowed.",
-                            gimp_object_get_name (plug_in),
-                            gimp_file_get_utf8_name (plug_in->file),
-                            gimp_object_get_name (proc),
-                            proc_install->params[i].name);
-
-              g_object_unref (proc);
-
-              return;
-            }
-        }
+      if (pspec)
+        gimp_procedure_add_argument (procedure, pspec);
     }
 
-  for (i = 0; i < proc_install->nreturn_vals; i++)
+  for (i = 0; i < proc_install->n_return_vals; i++)
     {
-      GParamSpec *pspec;
-      gboolean    name_valid;
+      GParamSpec *pspec =
+        _gimp_gp_param_def_to_param_spec (&proc_install->return_vals[i]);
 
-      pspec = gimp_pdb_compat_param_spec (plug_in->manager->gimp,
-                                          proc_install->return_vals[i].type,
-                                          proc_install->return_vals[i].name,
-                                          proc_install->return_vals[i].description,
-                                          &name_valid);
-
-      gimp_procedure_add_return_value (procedure, pspec);
-
-      if (pspec && ! name_valid)
-        {
-          switch (plug_in->manager->gimp->pdb_compat_mode)
-            {
-            case GIMP_PDB_COMPAT_ON:
-              break;
-
-            case GIMP_PDB_COMPAT_WARN:
-              gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_WARNING,
-                            "Plug-in \"%s\"\n(%s)\n"
-                            "attempted to install procedure \"%s\" "
-                            "with invalid return-value name \"%s\".\n"
-                            "This is deprecated.\n"
-                            "The return-value name was changed to \"%s\".",
-                            gimp_object_get_name (plug_in),
-                            gimp_file_get_utf8_name (plug_in->file),
-                            gimp_object_get_name (proc),
-                            proc_install->return_vals[i].name,
-                            pspec->name);
-              break;
-
-            case GIMP_PDB_COMPAT_OFF:
-              gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_ERROR,
-                            "Plug-in \"%s\"\n(%s)\n"
-                            "attempted to install procedure \"%s\" "
-                            "with invalid return-value name \"%s\".\n"
-                            "This is not allowed.",
-                            gimp_object_get_name (plug_in),
-                            gimp_file_get_utf8_name (plug_in->file),
-                            gimp_object_get_name (proc),
-                            proc_install->return_vals[i].name);
-
-              g_object_unref (proc);
-
-              return;
-            }
-        }
-    }
-
-  /*  Sanity check menu path  */
-
-  if (proc_install->menu_path && strlen (proc_install->menu_path))
-    {
-      if (proc_install->menu_path[0] == '<')
-        {
-          GError *error = NULL;
-
-          if (! gimp_plug_in_procedure_add_menu_path (proc,
-                                                      proc_install->menu_path,
-                                                      &error))
-            {
-              gimp_message_literal (plug_in->manager->gimp,
-                                    NULL, GIMP_MESSAGE_WARNING,
-                                    error->message);
-              g_clear_error (&error);
-            }
-        }
-      else
-        {
-          proc->menu_label = g_strdup (proc_install->menu_path);
-        }
+      if (pspec)
+        gimp_procedure_add_return_value (procedure, pspec);
     }
 
   /*  Install the procedure  */
 
   switch (proc_install->type)
     {
-    case GIMP_PLUGIN:
-    case GIMP_EXTENSION:
+    case GIMP_PDB_PROC_TYPE_PLUGIN:
+    case GIMP_PDB_PROC_TYPE_PERSISTENT:
       gimp_plug_in_def_add_procedure (plug_in->plug_in_def, proc);
       break;
 
-    case GIMP_TEMPORARY:
+    case GIMP_PDB_PROC_TYPE_TEMPORARY:
       gimp_plug_in_add_temp_proc (plug_in, GIMP_TEMPORARY_PROCEDURE (proc));
       break;
     }
@@ -1009,19 +842,27 @@ gimp_plug_in_handle_proc_uninstall (GimpPlugIn      *plug_in,
                                     GPProcUninstall *proc_uninstall)
 {
   GimpPlugInProcedure *proc;
-  gchar               *canonical;
 
   g_return_if_fail (proc_uninstall != NULL);
   g_return_if_fail (proc_uninstall->name != NULL);
 
-  canonical = gimp_canonicalize_identifier (proc_uninstall->name);
+  if (! gimp_is_canonical_identifier (proc_uninstall->name))
+    {
+      gimp_message (plug_in->manager->gimp, NULL, GIMP_MESSAGE_ERROR,
+                    "Plug-in \"%s\"\n(%s)\n\n"
+                    "attempted to uninstall procedure \"%s\" with a "
+                    "non-canonical name.",
+                    gimp_object_get_name (plug_in),
+                    gimp_file_get_utf8_name (plug_in->file),
+                    proc_uninstall->name);
+      return;
+    }
 
-  proc = gimp_plug_in_procedure_find (plug_in->temp_procedures, canonical);
+  proc = gimp_plug_in_procedure_find (plug_in->temp_procedures,
+                                      proc_uninstall->name);
 
   if (proc)
     gimp_plug_in_remove_temp_proc (plug_in, GIMP_TEMPORARY_PROCEDURE (proc));
-
-  g_free (canonical);
 }
 
 static void

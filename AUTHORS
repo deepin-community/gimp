@@ -61,6 +61,7 @@ The following people have contributed code to GIMP:
  Jay Cox
  Kevin Cozens
  Jeremiah Darais
+ Shubham Daule
  Michael Deal
  Alexia Death
  Brian Degenhardt
@@ -81,6 +82,7 @@ The following people have contributed code to GIMP:
  Morton Eriksen
  Larry Ewing
  Dirk Farin
+ Idriss Fekir
  Pedro Alonso Ferrer
  Nick Fetchak
  Piotr Filiciak
@@ -170,6 +172,7 @@ The following people have contributed code to GIMP:
  Tobias Lenz
  Frederic Leroy
  Raph Levien
+ Bruno Lopes
  Wing Tung Leung
  Dave Lichterman
  Adrian Likins
@@ -225,9 +228,10 @@ The following people have contributed code to GIMP:
  Jon Nordby
  Martin Nordholts
  Stephen Robert Norris
- Daniel Novomesky
+ Daniel Novomeský
  Erik Nygren
  Miles O'Neal
+ Lukas Oberhuber
  David Odin
  Nelson A. de Oliveira
  Victor Oliveira
@@ -342,6 +346,7 @@ The following people have contributed art to GIMP:
 
  Lapo Calamandrei
  Paul Davey
+ Patrick David
  Alexia Death
  Aurore Derriennic
  Philipp Haegi
@@ -350,7 +355,9 @@ The following people have contributed art to GIMP:
  Karl La Rocca
  Andreas Nilsson
  Ville Pätsi
+ Denis Rangelov
  Mike Schaeffer
+ Sevenix
  Carol Spears
  Klaus Staedtler
  Jakub Steiner
@@ -361,18 +368,22 @@ The following people have helped to document GIMP:
 
  Ignacio AntI
  Žygimantas Beručka
+ Jacob Boerema
  Carey Bunks
  Marco Ciampa
  Sven Claussner
+ Patrick David
  Dust
  Ulf-D. Ehlert
  Alessandro Falappa
  Jakub Friedl
+ Niels De Graef
  Michael Hammel
  Julien Hardelin
  Simon Janes
  Róman Joost
  Hans de Jonge
+ Lloyd Konneker
  Semka Kuloviæ-Debals
  Karin Kylander
  Olof S Kylander
@@ -380,6 +391,7 @@ The following people have helped to document GIMP:
  Vitaly Lomov
  Ed Mackey
  Ian Main
+ Akkana Peck
  Pierre Perrier
  Alexandre Prokoudine
  Manuel Quiñones

@@ -139,7 +139,7 @@ gimp_param_config_path_class_init (GParamSpecClass *class)
  * or list of file or dir names.
  * See g_param_spec_internal() for more information.
  *
- * Returns: a newly allocated #GParamSpec instance
+ * Returns: (transfer full): a newly allocated #GParamSpec instance
  *
  * Since: 2.4
  **/
@@ -213,10 +213,17 @@ static gchar        * gimp_config_path_unexpand_only (const gchar  *path) G_GNUC
 gchar *
 gimp_config_build_data_path (const gchar *name)
 {
-  return g_strconcat ("${gimp_dir}", G_DIR_SEPARATOR_S, name,
-                      G_SEARCHPATH_SEPARATOR_S,
-                      "${gimp_data_dir}", G_DIR_SEPARATOR_S, name,
-                      NULL);
+  if (g_getenv ("GIMP_TESTING_ABS_TOP_SRCDIR"))
+    /* Unit-testing mode: the source directory is where data is found. */
+    return g_strconcat (g_getenv ("GIMP_TESTING_ABS_TOP_SRCDIR"),
+                        G_DIR_SEPARATOR_S, "data",
+                        G_DIR_SEPARATOR_S, name,
+                        NULL);
+  else
+    return g_strconcat ("${gimp_dir}", G_DIR_SEPARATOR_S, name,
+                        G_SEARCHPATH_SEPARATOR_S,
+                        "${gimp_data_dir}", G_DIR_SEPARATOR_S, name,
+                        NULL);
 }
 
 /**
@@ -267,6 +274,27 @@ gimp_config_build_writable_path (const gchar *name)
   return g_strconcat ("${gimp_dir}", G_DIR_SEPARATOR_S, name, NULL);
 }
 
+/**
+ * gimp_config_build_system_path:
+ * @name: directory name (in UTF-8 encoding)
+ *
+ * Creates a search path as it is used in the gimprc file.  The path
+ * returned by gimp_config_build_system_path() is just the read-only
+ * parts of the search path constructed by gimp_config_build_plug_in_path().
+ *
+ * Note that you cannot use this path directly with gimp_path_parse().
+ * As it is in the gimprc notation, you first need to expand and
+ * recode it using gimp_config_path_expand().
+ *
+ * Returns: a newly allocated string
+ *
+ * Since: 2.10.6
+ **/
+gchar *
+gimp_config_build_system_path (const gchar *name)
+{
+  return g_strconcat ("${gimp_plug_in_dir}", G_DIR_SEPARATOR_S, name, NULL);
+}
 
 /**
  * gimp_config_path_expand:
@@ -284,7 +312,7 @@ gimp_config_build_writable_path (const gchar *name)
  *
  * To reverse the expansion, use gimp_config_path_unexpand().
  *
- * Return value: a newly allocated NUL-terminated string
+ * Returns: a newly allocated NUL-terminated string
  *
  * Since: 2.4
  **/
@@ -329,7 +357,8 @@ gimp_config_path_expand (const gchar  *path,
  * gimp_path_parse(), then turns the filenames returned by
  * gimp_path_parse() into GFile using g_file_new_for_path().
  *
- * Return value: a #GList of newly allocated #GFile objects.
+ * Returns: (element-type GFile) (transfer full):
+                 a #GList of newly allocated #GFile objects.
  *
  * Since: 2.10
  **/
@@ -380,7 +409,7 @@ gimp_config_path_expand_to_files (const gchar  *path,
  * If @recode is %TRUE then @path is in local filesystem encoding,
  * if @recode is %FALSE then @path is assumed to be UTF-8.
  *
- * Return value: a newly allocated NUL-terminated UTF-8 string
+ * Returns: a newly allocated NUL-terminated UTF-8 string
  *
  * Since: 2.10
  **/
@@ -420,7 +449,8 @@ gimp_config_path_unexpand (const gchar  *path,
  *
  * To reverse the expansion, use gimp_file_get_config_path().
  *
- * Return value: a newly allocated #GFile, or %NULL if the expansion failed.
+ * Returns: (nullable) (transfer full): a newly allocated #GFile,
+ *          or %NULL if the expansion failed.
  *
  * Since: 2.10
  **/
@@ -455,7 +485,7 @@ gimp_file_new_for_config_path (const gchar  *path,
  *
  * The inverse operation of gimp_file_new_for_config_path().
  *
- * Return value: a newly allocated NUL-terminated UTF-8 string, or %NULL if
+ * Returns: a newly allocated NUL-terminated UTF-8 string, or %NULL if
  *               unexpanding failed.
  *
  * Since: 2.10
@@ -505,7 +535,7 @@ gimp_config_path_expand_only (const gchar  *path,
   gchar      **substs   = NULL;
   guint        n_substs = 0;
   gint         length   = 0;
-  gint         i;
+  guint        i;
 
   home = g_get_home_dir ();
   if (home)

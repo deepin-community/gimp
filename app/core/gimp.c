@@ -23,6 +23,7 @@
 #include <gegl.h>
 
 #include "libgimpbase/gimpbase.h"
+#include "libgimpbase/gimpbase-private.h"
 #include "libgimpconfig/gimpconfig.h"
 
 #include "core-types.h"
@@ -58,9 +59,11 @@
 #include "gimpcontext.h"
 #include "gimpdynamics.h"
 #include "gimpdocumentlist.h"
+#include "gimpextensionmanager.h"
 #include "gimpgradient.h"
 #include "gimpidtable.h"
 #include "gimpimage.h"
+#include "gimpimage-metadata.h"
 #include "gimpimagefile.h"
 #include "gimplist.h"
 #include "gimpmarshal.h"
@@ -73,6 +76,14 @@
 #include "gimptreeproxy.h"
 
 #include "gimp-intl.h"
+
+
+/*  we need to register all enum types so they are known to the type
+ *  system by name, re-use the files the pdb generated for libgimp
+ */
+void           gimp_enums_init           (void);
+const gchar ** gimp_enums_get_type_names (gint *n_type_names);
+#include "libgimp/gimpenums.c.tail"
 
 
 enum
@@ -93,34 +104,36 @@ enum
 };
 
 
-static void      gimp_constructed          (GObject           *object);
-static void      gimp_set_property         (GObject           *object,
-                                            guint              property_id,
-                                            const GValue      *value,
-                                            GParamSpec        *pspec);
-static void      gimp_get_property         (GObject           *object,
-                                            guint              property_id,
-                                            GValue            *value,
-                                            GParamSpec        *pspec);
-static void      gimp_dispose              (GObject           *object);
-static void      gimp_finalize             (GObject           *object);
+static void      gimp_constructed                    (GObject           *object);
+static void      gimp_set_property                   (GObject           *object,
+                                                      guint              property_id,
+                                                      const GValue      *value,
+                                                      GParamSpec        *pspec);
+static void      gimp_get_property                   (GObject           *object,
+                                                      guint              property_id,
+                                                      GValue            *value,
+                                                      GParamSpec        *pspec);
+static void      gimp_dispose                        (GObject           *object);
+static void      gimp_finalize                       (GObject           *object);
 
-static gint64    gimp_get_memsize          (GimpObject        *object,
-                                            gint64            *gui_size);
+static gint64    gimp_get_memsize                    (GimpObject        *object,
+                                                      gint64            *gui_size);
 
-static void      gimp_real_initialize      (Gimp              *gimp,
-                                            GimpInitStatusFunc status_callback);
-static void      gimp_real_restore         (Gimp              *gimp,
-                                            GimpInitStatusFunc status_callback);
-static gboolean  gimp_real_exit            (Gimp              *gimp,
-                                            gboolean           force);
+static void      gimp_real_initialize                (Gimp              *gimp,
+                                                      GimpInitStatusFunc status_callback);
+static void      gimp_real_restore                   (Gimp              *gimp,
+                                                      GimpInitStatusFunc status_callback);
+static gboolean  gimp_real_exit                      (Gimp              *gimp,
+                                                      gboolean           force);
 
-static void      gimp_global_config_notify (GObject           *global_config,
-                                            GParamSpec        *param_spec,
-                                            GObject           *edit_config);
-static void      gimp_edit_config_notify   (GObject           *edit_config,
-                                            GParamSpec        *param_spec,
-                                            GObject           *global_config);
+static void      gimp_global_config_notify           (GObject           *global_config,
+                                                      GParamSpec        *param_spec,
+                                                      GObject           *edit_config);
+static void      gimp_edit_config_notify             (GObject           *edit_config,
+                                                      GParamSpec        *param_spec,
+                                                      GObject           *global_config);
+
+static gboolean  gimp_exit_idle_cleanup_stray_images (Gimp              *gimp);
 
 
 G_DEFINE_TYPE (Gimp, gimp, GIMP_TYPE_OBJECT)
@@ -141,8 +154,7 @@ gimp_class_init (GimpClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpClass, initialize),
-                  NULL, NULL,
-                  gimp_marshal_VOID__POINTER,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   G_TYPE_POINTER);
 
@@ -151,8 +163,7 @@ gimp_class_init (GimpClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpClass, restore),
-                  NULL, NULL,
-                  gimp_marshal_VOID__POINTER,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   G_TYPE_POINTER);
 
@@ -171,8 +182,7 @@ gimp_class_init (GimpClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpClass, clipboard_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   gimp_signals[FILTER_HISTORY_CHANGED] =
@@ -181,8 +191,7 @@ gimp_class_init (GimpClass *klass)
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpClass,
                                    filter_history_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   gimp_signals[IMAGE_OPENED] =
@@ -190,8 +199,7 @@ gimp_class_init (GimpClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpClass, image_opened),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1, G_TYPE_FILE);
 
   object_class->constructed      = gimp_constructed;
@@ -232,15 +240,18 @@ gimp_init (Gimp *gimp)
 
   gimp->parasites = gimp_parasite_list_new ();
 
+  gimp_enums_init ();
+
   gimp_units_init (gimp);
 
   gimp->images = gimp_list_new_weak (GIMP_TYPE_IMAGE, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (gimp->images), "images");
 
-  gimp->next_guide_ID        = 1;
-  gimp->next_sample_point_ID = 1;
-  gimp->image_table          = gimp_id_table_new ();
-  gimp->item_table           = gimp_id_table_new ();
+  gimp->next_guide_id         = 1;
+  gimp->next_sample_point_id  = 1;
+  gimp->image_table           = gimp_id_table_new ();
+  gimp->item_table            = gimp_id_table_new ();
+  gimp->drawable_filter_table = gimp_id_table_new ();
 
   gimp->displays = g_object_new (GIMP_TYPE_LIST,
                                  "children-type", GIMP_TYPE_OBJECT,
@@ -248,7 +259,7 @@ gimp_init (Gimp *gimp)
                                  "append",        TRUE,
                                  NULL);
   gimp_object_set_static_name (GIMP_OBJECT (gimp->displays), "displays");
-  gimp->next_display_ID = 1;
+  gimp->next_display_id = 1;
 
   gimp->named_buffers = gimp_list_new (GIMP_TYPE_BUFFER, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (gimp->named_buffers),
@@ -292,14 +303,20 @@ gimp_constructed (GObject *object)
 
   gimp_paint_init (gimp);
 
-  gimp->plug_in_manager = gimp_plug_in_manager_new (gimp);
-  gimp->pdb             = gimp_pdb_new (gimp);
+  gimp->extension_manager = gimp_extension_manager_new (gimp);
+  gimp->plug_in_manager   = gimp_plug_in_manager_new (gimp);
+  gimp->pdb               = gimp_pdb_new (gimp);
 
   xcf_init (gimp);
   file_data_init (gimp);
 
   /*  create user and default context  */
   gimp_contexts_init (gimp);
+
+  /* Initialize the extension manager early as its contents may be used
+   * at the very start (e.g. the splash image).
+   */
+  gimp_extension_manager_initialize (gimp->extension_manager);
 }
 
 static void
@@ -357,8 +374,6 @@ gimp_dispose (GObject *object)
   g_clear_object (&gimp->edit_config);
   g_clear_object (&gimp->config);
 
-  gimp_contexts_exit (gimp);
-
   g_clear_object (&gimp->image_new_last_template);
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
@@ -413,9 +428,11 @@ gimp_finalize (GObject *object)
   g_clear_object (&gimp->clipboard_image);
   g_clear_object (&gimp->displays);
   g_clear_object (&gimp->item_table);
+  g_clear_object (&gimp->drawable_filter_table);
   g_clear_object (&gimp->image_table);
   g_clear_object (&gimp->images);
   g_clear_object (&gimp->plug_in_manager);
+  g_clear_object (&gimp->extension_manager);
 
   if (gimp->module_db)
     gimp_modules_exit (gimp);
@@ -435,7 +452,9 @@ gimp_finalize (GObject *object)
                  G_STRFUNC, g_list_length (gimp->context_list));
 
       for (list = gimp->context_list; list; list = g_list_next (list))
-        g_printerr ("stale context: %s\n", gimp_object_get_name (list->data));
+        g_printerr ("stale context: %s (of type %s)\n",
+                    gimp_object_get_name (list->data),
+                    g_type_name (G_TYPE_FROM_INSTANCE (list->data)));
 
       g_list_free (gimp->context_list);
       gimp->context_list = NULL;
@@ -475,6 +494,7 @@ gimp_get_memsize (GimpObject *object,
 
   memsize += gimp_object_get_memsize (GIMP_OBJECT (gimp->image_table), 0);
   memsize += gimp_object_get_memsize (GIMP_OBJECT (gimp->item_table),  0);
+  memsize += gimp_object_get_memsize (GIMP_OBJECT (gimp->drawable_filter_table),  0);
 
   memsize += gimp_object_get_memsize (GIMP_OBJECT (gimp->displays), gui_size);
 
@@ -562,6 +582,7 @@ gimp_real_exit (Gimp     *gimp,
     g_print ("EXIT: %s\n", G_STRFUNC);
 
   gimp_plug_in_manager_exit (gimp->plug_in_manager);
+  gimp_extension_manager_exit (gimp->extension_manager);
   gimp_modules_unload (gimp);
 
   gimp_data_factories_save (gimp);
@@ -854,14 +875,14 @@ gimp_restore (Gimp                *gimp,
  * gimp_is_restored:
  * @gimp: a #Gimp object
  *
- * Return value: %TRUE if GIMP is completely started, %FALSE otherwise.
+ * Returns: %TRUE if GIMP is completely started, %FALSE otherwise.
  **/
 gboolean
 gimp_is_restored (Gimp *gimp)
 {
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), FALSE);
 
-  return gimp->restored;
+  return gimp->initialized && gimp->restored;
 }
 
 /**
@@ -876,8 +897,7 @@ void
 gimp_exit (Gimp     *gimp,
            gboolean  force)
 {
-  gboolean  handled;
-  GList    *image_iter;
+  gboolean handled;
 
   g_return_if_fail (GIMP_IS_GIMP (gimp));
 
@@ -891,17 +911,11 @@ gimp_exit (Gimp     *gimp,
   if (handled)
     return;
 
-  /* Get rid of images without display. We do this *after* handling the
-   * usual exit callbacks, because the things that are torn down there
-   * might have references to these images (for instance GimpActions
-   * in the UI manager).
-   */
-  while ((image_iter = gimp_get_image_iter (gimp)))
-    {
-      GimpImage *image = image_iter->data;
+  gimp_contexts_exit (gimp);
 
-      g_object_unref (image);
-    }
+  g_idle_add_full (G_PRIORITY_LOW,
+                   (GSourceFunc) gimp_exit_idle_cleanup_stray_images,
+                   gimp, NULL);
 }
 
 GList *
@@ -1023,11 +1037,16 @@ gimp_create_image (Gimp              *gimp,
                    GimpPrecision      precision,
                    gboolean           attach_comment)
 {
-  GimpImage *image;
+  GimpImage    *image;
+  GimpMetadata *metadata;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
 
   image = gimp_image_new (gimp, width, height, type, precision);
+
+  metadata = gimp_metadata_new ();
+  gimp_image_set_metadata (image, metadata, FALSE);
+  g_object_unref (metadata);
 
   if (attach_comment)
     {
@@ -1221,4 +1240,32 @@ gimp_get_temp_file (Gimp        *gimp,
   g_object_unref (dir);
 
   return file;
+}
+
+static gboolean
+gimp_exit_idle_cleanup_stray_images (Gimp *gimp)
+{
+  GList *image_iter;
+
+  while (g_main_context_pending (NULL))
+    g_main_context_iteration (NULL, TRUE);
+
+  /* Get rid of images without display. We do this *after* handling the
+   * usual exit callbacks and any other pending event, because the
+   * things that are torn down there might have references to these
+   * images, for instance GimpActions in the UI manager, or some plug-in
+   * which was still running and had to get killed in gimp_exit() (cf. #11922).
+   */
+  while ((image_iter = gimp_get_image_iter (gimp)))
+    {
+      GimpImage *image = image_iter->data;
+
+      /* TODO: localize after string freeze. */
+      g_printerr ("INFO: a stray image seems to have been left around by a plug-in: \"%s\"",
+                  gimp_image_get_display_name (image));
+
+      g_object_unref (image);
+    }
+
+  return G_SOURCE_REMOVE ;
 }

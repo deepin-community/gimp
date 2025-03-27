@@ -28,8 +28,6 @@
 
 #include "widgets-types.h"
 
-#include "core/gimpmarshal.h"
-
 #include "gimppopup.h"
 
 
@@ -39,6 +37,11 @@ enum
   CONFIRM,
   LAST_SIGNAL
 };
+
+typedef struct _GimpPopupPrivate
+{
+  GtkWidget *parent;
+} GimpPopupPrivate;
 
 
 static gboolean gimp_popup_map_event    (GtkWidget      *widget,
@@ -52,7 +55,7 @@ static void     gimp_popup_real_cancel  (GimpPopup      *popup);
 static void     gimp_popup_real_confirm (GimpPopup      *popup);
 
 
-G_DEFINE_TYPE (GimpPopup, gimp_popup, GTK_TYPE_WINDOW)
+G_DEFINE_TYPE_WITH_PRIVATE (GimpPopup, gimp_popup, GTK_TYPE_WINDOW)
 
 #define parent_class gimp_popup_parent_class
 
@@ -70,8 +73,7 @@ gimp_popup_class_init (GimpPopupClass *klass)
                   G_OBJECT_CLASS_TYPE (klass),
                   G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
                   G_STRUCT_OFFSET (GimpPopupClass, cancel),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   popup_signals[CONFIRM] =
@@ -79,8 +81,7 @@ gimp_popup_class_init (GimpPopupClass *klass)
                   G_OBJECT_CLASS_TYPE (klass),
                   G_SIGNAL_RUN_LAST | G_SIGNAL_ACTION,
                   G_STRUCT_OFFSET (GimpPopupClass, confirm),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   widget_class->map_event          = gimp_popup_map_event;
@@ -115,12 +116,31 @@ static void
 gimp_popup_grab_notify (GtkWidget *widget,
                         gboolean   was_grabbed)
 {
+  GtkWidget *grab_widget;
+  GtkWidget *iter;
+
   if (was_grabbed)
     return;
 
+  grab_widget = gtk_grab_get_current ();
+
   /* ignore grabs on one of our children, like a scrollbar */
-  if (gtk_widget_is_ancestor (gtk_grab_get_current (), widget))
+  if (gtk_widget_is_ancestor (grab_widget, widget))
     return;
+
+  /* ignore grabs from windows / menus shown by
+   * internal widgets */
+  iter = gtk_widget_get_toplevel (grab_widget);
+  while (iter)
+    {
+      if (iter == widget)
+        return;
+
+      if (GTK_IS_WINDOW (iter))
+        iter = (GtkWidget*) gtk_window_get_transient_for ((GtkWindow*) iter);
+      else
+        break;
+    }
 
   g_signal_emit (widget, popup_signals[CANCEL], 0);
 }
@@ -135,45 +155,42 @@ gimp_popup_grab_broken_event (GtkWidget          *widget,
 }
 
 static gboolean
-gimp_popup_map_event (GtkWidget                 *widget,
-                      G_GNUC_UNUSED GdkEventAny *event)
+gimp_popup_map_event (GtkWidget   *widget,
+                      GdkEventAny *event)
 {
+  GdkDisplay *display = gtk_widget_get_display (widget);
+
   GTK_WIDGET_CLASS (parent_class)->map_event (widget, event);
 
   /*  grab with owner_events == TRUE so the popup's widgets can
    *  receive events. we filter away events outside this toplevel
    *  away in button_press()
    */
-  if (gdk_pointer_grab (gtk_widget_get_window (widget), TRUE,
-                        GDK_BUTTON_PRESS_MASK | GDK_BUTTON_RELEASE_MASK |
-                        GDK_POINTER_MOTION_MASK,
-                        NULL, NULL, GDK_CURRENT_TIME) == GDK_GRAB_SUCCESS)
+  if (gdk_seat_grab (gdk_display_get_default_seat (display),
+                     gtk_widget_get_window (widget),
+                     GDK_SEAT_CAPABILITY_ALL,
+                     TRUE,
+                     NULL,
+                     (GdkEvent *) event,
+                     NULL, NULL) == GDK_GRAB_SUCCESS)
     {
-      if (gdk_keyboard_grab (gtk_widget_get_window (widget), TRUE,
-                             GDK_CURRENT_TIME) == GDK_GRAB_SUCCESS)
-        {
-          gtk_grab_add (widget);
+      gtk_grab_add (widget);
 
-          g_signal_connect (widget, "grab-notify",
-                            G_CALLBACK (gimp_popup_grab_notify),
-                            widget);
-          g_signal_connect (widget, "grab-broken-event",
-                            G_CALLBACK (gimp_popup_grab_broken_event),
-                            widget);
+      g_signal_connect (widget, "grab-notify",
+                        G_CALLBACK (gimp_popup_grab_notify),
+                        widget);
+      g_signal_connect (widget, "grab-broken-event",
+                        G_CALLBACK (gimp_popup_grab_broken_event),
+                        widget);
 
-          return FALSE;
-        }
-      else
-        {
-          gdk_display_pointer_ungrab (gtk_widget_get_display (widget),
-                                      GDK_CURRENT_TIME);
-        }
+      return FALSE;
     }
 
   /*  if we could not grab, destroy the popup instead of leaving it
    *  around uncloseable.
    */
   g_signal_emit (widget, popup_signals[CANCEL], 0);
+
   return FALSE;
 }
 
@@ -182,7 +199,8 @@ gimp_popup_button_press (GtkWidget      *widget,
                          GdkEventButton *bevent)
 {
   GtkWidget *event_widget;
-  gboolean   cancel = FALSE;
+  gboolean   cancel  = FALSE;
+  gboolean   confirm = FALSE;
 
   event_widget = gtk_get_event_widget ((GdkEvent *) bevent);
 
@@ -207,15 +225,22 @@ gimp_popup_button_press (GtkWidget      *widget,
     }
   else if (gtk_widget_get_toplevel (event_widget) != widget)
     {
+      GimpPopupPrivate *priv;
       /*  the event was on a gimp widget, but not inside the popup  */
 
-      cancel = TRUE;
+      priv = gimp_popup_get_instance_private (GIMP_POPUP (widget));
+      if (event_widget == priv->parent || gtk_widget_is_ancestor (event_widget, priv->parent))
+        confirm = TRUE;
+      else
+        cancel = TRUE;
     }
 
   if (cancel)
     g_signal_emit (widget, popup_signals[CANCEL], 0);
+  else if (confirm)
+    g_signal_emit (widget, popup_signals[CONFIRM], 0);
 
-  return cancel;
+  return (cancel || confirm);
 }
 
 static gboolean
@@ -251,7 +276,7 @@ gimp_popup_key_press (GtkWidget   *widget,
       if (gtk_binding_set_activate (binding_set,
                                     kevent->keyval,
                                     kevent->state,
-                                    GTK_OBJECT (widget)))
+                                    G_OBJECT (widget)))
         {
           return TRUE;
         }
@@ -282,24 +307,40 @@ gimp_popup_real_confirm (GimpPopup *popup)
   gtk_widget_destroy (widget);
 }
 
+/**
+ * gimp_popup_show:
+ * @popup:
+ * @widget: the parent widget which will determine @popup location.
+ *
+ * Shows @popup above @widget. Its placement will be determined relatively to
+ * @widget.
+ * Moreover clicking outside @popup but within @widget will be considered a
+ * "confirm" signal. Typically @widget would be a button. A typical UX could be:
+ * clicking it once would show the popup; clicking it again would confirm the
+ * choice within the popup.
+ */
 void
 gimp_popup_show (GimpPopup *popup,
                  GtkWidget *widget)
 {
-  GdkScreen      *screen;
-  GtkRequisition  requisition;
-  GtkAllocation   allocation;
-  GdkRectangle    rect;
-  gint            monitor;
-  gint            orig_x;
-  gint            orig_y;
-  gint            x;
-  gint            y;
+  GimpPopupPrivate *priv;
+  GdkDisplay       *display;
+  GdkMonitor       *monitor;
+  GtkRequisition    requisition;
+  GtkAllocation     allocation;
+  GdkRectangle      rect;
+  gint              orig_x;
+  gint              orig_y;
+  gint              x;
+  gint              y;
 
   g_return_if_fail (GIMP_IS_POPUP (popup));
   g_return_if_fail (GTK_IS_WIDGET (widget));
 
-  gtk_widget_size_request (GTK_WIDGET (popup), &requisition);
+  priv = gimp_popup_get_instance_private (popup);
+  priv->parent = widget;
+
+  gtk_widget_get_preferred_size (GTK_WIDGET (popup), &requisition, NULL);
 
   gtk_widget_get_allocation (widget, &allocation);
   gdk_window_get_origin (gtk_widget_get_window (widget), &orig_x, &orig_y);
@@ -310,10 +351,10 @@ gimp_popup_show (GimpPopup *popup,
       orig_y += allocation.y;
     }
 
-  screen = gtk_widget_get_screen (widget);
+  display = gtk_widget_get_display (widget);
 
-  monitor = gdk_screen_get_monitor_at_point (screen, orig_x, orig_y);
-  gdk_screen_get_monitor_workarea (screen, monitor, &rect);
+  monitor = gdk_display_get_monitor_at_point (display, orig_x, orig_y);
+  gdk_monitor_get_workarea (monitor, &rect);
 
   if (gtk_widget_get_direction (widget) == GTK_TEXT_DIR_RTL)
     {
@@ -335,7 +376,7 @@ gimp_popup_show (GimpPopup *popup,
   if (y + requisition.height > rect.y + rect.height)
     y = orig_y - requisition.height;
 
-  gtk_window_set_screen (GTK_WINDOW (popup), screen);
+  gtk_window_set_screen (GTK_WINDOW (popup), gtk_widget_get_screen (widget));
   gtk_window_set_transient_for (GTK_WINDOW (popup),
                                 GTK_WINDOW (gtk_widget_get_toplevel (widget)));
 

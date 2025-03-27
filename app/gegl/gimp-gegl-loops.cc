@@ -223,22 +223,26 @@ gimp_gegl_convolve (GeglBuffer          *src_buffer,
   if (babl_format_is_palette (src_format))
     src_format = gimp_babl_format (GIMP_RGB,
                                    GIMP_PRECISION_FLOAT_LINEAR,
-                                   babl_format_has_alpha (src_format));
+                                   babl_format_has_alpha (src_format),
+                                   babl_format_get_space (src_format));
   else
     src_format = gimp_babl_format (gimp_babl_format_get_base_type (src_format),
                                    GIMP_PRECISION_FLOAT_LINEAR,
-                                   babl_format_has_alpha (src_format));
+                                   babl_format_has_alpha (src_format),
+                                   babl_format_get_space (src_format));
 
   dest_format = gegl_buffer_get_format (dest_buffer);
 
   if (babl_format_is_palette (dest_format))
     dest_format = gimp_babl_format (GIMP_RGB,
                                     GIMP_PRECISION_FLOAT_LINEAR,
-                                    babl_format_has_alpha (dest_format));
+                                    babl_format_has_alpha (dest_format),
+                                    babl_format_get_space (dest_format));
   else
     dest_format = gimp_babl_format (gimp_babl_format_get_base_type (dest_format),
                                     GIMP_PRECISION_FLOAT_LINEAR,
-                                    babl_format_has_alpha (dest_format));
+                                    babl_format_has_alpha (dest_format),
+                                    babl_format_get_space (dest_format));
 
   src_components  = babl_format_get_n_components (src_format);
   dest_components = babl_format_get_n_components (dest_format);
@@ -617,7 +621,7 @@ gimp_gegl_smudge_with_paint (GeglBuffer          *accum_buffer,
                              const GeglRectangle *accum_rect,
                              GeglBuffer          *canvas_buffer,
                              const GeglRectangle *canvas_rect,
-                             const GimpRGB       *brush_color,
+                             GeglColor           *brush_color,
                              GeglBuffer          *paint_buffer,
                              gboolean             no_erasing,
                              gdouble              flow,
@@ -639,16 +643,11 @@ gimp_gegl_smudge_with_paint (GeglBuffer          *accum_buffer,
   if (! canvas_rect)
     canvas_rect = gegl_buffer_get_extent (canvas_buffer);
 
-  /* convert brush color from double to float */
+  /* convert brush color to linear RGBA float */
   if (brush_color)
     {
-      const gdouble *brush_color_ptr = &brush_color->r;
-      gint           b;
-
-      for (b = 0; b < 4; b++)
-        brush_color_float[b] = brush_color_ptr[b];
-
-      brush_a *= brush_color_ptr[3];
+      gegl_color_get_pixel (brush_color, babl_format ("RGBA float"), brush_color_float);
+      brush_a *= brush_color_float[3];
     }
 
   gegl_parallel_distribute_area (
@@ -910,6 +909,98 @@ gimp_gegl_index_to_mask (GeglBuffer          *indexed_buffer,
     });
 }
 
+gboolean
+gimp_gegl_is_index_used (GeglBuffer          *indexed_buffer,
+                         const GeglRectangle *indexed_rect,
+                         const Babl          *indexed_format,
+                         gint                 index)
+{
+  GeglBufferIterator *iter;
+  gboolean            found = FALSE;
+
+  if (! indexed_rect)
+    indexed_rect = gegl_buffer_get_extent (indexed_buffer);
+
+  iter = gegl_buffer_iterator_new (indexed_buffer, indexed_rect, 0,
+                                   indexed_format,
+                                   GEGL_ACCESS_READ, GEGL_ABYSS_NONE, 1);
+
+  /* I initially had an implementation using gegl_parallel_distribute_area()
+   * which turned out to be much slower than the simpler iteration on the whole
+   * buffer at once. I think the cost of threading and using GRWLock is just far
+   * too high for such very basic value check.
+   * See gegl_parallel_distribute_area() implementation in commit dbaa8b6a1c.
+   */
+  while (gegl_buffer_iterator_next (iter))
+    {
+      const guchar *indexed = (const guchar *) iter->items[0].data;
+      gint          count   = iter->length;
+
+      while (count--)
+        {
+          if (*indexed == index)
+            {
+              /*
+               * Position of one item using this color index:
+               gint x = iter->items[0].roi.x + (iter->length - count - 1) % iter->items[0].roi.width;
+               gint y = iter->items[0].roi.y + (gint) ((iter->length - count - 1) / iter->items[0].roi.width);
+               */
+              found = TRUE;
+              break;
+            }
+          indexed++;
+        }
+
+      if (found)
+        {
+          gegl_buffer_iterator_stop (iter);
+          break;
+        }
+    }
+
+  return found;
+}
+
+void
+gimp_gegl_shift_index (GeglBuffer          *indexed_buffer,
+                       const GeglRectangle *indexed_rect,
+                       const Babl          *indexed_format,
+                       gint                 from_index,
+                       gint                 shift)
+{
+  gboolean indexed_format_has_alpha;
+
+  if (! indexed_rect)
+    indexed_rect = gegl_buffer_get_extent (indexed_buffer);
+
+  indexed_format_has_alpha = babl_format_has_alpha (indexed_format);
+
+  gegl_parallel_distribute_area (
+    indexed_rect, PIXELS_PER_THREAD,
+    [=] (const GeglRectangle *indexed_area)
+    {
+      GeglBufferIterator *iter;
+
+      iter = gegl_buffer_iterator_new (indexed_buffer, indexed_area, 0,
+                                       indexed_format,
+                                       GEGL_ACCESS_READWRITE, GEGL_ABYSS_NONE, 1);
+
+      while (gegl_buffer_iterator_next (iter))
+        {
+          guchar *indexed = (guchar *) iter->items[0].data;
+          gint    count   = iter->length;
+
+          while (count--)
+            {
+              if (*indexed >= from_index)
+                *indexed += shift;
+
+              indexed += (indexed_format_has_alpha ? 2 : 1);
+            }
+        }
+    });
+}
+
 static void
 gimp_gegl_convert_color_profile_progress (GimpProgress *progress,
                                           gdouble       value)
@@ -933,6 +1024,12 @@ gimp_gegl_convert_color_profile (GeglBuffer               *src_buffer,
   guint               flags = 0;
   const Babl         *src_format;
   const Babl         *dest_format;
+
+  g_return_if_fail (GEGL_IS_BUFFER (src_buffer));
+  g_return_if_fail (GIMP_IS_COLOR_PROFILE (src_profile));
+  g_return_if_fail (GEGL_IS_BUFFER (dest_buffer));
+  g_return_if_fail (GIMP_IS_COLOR_PROFILE (dest_profile));
+  g_return_if_fail (progress == NULL || GIMP_IS_PROGRESS (progress));
 
   src_format  = gegl_buffer_get_format (src_buffer);
   dest_format = gegl_buffer_get_format (dest_buffer);
@@ -1004,15 +1101,18 @@ gimp_gegl_average_color (GeglBuffer          *buffer,
     gint   n;
   } Sum;
 
-  const Babl        *average_format = babl_format ("RaGaBaA float");
-  GeglRectangle      roi;
-  GSList * volatile  sums           = NULL;
-  GSList            *list;
-  Sum                average        = {};
-  gint               c;
+  const Babl    *average_format;
+  GeglRectangle  roi;
+  GSList        *sums    = NULL;
+  GSList        *list;
+  Sum            average = {};
+  gint           c;
 
   g_return_if_fail (GEGL_IS_BUFFER (buffer));
   g_return_if_fail (color != NULL);
+
+  average_format = babl_format_with_space ("RaGaBaA float",
+                                           babl_format_get_space (format));
 
   if (! rect)
     rect = gegl_buffer_get_extent (buffer);

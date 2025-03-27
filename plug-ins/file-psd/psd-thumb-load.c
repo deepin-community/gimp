@@ -34,93 +34,101 @@
 #include "libgimp/stdplugins-intl.h"
 
 /*  Local function prototypes  */
-static gint    read_header_block          (PSDimage     *img_a,
-                                           FILE         *f,
-                                           GError      **error);
+static gint    read_header_block          (PSDimage      *img_a,
+                                           GInputStream  *input,
+                                           GError       **error);
 
-static gint    read_color_mode_block      (PSDimage     *img_a,
-                                           FILE         *f,
-                                           GError      **error);
+static gint    read_color_mode_block      (PSDimage      *img_a,
+                                           GInputStream  *input,
+                                           GError       **error);
 
-static gint    read_image_resource_block  (PSDimage     *img_a,
-                                           FILE         *f,
-                                           GError      **error);
+static gint    read_image_resource_block  (PSDimage      *img_a,
+                                           GInputStream  *input,
+                                           GError       **error);
 
-static gint32  create_gimp_image          (PSDimage     *img_a,
-                                           const gchar  *filename);
+static GimpImage * create_gimp_image      (PSDimage      *img_a,
+                                           GFile         *file);
 
-static gint    add_image_resources        (gint32        image_id,
-                                           PSDimage     *img_a,
-                                           FILE         *f,
-                                           GError      **error);
+static gint    add_image_resources        (GimpImage     *image,
+                                           PSDimage      *img_a,
+                                           GFile         *file,
+                                           GInputStream  *input,
+                                           GError       **error);
 
 /* Main file load function */
-gint32
-load_thumbnail_image (const gchar  *filename,
-                      gint         *width,
-                      gint         *height,
-                      GError      **load_error)
+GimpImage *
+load_thumbnail_image (GFile   *file,
+                      gint    *width,
+                      gint    *height,
+                      GError **load_error)
 {
-  FILE        *f;
-  GStatBuf     st;
-  PSDimage     img_a;
-  gint32       image_id = -1;
-  GError      *error    = NULL;
+  GInputStream  *input;
+  PSDimage       img_a;
+  GimpImage     *image = NULL;
+  GError        *error = NULL;
 
   /* ----- Open PSD file ----- */
-  if (g_stat (filename, &st) == -1)
-    return -1;
 
   gimp_progress_init_printf (_("Opening thumbnail for '%s'"),
-                             gimp_filename_to_utf8 (filename));
+                             gimp_file_get_utf8_name (file));
 
-  IFDBG(1) g_debug ("Open file %s", gimp_filename_to_utf8 (filename));
-  f = g_fopen (filename, "rb");
-  if (f == NULL)
+  IFDBG(1) g_debug ("Open file %s", gimp_file_get_utf8_name (file));
+
+  input = G_INPUT_STREAM (g_file_read (file, NULL, &error));
+  if (! input)
     {
-      g_set_error (load_error, G_FILE_ERROR, g_file_error_from_errno (errno),
-                   _("Could not open '%s' for reading: %s"),
-                   gimp_filename_to_utf8 (filename), g_strerror (errno));
-      return -1;
+      if (! error)
+        g_set_error (load_error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                     _("Could not open '%s' for reading: %s"),
+                     gimp_file_get_utf8_name (file), g_strerror (errno));
+      else
+        {
+          g_set_error (load_error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                       _("Could not open '%s' for reading: %s"),
+                       gimp_file_get_utf8_name (file), error->message);
+          g_error_free (error);
+        }
+
+      return NULL;
     }
 
   /* ----- Read the PSD file Header block ----- */
   IFDBG(2) g_debug ("Read header block");
-  if (read_header_block (&img_a, f, &error) < 0)
+  if (read_header_block (&img_a, input, &error) < 0)
     goto load_error;
   gimp_progress_update (0.2);
 
   /* ----- Read the PSD file Color Mode block ----- */
   IFDBG(2) g_debug ("Read color mode block");
-  if (read_color_mode_block (&img_a, f, &error) < 0)
+  if (read_color_mode_block (&img_a, input, &error) < 0)
     goto load_error;
   gimp_progress_update (0.4);
 
   /* ----- Read the PSD file Image Resource block ----- */
   IFDBG(2) g_debug ("Read image resource block");
-  if (read_image_resource_block (&img_a, f, &error) < 0)
+  if (read_image_resource_block (&img_a, input, &error) < 0)
     goto load_error;
   gimp_progress_update (0.6);
 
   /* ----- Create GIMP image ----- */
   IFDBG(2) g_debug ("Create GIMP image");
-  image_id = create_gimp_image (&img_a, filename);
-  if (image_id < 0)
+  image = create_gimp_image (&img_a, file);
+  if (! image)
     goto load_error;
 
   /* ----- Add image resources ----- */
   IFDBG(2) g_debug ("Add image resources");
-  if (add_image_resources (image_id, &img_a, f, &error) < 1)
+  if (add_image_resources (image, &img_a, file, input, &error) < 1)
     goto load_error;
   gimp_progress_update (1.0);
 
-  gimp_image_clean_all (image_id);
-  gimp_image_undo_enable (image_id);
-  fclose (f);
+  gimp_image_clean_all (image);
+  gimp_image_undo_enable (image);
+  g_object_unref (input);
 
   *width = img_a.columns;
   *height = img_a.rows;
-  return image_id;
+  return image;
 
   /* ----- Process load errors ----- */
  load_error:
@@ -132,38 +140,37 @@ load_thumbnail_image (const gchar  *filename,
     }
 
   /* Delete partially loaded image */
-  if (image_id > 0)
-    gimp_image_delete (image_id);
+  if (image)
+    gimp_image_delete (image);
 
   /* Close file if Open */
-  if (! (f == NULL))
-    fclose (f);
+  g_object_unref (input);
 
-  return -1;
+  return NULL;
 }
 
 
 /* Local functions */
 
 static gint
-read_header_block (PSDimage  *img_a,
-                   FILE      *f,
-                   GError   **error)
+read_header_block (PSDimage      *img_a,
+                   GInputStream  *input,
+                   GError       **error)
 {
-  guint16  version;
-  gchar    sig[4];
+  guint16  version = 0;
+  gchar    sig[4]  = {0};
   gchar    buf[6];
 
-  if (fread (sig, 4, 1, f) < 1
-      || fread (&version, 2, 1, f) < 1
-      || fread (buf, 6, 1, f) < 1
-      || fread (&img_a->channels, 2, 1, f) < 1
-      || fread (&img_a->rows, 4, 1, f) < 1
-      || fread (&img_a->columns, 4, 1, f) < 1
-      || fread (&img_a->bps, 2, 1, f) < 1
-      || fread (&img_a->color_mode, 2, 1, f) < 1)
+  if (psd_read (input, sig,                4, error) < 4 ||
+      psd_read (input, &version,           2, error) < 2 ||
+      psd_read (input, buf,                6, error) < 6 ||
+      psd_read (input, &img_a->channels,   2, error) < 2 ||
+      psd_read (input, &img_a->rows,       4, error) < 4 ||
+      psd_read (input, &img_a->columns,    4, error) < 4 ||
+      psd_read (input, &img_a->bps,        2, error) < 2 ||
+      psd_read (input, &img_a->color_mode, 2, error) < 2)
     {
-      psd_set_error (feof (f), errno, error);
+      psd_set_error (error);
       return -1;
     }
   version = GUINT16_FROM_BE (version);
@@ -198,27 +205,27 @@ read_header_block (PSDimage  *img_a,
 }
 
 static gint
-read_color_mode_block (PSDimage  *img_a,
-                       FILE      *f,
-                       GError   **error)
+read_color_mode_block (PSDimage      *img_a,
+                       GInputStream  *input,
+                       GError       **error)
 {
-  guint32 block_len;
-  guint32 block_start;
-  guint32 block_end;
+  guint64 block_len = 0;
+  guint64 block_start;
+  guint64 block_end;
 
-  if (fread (&block_len, 4, 1, f) < 1)
+  if (psd_read (input, &block_len, 4, error) < 4)
     {
-      psd_set_error (feof (f), errno, error);
+      psd_set_error (error);
       return -1;
     }
   block_len = GUINT32_FROM_BE (block_len);
 
-  block_start = ftell (f);
+  block_start = g_seekable_tell (G_SEEKABLE (input));
   block_end = block_start + block_len;
 
-  if (fseek (f, block_end, SEEK_SET) < 0)
+  if (! psd_seek (input, block_end, G_SEEK_SET, error))
     {
-      psd_set_error (feof (f), errno, error);
+      psd_set_error (error);
       return -1;
     }
 
@@ -226,77 +233,77 @@ read_color_mode_block (PSDimage  *img_a,
 }
 
 static gint
-read_image_resource_block (PSDimage  *img_a,
-                           FILE      *f,
-                           GError   **error)
+read_image_resource_block (PSDimage      *img_a,
+                           GInputStream  *input,
+                           GError       **error)
 {
-  guint32 block_len;
-  guint32 block_end;
+  guint64 block_len = 0;
+  guint64 block_end;
 
-  if (fread (&block_len, 4, 1, f) < 1)
+  if (psd_read (input, &block_len, 4, error) < 4)
     {
-      psd_set_error (feof (f), errno, error);
+      psd_set_error (error);
       return -1;
     }
   img_a->image_res_len = GUINT32_FROM_BE (block_len);
 
   IFDBG(1) g_debug ("Image resource block size = %d", (int)img_a->image_res_len);
 
-  img_a->image_res_start = ftell (f);
+  img_a->image_res_start = g_seekable_tell (G_SEEKABLE (input));
   block_end = img_a->image_res_start + img_a->image_res_len;
 
-  if (fseek (f, block_end, SEEK_SET) < 0)
+  if (! psd_seek (input, block_end, G_SEEK_SET, error))
     {
-      psd_set_error (feof (f), errno, error);
+      psd_set_error (error);
       return -1;
     }
 
   return 0;
 }
 
-static gint32
-create_gimp_image (PSDimage    *img_a,
-                   const gchar *filename)
+static GimpImage *
+create_gimp_image (PSDimage *img_a,
+                   GFile    *file)
 {
-  gint32 image_id = -1;
+  GimpImage *image = NULL;
 
   img_a->base_type = GIMP_RGB;
 
   /* Create gimp image */
   IFDBG(2) g_debug ("Create image");
-  image_id = gimp_image_new (img_a->columns, img_a->rows, img_a->base_type);
+  image = gimp_image_new (img_a->columns, img_a->rows, img_a->base_type);
 
-  gimp_image_set_filename (image_id, filename);
-  gimp_image_undo_disable (image_id);
+  gimp_image_undo_disable (image);
 
-  return image_id;
+  return image;
 }
 
 static gint
-add_image_resources (gint32     image_id,
-                     PSDimage  *img_a,
-                     FILE      *f,
-                     GError   **error)
+add_image_resources (GimpImage     *image,
+                     PSDimage      *img_a,
+                     GFile         *file,
+                     GInputStream  *input,
+                     GError       **error)
 {
   PSDimageres   res_a;
   gint          status;
 
-  if (fseek (f, img_a->image_res_start, SEEK_SET) < 0)
+  if (! psd_seek (input, img_a->image_res_start, G_SEEK_SET, error))
     {
-      psd_set_error (feof (f), errno, error);
+      psd_set_error (error);
       return -1;
     }
 
-  while (ftell (f) < img_a->image_res_start + img_a->image_res_len)
+  while (g_seekable_tell (G_SEEKABLE (input)) < img_a->image_res_start + img_a->image_res_len)
     {
-      if (get_image_resource_header (&res_a, f, error) < 0)
+      if (get_image_resource_header (&res_a, input, error) < 0)
         return -1;
 
       if (res_a.data_start + res_a.data_len >
           img_a->image_res_start + img_a->image_res_len)
         return 0;
 
-      status = load_thumbnail_resource (&res_a, image_id, f, error);
+      status = load_thumbnail_resource (&res_a, image, file, input, error);
       /* Error */
       if (status < 0)
         return -1;

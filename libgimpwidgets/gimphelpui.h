@@ -31,32 +31,31 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-void   gimp_help_enable_tooltips           (void);
-void   gimp_help_disable_tooltips          (void);
-
 /*  the standard gimp help function
  */
-void   gimp_standard_help_func             (const gchar  *help_id,
-                                            gpointer      help_data);
+void   gimp_standard_help_func             (const gchar    *help_id,
+                                            gpointer        help_data);
 
 /*  connect the help callback of a window  */
-void   gimp_help_connect                   (GtkWidget    *widget,
-                                            GimpHelpFunc  help_func,
-                                            const gchar  *help_id,
-                                            gpointer      help_data);
+void   gimp_help_connect                   (GtkWidget      *widget,
+                                            const gchar    *tooltip,
+                                            GimpHelpFunc    help_func,
+                                            const gchar    *help_id,
+                                            gpointer        help_data,
+                                            GDestroyNotify  help_data_destroy);
 
 /*  set help data for non-window widgets  */
-void   gimp_help_set_help_data             (GtkWidget    *widget,
-                                            const gchar  *tooltip,
-                                            const gchar  *help_id);
+void   gimp_help_set_help_data             (GtkWidget      *widget,
+                                            const gchar    *tooltip,
+                                            const gchar    *help_id);
 
 /*  set help data with markup for non-window widgets  */
-void   gimp_help_set_help_data_with_markup (GtkWidget   *widget,
-                                            const gchar *tooltip,
-                                            const gchar *help_id);
+void   gimp_help_set_help_data_with_markup (GtkWidget      *widget,
+                                            const gchar    *tooltip,
+                                            const gchar    *help_id);
 
 /*  activate the context help inspector  */
-void   gimp_context_help                   (GtkWidget    *widget);
+void   gimp_context_help                   (GtkWidget      *widget);
 
 
 /**

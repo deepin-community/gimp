@@ -54,7 +54,7 @@
 static void         gimp_ink_finalize         (GObject           *object);
 
 static void         gimp_ink_paint            (GimpPaintCore     *paint_core,
-                                               GimpDrawable      *drawable,
+                                               GList             *drawables,
                                                GimpPaintOptions  *paint_options,
                                                GimpSymmetry      *sym,
                                                GimpPaintState     paint_state,
@@ -149,7 +149,7 @@ gimp_ink_finalize (GObject *object)
 
 static void
 gimp_ink_paint (GimpPaintCore    *paint_core,
-                GimpDrawable     *drawable,
+                GList            *drawables,
                 GimpPaintOptions *paint_options,
                 GimpSymmetry     *sym,
                 GimpPaintState    paint_state,
@@ -159,6 +159,8 @@ gimp_ink_paint (GimpPaintCore    *paint_core,
   GimpCoords *cur_coords;
   GimpCoords  last_coords;
 
+  g_return_if_fail (g_list_length (drawables) == 1);
+
   gimp_paint_core_get_last_coords (paint_core, &last_coords);
   cur_coords = gimp_symmetry_get_origin (sym);
 
@@ -167,12 +169,9 @@ gimp_ink_paint (GimpPaintCore    *paint_core,
     case GIMP_PAINT_STATE_INIT:
         {
           GimpContext *context = GIMP_CONTEXT (paint_options);
-          GimpRGB      foreground;
 
           gimp_symmetry_set_stateful (sym, TRUE);
-          gimp_context_get_foreground (context, &foreground);
-          gimp_palettes_add_color_history (context->gimp,
-                                           &foreground);
+          gimp_palettes_add_color_history (context->gimp, gimp_context_get_foreground (context));
 
           if (cur_coords->x == last_coords.x &&
               cur_coords->y == last_coords.y)
@@ -215,7 +214,8 @@ gimp_ink_paint (GimpPaintCore    *paint_core,
       break;
 
     case GIMP_PAINT_STATE_MOTION:
-      gimp_ink_motion (paint_core, drawable, paint_options, sym, time);
+      for (GList *iter = drawables; iter; iter = iter->next)
+        gimp_ink_motion (paint_core, iter->data, paint_options, sym, time);
       break;
 
     case GIMP_PAINT_STATE_FINISH:
@@ -235,16 +235,48 @@ gimp_ink_get_paint_buffer (GimpPaintCore    *paint_core,
                            gint             *paint_width,
                            gint             *paint_height)
 {
-  GimpInk *ink = GIMP_INK (paint_core);
-  gint     x, y;
-  gint     width, height;
-  gint     dwidth, dheight;
-  gint     x1, y1, x2, y2;
+  GimpInk    *ink = GIMP_INK (paint_core);
+  gint        x, y;
+  gint        width, height;
+  gint        dwidth, dheight;
+  gint        x1, y1, x2, y2;
+  gint        offset_change_x, offset_change_y;
+  GimpCoords  new_coords;
+  GList      *iter;
 
   gimp_blob_bounds (ink->cur_blob, &x, &y, &width, &height);
 
+  x1 = x / SUBSAMPLE - 1;
+  y1 = y / SUBSAMPLE - 1;
+  x2 = (x + width)  / SUBSAMPLE + 2;
+  y2 = (y + height) / SUBSAMPLE + 2;
+
+  gimp_paint_core_expand_drawable (paint_core, drawable, paint_options,
+                                   x1, x2, y1, y2,
+                                   &offset_change_x, &offset_change_y);
+
   dwidth  = gimp_item_get_width  (GIMP_ITEM (drawable));
   dheight = gimp_item_get_height (GIMP_ITEM (drawable));
+
+  if (offset_change_x || offset_change_y)
+    {
+      x += SUBSAMPLE * offset_change_x;
+      y += SUBSAMPLE * offset_change_y;
+
+      new_coords   = *coords;
+      new_coords.x = coords->x + offset_change_x;
+      new_coords.y = coords->y + offset_change_y;
+      gimp_symmetry_set_origin (paint_core->sym, drawable, &new_coords);
+
+      for (iter = ink->blobs_to_render; iter; iter = g_list_next (iter))
+        gimp_blob_move (iter->data,
+                        SUBSAMPLE * offset_change_x,
+                        SUBSAMPLE * offset_change_y);
+      for (iter = ink->last_blobs; iter; iter = g_list_next (iter))
+        gimp_blob_move (iter->data,
+                        SUBSAMPLE * offset_change_x,
+                        SUBSAMPLE * offset_change_y);
+    }
 
   x1 = CLAMP (x / SUBSAMPLE - 1,            0, dwidth);
   y1 = CLAMP (y / SUBSAMPLE - 1,            0, dheight);
@@ -312,18 +344,24 @@ gimp_ink_motion (GimpPaintCore    *paint_core,
   GimpInk        *ink             = GIMP_INK (paint_core);
   GimpInkOptions *options         = GIMP_INK_OPTIONS (paint_options);
   GimpContext    *context         = GIMP_CONTEXT (paint_options);
-  GList          *blob_unions     = NULL;
   GList          *blobs_to_render = NULL;
   GeglBuffer     *paint_buffer;
   gint            paint_buffer_x;
   gint            paint_buffer_y;
   GimpLayerMode   paint_mode;
-  GimpRGB         foreground;
   GeglColor      *color;
   GimpBlob       *last_blob;
-  GimpCoords     *coords;
+  GimpCoords      coords;
+  gint            off_x, off_y;
   gint            n_strokes;
   gint            i;
+
+  gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
+  coords    = *(gimp_symmetry_get_origin (sym));
+  coords.x -= off_x;
+  coords.y -= off_y;
+  gimp_symmetry_set_origin (sym, drawable, &coords);
+  paint_core->sym = sym;
 
   n_strokes = gimp_symmetry_get_size (sym);
 
@@ -346,16 +384,16 @@ gimp_ink_motion (GimpPaintCore    *paint_core,
         {
           GimpMatrix3 transform;
 
-          coords = gimp_symmetry_get_coords (sym, i);
+          coords    = *(gimp_symmetry_get_coords (sym, i));
 
           gimp_symmetry_get_matrix (sym, i, &transform);
 
           last_blob = ink_pen_ellipse (options,
-                                       coords->x,
-                                       coords->y,
-                                       coords->pressure,
-                                       coords->xtilt,
-                                       coords->ytilt,
+                                       coords.x,
+                                       coords.y,
+                                       coords.pressure,
+                                       coords.xtilt,
+                                       coords.ytilt,
                                        100,
                                        &transform);
 
@@ -363,7 +401,8 @@ gimp_ink_motion (GimpPaintCore    *paint_core,
                                             last_blob);
           ink->start_blobs = g_list_prepend (ink->start_blobs,
                                              gimp_blob_duplicate (last_blob));
-          blobs_to_render = g_list_prepend (blobs_to_render, last_blob);
+          blobs_to_render = g_list_prepend (blobs_to_render,
+                                            gimp_blob_duplicate (last_blob));
         }
       ink->start_blobs = g_list_reverse (ink->start_blobs);
       ink->last_blobs = g_list_reverse (ink->last_blobs);
@@ -377,17 +416,17 @@ gimp_ink_motion (GimpPaintCore    *paint_core,
           GimpBlob    *blob_union = NULL;
           GimpMatrix3  transform;
 
-          coords = gimp_symmetry_get_coords (sym, i);
+          coords    = *(gimp_symmetry_get_coords (sym, i));
 
           gimp_symmetry_get_matrix (sym, i, &transform);
 
           blob = ink_pen_ellipse (options,
-                                  coords->x,
-                                  coords->y,
-                                  coords->pressure,
-                                  coords->xtilt,
-                                  coords->ytilt,
-                                  coords->velocity * 100,
+                                  coords.x,
+                                  coords.y,
+                                  coords.pressure,
+                                  coords.xtilt,
+                                  coords.ytilt,
+                                  coords.velocity * 100,
                                   &transform);
 
           last_blob = g_list_nth_data (ink->last_blobs, i);
@@ -397,29 +436,26 @@ gimp_ink_motion (GimpPaintCore    *paint_core,
           g_list_nth (ink->last_blobs, i)->data = blob;
 
           blobs_to_render = g_list_prepend (blobs_to_render, blob_union);
-          blob_unions = g_list_prepend (blob_unions, blob_union);
         }
       blobs_to_render = g_list_reverse (blobs_to_render);
     }
 
   paint_mode = gimp_context_get_paint_mode (context);
+  color      = gimp_context_get_foreground (context);
 
-  gimp_context_get_foreground (context, &foreground);
-  gimp_pickable_srgb_to_image_color (GIMP_PICKABLE (drawable),
-                                     &foreground, &foreground);
-  color = gimp_gegl_color_new (&foreground);
+  ink->blobs_to_render = blobs_to_render;
 
   for (i = 0; i < n_strokes; i++)
     {
       GimpBlob *blob_to_render = g_list_nth_data (blobs_to_render, i);
 
-      coords = gimp_symmetry_get_coords (sym, i);
+      coords    = *(gimp_symmetry_get_coords (sym, i));
 
       ink->cur_blob = blob_to_render;
       paint_buffer = gimp_paint_core_get_paint_buffer (paint_core, drawable,
                                                        paint_options,
                                                        paint_mode,
-                                                       coords,
+                                                       &coords,
                                                        &paint_buffer_x,
                                                        &paint_buffer_y,
                                                        NULL, NULL);
@@ -451,9 +487,7 @@ gimp_ink_motion (GimpPaintCore    *paint_core,
 
     }
 
-  g_object_unref (color);
-
-  g_list_free_full (blob_unions, g_free);
+  g_list_free_full (blobs_to_render, g_free);
 }
 
 static GimpBlob *

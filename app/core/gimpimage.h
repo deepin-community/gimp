@@ -54,10 +54,9 @@ struct _GimpImageClass
   void (* precision_changed)            (GimpImage            *image);
   void (* alpha_changed)                (GimpImage            *image);
   void (* floating_selection_changed)   (GimpImage            *image);
-  void (* active_layer_changed)         (GimpImage            *image);
-  void (* active_channel_changed)       (GimpImage            *image);
-  void (* active_vectors_changed)       (GimpImage            *image);
-  void (* linked_items_changed)         (GimpImage            *image);
+  void (* selected_channels_changed)    (GimpImage            *image);
+  void (* selected_paths_changed)       (GimpImage            *image);
+  void (* selected_layers_changed)      (GimpImage            *image);
   void (* component_visibility_changed) (GimpImage            *image,
                                          GimpChannelType       channel);
   void (* component_active_changed)     (GimpImage            *image,
@@ -104,6 +103,8 @@ struct _GimpImageClass
   void (* undo_event)                   (GimpImage            *image,
                                          GimpUndoEvent         event,
                                          GimpUndo             *undo);
+  void (* item_sets_changed)            (GimpImage            *image,
+                                         GType                 item_type);
 };
 
 
@@ -127,7 +128,10 @@ GimpPrecision      gimp_image_get_precision      (GimpImage          *image);
 const Babl    * gimp_image_get_format            (GimpImage          *image,
                                                   GimpImageBaseType   base_type,
                                                   GimpPrecision       precision,
-                                                  gboolean            with_alpha);
+                                                  gboolean            with_alpha,
+                                                  const Babl         *space);
+
+const Babl    * gimp_image_get_layer_space       (GimpImage          *image);
 const Babl    * gimp_image_get_layer_format      (GimpImage          *image,
                                                   gboolean            with_alpha);
 const Babl    * gimp_image_get_channel_format    (GimpImage          *image);
@@ -138,8 +142,8 @@ GimpLayerMode   gimp_image_get_default_new_layer_mode
 void            gimp_image_unset_default_new_layer_mode
                                                  (GimpImage          *image);
 
-gint            gimp_image_get_ID                (GimpImage          *image);
-GimpImage     * gimp_image_get_by_ID             (Gimp               *gimp,
+gint            gimp_image_get_id                (GimpImage          *image);
+GimpImage     * gimp_image_get_by_id             (Gimp               *gimp,
                                                   gint                id);
 
 GFile         * gimp_image_get_file              (GimpImage          *image);
@@ -196,8 +200,8 @@ void            gimp_image_get_resolution        (GimpImage          *image,
 void            gimp_image_resolution_changed    (GimpImage          *image);
 
 void            gimp_image_set_unit              (GimpImage          *image,
-                                                  GimpUnit            unit);
-GimpUnit        gimp_image_get_unit              (GimpImage          *image);
+                                                  GimpUnit           *unit);
+GimpUnit      * gimp_image_get_unit              (GimpImage          *image);
 void            gimp_image_unit_changed          (GimpImage          *image);
 
 gint            gimp_image_get_width             (GimpImage          *image);
@@ -213,6 +217,12 @@ void       gimp_image_floating_selection_changed (GimpImage          *image);
 
 GimpChannel   * gimp_image_get_mask              (GimpImage          *image);
 void            gimp_image_mask_changed          (GimpImage          *image);
+gboolean        gimp_image_mask_intersect        (GimpImage          *image,
+                                                  GList              *items,
+                                                  gint               *x,
+                                                  gint               *y,
+                                                  gint               *width,
+                                                  gint               *height);
 
 
 /*  image components  */
@@ -246,7 +256,6 @@ GimpComponentMask gimp_image_get_visible_mask    (GimpImage          *image);
 void            gimp_image_mode_changed          (GimpImage          *image);
 void            gimp_image_precision_changed     (GimpImage          *image);
 void            gimp_image_alpha_changed         (GimpImage          *image);
-void            gimp_image_linked_items_changed  (GimpImage          *image);
 void            gimp_image_invalidate            (GimpImage          *image,
                                                   gint                x,
                                                   gint                y,
@@ -315,8 +324,7 @@ void            gimp_image_dec_show_all_count    (GimpImage          *image);
 
 const GimpParasite * gimp_image_parasite_find    (GimpImage          *image,
                                                   const gchar        *name);
-gchar        ** gimp_image_parasite_list         (GimpImage          *image,
-                                                  gint               *count);
+gchar        ** gimp_image_parasite_list         (GimpImage          *image);
 gboolean        gimp_image_parasite_validate     (GimpImage          *image,
                                                   const GimpParasite *parasite,
                                                   GError            **error);
@@ -341,53 +349,59 @@ GimpTattoo      gimp_image_get_tattoo_state      (GimpImage          *image);
 GimpProjection * gimp_image_get_projection       (GimpImage          *image);
 
 
-/*  layers / channels / vectors  */
+/*  layers / channels / paths  */
 
 GimpItemTree  * gimp_image_get_layer_tree        (GimpImage          *image);
 GimpItemTree  * gimp_image_get_channel_tree      (GimpImage          *image);
-GimpItemTree  * gimp_image_get_vectors_tree      (GimpImage          *image);
+GimpItemTree  * gimp_image_get_path_tree         (GimpImage          *image);
 
 GimpContainer * gimp_image_get_layers            (GimpImage          *image);
 GimpContainer * gimp_image_get_channels          (GimpImage          *image);
-GimpContainer * gimp_image_get_vectors           (GimpImage          *image);
+GimpContainer * gimp_image_get_paths             (GimpImage          *image);
 
 gint            gimp_image_get_n_layers          (GimpImage          *image);
 gint            gimp_image_get_n_channels        (GimpImage          *image);
-gint            gimp_image_get_n_vectors         (GimpImage          *image);
+gint            gimp_image_get_n_paths           (GimpImage          *image);
 
 GList         * gimp_image_get_layer_iter        (GimpImage          *image);
 GList         * gimp_image_get_channel_iter      (GimpImage          *image);
-GList         * gimp_image_get_vectors_iter      (GimpImage          *image);
+GList         * gimp_image_get_path_iter         (GimpImage          *image);
 
 GList         * gimp_image_get_layer_list        (GimpImage          *image);
 GList         * gimp_image_get_channel_list      (GimpImage          *image);
-GList         * gimp_image_get_vectors_list      (GimpImage          *image);
+GList         * gimp_image_get_path_list         (GimpImage          *image);
 
-GimpDrawable  * gimp_image_get_active_drawable   (GimpImage          *image);
-GimpLayer     * gimp_image_get_active_layer      (GimpImage          *image);
-GimpChannel   * gimp_image_get_active_channel    (GimpImage          *image);
-GimpVectors   * gimp_image_get_active_vectors    (GimpImage          *image);
+void          gimp_image_unset_selected_channels (GimpImage          *image);
 
-GimpLayer     * gimp_image_set_active_layer      (GimpImage          *image,
-                                                  GimpLayer          *layer);
-GimpChannel   * gimp_image_set_active_channel    (GimpImage          *image,
-                                                  GimpChannel        *channel);
-GimpChannel   * gimp_image_unset_active_channel  (GimpImage          *image);
-GimpVectors   * gimp_image_set_active_vectors    (GimpImage          *image,
-                                                  GimpVectors        *vectors);
+gboolean        gimp_image_is_selected_drawable  (GimpImage          *image,
+                                                  GimpDrawable       *drawable);
+gboolean     gimp_image_equal_selected_drawables (GimpImage          *image,
+                                                  GList              *drawables);
+
+GList        * gimp_image_get_selected_drawables (GimpImage          *image);
+GList         * gimp_image_get_selected_layers   (GimpImage          *image);
+GList         * gimp_image_get_selected_channels (GimpImage          *image);
+GList         * gimp_image_get_selected_paths    (GimpImage          *image);
+
+void            gimp_image_set_selected_layers   (GimpImage          *image,
+                                                  GList              *layers);
+void            gimp_image_set_selected_channels (GimpImage          *image,
+                                                  GList              *channels);
+void            gimp_image_set_selected_paths    (GimpImage          *image,
+                                                  GList              *paths);
 
 GimpLayer     * gimp_image_get_layer_by_tattoo   (GimpImage          *image,
                                                   GimpTattoo          tattoo);
 GimpChannel   * gimp_image_get_channel_by_tattoo (GimpImage          *image,
                                                   GimpTattoo          tattoo);
-GimpVectors   * gimp_image_get_vectors_by_tattoo (GimpImage          *image,
+GimpPath      * gimp_image_get_path_by_tattoo    (GimpImage          *image,
                                                   GimpTattoo          tattoo);
 
 GimpLayer     * gimp_image_get_layer_by_name     (GimpImage          *image,
                                                   const gchar        *name);
 GimpChannel   * gimp_image_get_channel_by_name   (GimpImage          *image,
                                                   const gchar        *name);
-GimpVectors   * gimp_image_get_vectors_by_name   (GimpImage          *image,
+GimpPath      * gimp_image_get_path_by_name      (GimpImage          *image,
                                                   const gchar        *name);
 
 gboolean        gimp_image_reorder_item          (GimpImage          *image,
@@ -415,7 +429,7 @@ gboolean        gimp_image_add_layer             (GimpImage          *image,
 void            gimp_image_remove_layer          (GimpImage          *image,
                                                   GimpLayer          *layer,
                                                   gboolean            push_undo,
-                                                  GimpLayer          *new_active);
+                                                  GList              *new_selected);
 
 void            gimp_image_add_layers            (GimpImage          *image,
                                                   GList              *layers,
@@ -427,6 +441,21 @@ void            gimp_image_add_layers            (GimpImage          *image,
                                                   gint                height,
                                                   const gchar        *undo_desc);
 
+void            gimp_image_store_item_set        (GimpImage          *image,
+                                                  GimpItemList       *set);
+gboolean        gimp_image_unlink_item_set       (GimpImage          *image,
+                                                  GimpItemList       *set);
+GList         * gimp_image_get_stored_item_sets   (GimpImage         *image,
+                                                   GType              item_type);
+void            gimp_image_select_item_set       (GimpImage          *image,
+                                                  GimpItemList       *set);
+void            gimp_image_add_item_set          (GimpImage          *image,
+                                                  GimpItemList       *set);
+void            gimp_image_remove_item_set       (GimpImage          *image,
+                                                  GimpItemList       *set);
+void            gimp_image_intersect_item_set    (GimpImage        *image,
+                                                  GimpItemList       *set);
+
 gboolean        gimp_image_add_channel           (GimpImage          *image,
                                                   GimpChannel        *channel,
                                                   GimpChannel        *parent,
@@ -435,17 +464,24 @@ gboolean        gimp_image_add_channel           (GimpImage          *image,
 void            gimp_image_remove_channel        (GimpImage          *image,
                                                   GimpChannel        *channel,
                                                   gboolean            push_undo,
-                                                  GimpChannel        *new_active);
+                                                  GList              *new_selected);
 
-gboolean        gimp_image_add_vectors           (GimpImage          *image,
-                                                  GimpVectors        *vectors,
-                                                  GimpVectors        *parent,
+gboolean        gimp_image_add_path              (GimpImage          *image,
+                                                  GimpPath           *path,
+                                                  GimpPath           *parent,
                                                   gint                position,
                                                   gboolean            push_undo);
-void            gimp_image_remove_vectors        (GimpImage          *image,
-                                                  GimpVectors        *vectors,
+void            gimp_image_remove_path           (GimpImage          *image,
+                                                  GimpPath           *path,
                                                   gboolean            push_undo,
-                                                  GimpVectors        *new_active);
+                                                  GList              *new_selected);
+
+gboolean        gimp_image_add_hidden_item       (GimpImage          *image,
+                                                  GimpItem           *item);
+void            gimp_image_remove_hidden_item    (GimpImage          *image,
+                                                  GimpItem           *item);
+gboolean        gimp_image_is_hidden_item        (GimpImage          *image,
+                                                  GimpItem           *item);
 
 gboolean    gimp_image_coords_in_active_pickable (GimpImage          *image,
                                                   const GimpCoords   *coords,

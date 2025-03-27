@@ -22,14 +22,16 @@
 #define __GIMP_GEGL_UTILS_H__
 
 
+GList       * gimp_gegl_get_op_classes                (void);
+
 GType         gimp_gegl_get_op_enum_type              (const gchar         *operation,
                                                        const gchar         *property);
-
-GeglColor   * gimp_gegl_color_new                     (const GimpRGB       *rgb);
 
 void          gimp_gegl_progress_connect              (GeglNode            *node,
                                                        GimpProgress        *progress,
                                                        const gchar         *text);
+void          gimp_gegl_progress_disconnect           (GeglNode            *node,
+                                                       GimpProgress        *progress);
 
 gboolean      gimp_gegl_node_is_source_operation      (GeglNode            *node);
 gboolean      gimp_gegl_node_is_point_operation       (GeglNode            *node);
@@ -52,6 +54,15 @@ gboolean      gimp_gegl_param_spec_has_key            (GParamSpec          *pspe
                                                        const gchar         *value);
 
 GeglBuffer  * gimp_gegl_buffer_dup                    (GeglBuffer          *buffer);
+GeglBuffer  * gimp_gegl_buffer_resize                 (GeglBuffer          *buffer,
+                                                       gint                 new_width,
+                                                       gint                 new_height,
+                                                       gint                 offset_x,
+                                                       gint                 offset_y,
+                                                       GeglColor           *color,
+                                                       GimpPattern         *pattern,
+                                                       gint                 pattern_offset_x,
+                                                       gint                 pattern_offset_y);
 
 gboolean      gimp_gegl_buffer_set_extent             (GeglBuffer          *buffer,
                                                        const GeglRectangle *extent);

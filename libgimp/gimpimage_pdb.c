@@ -22,7 +22,7 @@
 
 #include "config.h"
 
-#include <string.h>
+#include "stamp-pdbgen.h"
 
 #include "gimp.h"
 
@@ -38,74 +38,74 @@
 
 
 /**
- * gimp_image_is_valid:
- * @image_ID: The image to check.
+ * gimp_image_id_is_valid:
+ * @image_id: The image ID to check.
  *
- * Returns TRUE if the image is valid.
+ * Returns TRUE if the image ID is valid.
  *
  * This procedure checks if the given image ID is valid and refers to
  * an existing image.
  *
  * Returns: Whether the image ID is valid.
  *
- * Since: 2.4
+ * Since: 3.0
  **/
 gboolean
-gimp_image_is_valid (gint32 image_ID)
+gimp_image_id_is_valid (gint image_id)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean valid = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-image-is-valid",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, image_id,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    valid = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-id-is-valid",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    valid = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return valid;
 }
 
 /**
- * gimp_image_list:
- * @num_images: The number of images currently open.
+ * gimp_get_images:
  *
  * Returns the list of images currently open.
  *
  * This procedure returns the list of images currently open in GIMP.
  *
- * Returns: The list of images currently open. The returned value must
- * be freed with g_free().
+ * Returns: (element-type GimpImage) (array zero-terminated=1) (transfer container):
+ *          The list of images currently open.
+ *          The returned value must be freed with g_free().
  **/
-gint *
-gimp_image_list (gint *num_images)
+GimpImage **
+gimp_get_images (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint *image_ids = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpImage **images = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-list",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  *num_images = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-get-images",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_images = return_vals[1].data.d_int32;
-      image_ids = g_new (gint32, *num_images);
-      memcpy (image_ids,
-              return_vals[2].data.d_int32array,
-              *num_images * sizeof (gint32));
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    images = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
-  return image_ids;
+  return images;
 }
 
 /**
@@ -123,34 +123,38 @@ gimp_image_list (gint *num_images)
  * gimp_layer_new() commands. They can be added to an image using the
  * gimp_image_insert_layer() command.
  *
- * If your image's type if INDEXED, a colormap must also be added with
- * gimp_image_set_colormap(). An indexed image without a colormap will
- * output unexpected colors.
+ * If your image's type if INDEXED, a palette must also be set with
+ * [method@Gimp.Image.set_palette]. An indexed image without a palette
+ * will output unexpected colors.
  *
- * Returns: The ID of the newly created image.
+ * Returns: (transfer none): The newly created image.
  **/
-gint32
+GimpImage *
 gimp_image_new (gint              width,
                 gint              height,
                 GimpImageBaseType type)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 image_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpImage *image = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-new",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, width,
-                                    GIMP_PDB_INT32, height,
-                                    GIMP_PDB_INT32, type,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, width,
+                                          G_TYPE_INT, height,
+                                          GIMP_TYPE_IMAGE_BASE_TYPE, type,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    image_ID = return_vals[1].data.d_image;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-new",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    image = GIMP_VALUES_GET_IMAGE (return_vals, 1);
 
-  return image_ID;
+  gimp_value_array_unref (return_vals);
+
+  return image;
 }
 
 /**
@@ -165,73 +169,81 @@ gimp_image_new (gint              width,
  *
  * Creates a new image, undisplayed with the specified extents, type
  * and precision. Indexed images can only be created at
- * GIMP_PRECISION_U8_GAMMA precision. See gimp_image_new() for further
- * details.
+ * GIMP_PRECISION_U8_NON_LINEAR precision. See gimp_image_new() for
+ * further details.
  *
- * Returns: The ID of the newly created image.
+ * Returns: (transfer none): The newly created image.
  *
  * Since: 2.10
  **/
-gint32
+GimpImage *
 gimp_image_new_with_precision (gint              width,
                                gint              height,
                                GimpImageBaseType type,
                                GimpPrecision     precision)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 image_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpImage *image = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-new-with-precision",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, width,
-                                    GIMP_PDB_INT32, height,
-                                    GIMP_PDB_INT32, type,
-                                    GIMP_PDB_INT32, precision,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, width,
+                                          G_TYPE_INT, height,
+                                          GIMP_TYPE_IMAGE_BASE_TYPE, type,
+                                          GIMP_TYPE_PRECISION, precision,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    image_ID = return_vals[1].data.d_image;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-new-with-precision",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    image = GIMP_VALUES_GET_IMAGE (return_vals, 1);
 
-  return image_ID;
+  gimp_value_array_unref (return_vals);
+
+  return image;
 }
 
 /**
  * gimp_image_duplicate:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Duplicate the specified image
  *
  * This procedure duplicates the specified image, copying all layers,
  * channels, and image information.
  *
- * Returns: The new, duplicated image.
+ * Returns: (transfer none): The new, duplicated image.
  **/
-gint32
-gimp_image_duplicate (gint32 image_ID)
+GimpImage *
+gimp_image_duplicate (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 new_image_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpImage *new_image = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-duplicate",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    new_image_ID = return_vals[1].data.d_image;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-duplicate",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    new_image = GIMP_VALUES_GET_IMAGE (return_vals, 1);
 
-  return new_image_ID;
+  gimp_value_array_unref (return_vals);
+
+  return new_image;
 }
 
 /**
  * gimp_image_delete:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Delete the specified image.
  *
@@ -245,27 +257,31 @@ gimp_image_duplicate (gint32 image_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_delete (gint32 image_ID)
+gimp_image_delete (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-delete",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-delete",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_image_base_type:
- * @image_ID: The image.
+ * gimp_image_get_base_type:
+ * @image: The image.
  *
  * Get the base type of the image.
  *
@@ -275,28 +291,32 @@ gimp_image_delete (gint32 image_ID)
  * Returns: The image's base type.
  **/
 GimpImageBaseType
-gimp_image_base_type (gint32 image_ID)
+gimp_image_get_base_type (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpImageBaseType base_type = 0;
 
-  return_vals = gimp_run_procedure ("gimp-image-base-type",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    base_type = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-base-type",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    base_type = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return base_type;
 }
 
 /**
  * gimp_image_get_precision:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Get the precision of the image.
  *
@@ -307,28 +327,32 @@ gimp_image_base_type (gint32 image_ID)
  * Since: 2.10
  **/
 GimpPrecision
-gimp_image_get_precision (gint32 image_ID)
+gimp_image_get_precision (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpPrecision precision = 0;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-precision",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    precision = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-precision",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    precision = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return precision;
 }
 
 /**
  * gimp_image_get_default_new_layer_mode:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Get the default mode for newly created layers of this image.
  *
@@ -339,28 +363,32 @@ gimp_image_get_precision (gint32 image_ID)
  * Since: 2.10
  **/
 GimpLayerMode
-gimp_image_get_default_new_layer_mode (gint32 image_ID)
+gimp_image_get_default_new_layer_mode (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpLayerMode mode = 0;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-default-new-layer-mode",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    mode = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-default-new-layer-mode",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    mode = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return mode;
 }
 
 /**
- * gimp_image_width:
- * @image_ID: The image.
+ * gimp_image_get_width:
+ * @image: The image.
  *
  * Return the width of the image
  *
@@ -370,28 +398,32 @@ gimp_image_get_default_new_layer_mode (gint32 image_ID)
  * Returns: The image's width.
  **/
 gint
-gimp_image_width (gint32 image_ID)
+gimp_image_get_width (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gint width = 0;
 
-  return_vals = gimp_run_procedure ("gimp-image-width",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    width = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-width",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    width = GIMP_VALUES_GET_INT (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return width;
 }
 
 /**
- * gimp_image_height:
- * @image_ID: The image.
+ * gimp_image_get_height:
+ * @image: The image.
  *
  * Return the height of the image
  *
@@ -401,98 +433,75 @@ gimp_image_width (gint32 image_ID)
  * Returns: The image's height.
  **/
 gint
-gimp_image_height (gint32 image_ID)
+gimp_image_get_height (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gint height = 0;
 
-  return_vals = gimp_run_procedure ("gimp-image-height",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    height = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-height",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    height = GIMP_VALUES_GET_INT (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return height;
 }
 
 /**
- * gimp_image_free_shadow:
- * @image_ID: The image.
- *
- * Deprecated: Use gimp_drawable_free_shadow() instead.
- *
- * Returns: TRUE on success.
- **/
-gboolean
-gimp_image_free_shadow (gint32 image_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
-
-  return_vals = gimp_run_procedure ("gimp-image-free-shadow",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
-
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return success;
-}
-
-/**
  * gimp_image_get_layers:
- * @image_ID: The image.
- * @num_layers: The number of layers contained in the image.
+ * @image: The image.
  *
- * Returns the list of layers contained in the specified image.
+ * Returns the list of root layers contained in the specified image.
  *
- * This procedure returns the list of layers contained in the specified
- * image. The order of layers is from topmost to bottommost.
+ * This procedure returns the list of root layers contained in the
+ * specified image. The order of layers is from topmost to bottommost.
+ * Note that this is not the full list of layers, but only the root
+ * layers, i.e. layers with no parents themselves. If you need all
+ * layers, it is up to you to verify that any of these layers is a
+ * group layer with gimp_item_is_group() and to obtain its children
+ * with gimp_item_get_children() (possibly recursively checking if
+ * these have children too).
  *
- * Returns: The list of layers contained in the image. The returned
- * value must be freed with g_free().
+ * Returns: (element-type GimpLayer) (array zero-terminated=1) (transfer container):
+ *          The list of layers contained in the image.
+ *          The returned value must be freed with g_free().
  **/
-gint *
-gimp_image_get_layers (gint32  image_ID,
-                       gint   *num_layers)
+GimpLayer **
+gimp_image_get_layers (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint *layer_ids = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpLayer **layers = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-layers",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  *num_layers = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-layers",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_layers = return_vals[1].data.d_int32;
-      layer_ids = g_new (gint32, *num_layers);
-      memcpy (layer_ids,
-              return_vals[2].data.d_int32array,
-              *num_layers * sizeof (gint32));
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    layers = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
-  return layer_ids;
+  return layers;
 }
 
 /**
  * gimp_image_get_channels:
- * @image_ID: The image.
- * @num_channels: The number of channels contained in the image.
+ * @image: The image.
  *
  * Returns the list of channels contained in the specified image.
  *
@@ -502,120 +511,76 @@ gimp_image_get_layers (gint32  image_ID,
  * \"channels\" are custom channels and do not include the image's
  * color components.
  *
- * Returns: The list of channels contained in the image. The returned
- * value must be freed with g_free().
+ * Returns: (element-type GimpChannel) (array zero-terminated=1) (transfer container):
+ *          The list of channels contained in the image.
+ *          The returned value must be freed with g_free().
  **/
-gint *
-gimp_image_get_channels (gint32  image_ID,
-                         gint   *num_channels)
+GimpChannel **
+gimp_image_get_channels (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint *channel_ids = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpChannel **channels = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-channels",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  *num_channels = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-channels",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_channels = return_vals[1].data.d_int32;
-      channel_ids = g_new (gint32, *num_channels);
-      memcpy (channel_ids,
-              return_vals[2].data.d_int32array,
-              *num_channels * sizeof (gint32));
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    channels = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
-  return channel_ids;
+  return channels;
 }
 
 /**
- * gimp_image_get_vectors:
- * @image_ID: The image.
- * @num_vectors: The number of vectors contained in the image.
+ * gimp_image_get_paths:
+ * @image: The image.
  *
- * Returns the list of vectors contained in the specified image.
+ * Returns the list of paths contained in the specified image.
  *
- * This procedure returns the list of vectors contained in the
- * specified image.
+ * This procedure returns the list of paths contained in the specified
+ * image.
  *
- * Returns: The list of vectors contained in the image. The returned
- * value must be freed with g_free().
+ * Returns: (element-type GimpPath) (array zero-terminated=1) (transfer container):
+ *          The list of paths contained in the image.
+ *          The returned value must be freed with g_free().
  *
  * Since: 2.4
  **/
-gint *
-gimp_image_get_vectors (gint32  image_ID,
-                        gint   *num_vectors)
+GimpPath **
+gimp_image_get_paths (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint *vector_ids = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpPath **paths = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-vectors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  *num_vectors = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-paths",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_vectors = return_vals[1].data.d_int32;
-      vector_ids = g_new (gint32, *num_vectors);
-      memcpy (vector_ids,
-              return_vals[2].data.d_int32array,
-              *num_vectors * sizeof (gint32));
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    paths = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
-  return vector_ids;
-}
-
-/**
- * gimp_image_get_active_drawable:
- * @image_ID: The image.
- *
- * Get the image's active drawable
- *
- * This procedure returns the ID of the image's active drawable. This
- * can be either a layer, a channel, or a layer mask. The active
- * drawable is specified by the active image channel. If that is -1,
- * then by the active image layer. If the active image layer has a
- * layer mask and the layer mask is in edit mode, then the layer mask
- * is the active drawable.
- *
- * Returns: The active drawable.
- **/
-gint32
-gimp_image_get_active_drawable (gint32 image_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 drawable_ID = -1;
-
-  return_vals = gimp_run_procedure ("gimp-image-get-active-drawable",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    drawable_ID = return_vals[1].data.d_drawable;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return drawable_ID;
+  return paths;
 }
 
 /**
  * gimp_image_unset_active_channel:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Unsets the active channel in the specified image.
  *
@@ -627,58 +592,66 @@ gimp_image_get_active_drawable (gint32 image_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_unset_active_channel (gint32 image_ID)
+gimp_image_unset_active_channel (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-unset-active-channel",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-unset-active-channel",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_get_floating_sel:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Return the floating selection of the image.
  *
  * This procedure returns the image's floating selection, if it exists.
  * If it doesn't exist, -1 is returned as the layer ID.
  *
- * Returns: The image's floating selection.
+ * Returns: (transfer none): The image's floating selection.
  **/
-gint32
-gimp_image_get_floating_sel (gint32 image_ID)
+GimpLayer *
+gimp_image_get_floating_sel (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 floating_sel_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpLayer *floating_sel = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-floating-sel",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    floating_sel_ID = return_vals[1].data.d_layer;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-floating-sel",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    floating_sel = GIMP_VALUES_GET_LAYER (return_vals, 1);
 
-  return floating_sel_ID;
+  gimp_value_array_unref (return_vals);
+
+  return floating_sel;
 }
 
 /**
  * gimp_image_floating_sel_attached_to:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Return the drawable the floating selection is attached to.
  *
@@ -686,93 +659,108 @@ gimp_image_get_floating_sel (gint32 image_ID)
  * is attached to, if it exists. If it doesn't exist, -1 is returned as
  * the drawable ID.
  *
- * Returns: The drawable the floating selection is attached to.
+ * Returns: (transfer none):
+ *          The drawable the floating selection is attached to.
  **/
-gint32
-gimp_image_floating_sel_attached_to (gint32 image_ID)
+GimpDrawable *
+gimp_image_floating_sel_attached_to (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 drawable_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpDrawable *drawable = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-floating-sel-attached-to",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    drawable_ID = return_vals[1].data.d_drawable;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-floating-sel-attached-to",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    drawable = GIMP_VALUES_GET_DRAWABLE (return_vals, 1);
 
-  return drawable_ID;
+  gimp_value_array_unref (return_vals);
+
+  return drawable;
 }
 
 /**
  * gimp_image_pick_color:
- * @image_ID: The image.
- * @drawable_ID: The drawable to pick from.
+ * @image: The image.
+ * @drawables: (element-type GimpDrawable) (array zero-terminated=1): The drawables to pick from.
  * @x: x coordinate of upper-left corner of rectangle.
  * @y: y coordinate of upper-left corner of rectangle.
- * @sample_merged: Use the composite image, not the drawable.
+ * @sample_merged: Use the composite image, not the drawables.
  * @sample_average: Average the color of all the pixels in a specified radius.
  * @average_radius: The radius of pixels to average.
- * @color: The return color.
+ * @color: (out) (transfer full): The return color.
  *
- * Determine the color at the given drawable coordinates
+ * Determine the color at the given coordinates
  *
  * This tool determines the color at the specified coordinates. The
  * returned color is an RGB triplet even for grayscale and indexed
  * drawables. If the coordinates lie outside of the extents of the
- * specified drawable, then an error is returned. If the drawable has
- * an alpha channel, the algorithm examines the alpha value of the
- * drawable at the coordinates. If the alpha value is completely
- * transparent (0), then an error is returned. If the sample_merged
- * parameter is TRUE, the data of the composite image will be used
- * instead of that for the specified drawable. This is equivalent to
- * sampling for colors after merging all visible layers. In the case of
- * a merged sampling, the supplied drawable is ignored.
+ * specified drawables, then an error is returned. All drawables must
+ * belong to the image and be of the same type.
+ * If only one drawable is given and it has an alpha channel, the
+ * algorithm examines the alpha value of the drawable at the
+ * coordinates. If the alpha value is completely transparent (0), then
+ * an error is returned. With several drawables specified, the
+ * composite image with only these drawables is used.
+ * If the sample_merged parameter is TRUE, the data of the composite
+ * image will be used instead of that for the specified drawables. This
+ * is equivalent to sampling for colors after merging all visible
+ * layers. In the case of a merged sampling, the supplied drawables are
+ * ignored.
  *
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_pick_color (gint32    image_ID,
-                       gint32    drawable_ID,
-                       gdouble   x,
-                       gdouble   y,
-                       gboolean  sample_merged,
-                       gboolean  sample_average,
-                       gdouble   average_radius,
-                       GimpRGB  *color)
+gimp_image_pick_color (GimpImage           *image,
+                       const GimpDrawable **drawables,
+                       gdouble              x,
+                       gdouble              y,
+                       gboolean             sample_merged,
+                       gboolean             sample_average,
+                       gdouble              average_radius,
+                       GeglColor          **color)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-pick-color",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_FLOAT, x,
-                                    GIMP_PDB_FLOAT, y,
-                                    GIMP_PDB_INT32, sample_merged,
-                                    GIMP_PDB_INT32, sample_average,
-                                    GIMP_PDB_FLOAT, average_radius,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CORE_OBJECT_ARRAY, drawables,
+                                          G_TYPE_DOUBLE, x,
+                                          G_TYPE_DOUBLE, y,
+                                          G_TYPE_BOOLEAN, sample_merged,
+                                          G_TYPE_BOOLEAN, sample_average,
+                                          G_TYPE_DOUBLE, average_radius,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-pick-color",
+                                               args);
+  gimp_value_array_unref (args);
+
+  *color = NULL;
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
   if (success)
-    *color = return_vals[1].data.d_color;
+    *color = g_value_dup_object (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_pick_correlate_layer:
- * @image_ID: The image.
+ * @image: The image.
  * @x: The x coordinate for the pick.
  * @y: The y coordinate for the pick.
  *
@@ -784,70 +772,41 @@ gimp_image_pick_color (gint32    image_ID,
  * at the specified coordinates. This procedure will return -1 if no
  * layer is found.
  *
- * Returns: The layer found at the specified coordinates.
+ * Returns: (transfer none): The layer found at the specified coordinates.
  **/
-gint32
-gimp_image_pick_correlate_layer (gint32 image_ID,
-                                 gint   x,
-                                 gint   y)
+GimpLayer *
+gimp_image_pick_correlate_layer (GimpImage *image,
+                                 gint       x,
+                                 gint       y)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 layer_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpLayer *layer = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-pick-correlate-layer",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, x,
-                                    GIMP_PDB_INT32, y,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_INT, x,
+                                          G_TYPE_INT, y,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    layer_ID = return_vals[1].data.d_layer;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-pick-correlate-layer",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    layer = GIMP_VALUES_GET_LAYER (return_vals, 1);
 
-  return layer_ID;
-}
+  gimp_value_array_unref (return_vals);
 
-/**
- * gimp_image_add_layer:
- * @image_ID: The image.
- * @layer_ID: The layer.
- * @position: The layer position.
- *
- * Deprecated: Use gimp_image_insert_layer() instead.
- *
- * Returns: TRUE on success.
- **/
-gboolean
-gimp_image_add_layer (gint32 image_ID,
-                      gint32 layer_ID,
-                      gint   position)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
-
-  return_vals = gimp_run_procedure ("gimp-image-add-layer",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_LAYER, layer_ID,
-                                    GIMP_PDB_INT32, position,
-                                    GIMP_PDB_END);
-
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return success;
+  return layer;
 }
 
 /**
  * gimp_image_insert_layer:
- * @image_ID: The image.
- * @layer_ID: The layer.
- * @parent_ID: The parent layer.
+ * @image: The image.
+ * @layer: The layer.
+ * @parent: (nullable): The parent layer.
  * @position: The layer position.
  *
  * Add the specified layer to the image.
@@ -867,34 +826,38 @@ gimp_image_add_layer (gint32 image_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_insert_layer (gint32 image_ID,
-                         gint32 layer_ID,
-                         gint32 parent_ID,
-                         gint   position)
+gimp_image_insert_layer (GimpImage *image,
+                         GimpLayer *layer,
+                         GimpLayer *parent,
+                         gint       position)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-insert-layer",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_LAYER, layer_ID,
-                                    GIMP_PDB_LAYER, parent_ID,
-                                    GIMP_PDB_INT32, position,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_LAYER, layer,
+                                          GIMP_TYPE_LAYER, parent,
+                                          G_TYPE_INT, position,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-insert-layer",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_remove_layer:
- * @image_ID: The image.
- * @layer_ID: The layer.
+ * @image: The image.
+ * @layer: The layer.
  *
  * Remove the specified layer from the image.
  *
@@ -907,29 +870,33 @@ gimp_image_insert_layer (gint32 image_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_remove_layer (gint32 image_ID,
-                         gint32 layer_ID)
+gimp_image_remove_layer (GimpImage *image,
+                         GimpLayer *layer)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-remove-layer",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_LAYER, layer_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_LAYER, layer,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-remove-layer",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_freeze_layers:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Freeze the image's layer list.
  *
@@ -946,27 +913,31 @@ gimp_image_remove_layer (gint32 image_ID,
  * Since: 2.10.2
  **/
 gboolean
-gimp_image_freeze_layers (gint32 image_ID)
+gimp_image_freeze_layers (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-freeze-layers",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-freeze-layers",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_thaw_layers:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Thaw the image's layer list.
  *
@@ -981,62 +952,33 @@ gimp_image_freeze_layers (gint32 image_ID)
  * Since: 2.10.2
  **/
 gboolean
-gimp_image_thaw_layers (gint32 image_ID)
+gimp_image_thaw_layers (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-thaw-layers",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-thaw-layers",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
-  return success;
-}
-
-/**
- * gimp_image_add_channel:
- * @image_ID: The image.
- * @channel_ID: The channel.
- * @position: The channel position.
- *
- * Deprecated: Use gimp_image_insert_channel() instead.
- *
- * Returns: TRUE on success.
- **/
-gboolean
-gimp_image_add_channel (gint32 image_ID,
-                        gint32 channel_ID,
-                        gint   position)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
-
-  return_vals = gimp_run_procedure ("gimp-image-add-channel",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_CHANNEL, channel_ID,
-                                    GIMP_PDB_INT32, position,
-                                    GIMP_PDB_END);
-
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_insert_channel:
- * @image_ID: The image.
- * @channel_ID: The channel.
- * @parent_ID: The parent channel.
+ * @image: The image.
+ * @channel: The channel.
+ * @parent: (nullable): The parent channel.
  * @position: The channel position.
  *
  * Add the specified channel to the image.
@@ -1051,34 +993,38 @@ gimp_image_add_channel (gint32 image_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_insert_channel (gint32 image_ID,
-                           gint32 channel_ID,
-                           gint32 parent_ID,
-                           gint   position)
+gimp_image_insert_channel (GimpImage   *image,
+                           GimpChannel *channel,
+                           GimpChannel *parent,
+                           gint         position)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-insert-channel",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_CHANNEL, channel_ID,
-                                    GIMP_PDB_CHANNEL, parent_ID,
-                                    GIMP_PDB_INT32, position,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL, channel,
+                                          GIMP_TYPE_CHANNEL, parent,
+                                          G_TYPE_INT, position,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-insert-channel",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_remove_channel:
- * @image_ID: The image.
- * @channel_ID: The channel.
+ * @image: The image.
+ * @channel: The channel.
  *
  * Remove the specified channel from the image.
  *
@@ -1088,29 +1034,33 @@ gimp_image_insert_channel (gint32 image_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_remove_channel (gint32 image_ID,
-                           gint32 channel_ID)
+gimp_image_remove_channel (GimpImage   *image,
+                           GimpChannel *channel)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-remove-channel",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_CHANNEL, channel_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL, channel,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-remove-channel",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_freeze_channels:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Freeze the image's channel list.
  *
@@ -1128,27 +1078,31 @@ gimp_image_remove_channel (gint32 image_ID,
  * Since: 2.10.2
  **/
 gboolean
-gimp_image_freeze_channels (gint32 image_ID)
+gimp_image_freeze_channels (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-freeze-channels",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-freeze-channels",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_thaw_channels:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Thaw the image's channel list.
  *
@@ -1163,104 +1117,79 @@ gimp_image_freeze_channels (gint32 image_ID)
  * Since: 2.10.2
  **/
 gboolean
-gimp_image_thaw_channels (gint32 image_ID)
+gimp_image_thaw_channels (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-thaw-channels",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-thaw-channels",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_image_add_vectors:
- * @image_ID: The image.
- * @vectors_ID: The vectors object.
- * @position: The vectors objects position.
+ * gimp_image_insert_path:
+ * @image: The image.
+ * @path: The path.
+ * @parent: (nullable): The parent path.
+ * @position: The path position.
  *
- * Deprecated: Use gimp_image_insert_vectors() instead.
+ * Add the specified path to the image.
+ *
+ * This procedure adds the specified path to the image at the given
+ * position. Since path groups are not currently supported, the parent
+ * argument must always be 0. The position argument specifies the
+ * location of the path inside the stack, starting from the top (0) and
+ * increasing. If the position is specified as -1, then the path is
+ * inserted above the active path.
  *
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_add_vectors (gint32 image_ID,
-                        gint32 vectors_ID,
-                        gint   position)
+gimp_image_insert_path (GimpImage *image,
+                        GimpPath  *path,
+                        GimpPath  *parent,
+                        gint       position)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-add-vectors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_VECTORS, vectors_ID,
-                                    GIMP_PDB_INT32, position,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_PATH, path,
+                                          GIMP_TYPE_PATH, parent,
+                                          G_TYPE_INT, position,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-insert-path",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_image_insert_vectors:
- * @image_ID: The image.
- * @vectors_ID: The vectors.
- * @parent_ID: The parent vectors.
- * @position: The vectors position.
- *
- * Add the specified vectors to the image.
- *
- * This procedure adds the specified vectors to the image at the given
- * position. Since vectors groups are not currently supported, the
- * parent argument must always be 0. The position argument specifies
- * the location of the vectors inside the stack, starting from the top
- * (0) and increasing. If the position is specified as -1, then the
- * vectors is inserted above the active vectors.
- *
- * Returns: TRUE on success.
- **/
-gboolean
-gimp_image_insert_vectors (gint32 image_ID,
-                           gint32 vectors_ID,
-                           gint32 parent_ID,
-                           gint   position)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
-
-  return_vals = gimp_run_procedure ("gimp-image-insert-vectors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_VECTORS, vectors_ID,
-                                    GIMP_PDB_VECTORS, parent_ID,
-                                    GIMP_PDB_INT32, position,
-                                    GIMP_PDB_END);
-
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return success;
-}
-
-/**
- * gimp_image_remove_vectors:
- * @image_ID: The image.
- * @vectors_ID: The vectors object.
+ * gimp_image_remove_path:
+ * @image: The image.
+ * @path: The path object.
  *
  * Remove the specified path from the image.
  *
@@ -1272,103 +1201,310 @@ gimp_image_insert_vectors (gint32 image_ID,
  * Since: 2.4
  **/
 gboolean
-gimp_image_remove_vectors (gint32 image_ID,
-                           gint32 vectors_ID)
+gimp_image_remove_path (GimpImage *image,
+                        GimpPath  *path)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-remove-vectors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_VECTORS, vectors_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_PATH, path,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-remove-path",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_image_freeze_vectors:
- * @image_ID: The image.
+ * gimp_image_import_paths_from_file:
+ * @image: The image.
+ * @file: The SVG file to import.
+ * @merge: Merge paths into a single path object.
+ * @scale: Scale the SVG to image dimensions.
+ * @paths: (out) (element-type GimpPath) (array zero-terminated=1) (transfer container): The list of newly created paths.
  *
- * Freeze the image's vectors list.
+ * Import paths from an SVG file.
  *
- * This procedure freezes the vectors list of the image, suppressing
- * any updates to the Paths dialog in response to changes to the
- * image's vectors. This can significantly improve performance while
- * applying changes affecting the vectors list.
+ * This procedure imports paths from an SVG file. SVG elements other
+ * than paths and basic shapes are ignored.
  *
- * Each call to gimp_image_freeze_vectors() should be matched by a
- * corresponding call to gimp_image_thaw_vectors(), undoing its
- * effects.
+ * Returns: TRUE on success.
+ *
+ * Since: 2.4
+ **/
+gboolean
+gimp_image_import_paths_from_file (GimpImage   *image,
+                                   GFile       *file,
+                                   gboolean     merge,
+                                   gboolean     scale,
+                                   GimpPath  ***paths)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_FILE, file,
+                                          G_TYPE_BOOLEAN, merge,
+                                          G_TYPE_BOOLEAN, scale,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-import-paths-from-file",
+                                               args);
+  gimp_value_array_unref (args);
+
+  *paths = NULL;
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  if (success)
+    *paths = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_image_import_paths_from_string:
+ * @image: The image.
+ * @string: A string that must be a complete and valid SVG document.
+ * @length: Number of bytes in string or -1 if the string is NULL terminated.
+ * @merge: Merge paths into a single path object.
+ * @scale: Scale the SVG to image dimensions.
+ * @paths: (out) (element-type GimpPath) (array zero-terminated=1) (transfer container): The list of newly created paths.
+ *
+ * Import paths from an SVG string.
+ *
+ * This procedure works like [method@Gimp.Image.import_paths_from_file]
+ * but takes a string rather than reading the SVG from a file. This
+ * allows you to write scripts that generate SVG and feed it to GIMP.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 2.4
+ **/
+gboolean
+gimp_image_import_paths_from_string (GimpImage     *image,
+                                     const gchar   *string,
+                                     gint           length,
+                                     gboolean       merge,
+                                     gboolean       scale,
+                                     GimpPath    ***paths)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_STRING, string,
+                                          G_TYPE_INT, length,
+                                          G_TYPE_BOOLEAN, merge,
+                                          G_TYPE_BOOLEAN, scale,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-import-paths-from-string",
+                                               args);
+  gimp_value_array_unref (args);
+
+  *paths = NULL;
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  if (success)
+    *paths = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_image_export_path_to_file:
+ * @image: The image.
+ * @file: The SVG file to create.
+ * @path: (nullable): The path object to export, or %NULL for all in the image.
+ *
+ * save a path as an SVG file.
+ *
+ * This procedure creates an SVG file to save a Path object, that is, a
+ * path. The resulting file can be edited using a vector graphics
+ * application, or later reloaded into GIMP. Pass %NULL as the 'path'
+ * argument to export all paths in the image.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 2.6
+ **/
+gboolean
+gimp_image_export_path_to_file (GimpImage *image,
+                                GFile     *file,
+                                GimpPath  *path)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_FILE, file,
+                                          GIMP_TYPE_PATH, path,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-export-path-to-file",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_image_export_path_to_string:
+ * @image: The image.
+ * @path: (nullable): The path object to export, or %NULL for all in the image.
+ *
+ * Save a path as an SVG string.
+ *
+ * This procedure works like [method@Gimp.Image.export_path_to_file]
+ * but creates a string rather than a file. The string is
+ * NULL-terminated and holds a complete XML document. Pass %NULL as the
+ * 'path' argument to export all paths in the image.
+ *
+ * Returns: (transfer full):
+ *          A string whose contents are a complete SVG document.
+ *          The returned value must be freed with g_free().
+ *
+ * Since: 2.6
+ **/
+gchar *
+gimp_image_export_path_to_string (GimpImage *image,
+                                  GimpPath  *path)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gchar *string = NULL;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_PATH, path,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-export-path-to-string",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    string = GIMP_VALUES_DUP_STRING (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return string;
+}
+
+/**
+ * gimp_image_freeze_paths:
+ * @image: The image.
+ *
+ * Freeze the image's path list.
+ *
+ * This procedure freezes the path list of the image, suppressing any
+ * updates to the Paths dialog in response to changes to the image's
+ * path. This can significantly improve performance while applying
+ * changes affecting the path list.
+ *
+ * Each call to gimp_image_freeze_paths() should be matched by a
+ * corresponding call to gimp_image_thaw_paths (), undoing its effects.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.10.2
  **/
 gboolean
-gimp_image_freeze_vectors (gint32 image_ID)
+gimp_image_freeze_paths (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-freeze-vectors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-freeze-paths",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_image_thaw_vectors:
- * @image_ID: The image.
+ * gimp_image_thaw_paths:
+ * @image: The image.
  *
- * Thaw the image's vectors list.
+ * Thaw the image's path list.
  *
- * This procedure thaws the vectors list of the image, re-enabling
- * updates to the Paths dialog.
+ * This procedure thaws the path list of the image, re-enabling updates
+ * to the Paths dialog.
  *
  * This procedure should match a corresponding call to
- * gimp_image_freeze_vectors().
+ * gimp_image_freeze_paths().
  *
  * Returns: TRUE on success.
  *
  * Since: 2.10.2
  **/
 gboolean
-gimp_image_thaw_vectors (gint32 image_ID)
+gimp_image_thaw_paths (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-thaw-vectors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-thaw-paths",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_get_item_position:
- * @image_ID: The image.
- * @item_ID: The item.
+ * @image: The image.
+ * @item: The item.
  *
  * Returns the position of the item in its level of its item tree.
  *
@@ -1382,31 +1518,35 @@ gimp_image_thaw_vectors (gint32 image_ID)
  * Since: 2.8
  **/
 gint
-gimp_image_get_item_position (gint32 image_ID,
-                              gint32 item_ID)
+gimp_image_get_item_position (GimpImage *image,
+                              GimpItem  *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gint position = 0;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-item-position",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    position = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-item-position",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    position = GIMP_VALUES_GET_INT (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return position;
 }
 
 /**
  * gimp_image_raise_item:
- * @image_ID: The image.
- * @item_ID: The item to raise.
+ * @image: The image.
+ * @item: The item to raise.
  *
  * Raise the specified item in its level in its item tree
  *
@@ -1418,30 +1558,34 @@ gimp_image_get_item_position (gint32 image_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_image_raise_item (gint32 image_ID,
-                       gint32 item_ID)
+gimp_image_raise_item (GimpImage *image,
+                       GimpItem  *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-raise-item",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-raise-item",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_lower_item:
- * @image_ID: The image.
- * @item_ID: The item to lower.
+ * @image: The image.
+ * @item: The item to lower.
  *
  * Lower the specified item in its level in its item tree
  *
@@ -1453,30 +1597,34 @@ gimp_image_raise_item (gint32 image_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_image_lower_item (gint32 image_ID,
-                       gint32 item_ID)
+gimp_image_lower_item (GimpImage *image,
+                       GimpItem  *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-lower-item",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-lower-item",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_raise_item_to_top:
- * @image_ID: The image.
- * @item_ID: The item to raise to top.
+ * @image: The image.
+ * @item: The item to raise to top.
  *
  * Raise the specified item to the top of its level in its item tree
  *
@@ -1488,30 +1636,34 @@ gimp_image_lower_item (gint32 image_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_image_raise_item_to_top (gint32 image_ID,
-                              gint32 item_ID)
+gimp_image_raise_item_to_top (GimpImage *image,
+                              GimpItem  *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-raise-item-to-top",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-raise-item-to-top",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_lower_item_to_bottom:
- * @image_ID: The image.
- * @item_ID: The item to lower to bottom.
+ * @image: The image.
+ * @item: The item to lower to bottom.
  *
  * Lower the specified item to the bottom of its level in its item tree
  *
@@ -1524,69 +1676,87 @@ gimp_image_raise_item_to_top (gint32 image_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_image_lower_item_to_bottom (gint32 image_ID,
-                                 gint32 item_ID)
+gimp_image_lower_item_to_bottom (GimpImage *image,
+                                 GimpItem  *item)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-lower-item-to-bottom",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-lower-item-to-bottom",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_reorder_item:
- * @image_ID: The image.
- * @item_ID: The item to reorder.
- * @parent_ID: The new parent item.
+ * @image: The image.
+ * @item: The item to reorder.
+ * @parent: (nullable): The new parent item.
  * @position: The new position of the item.
  *
  * Reorder the specified item within its item tree
  *
- * This procedure reorders the specified item within its item tree.
+ * Reorders or moves item within an item tree. Requires parent is %NULL
+ * or a GroupLayer, else returns error. When parent is not %NULL and
+ * item is in parent, reorders item within parent group. When parent is
+ * not %NULL and item is not in parent, moves item into parent group.
+ * When parent is %NULL, moves item from current parent to top level.
+ *
+ * Requires item is in same tree as not %NULL parent, else returns
+ * error. Layers, Channels, and Paths are in separate trees.
+ *
+ * Requires item is not ancestor of parent, else returns error, to
+ * preclude cycles.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.8
  **/
 gboolean
-gimp_image_reorder_item (gint32 image_ID,
-                         gint32 item_ID,
-                         gint32 parent_ID,
-                         gint   position)
+gimp_image_reorder_item (GimpImage *image,
+                         GimpItem  *item,
+                         GimpItem  *parent,
+                         gint       position)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-reorder-item",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_ITEM, item_ID,
-                                    GIMP_PDB_ITEM, parent_ID,
-                                    GIMP_PDB_INT32, position,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_ITEM, item,
+                                          GIMP_TYPE_ITEM, parent,
+                                          G_TYPE_INT, position,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-reorder-item",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_flatten:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Flatten all visible layers into a single layer. Discard all
  * invisible layers.
@@ -1595,31 +1765,35 @@ gimp_image_reorder_item (gint32 image_ID,
  * merging with the CLIP_TO_IMAGE merge type. Non-visible layers are
  * discarded, and the resulting image is stripped of its alpha channel.
  *
- * Returns: The resulting layer.
+ * Returns: (transfer none): The resulting layer.
  **/
-gint32
-gimp_image_flatten (gint32 image_ID)
+GimpLayer *
+gimp_image_flatten (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 layer_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpLayer *layer = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-flatten",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    layer_ID = return_vals[1].data.d_layer;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-flatten",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    layer = GIMP_VALUES_GET_LAYER (return_vals, 1);
 
-  return layer_ID;
+  gimp_value_array_unref (return_vals);
+
+  return layer;
 }
 
 /**
  * gimp_image_merge_visible_layers:
- * @image_ID: The image.
+ * @image: The image.
  * @merge_type: The type of merge.
  *
  * Merge the visible image layers into one.
@@ -1631,34 +1805,38 @@ gimp_image_flatten (gint32 image_ID)
  * extents of the image. A merge type of CLIP_TO_BOTTOM_LAYER clips the
  * final layer to the size of the bottommost layer.
  *
- * Returns: The resulting layer.
+ * Returns: (transfer none): The resulting layer.
  **/
-gint32
-gimp_image_merge_visible_layers (gint32        image_ID,
-                                 GimpMergeType merge_type)
+GimpLayer *
+gimp_image_merge_visible_layers (GimpImage     *image,
+                                 GimpMergeType  merge_type)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 layer_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpLayer *layer = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-merge-visible-layers",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, merge_type,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_MERGE_TYPE, merge_type,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    layer_ID = return_vals[1].data.d_layer;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-merge-visible-layers",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    layer = GIMP_VALUES_GET_LAYER (return_vals, 1);
 
-  return layer_ID;
+  gimp_value_array_unref (return_vals);
+
+  return layer;
 }
 
 /**
  * gimp_image_merge_down:
- * @image_ID: The image.
- * @merge_layer_ID: The layer to merge down from.
+ * @image: The image.
+ * @merge_layer: The layer to merge down from.
  * @merge_type: The type of merge.
  *
  * Merge the layer passed and the first visible layer below.
@@ -1671,185 +1849,153 @@ gimp_image_merge_visible_layers (gint32        image_ID,
  * CLIP_TO_BOTTOM_LAYER clips the final layer to the size of the
  * bottommost layer.
  *
- * Returns: The resulting layer.
+ * Returns: (transfer none): The resulting layer.
  **/
-gint32
-gimp_image_merge_down (gint32        image_ID,
-                       gint32        merge_layer_ID,
-                       GimpMergeType merge_type)
+GimpLayer *
+gimp_image_merge_down (GimpImage     *image,
+                       GimpLayer     *merge_layer,
+                       GimpMergeType  merge_type)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 layer_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpLayer *layer = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-merge-down",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_LAYER, merge_layer_ID,
-                                    GIMP_PDB_INT32, merge_type,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_LAYER, merge_layer,
+                                          GIMP_TYPE_MERGE_TYPE, merge_type,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    layer_ID = return_vals[1].data.d_layer;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-merge-down",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    layer = GIMP_VALUES_GET_LAYER (return_vals, 1);
 
-  return layer_ID;
+  gimp_value_array_unref (return_vals);
+
+  return layer;
 }
 
 /**
- * gimp_image_merge_layer_group:
- * @image_ID: The image.
- * @layer_group_ID: The layer group to merge.
- *
- * Merge the passed layer group's layers into one normal layer.
- *
- * This procedure combines the layers of the passed layer group into a
- * single normal layer, replacing the group.
- *
- * Returns: The resulting layer.
- *
- * Since: 2.10.14
- **/
-gint32
-gimp_image_merge_layer_group (gint32 image_ID,
-                              gint32 layer_group_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 layer_ID = -1;
-
-  return_vals = gimp_run_procedure ("gimp-image-merge-layer-group",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_LAYER, layer_group_ID,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    layer_ID = return_vals[1].data.d_layer;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return layer_ID;
-}
-
-/**
- * _gimp_image_get_colormap:
- * @image_ID: The image.
- * @num_bytes: Number of bytes in the colormap array.
+ * gimp_image_get_palette:
+ * @image: The image.
  *
  * Returns the image's colormap
  *
- * This procedure returns an actual pointer to the image's colormap, as
- * well as the number of bytes contained in the colormap. The actual
- * number of colors in the transmitted colormap will be 'num-bytes' /
- * 3. If the image is not in Indexed color mode, no colormap is
- * returned.
+ * This procedure returns the image's colormap as a %GimpPalette. If
+ * the image is not in Indexed color mode, %NULL is returned.
  *
- * Returns: The image's colormap. The returned value must be freed with
- * g_free().
+ * Returns: (transfer none): The image's colormap palette.
+ *
+ * Since: 3.0
  **/
-guint8 *
-_gimp_image_get_colormap (gint32  image_ID,
-                          gint   *num_bytes)
+GimpPalette *
+gimp_image_get_palette (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  guint8 *colormap = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpPalette *palette = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-colormap",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  *num_bytes = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-palette",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_bytes = return_vals[1].data.d_int32;
-      colormap = g_new (guint8, *num_bytes);
-      memcpy (colormap,
-              return_vals[2].data.d_int8array,
-              *num_bytes * sizeof (guint8));
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    palette = GIMP_VALUES_GET_PALETTE (return_vals, 1);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
-  return colormap;
+  return palette;
 }
 
 /**
- * _gimp_image_set_colormap:
- * @image_ID: The image.
- * @num_bytes: Number of bytes in the colormap array.
- * @colormap: The new colormap values.
+ * gimp_image_set_palette:
+ * @image: The image.
+ * @new_palette: The palette to copy from.
  *
- * Sets the entries in the image's colormap.
+ * Set the image's colormap to a copy of @palette
  *
- * This procedure sets the entries in the specified image's colormap.
- * The number of entries is specified by the 'num-bytes' parameter and
- * corresponds to the number of INT8 triples that must be contained in
- * the 'colormap' array. The actual number of colors in the transmitted
- * colormap is 'num-bytes' / 3.
+ * This procedure changes the image's colormap to an exact copy of
+ * @palette and returns the palette of @image.
+ * If the image is not in Indexed color mode, nothing happens and %NULL
+ * is returned.
  *
- * Returns: TRUE on success.
+ * Returns: (transfer none): The image's colormap palette.
+ *
+ * Since: 3.0
  **/
-gboolean
-_gimp_image_set_colormap (gint32        image_ID,
-                          gint          num_bytes,
-                          const guint8 *colormap)
+GimpPalette *
+gimp_image_set_palette (GimpImage   *image,
+                        GimpPalette *new_palette)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpPalette *palette = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-set-colormap",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, num_bytes,
-                                    GIMP_PDB_INT8ARRAY, colormap,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_PALETTE, new_palette,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-palette",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    palette = GIMP_VALUES_GET_PALETTE (return_vals, 1);
 
-  return success;
+  gimp_value_array_unref (return_vals);
+
+  return palette;
 }
 
 /**
  * _gimp_image_get_metadata:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Returns the image's metadata.
  *
  * Returns exif/iptc/xmp metadata from the image.
  *
- * Returns: The exif/ptc/xmp metadata as a string.
+ * Returns: (transfer full): The exif/ptc/xmp metadata as a string.
+ *          The returned value must be freed with g_free().
  **/
 gchar *
-_gimp_image_get_metadata (gint32 image_ID)
+_gimp_image_get_metadata (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar *metadata_string = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-metadata",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    metadata_string = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-metadata",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    metadata_string = GIMP_VALUES_DUP_STRING (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return metadata_string;
 }
 
 /**
  * _gimp_image_set_metadata:
- * @image_ID: The image.
+ * @image: The image.
  * @metadata_string: The exif/ptc/xmp metadata as a string.
  *
  * Set the image's metadata.
@@ -1859,29 +2005,33 @@ _gimp_image_get_metadata (gint32 image_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-_gimp_image_set_metadata (gint32       image_ID,
+_gimp_image_set_metadata (GimpImage   *image,
                           const gchar *metadata_string)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-set-metadata",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_STRING, metadata_string,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_STRING, metadata_string,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-metadata",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_clean_all:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Set the image dirty count to 0.
  *
@@ -1895,27 +2045,31 @@ _gimp_image_set_metadata (gint32       image_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_clean_all (gint32 image_ID)
+gimp_image_clean_all (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-clean-all",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-clean-all",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_is_dirty:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Checks if the image has unsaved changes.
  *
@@ -1927,35 +2081,38 @@ gimp_image_clean_all (gint32 image_ID)
  * Returns: TRUE if the image has unsaved changes.
  **/
 gboolean
-gimp_image_is_dirty (gint32 image_ID)
+gimp_image_is_dirty (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean dirty = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-image-is-dirty",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    dirty = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-is-dirty",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    dirty = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return dirty;
 }
 
 /**
  * _gimp_image_thumbnail:
- * @image_ID: The image.
+ * @image: The image.
  * @width: The requested thumbnail width.
  * @height: The requested thumbnail height.
- * @actual_width: The previews width.
- * @actual_height: The previews height.
- * @bpp: The previews bpp.
- * @thumbnail_data_count: The number of bytes in thumbnail data.
- * @thumbnail_data: The thumbnail data.
+ * @actual_width: (out): The previews width.
+ * @actual_height: (out): The previews height.
+ * @bpp: (out): The previews bpp.
+ * @thumbnail_data: (out) (transfer full): The thumbnail data.
  *
  * Get a thumbnail of an image.
  *
@@ -1967,280 +2124,368 @@ gimp_image_is_dirty (gint32 image_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-_gimp_image_thumbnail (gint32   image_ID,
-                       gint     width,
-                       gint     height,
-                       gint    *actual_width,
-                       gint    *actual_height,
-                       gint    *bpp,
-                       gint    *thumbnail_data_count,
-                       guint8 **thumbnail_data)
+_gimp_image_thumbnail (GimpImage  *image,
+                       gint        width,
+                       gint        height,
+                       gint       *actual_width,
+                       gint       *actual_height,
+                       gint       *bpp,
+                       GBytes    **thumbnail_data)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-thumbnail",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, width,
-                                    GIMP_PDB_INT32, height,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_INT, width,
+                                          G_TYPE_INT, height,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-thumbnail",
+                                               args);
+  gimp_value_array_unref (args);
 
   *actual_width = 0;
   *actual_height = 0;
   *bpp = 0;
-  *thumbnail_data_count = 0;
   *thumbnail_data = NULL;
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
   if (success)
     {
-      *actual_width = return_vals[1].data.d_int32;
-      *actual_height = return_vals[2].data.d_int32;
-      *bpp = return_vals[3].data.d_int32;
-      *thumbnail_data_count = return_vals[4].data.d_int32;
-      *thumbnail_data = g_new (guint8, *thumbnail_data_count);
-      memcpy (*thumbnail_data,
-              return_vals[5].data.d_int8array,
-              *thumbnail_data_count * sizeof (guint8));
+      *actual_width = GIMP_VALUES_GET_INT (return_vals, 1);
+      *actual_height = GIMP_VALUES_GET_INT (return_vals, 2);
+      *bpp = GIMP_VALUES_GET_INT (return_vals, 3);
+      *thumbnail_data = GIMP_VALUES_DUP_BYTES (return_vals, 4);
     }
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_image_get_active_layer:
- * @image_ID: The image.
+ * gimp_image_get_selected_layers:
+ * @image: The image.
  *
- * Returns the specified image's active layer.
+ * Returns the specified image's selected layers.
  *
- * If there is an active layer, its ID will be returned, otherwise, -1.
- * If a channel is currently active, then no layer will be. If a layer
- * mask is active, then this will return the associated layer.
+ * This procedure returns the list of selected layers in the specified
+ * image.
  *
- * Returns: The active layer.
+ * Returns: (element-type GimpLayer) (array zero-terminated=1) (transfer container):
+ *          The list of selected layers in the image.
+ *          The returned value must be freed with g_free().
+ *
+ * Since: 3.0.0
  **/
-gint32
-gimp_image_get_active_layer (gint32 image_ID)
+GimpLayer **
+gimp_image_get_selected_layers (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 active_layer_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpLayer **layers = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-active-layer",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    active_layer_ID = return_vals[1].data.d_layer;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-selected-layers",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    layers = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
-  return active_layer_ID;
+  gimp_value_array_unref (return_vals);
+
+  return layers;
 }
 
 /**
- * gimp_image_set_active_layer:
- * @image_ID: The image.
- * @active_layer_ID: The new image active layer.
+ * gimp_image_set_selected_layers:
+ * @image: The image.
+ * @layers: (element-type GimpLayer) (array zero-terminated=1): The list of layers to select.
  *
- * Sets the specified image's active layer.
+ * Sets the specified image's selected layers.
  *
- * If the layer exists, it is set as the active layer in the image. Any
- * previous active layer or channel is set to inactive. An exception is
+ * The layers are set as the selected layers in the image. Any previous
+ * selected layers or channels are unselected. An exception is a
+ * previously existing floating selection, in which case this procedure
+ * will return an execution error.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0.0
+ **/
+gboolean
+gimp_image_set_selected_layers (GimpImage        *image,
+                                const GimpLayer **layers)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CORE_OBJECT_ARRAY, layers,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-selected-layers",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_image_get_selected_channels:
+ * @image: The image.
+ *
+ * Returns the specified image's selected channels.
+ *
+ * This procedure returns the list of selected channels in the
+ * specified image.
+ *
+ * Returns: (element-type GimpChannel) (array zero-terminated=1) (transfer container):
+ *          The list of selected channels in the image.
+ *          The returned value must be freed with g_free().
+ *
+ * Since: 3.0.0
+ **/
+GimpChannel **
+gimp_image_get_selected_channels (GimpImage *image)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpChannel **channels = NULL;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-selected-channels",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    channels = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
+
+  gimp_value_array_unref (return_vals);
+
+  return channels;
+}
+
+/**
+ * gimp_image_set_selected_channels:
+ * @image: The image.
+ * @channels: (element-type GimpChannel) (array zero-terminated=1): The list of channels to select.
+ *
+ * Sets the specified image's selected channels.
+ *
+ * The channels are set as the selected channels in the image. Any
+ * previous selected layers or channels are unselected. An exception is
  * a previously existing floating selection, in which case this
  * procedure will return an execution error.
  *
  * Returns: TRUE on success.
+ *
+ * Since: 3.0.0
  **/
 gboolean
-gimp_image_set_active_layer (gint32 image_ID,
-                             gint32 active_layer_ID)
+gimp_image_set_selected_channels (GimpImage          *image,
+                                  const GimpChannel **channels)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-set-active-layer",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_LAYER, active_layer_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CORE_OBJECT_ARRAY, channels,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-selected-channels",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_image_get_active_channel:
- * @image_ID: The image.
+ * gimp_image_get_selected_paths:
+ * @image: The image.
  *
- * Returns the specified image's active channel.
+ * Returns the specified image's selected paths.
  *
- * If there is an active channel, this will return the channel ID,
- * otherwise, -1.
+ * This procedure returns the list of selected paths in the specified
+ * image.
  *
- * Returns: The active channel.
+ * Returns: (element-type GimpPath) (array zero-terminated=1) (transfer container):
+ *          The list of selected paths in the image.
+ *          The returned value must be freed with g_free().
+ *
+ * Since: 3.0.0
  **/
-gint32
-gimp_image_get_active_channel (gint32 image_ID)
+GimpPath **
+gimp_image_get_selected_paths (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 active_channel_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpPath **paths = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-active-channel",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    active_channel_ID = return_vals[1].data.d_channel;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-selected-paths",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    paths = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
-  return active_channel_ID;
+  gimp_value_array_unref (return_vals);
+
+  return paths;
 }
 
 /**
- * gimp_image_set_active_channel:
- * @image_ID: The image.
- * @active_channel_ID: The new image active channel.
+ * gimp_image_set_selected_paths:
+ * @image: The image.
+ * @paths: (element-type GimpPath) (array zero-terminated=1): The list of paths to select.
  *
- * Sets the specified image's active channel.
+ * Sets the specified image's selected paths.
  *
- * If the channel exists, it is set as the active channel in the image.
- * Any previous active channel or layer is set to inactive. An
- * exception is a previously existing floating selection, in which case
- * this procedure will return an execution error.
+ * The paths are set as the selected paths in the image.
  *
  * Returns: TRUE on success.
+ *
+ * Since: 3.0.0
  **/
 gboolean
-gimp_image_set_active_channel (gint32 image_ID,
-                               gint32 active_channel_ID)
+gimp_image_set_selected_paths (GimpImage       *image,
+                               const GimpPath **paths)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-set-active-channel",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_CHANNEL, active_channel_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CORE_OBJECT_ARRAY, paths,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-selected-paths",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_image_get_active_vectors:
- * @image_ID: The image.
+ * gimp_image_get_selected_drawables:
+ * @image: The image.
  *
- * Returns the specified image's active vectors.
+ * Get the image's selected drawables
  *
- * If there is an active path, its ID will be returned, otherwise, -1.
+ * This procedure returns the list of selected drawable in the
+ * specified image. This can be either layers, channels, or a layer
+ * mask.
+ * The active drawables are the active image channels. If there are
+ * none, these are the active image layers. If the active image layer
+ * has a layer mask and the layer mask is in edit mode, then the layer
+ * mask is the active drawable.
  *
- * Returns: The active vectors.
+ * Returns: (element-type GimpDrawable) (array zero-terminated=1) (transfer container):
+ *          The list of selected drawables in the image.
+ *          The returned value must be freed with g_free().
+ *
+ * Since: 3.0.0
  **/
-gint32
-gimp_image_get_active_vectors (gint32 image_ID)
+GimpDrawable **
+gimp_image_get_selected_drawables (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 active_vectors_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpDrawable **drawables = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-active-vectors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    active_vectors_ID = return_vals[1].data.d_vectors;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-selected-drawables",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    drawables = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
-  return active_vectors_ID;
-}
+  gimp_value_array_unref (return_vals);
 
-/**
- * gimp_image_set_active_vectors:
- * @image_ID: The image.
- * @active_vectors_ID: The new image active vectors.
- *
- * Sets the specified image's active vectors.
- *
- * If the path exists, it is set as the active path in the image.
- *
- * Returns: TRUE on success.
- **/
-gboolean
-gimp_image_set_active_vectors (gint32 image_ID,
-                               gint32 active_vectors_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
-
-  return_vals = gimp_run_procedure ("gimp-image-set-active-vectors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_VECTORS, active_vectors_ID,
-                                    GIMP_PDB_END);
-
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return success;
+  return drawables;
 }
 
 /**
  * gimp_image_get_selection:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Returns the specified image's selection.
  *
  * This will always return a valid ID for a selection -- which is
  * represented as a channel internally.
  *
- * Returns: The selection channel.
+ * Returns: (transfer none): The selection channel.
  **/
-gint32
-gimp_image_get_selection (gint32 image_ID)
+GimpSelection *
+gimp_image_get_selection (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 selection_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpSelection *selection = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-selection",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    selection_ID = return_vals[1].data.d_selection;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-selection",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    selection = GIMP_VALUES_GET_SELECTION (return_vals, 1);
 
-  return selection_ID;
+  gimp_value_array_unref (return_vals);
+
+  return selection;
 }
 
 /**
  * gimp_image_get_component_active:
- * @image_ID: The image.
+ * @image: The image.
  * @component: The image component.
  *
  * Returns if the specified image's image component is active.
@@ -2253,30 +2498,34 @@ gimp_image_get_selection (gint32 image_ID)
  * Returns: Component is active.
  **/
 gboolean
-gimp_image_get_component_active (gint32          image_ID,
-                                 GimpChannelType component)
+gimp_image_get_component_active (GimpImage       *image,
+                                 GimpChannelType  component)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean active = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-component-active",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, component,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL_TYPE, component,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    active = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-component-active",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    active = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return active;
 }
 
 /**
  * gimp_image_set_component_active:
- * @image_ID: The image.
+ * @image: The image.
  * @component: The image component.
  * @active: Component is active.
  *
@@ -2290,31 +2539,35 @@ gimp_image_get_component_active (gint32          image_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_set_component_active (gint32          image_ID,
-                                 GimpChannelType component,
-                                 gboolean        active)
+gimp_image_set_component_active (GimpImage       *image,
+                                 GimpChannelType  component,
+                                 gboolean         active)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-set-component-active",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, component,
-                                    GIMP_PDB_INT32, active,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL_TYPE, component,
+                                          G_TYPE_BOOLEAN, active,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-component-active",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_get_component_visible:
- * @image_ID: The image.
+ * @image: The image.
  * @component: The image component.
  *
  * Returns if the specified image's image component is visible.
@@ -2328,30 +2581,34 @@ gimp_image_set_component_active (gint32          image_ID,
  * Returns: Component is visible.
  **/
 gboolean
-gimp_image_get_component_visible (gint32          image_ID,
-                                  GimpChannelType component)
+gimp_image_get_component_visible (GimpImage       *image,
+                                  GimpChannelType  component)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean visible = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-component-visible",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, component,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL_TYPE, component,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    visible = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-component-visible",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    visible = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return visible;
 }
 
 /**
  * gimp_image_set_component_visible:
- * @image_ID: The image.
+ * @image: The image.
  * @component: The image component.
  * @visible: Component is visible.
  *
@@ -2365,242 +2622,230 @@ gimp_image_get_component_visible (gint32          image_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_set_component_visible (gint32          image_ID,
-                                  GimpChannelType component,
-                                  gboolean        visible)
+gimp_image_set_component_visible (GimpImage       *image,
+                                  GimpChannelType  component,
+                                  gboolean         visible)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-set-component-visible",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, component,
-                                    GIMP_PDB_INT32, visible,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_CHANNEL_TYPE, component,
+                                          G_TYPE_BOOLEAN, visible,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-component-visible",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_image_get_filename:
- * @image_ID: The image.
+ * gimp_image_get_file:
+ * @image: The image.
  *
- * Returns the specified image's filename.
+ * Returns the file for the specified image.
  *
- * This procedure returns the specified image's filename in the
- * filesystem encoding. The image has a filename only if it was loaded
- * or imported from a file or has since been saved or exported.
- * Otherwise, this function returns %NULL. See also
- * gimp_image_get_uri().
+ * This procedure returns the file associated with the specified image.
+ * The image has a file only if it was loaded or imported from a file
+ * or has since been saved or exported. Otherwise, this function
+ * returns %NULL. See also gimp-image-get-imported-file to get the
+ * current file if it was imported from a non-GIMP file format and not
+ * yet saved, or gimp-image-get-exported-file if the image has been
+ * exported to a non-GIMP file format.
  *
- * Returns: The filename. The returned value must be freed with
- * g_free().
+ * Returns: (transfer full): The file.
+ *
+ * Since: 2.8
  **/
-gchar *
-gimp_image_get_filename (gint32 image_ID)
+GFile *
+gimp_image_get_file (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *filename = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GFile *file = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-filename",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    filename = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-file",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    file = GIMP_VALUES_DUP_FILE (return_vals, 1);
 
-  return filename;
+  gimp_value_array_unref (return_vals);
+
+  return file;
 }
 
 /**
- * gimp_image_set_filename:
- * @image_ID: The image.
- * @filename: The new image filename.
+ * gimp_image_set_file:
+ * @image: The image.
+ * @file: The new image file.
  *
- * Sets the specified image's filename.
+ * Sets the specified XCF image's file.
  *
- * This procedure sets the specified image's filename. The filename
- * should be in the filesystem encoding.
+ * This procedure sets the specified image's file.
+ * This is to set the XCF file associated with your image. In
+ * particular, do not use this function to set the imported file in
+ * file import plug-ins. This is done by the core process.
  *
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_set_filename (gint32       image_ID,
-                         const gchar *filename)
+gimp_image_set_file (GimpImage *image,
+                     GFile     *file)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-set-filename",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_STRING, filename,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_FILE, file,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-file",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_image_get_uri:
- * @image_ID: The image.
+ * gimp_image_get_xcf_file:
+ * @image: The image.
  *
- * Returns the URI for the specified image.
+ * Returns the XCF file for the specified image.
  *
- * This procedure returns the URI associated with the specified image.
- * The image has an URI only if it was loaded or imported from a file
- * or has since been saved or exported. Otherwise, this function
- * returns %NULL. See also gimp-image-get-imported-uri to get the URI
- * of the current file if it was imported from a non-GIMP file format
- * and not yet saved, or gimp-image-get-exported-uri if the image has
- * been exported to a non-GIMP file format.
+ * This procedure returns the XCF file associated with the image. If
+ * there is no such file, this procedure returns %NULL.
  *
- * Returns: The URI. The returned value must be freed with g_free().
+ * Returns: (transfer full): The imported XCF file.
  *
  * Since: 2.8
  **/
-gchar *
-gimp_image_get_uri (gint32 image_ID)
+GFile *
+gimp_image_get_xcf_file (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *uri = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GFile *file = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-uri",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    uri = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-xcf-file",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    file = GIMP_VALUES_DUP_FILE (return_vals, 1);
 
-  return uri;
+  gimp_value_array_unref (return_vals);
+
+  return file;
 }
 
 /**
- * gimp_image_get_xcf_uri:
- * @image_ID: The image.
+ * gimp_image_get_imported_file:
+ * @image: The image.
  *
- * Returns the XCF URI for the specified image.
+ * Returns the imported file for the specified image.
  *
- * This procedure returns the XCF URI associated with the image. If
- * there is no such URI, this procedure returns %NULL.
- *
- * Returns: The imported URI. The returned value must be freed with
- * g_free().
- *
- * Since: 2.8
- **/
-gchar *
-gimp_image_get_xcf_uri (gint32 image_ID)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *uri = NULL;
-
-  return_vals = gimp_run_procedure ("gimp-image-get-xcf-uri",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    uri = g_strdup (return_vals[1].data.d_string);
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return uri;
-}
-
-/**
- * gimp_image_get_imported_uri:
- * @image_ID: The image.
- *
- * Returns the imported URI for the specified image.
- *
- * This procedure returns the URI associated with the specified image
+ * This procedure returns the file associated with the specified image
  * if the image was imported from a non-native Gimp format. If the
  * image was not imported, or has since been saved in the native Gimp
  * format, this procedure returns %NULL.
  *
- * Returns: The imported URI. The returned value must be freed with
- * g_free().
+ * Returns: (transfer full): The imported file.
  *
  * Since: 2.8
  **/
-gchar *
-gimp_image_get_imported_uri (gint32 image_ID)
+GFile *
+gimp_image_get_imported_file (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *uri = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GFile *file = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-imported-uri",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    uri = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-imported-file",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    file = GIMP_VALUES_DUP_FILE (return_vals, 1);
 
-  return uri;
+  gimp_value_array_unref (return_vals);
+
+  return file;
 }
 
 /**
- * gimp_image_get_exported_uri:
- * @image_ID: The image.
+ * gimp_image_get_exported_file:
+ * @image: The image.
  *
- * Returns the exported URI for the specified image.
+ * Returns the exported file for the specified image.
  *
- * This procedure returns the URI associated with the specified image
+ * This procedure returns the file associated with the specified image
  * if the image was exported a non-native GIMP format. If the image was
  * not exported, this procedure returns %NULL.
  *
- * Returns: The exported URI. The returned value must be freed with
- * g_free().
+ * Returns: (transfer full): The exported file.
  *
  * Since: 2.8
  **/
-gchar *
-gimp_image_get_exported_uri (gint32 image_ID)
+GFile *
+gimp_image_get_exported_file (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *uri = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GFile *file = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-exported-uri",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    uri = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-exported-file",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    file = GIMP_VALUES_DUP_FILE (return_vals, 1);
 
-  return uri;
+  gimp_value_array_unref (return_vals);
+
+  return file;
 }
 
 /**
  * gimp_image_get_name:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Returns the specified image's name.
  *
@@ -2612,33 +2857,38 @@ gimp_image_get_exported_uri (gint32 image_ID)
  * '(imported)' etc. and should only be used to label user interface
  * elements. Never use it to construct filenames.
  *
- * Returns: The name. The returned value must be freed with g_free().
+ * Returns: (transfer full): The name.
+ *          The returned value must be freed with g_free().
  **/
 gchar *
-gimp_image_get_name (gint32 image_ID)
+gimp_image_get_name (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar *name = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-name",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    name = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-name",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    name = GIMP_VALUES_DUP_STRING (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return name;
 }
 
 /**
  * gimp_image_get_resolution:
- * @image_ID: The image.
- * @xresolution: The resolution in the x-axis, in dots per inch.
- * @yresolution: The resolution in the y-axis, in dots per inch.
+ * @image: The image.
+ * @xresolution: (out): The resolution in the x-axis, in dots per inch.
+ * @yresolution: (out): The resolution in the y-axis, in dots per inch.
  *
  * Returns the specified image's resolution.
  *
@@ -2648,38 +2898,42 @@ gimp_image_get_name (gint32 image_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_get_resolution (gint32   image_ID,
-                           gdouble *xresolution,
-                           gdouble *yresolution)
+gimp_image_get_resolution (GimpImage *image,
+                           gdouble   *xresolution,
+                           gdouble   *yresolution)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-resolution",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-resolution",
+                                               args);
+  gimp_value_array_unref (args);
 
   *xresolution = 0.0;
   *yresolution = 0.0;
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
   if (success)
     {
-      *xresolution = return_vals[1].data.d_float;
-      *yresolution = return_vals[2].data.d_float;
+      *xresolution = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+      *yresolution = GIMP_VALUES_GET_DOUBLE (return_vals, 2);
     }
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_set_resolution:
- * @image_ID: The image.
+ * @image: The image.
  * @xresolution: The new image resolution in the x-axis, in dots per inch.
  * @yresolution: The new image resolution in the y-axis, in dots per inch.
  *
@@ -2692,31 +2946,35 @@ gimp_image_get_resolution (gint32   image_ID,
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_set_resolution (gint32  image_ID,
-                           gdouble xresolution,
-                           gdouble yresolution)
+gimp_image_set_resolution (GimpImage *image,
+                           gdouble    xresolution,
+                           gdouble    yresolution)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-set-resolution",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_FLOAT, xresolution,
-                                    GIMP_PDB_FLOAT, yresolution,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_DOUBLE, xresolution,
+                                          G_TYPE_DOUBLE, yresolution,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-resolution",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_get_unit:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Returns the specified image's unit.
  *
@@ -2725,31 +2983,35 @@ gimp_image_set_resolution (gint32  image_ID,
  * gimp_unit_*() procedure definitions for the valid range of unit IDs
  * and a description of the unit system.
  *
- * Returns: The unit.
+ * Returns: (transfer none): The unit.
  **/
-GimpUnit
-gimp_image_get_unit (gint32 image_ID)
+GimpUnit *
+gimp_image_get_unit (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  GimpUnit unit = 0;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpUnit *unit = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-unit",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    unit = return_vals[1].data.d_unit;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-unit",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    unit = GIMP_VALUES_GET_UNIT (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return unit;
 }
 
 /**
  * gimp_image_set_unit:
- * @image_ID: The image.
+ * @image: The image.
  * @unit: The new image unit.
  *
  * Sets the specified image's unit.
@@ -2763,29 +3025,33 @@ gimp_image_get_unit (gint32 image_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_set_unit (gint32   image_ID,
-                     GimpUnit unit)
+gimp_image_set_unit (GimpImage *image,
+                     GimpUnit  *unit)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-set-unit",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, unit,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_UNIT, unit,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-unit",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_get_tattoo_state:
- * @image_ID: The image.
+ * @image: The image.
  *
  * Returns the tattoo state associated with the image.
  *
@@ -2795,29 +3061,33 @@ gimp_image_set_unit (gint32   image_ID,
  *
  * Returns: The tattoo state.
  **/
-gint
-gimp_image_get_tattoo_state (gint32 image_ID)
+guint
+gimp_image_get_tattoo_state (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint tattoo_state = 0;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  guint tattoo_state = 0;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-tattoo-state",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    tattoo_state = return_vals[1].data.d_tattoo;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-tattoo-state",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    tattoo_state = GIMP_VALUES_GET_UINT (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return tattoo_state;
 }
 
 /**
  * gimp_image_set_tattoo_state:
- * @image_ID: The image.
+ * @image: The image.
  * @tattoo_state: The new image tattoo state.
  *
  * Set the tattoo state associated with the image.
@@ -2838,29 +3108,33 @@ gimp_image_get_tattoo_state (gint32 image_ID)
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_image_set_tattoo_state (gint32 image_ID,
-                             gint   tattoo_state)
+gimp_image_set_tattoo_state (GimpImage *image,
+                             guint      tattoo_state)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-set-tattoo-state",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, tattoo_state,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_UINT, tattoo_state,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-set-tattoo-state",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_get_layer_by_tattoo:
- * @image_ID: The image.
+ * @image: The image.
  * @tattoo: The tattoo of the layer to find.
  *
  * Find a layer with a given tattoo in an image.
@@ -2868,33 +3142,37 @@ gimp_image_set_tattoo_state (gint32 image_ID,
  * This procedure returns the layer with the given tattoo in the
  * specified image.
  *
- * Returns: The layer with the specified tattoo.
+ * Returns: (transfer none): The layer with the specified tattoo.
  **/
-gint32
-gimp_image_get_layer_by_tattoo (gint32 image_ID,
-                                gint   tattoo)
+GimpLayer *
+gimp_image_get_layer_by_tattoo (GimpImage *image,
+                                guint      tattoo)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 layer_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpLayer *layer = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-layer-by-tattoo",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, tattoo,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_UINT, tattoo,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    layer_ID = return_vals[1].data.d_layer;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-layer-by-tattoo",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    layer = GIMP_VALUES_GET_LAYER (return_vals, 1);
 
-  return layer_ID;
+  gimp_value_array_unref (return_vals);
+
+  return layer;
 }
 
 /**
  * gimp_image_get_channel_by_tattoo:
- * @image_ID: The image.
+ * @image: The image.
  * @tattoo: The tattoo of the channel to find.
  *
  * Find a channel with a given tattoo in an image.
@@ -2902,69 +3180,77 @@ gimp_image_get_layer_by_tattoo (gint32 image_ID,
  * This procedure returns the channel with the given tattoo in the
  * specified image.
  *
- * Returns: The channel with the specified tattoo.
+ * Returns: (transfer none): The channel with the specified tattoo.
  **/
-gint32
-gimp_image_get_channel_by_tattoo (gint32 image_ID,
-                                  gint   tattoo)
+GimpChannel *
+gimp_image_get_channel_by_tattoo (GimpImage *image,
+                                  guint      tattoo)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 channel_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpChannel *channel = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-channel-by-tattoo",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, tattoo,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_UINT, tattoo,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    channel_ID = return_vals[1].data.d_channel;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-channel-by-tattoo",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    channel = GIMP_VALUES_GET_CHANNEL (return_vals, 1);
 
-  return channel_ID;
+  gimp_value_array_unref (return_vals);
+
+  return channel;
 }
 
 /**
- * gimp_image_get_vectors_by_tattoo:
- * @image_ID: The image.
- * @tattoo: The tattoo of the vectors to find.
+ * gimp_image_get_path_by_tattoo:
+ * @image: The image.
+ * @tattoo: The tattoo of the path to find.
  *
- * Find a vectors with a given tattoo in an image.
+ * Find a path with a given tattoo in an image.
  *
- * This procedure returns the vectors with the given tattoo in the
+ * This procedure returns the path with the given tattoo in the
  * specified image.
  *
- * Returns: The vectors with the specified tattoo.
+ * Returns: (transfer none): The path with the specified tattoo.
  *
  * Since: 2.6
  **/
-gint32
-gimp_image_get_vectors_by_tattoo (gint32 image_ID,
-                                  gint   tattoo)
+GimpPath *
+gimp_image_get_path_by_tattoo (GimpImage *image,
+                               guint      tattoo)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 vectors_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpPath *path = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-vectors-by-tattoo",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_INT32, tattoo,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_UINT, tattoo,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    vectors_ID = return_vals[1].data.d_vectors;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-path-by-tattoo",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    path = GIMP_VALUES_GET_PATH (return_vals, 1);
 
-  return vectors_ID;
+  gimp_value_array_unref (return_vals);
+
+  return path;
 }
 
 /**
  * gimp_image_get_layer_by_name:
- * @image_ID: The image.
+ * @image: The image.
  * @name: The name of the layer to find.
  *
  * Find a layer with a given name in an image.
@@ -2972,35 +3258,39 @@ gimp_image_get_vectors_by_tattoo (gint32 image_ID,
  * This procedure returns the layer with the given name in the
  * specified image.
  *
- * Returns: The layer with the specified name.
+ * Returns: (transfer none): The layer with the specified name.
  *
  * Since: 2.8
  **/
-gint32
-gimp_image_get_layer_by_name (gint32       image_ID,
+GimpLayer *
+gimp_image_get_layer_by_name (GimpImage   *image,
                               const gchar *name)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 layer_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpLayer *layer = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-layer-by-name",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    layer_ID = return_vals[1].data.d_layer;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-layer-by-name",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    layer = GIMP_VALUES_GET_LAYER (return_vals, 1);
 
-  return layer_ID;
+  gimp_value_array_unref (return_vals);
+
+  return layer;
 }
 
 /**
  * gimp_image_get_channel_by_name:
- * @image_ID: The image.
+ * @image: The image.
  * @name: The name of the channel to find.
  *
  * Find a channel with a given name in an image.
@@ -3008,71 +3298,79 @@ gimp_image_get_layer_by_name (gint32       image_ID,
  * This procedure returns the channel with the given name in the
  * specified image.
  *
- * Returns: The channel with the specified name.
+ * Returns: (transfer none): The channel with the specified name.
  *
  * Since: 2.8
  **/
-gint32
-gimp_image_get_channel_by_name (gint32       image_ID,
+GimpChannel *
+gimp_image_get_channel_by_name (GimpImage   *image,
                                 const gchar *name)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 channel_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpChannel *channel = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-channel-by-name",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    channel_ID = return_vals[1].data.d_channel;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-channel-by-name",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    channel = GIMP_VALUES_GET_CHANNEL (return_vals, 1);
 
-  return channel_ID;
+  gimp_value_array_unref (return_vals);
+
+  return channel;
 }
 
 /**
- * gimp_image_get_vectors_by_name:
- * @image_ID: The image.
- * @name: The name of the vectors to find.
+ * gimp_image_get_path_by_name:
+ * @image: The image.
+ * @name: The name of the path to find.
  *
- * Find a vectors with a given name in an image.
+ * Find a path with a given name in an image.
  *
- * This procedure returns the vectors with the given name in the
- * specified image.
+ * This procedure returns the path with the given name in the specified
+ * image.
  *
- * Returns: The vectors with the specified name.
+ * Returns: (transfer none): The path with the specified name.
  *
  * Since: 2.8
  **/
-gint32
-gimp_image_get_vectors_by_name (gint32       image_ID,
-                                const gchar *name)
+GimpPath *
+gimp_image_get_path_by_name (GimpImage   *image,
+                             const gchar *name)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 vectors_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpPath *path = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-vectors-by-name",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    vectors_ID = return_vals[1].data.d_vectors;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-path-by-name",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    path = GIMP_VALUES_GET_PATH (return_vals, 1);
 
-  return vectors_ID;
+  gimp_value_array_unref (return_vals);
+
+  return path;
 }
 
 /**
  * gimp_image_attach_parasite:
- * @image_ID: The image.
+ * @image: The image.
  * @parasite: The parasite to attach to an image.
  *
  * Add a parasite to an image.
@@ -3085,29 +3383,33 @@ gimp_image_get_vectors_by_name (gint32       image_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_image_attach_parasite (gint32              image_ID,
+gimp_image_attach_parasite (GimpImage          *image,
                             const GimpParasite *parasite)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-attach-parasite",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_PARASITE, parasite,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_PARASITE, parasite,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-attach-parasite",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_detach_parasite:
- * @image_ID: The image.
+ * @image: The image.
  * @name: The name of the parasite to detach from an image.
  *
  * Removes a parasite from an image.
@@ -3120,29 +3422,33 @@ gimp_image_attach_parasite (gint32              image_ID,
  * Since: 2.8
  **/
 gboolean
-gimp_image_detach_parasite (gint32       image_ID,
+gimp_image_detach_parasite (GimpImage   *image,
                             const gchar *name)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-image-detach-parasite",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-detach-parasite",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_image_get_parasite:
- * @image_ID: The image.
+ * @image: The image.
  * @name: The name of the parasite to find.
  *
  * Look up a parasite in an image
@@ -3150,74 +3456,176 @@ gimp_image_detach_parasite (gint32       image_ID,
  * Finds and returns the parasite that was previously attached to an
  * image.
  *
- * Returns: The found parasite.
+ * Returns: (transfer full): The found parasite.
  *
  * Since: 2.8
  **/
 GimpParasite *
-gimp_image_get_parasite (gint32       image_ID,
+gimp_image_get_parasite (GimpImage   *image,
                          const gchar *name)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpParasite *parasite = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-parasite",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    parasite = gimp_parasite_copy (&return_vals[1].data.d_parasite);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-parasite",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    parasite = GIMP_VALUES_DUP_PARASITE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return parasite;
 }
 
 /**
  * gimp_image_get_parasite_list:
- * @image_ID: The image.
- * @num_parasites: The number of attached parasites.
+ * @image: The image.
  *
  * List all parasites.
  *
- * Returns a list of all currently attached parasites.
+ * Returns a list of the names of all currently attached parasites.
+ * These names can later be used to get the actual #GimpParasite with
+ * gimp_image_get_parasite() when needed.
  *
- * Returns: The names of currently attached parasites. The returned
- * value must be freed with g_strfreev().
+ * Returns: (array zero-terminated=1) (transfer full):
+ *          The names of currently attached parasites.
+ *          The returned value must be freed with g_strfreev().
  *
  * Since: 2.8
  **/
 gchar **
-gimp_image_get_parasite_list (gint32  image_ID,
-                              gint   *num_parasites)
+gimp_image_get_parasite_list (GimpImage *image)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar **parasites = NULL;
-  gint i;
 
-  return_vals = gimp_run_procedure ("gimp-image-get-parasite-list",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_NONE);
 
-  *num_parasites = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-get-parasite-list",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_parasites = return_vals[1].data.d_int32;
-      if (*num_parasites > 0)
-        {
-          parasites = g_new0 (gchar *, *num_parasites + 1);
-          for (i = 0; i < *num_parasites; i++)
-            parasites[i] = g_strdup (return_vals[2].data.d_stringarray[i]);
-        }
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    parasites = GIMP_VALUES_DUP_STRV (return_vals, 1);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return parasites;
+}
+
+/**
+ * gimp_image_policy_rotate:
+ * @image: The image.
+ * @interactive: Querying the user through a dialog is a possibility.
+ *
+ * Execute the \"Orientation\" metadata policy.
+ *
+ * Process the image according to the rotation policy as set in
+ * Preferences. If GIMP is running as a GUI and interactive is TRUE, a
+ * dialog may be presented to the user depending on the set policy.
+ * Otherwise, if the policy does not mandate the action to perform, the
+ * image will be rotated following the Orientation metadata.
+ * If you wish absolutely to rotate a loaded image following the
+ * Orientation metadata, do not use this function and process the
+ * metadata yourself. Indeed even with `interactive` to FALSE, user
+ * settings may leave the image unrotated.
+ * Finally it is unnecessary to call this function in a format load
+ * procedure because this is called automatically by the core code when
+ * loading any image. You should only call this function explicitly
+ * when loading an image through a PDB call.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_image_policy_rotate (GimpImage *image,
+                          gboolean   interactive)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_BOOLEAN, interactive,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-policy-rotate",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_image_policy_color_profile:
+ * @image: The image.
+ * @interactive: Querying the user through a dialog is a possibility.
+ *
+ * Execute the color profile conversion policy.
+ *
+ * Process the image according to the color profile policy as set in
+ * Preferences.
+ * If GIMP is running as a GUI and interactive is TRUE, a dialog may be
+ * presented to the user depending on the policy. Otherwise, if the
+ * policy does not mandate the conversion to perform, the conversion to
+ * the preferred RGB or grayscale profile will happen, defaulting to
+ * built-in profiles if no preferred profiles were set in
+ * `Preferences`.
+ * This function should be used only if you want to follow user
+ * settings. If you intend to convert to a specific profile, call
+ * preferably gimp_image_convert_color_profile(). And if you wish to
+ * leave whatever profile an image has, do not call any of these
+ * functions.
+ * Finally it is unnecessary to call this function in a format load
+ * procedure because this is called automatically by the core code when
+ * loading any image. You should only call this function explicitly
+ * when loading an image through a PDB call.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_image_policy_color_profile (GimpImage *image,
+                                 gboolean   interactive)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          G_TYPE_BOOLEAN, interactive,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-image-policy-color-profile",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
 }

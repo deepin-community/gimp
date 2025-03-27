@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <cairo.h>
 
 #include <gegl.h>
@@ -37,17 +39,18 @@
 #include "core/gimpchannel.h"
 #include "core/gimpcontainer.h"
 #include "core/gimpdrawable.h"
-#include "core/gimpgrouplayer.h"
+#include "core/gimpimage-color-profile.h"
 #include "core/gimpimage-colormap.h"
 #include "core/gimpimage-duplicate.h"
 #include "core/gimpimage-merge.h"
 #include "core/gimpimage-metadata.h"
 #include "core/gimpimage-pick-color.h"
 #include "core/gimpimage-pick-item.h"
+#include "core/gimpimage-rotate.h"
 #include "core/gimpimage.h"
 #include "core/gimpitem.h"
 #include "core/gimplayer.h"
-#include "core/gimplayermask.h"
+#include "core/gimppalette.h"
 #include "core/gimpparamspecs.h"
 #include "core/gimppickable.h"
 #include "core/gimpprogress.h"
@@ -58,7 +61,9 @@
 #include "plug-in/gimpplugin-cleanup.h"
 #include "plug-in/gimpplugin.h"
 #include "plug-in/gimppluginmanager.h"
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath-export.h"
+#include "vectors/gimppath-import.h"
+#include "vectors/gimppath.h"
 
 #include "gimppdb.h"
 #include "gimppdberror.h"
@@ -70,40 +75,37 @@
 #include "gimp-intl.h"
 
 
-#if defined (HAVE_ISFINITE)
-#define FINITE(x) isfinite(x)
-#elif defined (HAVE_FINITE)
-#define FINITE(x) finite(x)
-#elif defined (G_OS_WIN32)
-#define FINITE(x) _finite(x)
-#else
-#error "no FINITE() implementation available?!"
-#endif
-
 static GimpValueArray *
-image_is_valid_invoker (GimpProcedure         *procedure,
-                        Gimp                  *gimp,
-                        GimpContext           *context,
-                        GimpProgress          *progress,
-                        const GimpValueArray  *args,
-                        GError               **error)
+image_id_is_valid_invoker (GimpProcedure         *procedure,
+                           Gimp                  *gimp,
+                           GimpContext           *context,
+                           GimpProgress          *progress,
+                           const GimpValueArray  *args,
+                           GError               **error)
 {
+  gboolean success = TRUE;
   GimpValueArray *return_vals;
-  GimpImage *image;
+  gint image_id;
   gboolean valid = FALSE;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image_id = g_value_get_int (gimp_value_array_index (args, 0));
 
-  valid = GIMP_IS_IMAGE (image);
+  if (success)
+    {
+      valid = (gimp_image_get_by_id (gimp, image_id) != NULL);
+    }
 
-  return_vals = gimp_procedure_get_return_values (procedure, TRUE, NULL);
-  g_value_set_boolean (gimp_value_array_index (return_vals, 1), valid);
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_boolean (gimp_value_array_index (return_vals, 1), valid);
 
   return return_vals;
 }
 
 static GimpValueArray *
-image_list_invoker (GimpProcedure         *procedure,
+get_images_invoker (GimpProcedure         *procedure,
                     Gimp                  *gimp,
                     GimpContext           *context,
                     GimpProgress          *progress,
@@ -111,27 +113,20 @@ image_list_invoker (GimpProcedure         *procedure,
                     GError               **error)
 {
   GimpValueArray *return_vals;
-  gint32 num_images = 0;
-  gint32 *image_ids = NULL;
+  GimpImage **images = NULL;
 
   GList *list = gimp_get_image_iter (gimp);
+  gsize  num_images;
+  gint   i;
 
   num_images = g_list_length (list);
+  images     = g_new0 (GimpImage *, num_images + 1);
 
-  if (num_images)
-    {
-      gint i;
-
-      image_ids = g_new (gint32, num_images);
-
-      for (i = 0; i < num_images; i++, list = g_list_next (list))
-        image_ids[i] = gimp_image_get_ID (GIMP_IMAGE (list->data));
-    }
+  for (i = 0; i < num_images; i++, list = g_list_next (list))
+    images[i] = list->data;
 
   return_vals = gimp_procedure_get_return_values (procedure, TRUE, NULL);
-
-  g_value_set_int (gimp_value_array_index (return_vals, 1), num_images);
-  gimp_value_take_int32array (gimp_value_array_index (return_vals, 2), image_ids, num_images);
+  g_value_take_boxed (gimp_value_array_index (return_vals, 1), images);
 
   return return_vals;
 }
@@ -146,9 +141,9 @@ image_new_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
-  gint32 width;
-  gint32 height;
-  gint32 type;
+  gint width;
+  gint height;
+  gint type;
   GimpImage *image = NULL;
 
   width = g_value_get_int (gimp_value_array_index (args, 0));
@@ -158,7 +153,7 @@ image_new_invoker (GimpProcedure         *procedure,
   if (success)
     {
       image = gimp_create_image (gimp, width, height, type,
-                                 GIMP_PRECISION_U8_GAMMA, FALSE);
+                                 GIMP_PRECISION_U8_NON_LINEAR, FALSE);
 
       if (! image)
         success = FALSE;
@@ -168,7 +163,7 @@ image_new_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_image (gimp_value_array_index (return_vals, 1), image);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), image);
 
   return return_vals;
 }
@@ -183,10 +178,10 @@ image_new_with_precision_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
-  gint32 width;
-  gint32 height;
-  gint32 type;
-  gint32 precision;
+  gint width;
+  gint height;
+  gint type;
+  gint precision;
   GimpImage *image = NULL;
 
   width = g_value_get_int (gimp_value_array_index (args, 0));
@@ -196,9 +191,6 @@ image_new_with_precision_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (gimp->plug_in_manager->current_plug_in)
-        gimp_plug_in_enable_precision (gimp->plug_in_manager->current_plug_in);
-
       if (gimp_babl_is_valid (type, precision))
         {
           image = gimp_create_image (gimp, width, height, type,
@@ -214,7 +206,7 @@ image_new_with_precision_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_image (gimp_value_array_index (return_vals, 1), image);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), image);
 
   return return_vals;
 }
@@ -232,7 +224,7 @@ image_duplicate_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpImage *new_image = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -246,7 +238,7 @@ image_duplicate_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_image (gimp_value_array_index (return_vals, 1), new_image);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), new_image);
 
   return return_vals;
 }
@@ -262,7 +254,7 @@ image_delete_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpImage *image;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -277,19 +269,19 @@ image_delete_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_base_type_invoker (GimpProcedure         *procedure,
-                         Gimp                  *gimp,
-                         GimpContext           *context,
-                         GimpProgress          *progress,
-                         const GimpValueArray  *args,
-                         GError               **error)
+image_get_base_type_invoker (GimpProcedure         *procedure,
+                             Gimp                  *gimp,
+                             GimpContext           *context,
+                             GimpProgress          *progress,
+                             const GimpValueArray  *args,
+                             GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 base_type = 0;
+  gint base_type = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -316,15 +308,12 @@ image_get_precision_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 precision = 0;
+  gint precision = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      if (gimp->plug_in_manager->current_plug_in)
-        gimp_plug_in_enable_precision (gimp->plug_in_manager->current_plug_in);
-
       precision = gimp_image_get_precision (image);
     }
 
@@ -348,9 +337,9 @@ image_get_default_new_layer_mode_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 mode = 0;
+  gint mode = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -367,19 +356,19 @@ image_get_default_new_layer_mode_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_width_invoker (GimpProcedure         *procedure,
-                     Gimp                  *gimp,
-                     GimpContext           *context,
-                     GimpProgress          *progress,
-                     const GimpValueArray  *args,
-                     GError               **error)
+image_get_width_invoker (GimpProcedure         *procedure,
+                         Gimp                  *gimp,
+                         GimpContext           *context,
+                         GimpProgress          *progress,
+                         const GimpValueArray  *args,
+                         GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 width = 0;
+  gint width = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -396,19 +385,19 @@ image_width_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_height_invoker (GimpProcedure         *procedure,
-                      Gimp                  *gimp,
-                      GimpContext           *context,
-                      GimpProgress          *progress,
-                      const GimpValueArray  *args,
-                      GError               **error)
+image_get_height_invoker (GimpProcedure         *procedure,
+                          Gimp                  *gimp,
+                          GimpContext           *context,
+                          GimpProgress          *progress,
+                          const GimpValueArray  *args,
+                          GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 height = 0;
+  gint height = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -425,22 +414,6 @@ image_height_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_free_shadow_invoker (GimpProcedure         *procedure,
-                           Gimp                  *gimp,
-                           GimpContext           *context,
-                           GimpProgress          *progress,
-                           const GimpValueArray  *args,
-                           GError               **error)
-{
-  gboolean success = TRUE;
-  if (success)
-    {
-    }
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
-}
-
-static GimpValueArray *
 image_get_layers_invoker (GimpProcedure         *procedure,
                           Gimp                  *gimp,
                           GimpContext           *context,
@@ -451,36 +424,29 @@ image_get_layers_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 num_layers = 0;
-  gint32 *layer_ids = NULL;
+  GimpLayer **layers = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
       GList *list = gimp_image_get_layer_iter (image);
+      gsize  num_layers;
+      gint   i;
 
       num_layers = g_list_length (list);
 
-      if (num_layers)
-        {
-          gint i;
+      layers = g_new0 (GimpLayer *, num_layers + 1);
 
-          layer_ids = g_new (gint32, num_layers);
-
-          for (i = 0; i < num_layers; i++, list = g_list_next (list))
-            layer_ids[i] = gimp_item_get_ID (GIMP_ITEM (list->data));
-        }
+      for (i = 0; i < num_layers; i++, list = g_list_next (list))
+        layers[i] = list->data;
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    {
-      g_value_set_int (gimp_value_array_index (return_vals, 1), num_layers);
-      gimp_value_take_int32array (gimp_value_array_index (return_vals, 2), layer_ids, num_layers);
-    }
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), layers);
 
   return return_vals;
 }
@@ -496,110 +462,65 @@ image_get_channels_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 num_channels = 0;
-  gint32 *channel_ids = NULL;
+  GimpChannel **channels = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
       GList *list = gimp_image_get_channel_iter (image);
+      gsize  num_channels;
+      gint   i;
 
       num_channels = g_list_length (list);
+      channels = g_new0 (GimpChannel *, num_channels + 1);
 
-      if (num_channels)
-        {
-          gint i;
-
-          channel_ids = g_new (gint32, num_channels);
-
-          for (i = 0; i < num_channels; i++, list = g_list_next (list))
-            channel_ids[i] = gimp_item_get_ID (GIMP_ITEM (list->data));
-        }
+      for (i = 0; i < num_channels; i++, list = g_list_next (list))
+        channels[i] = list->data;
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    {
-      g_value_set_int (gimp_value_array_index (return_vals, 1), num_channels);
-      gimp_value_take_int32array (gimp_value_array_index (return_vals, 2), channel_ids, num_channels);
-    }
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), channels);
 
   return return_vals;
 }
 
 static GimpValueArray *
-image_get_vectors_invoker (GimpProcedure         *procedure,
-                           Gimp                  *gimp,
-                           GimpContext           *context,
-                           GimpProgress          *progress,
-                           const GimpValueArray  *args,
-                           GError               **error)
+image_get_paths_invoker (GimpProcedure         *procedure,
+                         Gimp                  *gimp,
+                         GimpContext           *context,
+                         GimpProgress          *progress,
+                         const GimpValueArray  *args,
+                         GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 num_vectors = 0;
-  gint32 *vector_ids = NULL;
+  GimpPath **paths = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      GList *list = gimp_image_get_vectors_iter (image);
+      GList *list = gimp_image_get_path_iter (image);
+      gsize  num_paths;
+      gint   i;
 
-      num_vectors = g_list_length (list);
+      num_paths = g_list_length (list);
+      paths     = g_new0 (GimpPath *, num_paths + 1);
 
-      if (num_vectors)
-        {
-          gint i;
-
-          vector_ids = g_new (gint32, num_vectors);
-
-          for (i = 0; i < num_vectors; i++, list = g_list_next (list))
-            vector_ids[i] = gimp_item_get_ID (GIMP_ITEM (list->data));
-        }
+      for (i = 0; i < num_paths; i++, list = g_list_next (list))
+        paths[i] = g_object_ref (list->data);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    {
-      g_value_set_int (gimp_value_array_index (return_vals, 1), num_vectors);
-      gimp_value_take_int32array (gimp_value_array_index (return_vals, 2), vector_ids, num_vectors);
-    }
-
-  return return_vals;
-}
-
-static GimpValueArray *
-image_get_active_drawable_invoker (GimpProcedure         *procedure,
-                                   Gimp                  *gimp,
-                                   GimpContext           *context,
-                                   GimpProgress          *progress,
-                                   const GimpValueArray  *args,
-                                   GError               **error)
-{
-  gboolean success = TRUE;
-  GimpValueArray *return_vals;
-  GimpImage *image;
-  GimpDrawable *drawable = NULL;
-
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-
-  if (success)
-    {
-      drawable = gimp_image_get_active_drawable (image);
-    }
-
-  return_vals = gimp_procedure_get_return_values (procedure, success,
-                                                  error ? *error : NULL);
-
-  if (success)
-    gimp_value_set_drawable (gimp_value_array_index (return_vals, 1), drawable);
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), paths);
 
   return return_vals;
 }
@@ -615,11 +536,11 @@ image_unset_active_channel_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpImage *image;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      gimp_image_unset_active_channel (image);
+      gimp_image_unset_selected_channels (image);
     }
 
   return gimp_procedure_get_return_values (procedure, success,
@@ -639,7 +560,7 @@ image_get_floating_sel_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpLayer *floating_sel = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -650,7 +571,7 @@ image_get_floating_sel_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_layer (gimp_value_array_index (return_vals, 1), floating_sel);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), floating_sel);
 
   return return_vals;
 }
@@ -668,7 +589,7 @@ image_floating_sel_attached_to_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpDrawable *drawable = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -684,7 +605,7 @@ image_floating_sel_attached_to_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_drawable (gimp_value_array_index (return_vals, 1), drawable);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), drawable);
 
   return return_vals;
 }
@@ -700,16 +621,16 @@ image_pick_color_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  GimpDrawable *drawable;
+  const GimpDrawable **drawables;
   gdouble x;
   gdouble y;
   gboolean sample_merged;
   gboolean sample_average;
   gdouble average_radius;
-  GimpRGB color = { 0.0, 0.0, 0.0, 1.0 };
+  GeglColor *color = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  drawables = g_value_get_boxed (gimp_value_array_index (args, 1));
   x = g_value_get_double (gimp_value_array_index (args, 2));
   y = g_value_get_double (gimp_value_array_index (args, 3));
   sample_merged = g_value_get_boolean (gimp_value_array_index (args, 4));
@@ -718,9 +639,24 @@ image_pick_color_invoker (GimpProcedure         *procedure,
 
   if (success)
     {
-      if (!sample_merged)
-        if (!drawable || (gimp_item_get_image (GIMP_ITEM (drawable)) != image))
-          success = FALSE;
+      gint i;
+
+      if (! sample_merged)
+        {
+          if (drawables == NULL || drawables[0] == NULL)
+            {
+              success = FALSE;
+            }
+          else
+            {
+              for (i = 0; drawables[i] != NULL; i++)
+                if (gimp_item_get_image (GIMP_ITEM (drawables[i])) != image)
+                  {
+                    success = FALSE;
+                    break;
+                  }
+            }
+        }
 
       if (success && sample_average)
         {
@@ -730,13 +666,23 @@ image_pick_color_invoker (GimpProcedure         *procedure,
 
       if (success)
         {
+          GList *drawable_list = NULL;
+
+          for (i = 0; drawables[i] != NULL; i++)
+            {
+              GimpPickable *pickable = (GimpPickable *) drawables[i];
+
+              drawable_list = g_list_prepend (drawable_list, pickable);
+              if (! sample_merged)
+                gimp_pickable_flush (pickable);
+            }
+
           if (sample_merged)
             gimp_pickable_flush (GIMP_PICKABLE (image));
-          else
-            gimp_pickable_flush (GIMP_PICKABLE (drawable));
 
+          color   = gegl_color_new ("black");
           success = gimp_image_pick_color (image,
-                                           drawable,
+                                           drawable_list,
                                            (gint) x, (gint) y,
                                            FALSE,
                                            sample_merged,
@@ -745,6 +691,8 @@ image_pick_color_invoker (GimpProcedure         *procedure,
                                            NULL,
                                            NULL,
                                            &color);
+
+          g_list_free (drawable_list);
         }
     }
 
@@ -752,7 +700,7 @@ image_pick_color_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_rgb (gimp_value_array_index (return_vals, 1), &color);
+    g_value_take_object (gimp_value_array_index (return_vals, 1), color);
 
   return return_vals;
 }
@@ -768,11 +716,11 @@ image_pick_correlate_layer_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 x;
-  gint32 y;
+  gint x;
+  gint y;
   GimpLayer *layer = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   x = g_value_get_int (gimp_value_array_index (args, 1));
   y = g_value_get_int (gimp_value_array_index (args, 2));
 
@@ -785,46 +733,9 @@ image_pick_correlate_layer_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_layer (gimp_value_array_index (return_vals, 1), layer);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), layer);
 
   return return_vals;
-}
-
-static GimpValueArray *
-image_add_layer_invoker (GimpProcedure         *procedure,
-                         Gimp                  *gimp,
-                         GimpContext           *context,
-                         GimpProgress          *progress,
-                         const GimpValueArray  *args,
-                         GError               **error)
-{
-  gboolean success = TRUE;
-  GimpImage *image;
-  GimpLayer *layer;
-  gint32 position;
-
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  layer = gimp_value_get_layer (gimp_value_array_index (args, 1), gimp);
-  position = g_value_get_int (gimp_value_array_index (args, 2));
-
-  if (success)
-    {
-      if (gimp_pdb_item_is_floating (GIMP_ITEM (layer), image, error) &&
-          gimp_pdb_image_is_base_type (image,
-                                       gimp_drawable_get_base_type (GIMP_DRAWABLE (layer)),
-                                       error))
-        {
-          success = gimp_image_add_layer (image, layer,
-                                          NULL, MAX (position, -1), TRUE);
-        }
-      else
-        {
-          success = FALSE;
-        }
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
 }
 
 static GimpValueArray *
@@ -839,11 +750,11 @@ image_insert_layer_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpLayer *layer;
   GimpLayer *parent;
-  gint32 position;
+  gint position;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  layer = gimp_value_get_layer (gimp_value_array_index (args, 1), gimp);
-  parent = gimp_value_get_layer (gimp_value_array_index (args, 2), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  layer = g_value_get_object (gimp_value_array_index (args, 1));
+  parent = g_value_get_object (gimp_value_array_index (args, 2));
   position = g_value_get_int (gimp_value_array_index (args, 3));
 
   if (success)
@@ -858,6 +769,10 @@ image_insert_layer_invoker (GimpProcedure         *procedure,
         {
           if (position == -1 && parent == NULL)
             parent = GIMP_IMAGE_ACTIVE_PARENT;
+
+          /* see layer-new */
+          if (gimp_drawable_is_gray (GIMP_DRAWABLE (layer)))
+            gimp_layer_fix_format_space (layer, TRUE, FALSE);
 
           success = gimp_image_add_layer (image, layer,
                                           parent, MAX (position, -1), TRUE);
@@ -884,8 +799,8 @@ image_remove_layer_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpLayer *layer;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  layer = gimp_value_get_layer (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  layer = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
@@ -910,7 +825,7 @@ image_freeze_layers_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpImage *image;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -939,7 +854,7 @@ image_thaw_layers_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpImage *image;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -961,40 +876,6 @@ image_thaw_layers_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_add_channel_invoker (GimpProcedure         *procedure,
-                           Gimp                  *gimp,
-                           GimpContext           *context,
-                           GimpProgress          *progress,
-                           const GimpValueArray  *args,
-                           GError               **error)
-{
-  gboolean success = TRUE;
-  GimpImage *image;
-  GimpChannel *channel;
-  gint32 position;
-
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  channel = gimp_value_get_channel (gimp_value_array_index (args, 1), gimp);
-  position = g_value_get_int (gimp_value_array_index (args, 2));
-
-  if (success)
-    {
-      if (gimp_pdb_item_is_floating (GIMP_ITEM (channel), image, error))
-        {
-          success = gimp_image_add_channel (image, channel,
-                                            NULL, MAX (position, -1), TRUE);
-        }
-      else
-        {
-          success = FALSE;
-        }
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
-}
-
-static GimpValueArray *
 image_insert_channel_invoker (GimpProcedure         *procedure,
                               Gimp                  *gimp,
                               GimpContext           *context,
@@ -1006,11 +887,11 @@ image_insert_channel_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpChannel *channel;
   GimpChannel *parent;
-  gint32 position;
+  gint position;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  channel = gimp_value_get_channel (gimp_value_array_index (args, 1), gimp);
-  parent = gimp_value_get_channel (gimp_value_array_index (args, 2), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  channel = g_value_get_object (gimp_value_array_index (args, 1));
+  parent = g_value_get_object (gimp_value_array_index (args, 2));
   position = g_value_get_int (gimp_value_array_index (args, 3));
 
   if (success)
@@ -1048,8 +929,8 @@ image_remove_channel_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpChannel *channel;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  channel = gimp_value_get_channel (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  channel = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
@@ -1074,7 +955,7 @@ image_freeze_channels_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpImage *image;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -1103,7 +984,7 @@ image_thaw_channels_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpImage *image;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -1125,7 +1006,7 @@ image_thaw_channels_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_add_vectors_invoker (GimpProcedure         *procedure,
+image_insert_path_invoker (GimpProcedure         *procedure,
                            Gimp                  *gimp,
                            GimpContext           *context,
                            GimpProgress          *progress,
@@ -1134,52 +1015,18 @@ image_add_vectors_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  GimpVectors *vectors;
-  gint32 position;
+  GimpPath *path;
+  GimpPath *parent;
+  gint position;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  vectors = gimp_value_get_vectors (gimp_value_array_index (args, 1), gimp);
-  position = g_value_get_int (gimp_value_array_index (args, 2));
-
-  if (success)
-    {
-      if (gimp_pdb_item_is_floating (GIMP_ITEM (vectors), image, error))
-        {
-          success = gimp_image_add_vectors (image, vectors,
-                                            NULL, MAX (position, -1), TRUE);
-        }
-      else
-        {
-          success = FALSE;
-        }
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
-}
-
-static GimpValueArray *
-image_insert_vectors_invoker (GimpProcedure         *procedure,
-                              Gimp                  *gimp,
-                              GimpContext           *context,
-                              GimpProgress          *progress,
-                              const GimpValueArray  *args,
-                              GError               **error)
-{
-  gboolean success = TRUE;
-  GimpImage *image;
-  GimpVectors *vectors;
-  GimpVectors *parent;
-  gint32 position;
-
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  vectors = gimp_value_get_vectors (gimp_value_array_index (args, 1), gimp);
-  parent = gimp_value_get_vectors (gimp_value_array_index (args, 2), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  path = g_value_get_object (gimp_value_array_index (args, 1));
+  parent = g_value_get_object (gimp_value_array_index (args, 2));
   position = g_value_get_int (gimp_value_array_index (args, 3));
 
   if (success)
     {
-      if (gimp_pdb_item_is_floating (GIMP_ITEM (vectors), image, error) &&
+      if (gimp_pdb_item_is_floating (GIMP_ITEM (path), image, error) &&
           (parent == NULL ||
            (gimp_pdb_item_is_in_tree (GIMP_ITEM (parent), image, 0, error) &&
             gimp_pdb_item_is_group (GIMP_ITEM (parent), error))))
@@ -1187,8 +1034,8 @@ image_insert_vectors_invoker (GimpProcedure         *procedure,
           if (position == -1 && parent == NULL)
             parent = GIMP_IMAGE_ACTIVE_PARENT;
 
-          success = gimp_image_add_vectors (image, vectors,
-                                            parent, MAX (position, -1), TRUE);
+          success = gimp_image_add_path (image, path,
+                                         parent, MAX (position, -1), TRUE);
         }
       else
         {
@@ -1201,24 +1048,24 @@ image_insert_vectors_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_remove_vectors_invoker (GimpProcedure         *procedure,
-                              Gimp                  *gimp,
-                              GimpContext           *context,
-                              GimpProgress          *progress,
-                              const GimpValueArray  *args,
-                              GError               **error)
+image_remove_path_invoker (GimpProcedure         *procedure,
+                           Gimp                  *gimp,
+                           GimpContext           *context,
+                           GimpProgress          *progress,
+                           const GimpValueArray  *args,
+                           GError               **error)
 {
   gboolean success = TRUE;
   GimpImage *image;
-  GimpVectors *vectors;
+  GimpPath *path;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  vectors = gimp_value_get_vectors (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  path = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (vectors), image, 0, error))
-        gimp_image_remove_vectors (image, vectors, TRUE, NULL);
+      if (gimp_pdb_item_is_attached (GIMP_ITEM (path), image, 0, error))
+        gimp_image_remove_path (image, path, TRUE, NULL);
       else
         success = FALSE;
     }
@@ -1228,25 +1075,215 @@ image_remove_vectors_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_freeze_vectors_invoker (GimpProcedure         *procedure,
-                              Gimp                  *gimp,
-                              GimpContext           *context,
-                              GimpProgress          *progress,
-                              const GimpValueArray  *args,
-                              GError               **error)
+image_import_paths_from_file_invoker (GimpProcedure         *procedure,
+                                      Gimp                  *gimp,
+                                      GimpContext           *context,
+                                      GimpProgress          *progress,
+                                      const GimpValueArray  *args,
+                                      GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  GimpImage *image;
+  GFile *file;
+  gboolean merge;
+  gboolean scale;
+  GimpPath **paths = NULL;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  file = g_value_get_object (gimp_value_array_index (args, 1));
+  merge = g_value_get_boolean (gimp_value_array_index (args, 2));
+  scale = g_value_get_boolean (gimp_value_array_index (args, 3));
+
+  if (success)
+    {
+      GList *path_list = NULL;
+
+      /* FIXME tree */
+      success = gimp_path_import_file (image, file,
+                                       merge, scale, NULL, -1,
+                                       &path_list, error);
+
+      if (success)
+        {
+          gsize  num_paths = g_list_length (path_list);
+          GList *list;
+          gint   i;
+
+          paths = g_new0 (GimpPath *, num_paths + 1);
+
+          for (i = 0, list = path_list;
+               i < num_paths;
+               i++, list = g_list_next (list))
+            {
+              paths[i] = list->data;
+            }
+
+          g_list_free (path_list);
+        }
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), paths);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+image_import_paths_from_string_invoker (GimpProcedure         *procedure,
+                                        Gimp                  *gimp,
+                                        GimpContext           *context,
+                                        GimpProgress          *progress,
+                                        const GimpValueArray  *args,
+                                        GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  GimpImage *image;
+  const gchar *string;
+  gint length;
+  gboolean merge;
+  gboolean scale;
+  GimpPath **paths = NULL;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  string = g_value_get_string (gimp_value_array_index (args, 1));
+  length = g_value_get_int (gimp_value_array_index (args, 2));
+  merge = g_value_get_boolean (gimp_value_array_index (args, 3));
+  scale = g_value_get_boolean (gimp_value_array_index (args, 4));
+
+  if (success)
+    {
+      GList *path_list = NULL;
+
+      /* FIXME tree */
+      success = gimp_path_import_buffer (image, string, length,
+                                         merge, scale, NULL, -1,
+                                         &path_list, error);
+
+      if (success)
+        {
+          GList *list;
+          gsize  num_paths = g_list_length (path_list);
+          gint   i;
+
+          paths = g_new0 (GimpPath *, num_paths + 1);
+
+          for (i = 0, list = path_list;
+               i < num_paths;
+               i++, list = g_list_next (list))
+            {
+              paths[i] = list->data;
+            }
+
+          g_list_free (path_list);
+        }
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), paths);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+image_export_path_to_file_invoker (GimpProcedure         *procedure,
+                                   Gimp                  *gimp,
+                                   GimpContext           *context,
+                                   GimpProgress          *progress,
+                                   const GimpValueArray  *args,
+                                   GError               **error)
+{
+  gboolean success = TRUE;
+  GimpImage *image;
+  GFile *file;
+  GimpPath *path;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  file = g_value_get_object (gimp_value_array_index (args, 1));
+  path = g_value_get_object (gimp_value_array_index (args, 2));
+
+  if (success)
+    {
+      GList *path_list = NULL;
+
+      if (path != NULL)
+        path_list = g_list_prepend (path_list, path);
+
+      success = gimp_path_export_file (image, path_list, file, error);
+
+      g_list_free (path_list);
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
+image_export_path_to_string_invoker (GimpProcedure         *procedure,
+                                     Gimp                  *gimp,
+                                     GimpContext           *context,
+                                     GimpProgress          *progress,
+                                     const GimpValueArray  *args,
+                                     GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  GimpImage *image;
+  GimpPath *path;
+  gchar *string = NULL;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  path = g_value_get_object (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      GList *path_list = NULL;
+
+      if (path != NULL)
+        path_list = g_list_prepend (path_list, path);
+
+      string = gimp_path_export_string (image, path_list);
+      g_list_free (path_list);
+
+      success = (string != NULL);
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_take_string (gimp_value_array_index (return_vals, 1), string);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+image_freeze_paths_invoker (GimpProcedure         *procedure,
+                            Gimp                  *gimp,
+                            GimpContext           *context,
+                            GimpProgress          *progress,
+                            const GimpValueArray  *args,
+                            GError               **error)
 {
   gboolean success = TRUE;
   GimpImage *image;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
       GimpPlugIn    *plug_in   = gimp->plug_in_manager->current_plug_in;
-      GimpContainer *container = gimp_image_get_vectors (image);
+      GimpContainer *container = gimp_image_get_paths (image);
 
       if (plug_in)
-        success = gimp_plug_in_cleanup_vectors_freeze (plug_in, image);
+        success = gimp_plug_in_cleanup_paths_freeze (plug_in, image);
 
       if (success)
         gimp_container_freeze (container);
@@ -1257,25 +1294,25 @@ image_freeze_vectors_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_thaw_vectors_invoker (GimpProcedure         *procedure,
-                            Gimp                  *gimp,
-                            GimpContext           *context,
-                            GimpProgress          *progress,
-                            const GimpValueArray  *args,
-                            GError               **error)
+image_thaw_paths_invoker (GimpProcedure         *procedure,
+                          Gimp                  *gimp,
+                          GimpContext           *context,
+                          GimpProgress          *progress,
+                          const GimpValueArray  *args,
+                          GError               **error)
 {
   gboolean success = TRUE;
   GimpImage *image;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
       GimpPlugIn    *plug_in   = gimp->plug_in_manager->current_plug_in;
-      GimpContainer *container = gimp_image_get_vectors (image);
+      GimpContainer *container = gimp_image_get_paths (image);
 
       if (plug_in)
-        success = gimp_plug_in_cleanup_vectors_thaw (plug_in, image);
+        success = gimp_plug_in_cleanup_paths_thaw (plug_in, image);
 
       if (success)
         success = gimp_container_frozen (container);
@@ -1300,10 +1337,10 @@ image_get_item_position_invoker (GimpProcedure         *procedure,
   GimpValueArray *return_vals;
   GimpImage *image;
   GimpItem *item;
-  gint32 position = 0;
+  gint position = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  item = gimp_value_get_item (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  item = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
@@ -1334,8 +1371,8 @@ image_raise_item_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpItem *item;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  item = gimp_value_get_item (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  item = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
@@ -1361,8 +1398,8 @@ image_lower_item_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpItem *item;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  item = gimp_value_get_item (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  item = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
@@ -1388,8 +1425,8 @@ image_raise_item_to_top_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpItem *item;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  item = gimp_value_get_item (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  item = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
@@ -1415,8 +1452,8 @@ image_lower_item_to_bottom_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpItem *item;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  item = gimp_value_get_item (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  item = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
@@ -1442,11 +1479,11 @@ image_reorder_item_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpItem *item;
   GimpItem *parent;
-  gint32 position;
+  gint position;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  item = gimp_value_get_item (gimp_value_array_index (args, 1), gimp);
-  parent = gimp_value_get_item (gimp_value_array_index (args, 2), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  item = g_value_get_object (gimp_value_array_index (args, 1));
+  parent = g_value_get_object (gimp_value_array_index (args, 2));
   position = g_value_get_int (gimp_value_array_index (args, 3));
 
   if (success)
@@ -1481,7 +1518,7 @@ image_flatten_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpLayer *layer = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -1496,7 +1533,7 @@ image_flatten_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_layer (gimp_value_array_index (return_vals, 1), layer);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), layer);
 
   return return_vals;
 }
@@ -1512,17 +1549,24 @@ image_merge_visible_layers_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 merge_type;
+  gint merge_type;
   GimpLayer *layer = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   merge_type = g_value_get_enum (gimp_value_array_index (args, 1));
 
   if (success)
     {
-      layer = gimp_image_merge_visible_layers (image, context, merge_type,
-                                               FALSE, FALSE,
-                                               progress);
+      GList *layers;
+
+      layers = gimp_image_merge_visible_layers (image, context, merge_type,
+                                                FALSE, FALSE, progress);
+
+      if (layers)
+        /* With merge_selected_groups set to FALSE, we always get only a
+         * single selected layer.
+         */
+        layer = layers->data;
 
       if (! layer)
         success = FALSE;
@@ -1532,7 +1576,7 @@ image_merge_visible_layers_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_layer (gimp_value_array_index (return_vals, 1), layer);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), layer);
 
   return return_vals;
 }
@@ -1549,22 +1593,30 @@ image_merge_down_invoker (GimpProcedure         *procedure,
   GimpValueArray *return_vals;
   GimpImage *image;
   GimpLayer *merge_layer;
-  gint32 merge_type;
+  gint merge_type;
   GimpLayer *layer = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  merge_layer = gimp_value_get_layer (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  merge_layer = g_value_get_object (gimp_value_array_index (args, 1));
   merge_type = g_value_get_enum (gimp_value_array_index (args, 2));
 
   if (success)
     {
       if (gimp_pdb_item_is_attached (GIMP_ITEM (merge_layer), image, 0, error))
         {
-          layer = gimp_image_merge_down (image, merge_layer, context, merge_type,
-                                         progress, error);
+          GList *merge_layers = g_list_prepend (NULL, merge_layer);
+          GList *layers;
 
-          if (! layer)
+          layers = gimp_image_merge_down (image, merge_layers, context,
+                                          merge_type, progress, error);
+          g_list_free (merge_layers);
+
+          if (! layers)
             success = FALSE;
+          else
+            layer = layers->data;
+
+          g_list_free (layers);
         }
       else
         success = FALSE;
@@ -1574,175 +1626,74 @@ image_merge_down_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_layer (gimp_value_array_index (return_vals, 1), layer);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), layer);
 
   return return_vals;
 }
 
 static GimpValueArray *
-image_merge_layer_group_invoker (GimpProcedure         *procedure,
-                                 Gimp                  *gimp,
-                                 GimpContext           *context,
-                                 GimpProgress          *progress,
-                                 const GimpValueArray  *args,
-                                 GError               **error)
+image_get_palette_invoker (GimpProcedure         *procedure,
+                           Gimp                  *gimp,
+                           GimpContext           *context,
+                           GimpProgress          *progress,
+                           const GimpValueArray  *args,
+                           GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  GimpLayer *layer_group;
-  GimpLayer *layer = NULL;
+  GimpPalette *palette = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  layer_group = gimp_value_get_layer (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer_group), image, 0, error) &&
-          gimp_pdb_item_is_group (GIMP_ITEM (layer_group), error))
-        {
-          layer = gimp_image_merge_group_layer (image,
-                                                GIMP_GROUP_LAYER (layer_group));
-
-          if (! layer)
-            success = FALSE;
-        }
-      else
-        success = FALSE;
+      palette = gimp_image_get_colormap_palette (image);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_layer (gimp_value_array_index (return_vals, 1), layer);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), palette);
 
   return return_vals;
 }
 
 static GimpValueArray *
-image_add_layer_mask_invoker (GimpProcedure         *procedure,
-                              Gimp                  *gimp,
-                              GimpContext           *context,
-                              GimpProgress          *progress,
-                              const GimpValueArray  *args,
-                              GError               **error)
-{
-  gboolean success = TRUE;
-  GimpImage *image;
-  GimpLayer *layer;
-  GimpLayerMask *mask;
-
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  layer = gimp_value_get_layer (gimp_value_array_index (args, 1), gimp);
-  mask = gimp_value_get_layer_mask (gimp_value_array_index (args, 2), gimp);
-
-  if (success)
-    {
-      if (gimp_pdb_item_is_floating (GIMP_ITEM (mask), image, error) &&
-          gimp_pdb_item_is_not_group (GIMP_ITEM (layer), error))
-        success = (gimp_layer_add_mask (layer, mask, TRUE, error) == mask);
-      else
-        success = FALSE;
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
-}
-
-static GimpValueArray *
-image_remove_layer_mask_invoker (GimpProcedure         *procedure,
-                                 Gimp                  *gimp,
-                                 GimpContext           *context,
-                                 GimpProgress          *progress,
-                                 const GimpValueArray  *args,
-                                 GError               **error)
-{
-  gboolean success = TRUE;
-  GimpImage *image;
-  GimpLayer *layer;
-  gint32 mode;
-
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  layer = gimp_value_get_layer (gimp_value_array_index (args, 1), gimp);
-  mode = g_value_get_enum (gimp_value_array_index (args, 2));
-
-  if (success)
-    {
-      GimpPDBItemModify modify = 0;
-
-      if (mode == GIMP_MASK_APPLY)
-        modify |= GIMP_PDB_ITEM_CONTENT;
-
-      if (gimp_pdb_item_is_attached (GIMP_ITEM (layer), image, modify, error) &&
-          gimp_layer_get_mask (layer))
-        gimp_layer_apply_mask (layer, mode, TRUE);
-      else
-        success = FALSE;
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
-}
-
-static GimpValueArray *
-image_get_colormap_invoker (GimpProcedure         *procedure,
-                            Gimp                  *gimp,
-                            GimpContext           *context,
-                            GimpProgress          *progress,
-                            const GimpValueArray  *args,
-                            GError               **error)
+image_set_palette_invoker (GimpProcedure         *procedure,
+                           Gimp                  *gimp,
+                           GimpContext           *context,
+                           GimpProgress          *progress,
+                           const GimpValueArray  *args,
+                           GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 num_bytes = 0;
-  guint8 *colormap = NULL;
+  GimpPalette *new_palette;
+  GimpPalette *palette = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  new_palette = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
-      num_bytes = 3 * gimp_image_get_colormap_size (image);
-      colormap = g_memdup (gimp_image_get_colormap (image), num_bytes);
+      palette = gimp_image_get_colormap_palette (image);
+
+      if (palette == NULL || new_palette == NULL)
+        success = FALSE;
+      else if (new_palette != palette)
+        gimp_image_set_colormap_palette (image, new_palette, TRUE);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    {
-      g_value_set_int (gimp_value_array_index (return_vals, 1), num_bytes);
-      gimp_value_take_int8array (gimp_value_array_index (return_vals, 2), colormap, num_bytes);
-    }
+    g_value_set_object (gimp_value_array_index (return_vals, 1), palette);
 
   return return_vals;
-}
-
-static GimpValueArray *
-image_set_colormap_invoker (GimpProcedure         *procedure,
-                            Gimp                  *gimp,
-                            GimpContext           *context,
-                            GimpProgress          *progress,
-                            const GimpValueArray  *args,
-                            GError               **error)
-{
-  gboolean success = TRUE;
-  GimpImage *image;
-  gint32 num_bytes;
-  const guint8 *colormap;
-
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  num_bytes = g_value_get_int (gimp_value_array_index (args, 1));
-  colormap = gimp_value_get_int8array (gimp_value_array_index (args, 2));
-
-  if (success)
-    {
-      gimp_image_set_colormap (image, colormap, num_bytes / 3, TRUE);
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
 }
 
 static GimpValueArray *
@@ -1758,7 +1709,7 @@ image_get_metadata_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   gchar *metadata_string = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -1789,7 +1740,7 @@ image_set_metadata_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   const gchar *metadata_string;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   metadata_string = g_value_get_string (gimp_value_array_index (args, 1));
 
   if (success)
@@ -1817,7 +1768,7 @@ image_clean_all_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpImage *image;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -1841,7 +1792,7 @@ image_is_dirty_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   gboolean dirty = FALSE;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -1868,15 +1819,14 @@ image_thumbnail_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 width;
-  gint32 height;
-  gint32 actual_width = 0;
-  gint32 actual_height = 0;
-  gint32 bpp = 0;
-  gint32 thumbnail_data_count = 0;
-  guint8 *thumbnail_data = NULL;
+  gint width;
+  gint height;
+  gint actual_width = 0;
+  gint actual_height = 0;
+  gint bpp = 0;
+  GBytes *thumbnail_data = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   width = g_value_get_int (gimp_value_array_index (args, 1));
   height = g_value_get_int (gimp_value_array_index (args, 2));
 
@@ -1906,9 +1856,8 @@ image_thumbnail_invoker (GimpProcedure         *procedure,
           actual_width         = gimp_temp_buf_get_width  (buf);
           actual_height        = gimp_temp_buf_get_height (buf);
           bpp                  = babl_format_get_bytes_per_pixel (gimp_temp_buf_get_format (buf));
-          thumbnail_data_count = gimp_temp_buf_get_data_size (buf);
-          thumbnail_data       = g_memdup (gimp_temp_buf_get_data (buf),
-                                           thumbnail_data_count);
+          thumbnail_data       = g_bytes_new (gimp_temp_buf_get_data (buf),
+                                              gimp_temp_buf_get_data_size (buf));
 
           gimp_temp_buf_unref (buf);
         }
@@ -1924,61 +1873,75 @@ image_thumbnail_invoker (GimpProcedure         *procedure,
       g_value_set_int (gimp_value_array_index (return_vals, 1), actual_width);
       g_value_set_int (gimp_value_array_index (return_vals, 2), actual_height);
       g_value_set_int (gimp_value_array_index (return_vals, 3), bpp);
-      g_value_set_int (gimp_value_array_index (return_vals, 4), thumbnail_data_count);
-      gimp_value_take_int8array (gimp_value_array_index (return_vals, 5), thumbnail_data, thumbnail_data_count);
+      g_value_take_boxed (gimp_value_array_index (return_vals, 4), thumbnail_data);
     }
 
   return return_vals;
 }
 
 static GimpValueArray *
-image_get_active_layer_invoker (GimpProcedure         *procedure,
-                                Gimp                  *gimp,
-                                GimpContext           *context,
-                                GimpProgress          *progress,
-                                const GimpValueArray  *args,
-                                GError               **error)
+image_get_selected_layers_invoker (GimpProcedure         *procedure,
+                                   Gimp                  *gimp,
+                                   GimpContext           *context,
+                                   GimpProgress          *progress,
+                                   const GimpValueArray  *args,
+                                   GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  GimpLayer *active_layer = NULL;
+  GimpLayer **layers = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      active_layer = gimp_image_get_active_layer (image);
+      GList *list = gimp_image_get_selected_layers (image);
+      gsize  num_layers;
+      gint   i;
+
+      num_layers = g_list_length (list);
+      layers = g_new0 (GimpLayer *, num_layers + 1);
+
+      for (i = 0; i < num_layers; i++, list = g_list_next (list))
+        layers[i] = list->data;
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_layer (gimp_value_array_index (return_vals, 1), active_layer);
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), layers);
 
   return return_vals;
 }
 
 static GimpValueArray *
-image_set_active_layer_invoker (GimpProcedure         *procedure,
-                                Gimp                  *gimp,
-                                GimpContext           *context,
-                                GimpProgress          *progress,
-                                const GimpValueArray  *args,
-                                GError               **error)
+image_set_selected_layers_invoker (GimpProcedure         *procedure,
+                                   Gimp                  *gimp,
+                                   GimpContext           *context,
+                                   GimpProgress          *progress,
+                                   const GimpValueArray  *args,
+                                   GError               **error)
 {
   gboolean success = TRUE;
   GimpImage *image;
-  GimpLayer *active_layer;
+  const GimpLayer **layers;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  active_layer = gimp_value_get_layer (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  layers = g_value_get_boxed (gimp_value_array_index (args, 1));
 
   if (success)
     {
-      if (gimp_image_set_active_layer (image, active_layer) != active_layer)
-        success = FALSE;
+      GList *selected_layers = NULL;
+      gint   i;
+
+      if (layers)
+        for (i = 0; layers[i] != NULL; i++)
+          selected_layers = g_list_prepend (selected_layers, (gpointer) layers[i]);
+
+      gimp_image_set_selected_layers (image, selected_layers);
+      g_list_free (selected_layers);
     }
 
   return gimp_procedure_get_return_values (procedure, success,
@@ -1986,7 +1949,76 @@ image_set_active_layer_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_get_active_channel_invoker (GimpProcedure         *procedure,
+image_get_selected_channels_invoker (GimpProcedure         *procedure,
+                                     Gimp                  *gimp,
+                                     GimpContext           *context,
+                                     GimpProgress          *progress,
+                                     const GimpValueArray  *args,
+                                     GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  GimpImage *image;
+  GimpChannel **channels = NULL;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      GList *list = gimp_image_get_selected_channels (image);
+      gsize  num_channels;
+      gint   i;
+
+      num_channels = g_list_length (list);
+      channels = g_new0 (GimpChannel *, num_channels + 1);
+
+      for (i = 0; i < num_channels; i++, list = g_list_next (list))
+        channels[i] = list->data;
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), channels);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+image_set_selected_channels_invoker (GimpProcedure         *procedure,
+                                     Gimp                  *gimp,
+                                     GimpContext           *context,
+                                     GimpProgress          *progress,
+                                     const GimpValueArray  *args,
+                                     GError               **error)
+{
+  gboolean success = TRUE;
+  GimpImage *image;
+  const GimpChannel **channels;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  channels = g_value_get_boxed (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      GList *selected_channels = NULL;
+      gint   i;
+
+      if (channels)
+        for (i = 0; channels[i] != NULL; i++)
+          selected_channels = g_list_prepend (selected_channels, (gpointer) channels[i]);
+
+      gimp_image_set_selected_channels (image, selected_channels);
+      g_list_free (selected_channels);
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
+image_get_selected_paths_invoker (GimpProcedure         *procedure,
                                   Gimp                  *gimp,
                                   GimpContext           *context,
                                   GimpProgress          *progress,
@@ -1996,26 +2028,34 @@ image_get_active_channel_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  GimpChannel *active_channel = NULL;
+  GimpPath **paths = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      active_channel = gimp_image_get_active_channel (image);
+      GList *list = gimp_image_get_selected_paths (image);
+      gsize  num_paths;
+      gint   i;
+
+      num_paths = g_list_length (list);
+      paths     = g_new0 (GimpPath *, num_paths + 1);
+
+      for (i = 0; i < num_paths; i++, list = g_list_next (list))
+        paths[i] = g_object_ref (list->data);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_channel (gimp_value_array_index (return_vals, 1), active_channel);
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), paths);
 
   return return_vals;
 }
 
 static GimpValueArray *
-image_set_active_channel_invoker (GimpProcedure         *procedure,
+image_set_selected_paths_invoker (GimpProcedure         *procedure,
                                   Gimp                  *gimp,
                                   GimpContext           *context,
                                   GimpProgress          *progress,
@@ -2024,15 +2064,21 @@ image_set_active_channel_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  GimpChannel *active_channel;
+  const GimpPath **paths;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  active_channel = gimp_value_get_channel (gimp_value_array_index (args, 1), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  paths = g_value_get_boxed (gimp_value_array_index (args, 1));
 
   if (success)
     {
-      if (gimp_image_set_active_channel (image, active_channel) != active_channel)
-        success = FALSE;
+      GList *selected_paths = NULL;
+      gint   i;
+
+      for (i = 0; paths[i] != NULL; i++)
+        selected_paths = g_list_prepend (selected_paths, (gpointer) paths[i]);
+
+      gimp_image_set_selected_paths (image, selected_paths);
+      g_list_free (selected_paths);
     }
 
   return gimp_procedure_get_return_values (procedure, success,
@@ -2040,57 +2086,40 @@ image_set_active_channel_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_get_active_vectors_invoker (GimpProcedure         *procedure,
-                                  Gimp                  *gimp,
-                                  GimpContext           *context,
-                                  GimpProgress          *progress,
-                                  const GimpValueArray  *args,
-                                  GError               **error)
+image_get_selected_drawables_invoker (GimpProcedure         *procedure,
+                                      Gimp                  *gimp,
+                                      GimpContext           *context,
+                                      GimpProgress          *progress,
+                                      const GimpValueArray  *args,
+                                      GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  GimpVectors *active_vectors = NULL;
+  GimpDrawable **drawables = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      active_vectors = gimp_image_get_active_vectors (image);
+      GList *list = gimp_image_get_selected_drawables (image);
+      gsize  num_drawables;
+      gint   i;
+
+      num_drawables = g_list_length (list);
+      drawables     = g_new0 (GimpDrawable *, num_drawables + 1);
+
+      for (i = 0; i < num_drawables; i++, list = g_list_next (list))
+        drawables[i] = list->data;
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_vectors (gimp_value_array_index (return_vals, 1), active_vectors);
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), drawables);
 
   return return_vals;
-}
-
-static GimpValueArray *
-image_set_active_vectors_invoker (GimpProcedure         *procedure,
-                                  Gimp                  *gimp,
-                                  GimpContext           *context,
-                                  GimpProgress          *progress,
-                                  const GimpValueArray  *args,
-                                  GError               **error)
-{
-  gboolean success = TRUE;
-  GimpImage *image;
-  GimpVectors *active_vectors;
-
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  active_vectors = gimp_value_get_vectors (gimp_value_array_index (args, 1), gimp);
-
-  if (success)
-    {
-      if (gimp_image_set_active_vectors (image, active_vectors) != active_vectors)
-        success = FALSE;
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
 }
 
 static GimpValueArray *
@@ -2106,7 +2135,7 @@ image_get_selection_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   GimpSelection *selection = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -2120,7 +2149,7 @@ image_get_selection_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_selection (gimp_value_array_index (return_vals, 1), selection);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), selection);
 
   return return_vals;
 }
@@ -2136,10 +2165,10 @@ image_get_component_active_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 component;
+  gint component;
   gboolean active = FALSE;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   component = g_value_get_enum (gimp_value_array_index (args, 1));
 
   if (success)
@@ -2174,10 +2203,10 @@ image_set_component_active_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  gint32 component;
+  gint component;
   gboolean active;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   component = g_value_get_enum (gimp_value_array_index (args, 1));
   active = g_value_get_boolean (gimp_value_array_index (args, 2));
 
@@ -2209,10 +2238,10 @@ image_get_component_visible_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 component;
+  gint component;
   gboolean visible = FALSE;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   component = g_value_get_enum (gimp_value_array_index (args, 1));
 
   if (success)
@@ -2247,10 +2276,10 @@ image_set_component_visible_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  gint32 component;
+  gint component;
   gboolean visible;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   component = g_value_get_enum (gimp_value_array_index (args, 1));
   visible = g_value_get_boolean (gimp_value_array_index (args, 2));
 
@@ -2272,82 +2301,77 @@ image_set_component_visible_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_get_filename_invoker (GimpProcedure         *procedure,
-                            Gimp                  *gimp,
-                            GimpContext           *context,
-                            GimpProgress          *progress,
-                            const GimpValueArray  *args,
-                            GError               **error)
+image_get_file_invoker (GimpProcedure         *procedure,
+                        Gimp                  *gimp,
+                        GimpContext           *context,
+                        GimpProgress          *progress,
+                        const GimpValueArray  *args,
+                        GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gchar *filename = NULL;
+  GFile *file = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      GFile *file = gimp_image_get_any_file (image);
-      if (file)
-        filename = g_file_get_path (file);
+      file = gimp_image_get_any_file (image);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    g_value_take_string (gimp_value_array_index (return_vals, 1), filename);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), file);
 
   return return_vals;
 }
 
 static GimpValueArray *
-image_set_filename_invoker (GimpProcedure         *procedure,
-                            Gimp                  *gimp,
-                            GimpContext           *context,
-                            GimpProgress          *progress,
-                            const GimpValueArray  *args,
-                            GError               **error)
+image_set_file_invoker (GimpProcedure         *procedure,
+                        Gimp                  *gimp,
+                        GimpContext           *context,
+                        GimpProgress          *progress,
+                        const GimpValueArray  *args,
+                        GError               **error)
 {
   gboolean success = TRUE;
   GimpImage *image;
-  const gchar *filename;
+  GFile *file;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  filename = g_value_get_string (gimp_value_array_index (args, 1));
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  file = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
-      /*  verify that the filename can be converted to UTF-8 and back  */
-      gchar *utf8 = g_filename_to_utf8 (filename, -1, NULL, NULL, error);
+      gchar *uri;
+      gchar *folded_uri;
 
-      if (utf8)
+      uri        = g_file_get_uri (file);
+      folded_uri = g_utf8_casefold (uri, -1);
+
+      if (! g_regex_match_simple ("\\.xcf(\\.?(gz|bz2|xz))?$", uri, G_REGEX_CASELESS, 0))
         {
-          gchar *tmp = g_filename_from_utf8 (utf8, -1, NULL, NULL, error);
+          gchar *dot = g_strrstr (uri, ".");
 
-          if (tmp)
-            g_free (tmp);
+          if (dot != NULL && strstr (dot + 1, G_DIR_SEPARATOR_S) == NULL)
+            g_printerr ("%s: failure to set file '%s' with extension '%s'. "
+                        "The extension must be '.xcf' (or a compressed variant).\n",
+                        "gimp_image_set_file", uri, dot + 1);
           else
-            success = FALSE;
+            g_printerr ("%s: failure to set file '%s' without extension. "
+                        "The extension must be '.xcf' (or a compressed variant).\n",
+                        "gimp_image_set_file", uri);
 
-          g_free (utf8);
+          success = FALSE;
         }
-      else
-        success = FALSE;
-
       if (success)
-        {
-          GFile *file = NULL;
+        gimp_image_set_file (image, file);
 
-          if (filename && strlen (filename))
-            file = file_utils_filename_to_file (image->gimp, filename, NULL);
-
-          gimp_image_set_file (image, file);
-
-          if (file)
-            g_object_unref (file);
-        }
+      g_free (uri);
+      g_free (folded_uri);
     }
 
   return gimp_procedure_get_return_values (procedure, success,
@@ -2355,125 +2379,88 @@ image_set_filename_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-image_get_uri_invoker (GimpProcedure         *procedure,
-                       Gimp                  *gimp,
-                       GimpContext           *context,
-                       GimpProgress          *progress,
-                       const GimpValueArray  *args,
-                       GError               **error)
+image_get_xcf_file_invoker (GimpProcedure         *procedure,
+                            Gimp                  *gimp,
+                            GimpContext           *context,
+                            GimpProgress          *progress,
+                            const GimpValueArray  *args,
+                            GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gchar *uri = NULL;
+  GFile *file = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      GFile *file = gimp_image_get_any_file (image);
-      if (file)
-        uri = g_file_get_uri (file);
+      file = gimp_image_get_file (image);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    g_value_take_string (gimp_value_array_index (return_vals, 1), uri);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), file);
 
   return return_vals;
 }
 
 static GimpValueArray *
-image_get_xcf_uri_invoker (GimpProcedure         *procedure,
-                           Gimp                  *gimp,
-                           GimpContext           *context,
-                           GimpProgress          *progress,
-                           const GimpValueArray  *args,
-                           GError               **error)
+image_get_imported_file_invoker (GimpProcedure         *procedure,
+                                 Gimp                  *gimp,
+                                 GimpContext           *context,
+                                 GimpProgress          *progress,
+                                 const GimpValueArray  *args,
+                                 GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gchar *uri = NULL;
+  GFile *file = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      GFile *file = gimp_image_get_file (image);
-      if (file)
-        uri = g_file_get_uri (file);
+      file = gimp_image_get_imported_file (image);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    g_value_take_string (gimp_value_array_index (return_vals, 1), uri);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), file);
 
   return return_vals;
 }
 
 static GimpValueArray *
-image_get_imported_uri_invoker (GimpProcedure         *procedure,
-                                Gimp                  *gimp,
-                                GimpContext           *context,
-                                GimpProgress          *progress,
-                                const GimpValueArray  *args,
-                                GError               **error)
+image_get_exported_file_invoker (GimpProcedure         *procedure,
+                                 Gimp                  *gimp,
+                                 GimpContext           *context,
+                                 GimpProgress          *progress,
+                                 const GimpValueArray  *args,
+                                 GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gchar *uri = NULL;
+  GFile *file = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      GFile *file = gimp_image_get_imported_file (image);
-      if (file)
-        uri = g_file_get_uri (file);
+      file = gimp_image_get_exported_file (image);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    g_value_take_string (gimp_value_array_index (return_vals, 1), uri);
-
-  return return_vals;
-}
-
-static GimpValueArray *
-image_get_exported_uri_invoker (GimpProcedure         *procedure,
-                                Gimp                  *gimp,
-                                GimpContext           *context,
-                                GimpProgress          *progress,
-                                const GimpValueArray  *args,
-                                GError               **error)
-{
-  gboolean success = TRUE;
-  GimpValueArray *return_vals;
-  GimpImage *image;
-  gchar *uri = NULL;
-
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-
-  if (success)
-    {
-      GFile *file = gimp_image_get_exported_file (image);
-      if (file)
-        uri = g_file_get_uri (file);
-    }
-
-  return_vals = gimp_procedure_get_return_values (procedure, success,
-                                                  error ? *error : NULL);
-
-  if (success)
-    g_value_take_string (gimp_value_array_index (return_vals, 1), uri);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), file);
 
   return return_vals;
 }
@@ -2491,7 +2478,7 @@ image_get_name_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   gchar *name = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -2521,7 +2508,7 @@ image_get_resolution_invoker (GimpProcedure         *procedure,
   gdouble xresolution = 0.0;
   gdouble yresolution = 0.0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -2553,15 +2540,15 @@ image_set_resolution_invoker (GimpProcedure         *procedure,
   gdouble xresolution;
   gdouble yresolution;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   xresolution = g_value_get_double (gimp_value_array_index (args, 1));
   yresolution = g_value_get_double (gimp_value_array_index (args, 2));
 
   if (success)
     {
-      if (! FINITE (xresolution) ||
+      if (! isfinite (xresolution) ||
           xresolution < GIMP_MIN_RESOLUTION || xresolution > GIMP_MAX_RESOLUTION ||
-          ! FINITE (yresolution) ||
+          ! isfinite (yresolution) ||
           yresolution < GIMP_MIN_RESOLUTION || yresolution > GIMP_MAX_RESOLUTION)
         {
           g_set_error_literal (error, GIMP_PDB_ERROR,
@@ -2591,9 +2578,9 @@ image_get_unit_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  GimpUnit unit = 0;
+  GimpUnit *unit = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -2604,7 +2591,7 @@ image_get_unit_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    g_value_set_int (gimp_value_array_index (return_vals, 1), unit);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), unit);
 
   return return_vals;
 }
@@ -2619,10 +2606,10 @@ image_set_unit_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  GimpUnit unit;
+  GimpUnit *unit;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  unit = g_value_get_int (gimp_value_array_index (args, 1));
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  unit = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
@@ -2644,9 +2631,9 @@ image_get_tattoo_state_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 tattoo_state = 0;
+  guint tattoo_state = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -2672,9 +2659,9 @@ image_set_tattoo_state_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  gint32 tattoo_state;
+  guint tattoo_state;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   tattoo_state = g_value_get_uint (gimp_value_array_index (args, 1));
 
   if (success)
@@ -2697,10 +2684,10 @@ image_get_layer_by_tattoo_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 tattoo;
+  guint tattoo;
   GimpLayer *layer = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   tattoo = g_value_get_uint (gimp_value_array_index (args, 1));
 
   if (success)
@@ -2712,7 +2699,7 @@ image_get_layer_by_tattoo_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_layer (gimp_value_array_index (return_vals, 1), layer);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), layer);
 
   return return_vals;
 }
@@ -2728,10 +2715,10 @@ image_get_channel_by_tattoo_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 tattoo;
+  guint tattoo;
   GimpChannel *channel = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   tattoo = g_value_get_uint (gimp_value_array_index (args, 1));
 
   if (success)
@@ -2743,38 +2730,38 @@ image_get_channel_by_tattoo_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_channel (gimp_value_array_index (return_vals, 1), channel);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), channel);
 
   return return_vals;
 }
 
 static GimpValueArray *
-image_get_vectors_by_tattoo_invoker (GimpProcedure         *procedure,
-                                     Gimp                  *gimp,
-                                     GimpContext           *context,
-                                     GimpProgress          *progress,
-                                     const GimpValueArray  *args,
-                                     GError               **error)
+image_get_path_by_tattoo_invoker (GimpProcedure         *procedure,
+                                  Gimp                  *gimp,
+                                  GimpContext           *context,
+                                  GimpProgress          *progress,
+                                  const GimpValueArray  *args,
+                                  GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 tattoo;
-  GimpVectors *vectors = NULL;
+  guint tattoo;
+  GimpPath *path = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   tattoo = g_value_get_uint (gimp_value_array_index (args, 1));
 
   if (success)
     {
-      vectors = gimp_image_get_vectors_by_tattoo (image, tattoo);
+      path = gimp_image_get_path_by_tattoo (image, tattoo);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_vectors (gimp_value_array_index (return_vals, 1), vectors);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), path);
 
   return return_vals;
 }
@@ -2793,7 +2780,7 @@ image_get_layer_by_name_invoker (GimpProcedure         *procedure,
   const gchar *name;
   GimpLayer *layer = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   name = g_value_get_string (gimp_value_array_index (args, 1));
 
   if (success)
@@ -2805,7 +2792,7 @@ image_get_layer_by_name_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_layer (gimp_value_array_index (return_vals, 1), layer);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), layer);
 
   return return_vals;
 }
@@ -2824,7 +2811,7 @@ image_get_channel_by_name_invoker (GimpProcedure         *procedure,
   const gchar *name;
   GimpChannel *channel = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   name = g_value_get_string (gimp_value_array_index (args, 1));
 
   if (success)
@@ -2836,38 +2823,38 @@ image_get_channel_by_name_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_channel (gimp_value_array_index (return_vals, 1), channel);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), channel);
 
   return return_vals;
 }
 
 static GimpValueArray *
-image_get_vectors_by_name_invoker (GimpProcedure         *procedure,
-                                   Gimp                  *gimp,
-                                   GimpContext           *context,
-                                   GimpProgress          *progress,
-                                   const GimpValueArray  *args,
-                                   GError               **error)
+image_get_path_by_name_invoker (GimpProcedure         *procedure,
+                                Gimp                  *gimp,
+                                GimpContext           *context,
+                                GimpProgress          *progress,
+                                const GimpValueArray  *args,
+                                GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
   const gchar *name;
-  GimpVectors *vectors = NULL;
+  GimpPath *path = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   name = g_value_get_string (gimp_value_array_index (args, 1));
 
   if (success)
     {
-      vectors = gimp_image_get_vectors_by_name (image, name);
+      path = gimp_image_get_path_by_name (image, name);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_vectors (gimp_value_array_index (return_vals, 1), vectors);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), path);
 
   return return_vals;
 }
@@ -2884,7 +2871,7 @@ image_attach_parasite_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   const GimpParasite *parasite;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   parasite = g_value_get_boxed (gimp_value_array_index (args, 1));
 
   if (success)
@@ -2911,7 +2898,7 @@ image_detach_parasite_invoker (GimpProcedure         *procedure,
   GimpImage *image;
   const gchar *name;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   name = g_value_get_string (gimp_value_array_index (args, 1));
 
   if (success)
@@ -2937,7 +2924,7 @@ image_get_parasite_invoker (GimpProcedure         *procedure,
   const gchar *name;
   GimpParasite *parasite = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   name = g_value_get_string (gimp_value_array_index (args, 1));
 
   if (success)
@@ -2968,26 +2955,70 @@ image_get_parasite_list_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 num_parasites = 0;
   gchar **parasites = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      parasites = gimp_image_parasite_list (image, &num_parasites);
+      parasites = gimp_image_parasite_list (image);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    {
-      g_value_set_int (gimp_value_array_index (return_vals, 1), num_parasites);
-      gimp_value_take_stringarray (gimp_value_array_index (return_vals, 2), parasites, num_parasites);
-    }
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), parasites);
 
   return return_vals;
+}
+
+static GimpValueArray *
+image_policy_rotate_invoker (GimpProcedure         *procedure,
+                             Gimp                  *gimp,
+                             GimpContext           *context,
+                             GimpProgress          *progress,
+                             const GimpValueArray  *args,
+                             GError               **error)
+{
+  gboolean success = TRUE;
+  GimpImage *image;
+  gboolean interactive;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  interactive = g_value_get_boolean (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      gimp_image_import_rotation_metadata (image, context, progress, interactive);
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
+image_policy_color_profile_invoker (GimpProcedure         *procedure,
+                                    Gimp                  *gimp,
+                                    GimpContext           *context,
+                                    GimpProgress          *progress,
+                                    const GimpValueArray  *args,
+                                    GError               **error)
+{
+  gboolean success = TRUE;
+  GimpImage *image;
+  gboolean interactive;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  interactive = g_value_get_boolean (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      gimp_image_import_color_profile (image, context, progress, interactive);
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
 }
 
 void
@@ -2996,25 +3027,25 @@ register_image_procs (GimpPDB *pdb)
   GimpProcedure *procedure;
 
   /*
-   * gimp-image-is-valid
+   * gimp-image-id-is-valid
    */
-  procedure = gimp_procedure_new (image_is_valid_invoker);
+  procedure = gimp_procedure_new (image_id_is_valid_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-is-valid");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-is-valid",
-                                     "Returns TRUE if the image is valid.",
-                                     "This procedure checks if the given image ID is valid and refers to an existing image.",
-                                     "Sven Neumann <sven@gimp.org>",
-                                     "Sven Neumann",
-                                     "2007",
-                                     NULL);
+                               "gimp-image-id-is-valid");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns TRUE if the image ID is valid.",
+                                  "This procedure checks if the given image ID is valid and refers to an existing image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Sven Neumann <sven@gimp.org>",
+                                         "Sven Neumann",
+                                         "2007");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image to check",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
+                               g_param_spec_int ("image-id",
+                                                 "image id",
+                                                 "The image ID to check",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("valid",
                                                          "valid",
@@ -3025,61 +3056,56 @@ register_image_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-image-list
+   * gimp-get-images
    */
-  procedure = gimp_procedure_new (image_list_invoker);
+  procedure = gimp_procedure_new (get_images_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-list");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-list",
-                                     "Returns the list of images currently open.",
-                                     "This procedure returns the list of images currently open in GIMP.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-get-images");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the list of images currently open.",
+                                  "This procedure returns the list of images currently open in GIMP.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-images",
-                                                          "num images",
-                                                          "The number of images currently open",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32_array ("image-ids",
-                                                                "image ids",
-                                                                "The list of images currently open. The returned value must be freed with g_free()",
-                                                                GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_core_object_array ("images",
+                                                                      "images",
+                                                                      "The list of images currently open.",
+                                                                      GIMP_TYPE_IMAGE,
+                                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-new
    */
-  procedure = gimp_procedure_new (image_new_invoker);
+  procedure = gimp_procedure_new (image_new_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-new");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-new",
-                                     "Creates a new image with the specified width, height, and type.",
-                                     "Creates a new image, undisplayed, with the specified extents and type. A layer should be created and added before this image is displayed, or subsequent calls to 'gimp-display-new' with this image as an argument will fail. Layers can be created using the 'gimp-layer-new' commands. They can be added to an image using the 'gimp-image-insert-layer' command.\n"
-                                     "\n"
-                                     "If your image's type if INDEXED, a colormap must also be added with 'gimp-image-set-colormap'. An indexed image without a colormap will output unexpected colors.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Creates a new image with the specified width, height, and type.",
+                                  "Creates a new image, undisplayed, with the specified extents and type. A layer should be created and added before this image is displayed, or subsequent calls to 'gimp-display-new' with this image as an argument will fail. Layers can be created using the 'gimp-layer-new' commands. They can be added to an image using the 'gimp-image-insert-layer' command.\n"
+                                  "\n"
+                                  "If your image's type if INDEXED, a palette must also be set with [method@Gimp.Image.set_palette]. An indexed image without a palette will output unexpected colors.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("width",
-                                                      "width",
-                                                      "The width of the image",
-                                                      1, GIMP_MAX_IMAGE_SIZE, 1,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("width",
+                                                 "width",
+                                                 "The width of the image",
+                                                 1, GIMP_MAX_IMAGE_SIZE, 1,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("height",
-                                                      "height",
-                                                      "The height of the image",
-                                                      1, GIMP_MAX_IMAGE_SIZE, 1,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("height",
+                                                 "height",
+                                                 "The height of the image",
+                                                 1, GIMP_MAX_IMAGE_SIZE, 1,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("type",
                                                   "type",
@@ -3088,40 +3114,40 @@ register_image_procs (GimpPDB *pdb)
                                                   GIMP_RGB,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_image_id ("image",
-                                                             "image",
-                                                             "The ID of the newly created image",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_image ("image",
+                                                          "image",
+                                                          "The newly created image",
+                                                          FALSE,
+                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-new-with-precision
    */
-  procedure = gimp_procedure_new (image_new_with_precision_invoker);
+  procedure = gimp_procedure_new (image_new_with_precision_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-new-with-precision");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-new-with-precision",
-                                     "Creates a new image with the specified width, height, type and precision.",
-                                     "Creates a new image, undisplayed with the specified extents, type and precision. Indexed images can only be created at GIMP_PRECISION_U8_GAMMA precision. See 'gimp-image-new' for further details.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2012",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Creates a new image with the specified width, height, type and precision.",
+                                  "Creates a new image, undisplayed with the specified extents, type and precision. Indexed images can only be created at GIMP_PRECISION_U8_NON_LINEAR precision. See 'gimp-image-new' for further details.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2012");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("width",
-                                                      "width",
-                                                      "The width of the image",
-                                                      1, GIMP_MAX_IMAGE_SIZE, 1,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("width",
+                                                 "width",
+                                                 "The width of the image",
+                                                 1, GIMP_MAX_IMAGE_SIZE, 1,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("height",
-                                                      "height",
-                                                      "The height of the image",
-                                                      1, GIMP_MAX_IMAGE_SIZE, 1,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("height",
+                                                 "height",
+                                                 "The height of the image",
+                                                 1, GIMP_MAX_IMAGE_SIZE, 1,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("type",
                                                   "type",
@@ -3137,86 +3163,86 @@ register_image_procs (GimpPDB *pdb)
                                                   GIMP_PRECISION_U8_LINEAR,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_image_id ("image",
-                                                             "image",
-                                                             "The ID of the newly created image",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_image ("image",
+                                                          "image",
+                                                          "The newly created image",
+                                                          FALSE,
+                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-duplicate
    */
-  procedure = gimp_procedure_new (image_duplicate_invoker);
+  procedure = gimp_procedure_new (image_duplicate_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-duplicate");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-duplicate",
-                                     "Duplicate the specified image",
-                                     "This procedure duplicates the specified image, copying all layers, channels, and image information.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1997",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Duplicate the specified image",
+                                  "This procedure duplicates the specified image, copying all layers, channels, and image information.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1997");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_image_id ("new-image",
-                                                             "new image",
-                                                             "The new, duplicated image",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_image ("new-image",
+                                                          "new image",
+                                                          "The new, duplicated image",
+                                                          FALSE,
+                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-delete
    */
-  procedure = gimp_procedure_new (image_delete_invoker);
+  procedure = gimp_procedure_new (image_delete_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-delete");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-delete",
-                                     "Delete the specified image.",
-                                     "If there are no displays associated with this image it will be deleted. This means that you can not delete an image through the PDB that was created by the user. If the associated display was however created through the PDB and you know the display ID, you may delete the display. Removal of the last associated display will then delete the image.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Delete the specified image.",
+                                  "If there are no displays associated with this image it will be deleted. This means that you can not delete an image through the PDB that was created by the user. If the associated display was however created through the PDB and you know the display ID, you may delete the display. Removal of the last associated display will then delete the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-base-type
+   * gimp-image-get-base-type
    */
-  procedure = gimp_procedure_new (image_base_type_invoker);
+  procedure = gimp_procedure_new (image_get_base_type_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-base-type");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-base-type",
-                                     "Get the base type of the image.",
-                                     "This procedure returns the image's base type. Layers in the image must be of this subtype, but can have an optional alpha channel.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-image-get-base-type");
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the base type of the image.",
+                                  "This procedure returns the image's base type. Layers in the image must be of this subtype, but can have an optional alpha channel.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_enum ("base-type",
                                                       "base type",
@@ -3230,23 +3256,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-precision
    */
-  procedure = gimp_procedure_new (image_get_precision_invoker);
+  procedure = gimp_procedure_new (image_get_precision_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-precision");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-precision",
-                                     "Get the precision of the image.",
-                                     "This procedure returns the image's precision.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2012",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the precision of the image.",
+                                  "This procedure returns the image's precision.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2012");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_enum ("precision",
                                                       "precision",
@@ -3260,23 +3286,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-default-new-layer-mode
    */
-  procedure = gimp_procedure_new (image_get_default_new_layer_mode_invoker);
+  procedure = gimp_procedure_new (image_get_default_new_layer_mode_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-default-new-layer-mode");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-default-new-layer-mode",
-                                     "Get the default mode for newly created layers of this image.",
-                                     "Returns the default mode for newly created layers of this image.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2017",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the default mode for newly created layers of this image.",
+                                  "Returns the default mode for newly created layers of this image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2017");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_enum ("mode",
                                                       "mode",
@@ -3288,324 +3314,260 @@ register_image_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-image-width
+   * gimp-image-get-width
    */
-  procedure = gimp_procedure_new (image_width_invoker);
+  procedure = gimp_procedure_new (image_get_width_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-width");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-width",
-                                     "Return the width of the image",
-                                     "This procedure returns the image's width. This value is independent of any of the layers in this image. This is the \"canvas\" width.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-image-get-width");
+  gimp_procedure_set_static_help (procedure,
+                                  "Return the width of the image",
+                                  "This procedure returns the image's width. This value is independent of any of the layers in this image. This is the \"canvas\" width.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("width",
-                                                          "width",
-                                                          "The image's width",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("width",
+                                                     "width",
+                                                     "The image's width",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-height
+   * gimp-image-get-height
    */
-  procedure = gimp_procedure_new (image_height_invoker);
+  procedure = gimp_procedure_new (image_get_height_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-height");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-height",
-                                     "Return the height of the image",
-                                     "This procedure returns the image's height. This value is independent of any of the layers in this image. This is the \"canvas\" height.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-image-get-height");
+  gimp_procedure_set_static_help (procedure,
+                                  "Return the height of the image",
+                                  "This procedure returns the image's height. This value is independent of any of the layers in this image. This is the \"canvas\" height.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("height",
-                                                          "height",
-                                                          "The image's height",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-free-shadow
-   */
-  procedure = gimp_procedure_new (image_free_shadow_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-free-shadow");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-free-shadow",
-                                     "Deprecated: Use 'gimp-drawable-free-shadow' instead.",
-                                     "Deprecated: Use 'gimp-drawable-free-shadow' instead.",
-                                     "",
-                                     "",
-                                     "",
-                                     "gimp-drawable-free-shadow");
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("height",
+                                                     "height",
+                                                     "The image's height",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-get-layers
    */
-  procedure = gimp_procedure_new (image_get_layers_invoker);
+  procedure = gimp_procedure_new (image_get_layers_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-layers");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-layers",
-                                     "Returns the list of layers contained in the specified image.",
-                                     "This procedure returns the list of layers contained in the specified image. The order of layers is from topmost to bottommost.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the list of root layers contained in the specified image.",
+                                  "This procedure returns the list of root layers contained in the specified image. The order of layers is from topmost to bottommost.\n"
+                                  "Note that this is not the full list of layers, but only the root layers, i.e. layers with no parents themselves. If you need all layers, it is up to you to verify that any of these layers is a group layer with 'gimp-item-is-group' and to obtain its children with 'gimp-item-get-children' (possibly recursively checking if these have children too).",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-layers",
-                                                          "num layers",
-                                                          "The number of layers contained in the image",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32_array ("layer-ids",
-                                                                "layer ids",
-                                                                "The list of layers contained in the image. The returned value must be freed with g_free()",
-                                                                GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_core_object_array ("layers",
+                                                                      "layers",
+                                                                      "The list of layers contained in the image.",
+                                                                      GIMP_TYPE_LAYER,
+                                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-get-channels
    */
-  procedure = gimp_procedure_new (image_get_channels_invoker);
+  procedure = gimp_procedure_new (image_get_channels_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-channels");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-channels",
-                                     "Returns the list of channels contained in the specified image.",
-                                     "This procedure returns the list of channels contained in the specified image. This does not include the selection mask, or layer masks. The order is from topmost to bottommost. Note that \"channels\" are custom channels and do not include the image's color components.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the list of channels contained in the specified image.",
+                                  "This procedure returns the list of channels contained in the specified image. This does not include the selection mask, or layer masks. The order is from topmost to bottommost. Note that \"channels\" are custom channels and do not include the image's color components.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-channels",
-                                                          "num channels",
-                                                          "The number of channels contained in the image",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32_array ("channel-ids",
-                                                                "channel ids",
-                                                                "The list of channels contained in the image. The returned value must be freed with g_free()",
-                                                                GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_core_object_array ("channels",
+                                                                      "channels",
+                                                                      "The list of channels contained in the image.",
+                                                                      GIMP_TYPE_CHANNEL,
+                                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-get-vectors
+   * gimp-image-get-paths
    */
-  procedure = gimp_procedure_new (image_get_vectors_invoker);
+  procedure = gimp_procedure_new (image_get_paths_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-vectors");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-vectors",
-                                     "Returns the list of vectors contained in the specified image.",
-                                     "This procedure returns the list of vectors contained in the specified image.",
-                                     "Simon Budig",
-                                     "Simon Budig",
-                                     "2005",
-                                     NULL);
+                               "gimp-image-get-paths");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the list of paths contained in the specified image.",
+                                  "This procedure returns the list of paths contained in the specified image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Simon Budig",
+                                         "Simon Budig",
+                                         "2005");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-vectors",
-                                                          "num vectors",
-                                                          "The number of vectors contained in the image",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32_array ("vector-ids",
-                                                                "vector ids",
-                                                                "The list of vectors contained in the image. The returned value must be freed with g_free()",
-                                                                GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-get-active-drawable
-   */
-  procedure = gimp_procedure_new (image_get_active_drawable_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-active-drawable");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-active-drawable",
-                                     "Get the image's active drawable",
-                                     "This procedure returns the ID of the image's active drawable. This can be either a layer, a channel, or a layer mask. The active drawable is specified by the active image channel. If that is -1, then by the active image layer. If the active image layer has a layer mask and the layer mask is in edit mode, then the layer mask is the active drawable.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_drawable_id ("drawable",
-                                                                "drawable",
-                                                                "The active drawable",
-                                                                pdb->gimp, FALSE,
-                                                                GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_core_object_array ("paths",
+                                                                      "paths",
+                                                                      "The list of paths contained in the image.",
+                                                                      GIMP_TYPE_PATH,
+                                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-unset-active-channel
    */
-  procedure = gimp_procedure_new (image_unset_active_channel_invoker);
+  procedure = gimp_procedure_new (image_unset_active_channel_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-unset-active-channel");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-unset-active-channel",
-                                     "Unsets the active channel in the specified image.",
-                                     "If an active channel exists, it is unset. There then exists no active channel, and if desired, one can be set through a call to 'Set Active Channel'. No error is returned in the case of no existing active channel.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Unsets the active channel in the specified image.",
+                                  "If an active channel exists, it is unset. There then exists no active channel, and if desired, one can be set through a call to 'Set Active Channel'. No error is returned in the case of no existing active channel.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-get-floating-sel
    */
-  procedure = gimp_procedure_new (image_get_floating_sel_invoker);
+  procedure = gimp_procedure_new (image_get_floating_sel_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-floating-sel");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-floating-sel",
-                                     "Return the floating selection of the image.",
-                                     "This procedure returns the image's floating selection, if it exists. If it doesn't exist, -1 is returned as the layer ID.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Return the floating selection of the image.",
+                                  "This procedure returns the image's floating selection, if it exists. If it doesn't exist, -1 is returned as the layer ID.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_layer_id ("floating-sel",
-                                                             "floating sel",
-                                                             "The image's floating selection",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_layer ("floating-sel",
+                                                          "floating sel",
+                                                          "The image's floating selection",
+                                                          FALSE,
+                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-floating-sel-attached-to
    */
-  procedure = gimp_procedure_new (image_floating_sel_attached_to_invoker);
+  procedure = gimp_procedure_new (image_floating_sel_attached_to_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-floating-sel-attached-to");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-floating-sel-attached-to",
-                                     "Return the drawable the floating selection is attached to.",
-                                     "This procedure returns the drawable the image's floating selection is attached to, if it exists. If it doesn't exist, -1 is returned as the drawable ID.",
-                                     "Wolfgang Hofer",
-                                     "Wolfgang Hofer",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Return the drawable the floating selection is attached to.",
+                                  "This procedure returns the drawable the image's floating selection is attached to, if it exists. If it doesn't exist, -1 is returned as the drawable ID.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Wolfgang Hofer",
+                                         "Wolfgang Hofer",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_drawable_id ("drawable",
-                                                                "drawable",
-                                                                "The drawable the floating selection is attached to",
-                                                                pdb->gimp, FALSE,
-                                                                GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_drawable ("drawable",
+                                                             "drawable",
+                                                             "The drawable the floating selection is attached to",
+                                                             FALSE,
+                                                             GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-pick-color
    */
-  procedure = gimp_procedure_new (image_pick_color_invoker);
+  procedure = gimp_procedure_new (image_pick_color_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-pick-color");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-pick-color",
-                                     "Determine the color at the given drawable coordinates",
-                                     "This tool determines the color at the specified coordinates. The returned color is an RGB triplet even for grayscale and indexed drawables. If the coordinates lie outside of the extents of the specified drawable, then an error is returned. If the drawable has an alpha channel, the algorithm examines the alpha value of the drawable at the coordinates. If the alpha value is completely transparent (0), then an error is returned. If the sample_merged parameter is TRUE, the data of the composite image will be used instead of that for the specified drawable. This is equivalent to sampling for colors after merging all visible layers. In the case of a merged sampling, the supplied drawable is ignored.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Determine the color at the given coordinates",
+                                  "This tool determines the color at the specified coordinates. The returned color is an RGB triplet even for grayscale and indexed drawables. If the coordinates lie outside of the extents of the specified drawables, then an error is returned. All drawables must belong to the image and be of the same type.\n"
+                                  "If only one drawable is given and it has an alpha channel, the algorithm examines the alpha value of the drawable at the coordinates. If the alpha value is completely transparent (0), then an error is returned. With several drawables specified, the composite image with only these drawables is used.\n"
+                                  "If the sample_merged parameter is TRUE, the data of the composite image will be used instead of that for the specified drawables. This is equivalent to sampling for colors after merging all visible layers. In the case of a merged sampling, the supplied drawables are ignored.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable to pick from",
-                                                            pdb->gimp, TRUE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_core_object_array ("drawables",
+                                                                  "drawables",
+                                                                  "The drawables to pick from",
+                                                                  GIMP_TYPE_DRAWABLE,
+                                                                  GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_double ("x",
                                                     "x",
@@ -3621,7 +3583,7 @@ register_image_procs (GimpPDB *pdb)
   gimp_procedure_add_argument (procedure,
                                g_param_spec_boolean ("sample-merged",
                                                      "sample merged",
-                                                     "Use the composite image, not the drawable",
+                                                     "Use the composite image, not the drawables",
                                                      FALSE,
                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
@@ -3637,242 +3599,172 @@ register_image_procs (GimpPDB *pdb)
                                                     0, G_MAXDOUBLE, 0,
                                                     GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_rgb ("color",
-                                                        "color",
-                                                        "The return color",
-                                                        TRUE,
-                                                        NULL,
-                                                        GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_color ("color",
+                                                          "color",
+                                                          "The return color",
+                                                          TRUE,
+                                                          NULL,
+                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-pick-correlate-layer
    */
-  procedure = gimp_procedure_new (image_pick_correlate_layer_invoker);
+  procedure = gimp_procedure_new (image_pick_correlate_layer_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-pick-correlate-layer");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-pick-correlate-layer",
-                                     "Find the layer visible at the specified coordinates.",
-                                     "This procedure finds the layer which is visible at the specified coordinates. Layers which do not qualify are those whose extents do not pass within the specified coordinates, or which are transparent at the specified coordinates. This procedure will return -1 if no layer is found.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Find the layer visible at the specified coordinates.",
+                                  "This procedure finds the layer which is visible at the specified coordinates. Layers which do not qualify are those whose extents do not pass within the specified coordinates, or which are transparent at the specified coordinates. This procedure will return -1 if no layer is found.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("x",
-                                                      "x",
-                                                      "The x coordinate for the pick",
-                                                      G_MININT32, G_MAXINT32, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("y",
-                                                      "y",
-                                                      "The y coordinate for the pick",
-                                                      G_MININT32, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("x",
+                                                 "x",
+                                                 "The x coordinate for the pick",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("y",
+                                                 "y",
+                                                 "The y coordinate for the pick",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_layer_id ("layer",
-                                                             "layer",
-                                                             "The layer found at the specified coordinates",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-add-layer
-   */
-  procedure = gimp_procedure_new (image_add_layer_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-add-layer");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-add-layer",
-                                     "Deprecated: Use 'gimp-image-insert-layer' instead.",
-                                     "Deprecated: Use 'gimp-image-insert-layer' instead.",
-                                     "",
-                                     "",
-                                     "",
-                                     "gimp-image-insert-layer");
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_layer_id ("layer",
-                                                         "layer",
-                                                         "The layer",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("position",
-                                                      "position",
-                                                      "The layer position",
-                                                      G_MININT32, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_layer ("layer",
+                                                          "layer",
+                                                          "The layer found at the specified coordinates",
+                                                          FALSE,
+                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-insert-layer
    */
-  procedure = gimp_procedure_new (image_insert_layer_invoker);
+  procedure = gimp_procedure_new (image_insert_layer_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-insert-layer");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-insert-layer",
-                                     "Add the specified layer to the image.",
-                                     "This procedure adds the specified layer to the image at the given position. If the specified parent is a valid layer group (See 'gimp-item-is-group' and 'gimp-layer-group-new') then the layer is added inside the group. If the parent is 0, the layer is added inside the main stack, outside of any group. The position argument specifies the location of the layer inside the stack (or the group, if a valid parent was supplied), starting from the top (0) and increasing. If the position is specified as -1 and the parent is specified as 0, then the layer is inserted above the active layer, or inside the group if the active layer is a layer group. The layer type must be compatible with the image base type.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Add the specified layer to the image.",
+                                  "This procedure adds the specified layer to the image at the given position. If the specified parent is a valid layer group (See 'gimp-item-is-group' and 'gimp-layer-group-new') then the layer is added inside the group. If the parent is 0, the layer is added inside the main stack, outside of any group. The position argument specifies the location of the layer inside the stack (or the group, if a valid parent was supplied), starting from the top (0) and increasing. If the position is specified as -1 and the parent is specified as 0, then the layer is inserted above the active layer, or inside the group if the active layer is a layer group. The layer type must be compatible with the image base type.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_layer_id ("layer",
-                                                         "layer",
-                                                         "The layer",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_layer_id ("parent",
-                                                         "parent",
-                                                         "The parent layer",
-                                                         pdb->gimp, TRUE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("position",
-                                                      "position",
-                                                      "The layer position",
-                                                      G_MININT32, G_MAXINT32, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_layer ("layer",
+                                                      "layer",
+                                                      "The layer",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_layer ("parent",
+                                                      "parent",
+                                                      "The parent layer",
+                                                      TRUE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("position",
+                                                 "position",
+                                                 "The layer position",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-remove-layer
    */
-  procedure = gimp_procedure_new (image_remove_layer_invoker);
+  procedure = gimp_procedure_new (image_remove_layer_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-remove-layer");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-remove-layer",
-                                     "Remove the specified layer from the image.",
-                                     "This procedure removes the specified layer from the image. If the layer doesn't exist, an error is returned. If there are no layers left in the image, this call will fail. If this layer is the last layer remaining, the image will become empty and have no active layer.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Remove the specified layer from the image.",
+                                  "This procedure removes the specified layer from the image. If the layer doesn't exist, an error is returned. If there are no layers left in the image, this call will fail. If this layer is the last layer remaining, the image will become empty and have no active layer.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_layer_id ("layer",
-                                                         "layer",
-                                                         "The layer",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_layer ("layer",
+                                                      "layer",
+                                                      "The layer",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-freeze-layers
    */
-  procedure = gimp_procedure_new (image_freeze_layers_invoker);
+  procedure = gimp_procedure_new (image_freeze_layers_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-freeze-layers");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-freeze-layers",
-                                     "Freeze the image's layer list.",
-                                     "This procedure freezes the layer list of the image, suppressing any updates to the Layers dialog in response to changes to the image's layers. This can significantly improve performance while applying changes affecting the layer list.\n"
-                                     "\n"
-                                     "Each call to 'gimp-image-freeze-layers' should be matched by a corresponding call to 'gimp-image-thaw-layers', undoing its effects.",
-                                     "Ell",
-                                     "Ell",
-                                     "2018",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Freeze the image's layer list.",
+                                  "This procedure freezes the layer list of the image, suppressing any updates to the Layers dialog in response to changes to the image's layers. This can significantly improve performance while applying changes affecting the layer list.\n"
+                                  "\n"
+                                  "Each call to 'gimp-image-freeze-layers' should be matched by a corresponding call to 'gimp-image-thaw-layers', undoing its effects.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Ell",
+                                         "Ell",
+                                         "2018");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-thaw-layers
    */
-  procedure = gimp_procedure_new (image_thaw_layers_invoker);
+  procedure = gimp_procedure_new (image_thaw_layers_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-thaw-layers");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-thaw-layers",
-                                     "Thaw the image's layer list.",
-                                     "This procedure thaws the layer list of the image, re-enabling updates to the Layers dialog.\n"
-                                     "\n"
-                                     "This procedure should match a corresponding call to 'gimp-image-freeze-layers'.",
-                                     "Ell",
-                                     "Ell",
-                                     "2018",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Thaw the image's layer list.",
+                                  "This procedure thaws the layer list of the image, re-enabling updates to the Layers dialog.\n"
+                                  "\n"
+                                  "This procedure should match a corresponding call to 'gimp-image-freeze-layers'.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Ell",
+                                         "Ell",
+                                         "2018");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-add-channel
-   */
-  procedure = gimp_procedure_new (image_add_channel_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-add-channel");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-add-channel",
-                                     "Deprecated: Use 'gimp-image-insert-channel' instead.",
-                                     "Deprecated: Use 'gimp-image-insert-channel' instead.",
-                                     "",
-                                     "",
-                                     "",
-                                     "gimp-image-insert-channel");
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_channel_id ("channel",
-                                                           "channel",
-                                                           "The channel",
-                                                           pdb->gimp, FALSE,
-                                                           GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("position",
-                                                      "position",
-                                                      "The channel position",
-                                                      G_MININT32, G_MAXINT32, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -3880,519 +3772,660 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-insert-channel
    */
-  procedure = gimp_procedure_new (image_insert_channel_invoker);
+  procedure = gimp_procedure_new (image_insert_channel_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-insert-channel");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-insert-channel",
-                                     "Add the specified channel to the image.",
-                                     "This procedure adds the specified channel to the image at the given position. Since channel groups are not currently supported, the parent argument must always be 0. The position argument specifies the location of the channel inside the stack, starting from the top (0) and increasing. If the position is specified as -1, then the channel is inserted above the active channel.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Add the specified channel to the image.",
+                                  "This procedure adds the specified channel to the image at the given position. Since channel groups are not currently supported, the parent argument must always be 0. The position argument specifies the location of the channel inside the stack, starting from the top (0) and increasing. If the position is specified as -1, then the channel is inserted above the active channel.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_channel_id ("channel",
-                                                           "channel",
-                                                           "The channel",
-                                                           pdb->gimp, FALSE,
-                                                           GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_channel_id ("parent",
-                                                           "parent",
-                                                           "The parent channel",
-                                                           pdb->gimp, TRUE,
-                                                           GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("position",
-                                                      "position",
-                                                      "The channel position",
-                                                      G_MININT32, G_MAXINT32, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_channel ("channel",
+                                                        "channel",
+                                                        "The channel",
+                                                        FALSE,
+                                                        GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_channel ("parent",
+                                                        "parent",
+                                                        "The parent channel",
+                                                        TRUE,
+                                                        GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("position",
+                                                 "position",
+                                                 "The channel position",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-remove-channel
    */
-  procedure = gimp_procedure_new (image_remove_channel_invoker);
+  procedure = gimp_procedure_new (image_remove_channel_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-remove-channel");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-remove-channel",
-                                     "Remove the specified channel from the image.",
-                                     "This procedure removes the specified channel from the image. If the channel doesn't exist, an error is returned.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Remove the specified channel from the image.",
+                                  "This procedure removes the specified channel from the image. If the channel doesn't exist, an error is returned.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_channel_id ("channel",
-                                                           "channel",
-                                                           "The channel",
-                                                           pdb->gimp, FALSE,
-                                                           GIMP_PARAM_READWRITE));
+                               gimp_param_spec_channel ("channel",
+                                                        "channel",
+                                                        "The channel",
+                                                        FALSE,
+                                                        GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-freeze-channels
    */
-  procedure = gimp_procedure_new (image_freeze_channels_invoker);
+  procedure = gimp_procedure_new (image_freeze_channels_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-freeze-channels");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-freeze-channels",
-                                     "Freeze the image's channel list.",
-                                     "This procedure freezes the channel list of the image, suppressing any updates to the Channels dialog in response to changes to the image's channels. This can significantly improve performance while applying changes affecting the channel list.\n"
-                                     "\n"
-                                     "Each call to 'gimp-image-freeze-channels' should be matched by a corresponding call to 'gimp-image-thaw-channels', undoing its effects.",
-                                     "Ell",
-                                     "Ell",
-                                     "2018",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Freeze the image's channel list.",
+                                  "This procedure freezes the channel list of the image, suppressing any updates to the Channels dialog in response to changes to the image's channels. This can significantly improve performance while applying changes affecting the channel list.\n"
+                                  "\n"
+                                  "Each call to 'gimp-image-freeze-channels' should be matched by a corresponding call to 'gimp-image-thaw-channels', undoing its effects.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Ell",
+                                         "Ell",
+                                         "2018");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-thaw-channels
    */
-  procedure = gimp_procedure_new (image_thaw_channels_invoker);
+  procedure = gimp_procedure_new (image_thaw_channels_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-thaw-channels");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-thaw-channels",
-                                     "Thaw the image's channel list.",
-                                     "This procedure thaws the channel list of the image, re-enabling updates to the Channels dialog.\n"
-                                     "\n"
-                                     "This procedure should match a corresponding call to 'gimp-image-freeze-channels'.",
-                                     "Ell",
-                                     "Ell",
-                                     "2018",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Thaw the image's channel list.",
+                                  "This procedure thaws the channel list of the image, re-enabling updates to the Channels dialog.\n"
+                                  "\n"
+                                  "This procedure should match a corresponding call to 'gimp-image-freeze-channels'.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Ell",
+                                         "Ell",
+                                         "2018");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-add-vectors
-   */
-  procedure = gimp_procedure_new (image_add_vectors_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-add-vectors");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-add-vectors",
-                                     "Deprecated: Use 'gimp-image-insert-vectors' instead.",
-                                     "Deprecated: Use 'gimp-image-insert-vectors' instead.",
-                                     "",
-                                     "",
-                                     "",
-                                     "gimp-image-insert-vectors");
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_vectors_id ("vectors",
-                                                           "vectors",
-                                                           "The vectors object",
-                                                           pdb->gimp, FALSE,
-                                                           GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("position",
-                                                      "position",
-                                                      "The vectors objects position",
-                                                      G_MININT32, G_MAXINT32, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-insert-vectors
+   * gimp-image-insert-path
    */
-  procedure = gimp_procedure_new (image_insert_vectors_invoker);
+  procedure = gimp_procedure_new (image_insert_path_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-insert-vectors");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-insert-vectors",
-                                     "Add the specified vectors to the image.",
-                                     "This procedure adds the specified vectors to the image at the given position. Since vectors groups are not currently supported, the parent argument must always be 0. The position argument specifies the location of the vectors inside the stack, starting from the top (0) and increasing. If the position is specified as -1, then the vectors is inserted above the active vectors.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-image-insert-path");
+  gimp_procedure_set_static_help (procedure,
+                                  "Add the specified path to the image.",
+                                  "This procedure adds the specified path to the image at the given position. Since path groups are not currently supported, the parent argument must always be 0. The position argument specifies the location of the path inside the stack, starting from the top (0) and increasing. If the position is specified as -1, then the path is inserted above the active path.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_vectors_id ("vectors",
-                                                           "vectors",
-                                                           "The vectors",
-                                                           pdb->gimp, FALSE,
+                               gimp_param_spec_path ("path",
+                                                     "path",
+                                                     "The path",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_path ("parent",
+                                                     "parent",
+                                                     "The parent path",
+                                                     TRUE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("position",
+                                                 "position",
+                                                 "The path position",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-remove-path
+   */
+  procedure = gimp_procedure_new (image_remove_path_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-remove-path");
+  gimp_procedure_set_static_help (procedure,
+                                  "Remove the specified path from the image.",
+                                  "This procedure removes the specified path from the image. If the path doesn't exist, an error is returned.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Simon Budig",
+                                         "Simon Budig",
+                                         "2005");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_path ("path",
+                                                     "path",
+                                                     "The path object",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-import-paths-from-file
+   */
+  procedure = gimp_procedure_new (image_import_paths_from_file_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-import-paths-from-file");
+  gimp_procedure_set_static_help (procedure,
+                                  "Import paths from an SVG file.",
+                                  "This procedure imports paths from an SVG file. SVG elements other than paths and basic shapes are ignored.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Simon Budig",
+                                         "Simon Budig",
+                                         "2006");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_object ("file",
+                                                    "file",
+                                                    "The SVG file to import.",
+                                                    G_TYPE_FILE,
+                                                    GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boolean ("merge",
+                                                     "merge",
+                                                     "Merge paths into a single path object.",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boolean ("scale",
+                                                     "scale",
+                                                     "Scale the SVG to image dimensions.",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   gimp_param_spec_core_object_array ("paths",
+                                                                      "paths",
+                                                                      "The list of newly created paths",
+                                                                      GIMP_TYPE_PATH,
+                                                                      GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-import-paths-from-string
+   */
+  procedure = gimp_procedure_new (image_import_paths_from_string_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-import-paths-from-string");
+  gimp_procedure_set_static_help (procedure,
+                                  "Import paths from an SVG string.",
+                                  "This procedure works like [method@Gimp.Image.import_paths_from_file] but takes a string rather than reading the SVG from a file. This allows you to write scripts that generate SVG and feed it to GIMP.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Simon Budig",
+                                         "Simon Budig",
+                                         "2006");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_string ("string",
+                                                       "string",
+                                                       "A string that must be a complete and valid SVG document.",
+                                                       TRUE, FALSE, FALSE,
+                                                       NULL,
+                                                       GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("length",
+                                                 "length",
+                                                 "Number of bytes in string or -1 if the string is NULL terminated.",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boolean ("merge",
+                                                     "merge",
+                                                     "Merge paths into a single path object.",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boolean ("scale",
+                                                     "scale",
+                                                     "Scale the SVG to image dimensions.",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   gimp_param_spec_core_object_array ("paths",
+                                                                      "paths",
+                                                                      "The list of newly created paths",
+                                                                      GIMP_TYPE_PATH,
+                                                                      GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-export-path-to-file
+   */
+  procedure = gimp_procedure_new (image_export_path_to_file_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-export-path-to-file");
+  gimp_procedure_set_static_help (procedure,
+                                  "save a path as an SVG file.",
+                                  "This procedure creates an SVG file to save a Path object, that is, a path. The resulting file can be edited using a vector graphics application, or later reloaded into GIMP. Pass %NULL as the 'path' argument to export all paths in the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Bill Skaggs <weskaggs@primate.ucdavis.edu>",
+                                         "Bill Skaggs",
+                                         "2007");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_object ("file",
+                                                    "file",
+                                                    "The SVG file to create.",
+                                                    G_TYPE_FILE,
+                                                    GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_path ("path",
+                                                     "path",
+                                                     "The path object to export, or %NULL for all in the image",
+                                                     TRUE,
+                                                     GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-export-path-to-string
+   */
+  procedure = gimp_procedure_new (image_export_path_to_string_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-export-path-to-string");
+  gimp_procedure_set_static_help (procedure,
+                                  "Save a path as an SVG string.",
+                                  "This procedure works like [method@Gimp.Image.export_path_to_file] but creates a string rather than a file. The string is NULL-terminated and holds a complete XML document. Pass %NULL as the 'path' argument to export all paths in the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Bill Skaggs <weskaggs@primate.ucdavis.edu>",
+                                         "Bill Skaggs",
+                                         "2007");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_path ("path",
+                                                     "path",
+                                                     "The path object to export, or %NULL for all in the image",
+                                                     TRUE,
+                                                     GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
+  gimp_procedure_add_return_value (procedure,
+                                   gimp_param_spec_string ("string",
+                                                           "string",
+                                                           "A string whose contents are a complete SVG document.",
+                                                           FALSE, FALSE, FALSE,
+                                                           NULL,
                                                            GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-freeze-paths
+   */
+  procedure = gimp_procedure_new (image_freeze_paths_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-freeze-paths");
+  gimp_procedure_set_static_help (procedure,
+                                  "Freeze the image's path list.",
+                                  "This procedure freezes the path list of the image, suppressing any updates to the Paths dialog in response to changes to the image's path. This can significantly improve performance while applying changes affecting the path list.\n"
+                                  "\n"
+                                  "Each call to 'gimp-image-freeze-paths' should be matched by a corresponding call to gimp_image_thaw_paths (), undoing its effects.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Ell",
+                                         "Ell",
+                                         "2018");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_vectors_id ("parent",
-                                                           "parent",
-                                                           "The parent vectors",
-                                                           pdb->gimp, TRUE,
-                                                           GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("position",
-                                                      "position",
-                                                      "The vectors position",
-                                                      G_MININT32, G_MAXINT32, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-remove-vectors
+   * gimp-image-thaw-paths
    */
-  procedure = gimp_procedure_new (image_remove_vectors_invoker);
+  procedure = gimp_procedure_new (image_thaw_paths_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-remove-vectors");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-remove-vectors",
-                                     "Remove the specified path from the image.",
-                                     "This procedure removes the specified path from the image. If the path doesn't exist, an error is returned.",
-                                     "Simon Budig",
-                                     "Simon Budig",
-                                     "2005",
-                                     NULL);
+                               "gimp-image-thaw-paths");
+  gimp_procedure_set_static_help (procedure,
+                                  "Thaw the image's path list.",
+                                  "This procedure thaws the path list of the image, re-enabling updates to the Paths dialog.\n"
+                                  "\n"
+                                  "This procedure should match a corresponding call to 'gimp-image-freeze-paths'.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Ell",
+                                         "Ell",
+                                         "2018");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_vectors_id ("vectors",
-                                                           "vectors",
-                                                           "The vectors object",
-                                                           pdb->gimp, FALSE,
-                                                           GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-freeze-vectors
-   */
-  procedure = gimp_procedure_new (image_freeze_vectors_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-freeze-vectors");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-freeze-vectors",
-                                     "Freeze the image's vectors list.",
-                                     "This procedure freezes the vectors list of the image, suppressing any updates to the Paths dialog in response to changes to the image's vectors. This can significantly improve performance while applying changes affecting the vectors list.\n"
-                                     "\n"
-                                     "Each call to 'gimp-image-freeze-vectors' should be matched by a corresponding call to 'gimp-image-thaw-vectors', undoing its effects.",
-                                     "Ell",
-                                     "Ell",
-                                     "2018",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-thaw-vectors
-   */
-  procedure = gimp_procedure_new (image_thaw_vectors_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-thaw-vectors");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-thaw-vectors",
-                                     "Thaw the image's vectors list.",
-                                     "This procedure thaws the vectors list of the image, re-enabling updates to the Paths dialog.\n"
-                                     "\n"
-                                     "This procedure should match a corresponding call to 'gimp-image-freeze-vectors'.",
-                                     "Ell",
-                                     "Ell",
-                                     "2018",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-get-item-position
    */
-  procedure = gimp_procedure_new (image_get_item_position_invoker);
+  procedure = gimp_procedure_new (image_get_item_position_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-item-position");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-item-position",
-                                     "Returns the position of the item in its level of its item tree.",
-                                     "This procedure determines the position of the specified item in its level in its item tree in the image. If the item doesn't exist in the image, or the item is not part of an item tree, an error is returned.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2010",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the position of the item in its level of its item tree.",
+                                  "This procedure determines the position of the specified item in its level in its item tree in the image. If the item doesn't exist in the image, or the item is not part of an item tree, an error is returned.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2010");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("position",
-                                                          "position",
-                                                          "The position of the item in its level in the item tree",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("position",
+                                                     "position",
+                                                     "The position of the item in its level in the item tree",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-raise-item
    */
-  procedure = gimp_procedure_new (image_raise_item_invoker);
+  procedure = gimp_procedure_new (image_raise_item_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-raise-item");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-raise-item",
-                                     "Raise the specified item in its level in its item tree",
-                                     "This procedure raises the specified item one step in the item tree. The procedure call will fail if there is no item above it.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2010",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Raise the specified item in its level in its item tree",
+                                  "This procedure raises the specified item one step in the item tree. The procedure call will fail if there is no item above it.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2010");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item to raise",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item to raise",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-lower-item
    */
-  procedure = gimp_procedure_new (image_lower_item_invoker);
+  procedure = gimp_procedure_new (image_lower_item_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-lower-item");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-lower-item",
-                                     "Lower the specified item in its level in its item tree",
-                                     "This procedure lowers the specified item one step in the item tree. The procedure call will fail if there is no item below it.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2010",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Lower the specified item in its level in its item tree",
+                                  "This procedure lowers the specified item one step in the item tree. The procedure call will fail if there is no item below it.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2010");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item to lower",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item to lower",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-raise-item-to-top
    */
-  procedure = gimp_procedure_new (image_raise_item_to_top_invoker);
+  procedure = gimp_procedure_new (image_raise_item_to_top_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-raise-item-to-top");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-raise-item-to-top",
-                                     "Raise the specified item to the top of its level in its item tree",
-                                     "This procedure raises the specified item to top of its level in the item tree. It will not move the item if there is no item above it.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2010",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Raise the specified item to the top of its level in its item tree",
+                                  "This procedure raises the specified item to top of its level in the item tree. It will not move the item if there is no item above it.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2010");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item to raise to top",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item to raise to top",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-lower-item-to-bottom
    */
-  procedure = gimp_procedure_new (image_lower_item_to_bottom_invoker);
+  procedure = gimp_procedure_new (image_lower_item_to_bottom_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-lower-item-to-bottom");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-lower-item-to-bottom",
-                                     "Lower the specified item to the bottom of its level in its item tree",
-                                     "This procedure lowers the specified item to bottom of its level in the item tree. It will not move the layer if there is no layer below it.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2010",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Lower the specified item to the bottom of its level in its item tree",
+                                  "This procedure lowers the specified item to bottom of its level in the item tree. It will not move the layer if there is no layer below it.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2010");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item to lower to bottom",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item to lower to bottom",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-reorder-item
    */
-  procedure = gimp_procedure_new (image_reorder_item_invoker);
+  procedure = gimp_procedure_new (image_reorder_item_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-reorder-item");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-reorder-item",
-                                     "Reorder the specified item within its item tree",
-                                     "This procedure reorders the specified item within its item tree.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2010",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Reorder the specified item within its item tree",
+                                  "Reorders or moves item within an item tree. Requires parent is %NULL or a GroupLayer, else returns error. When parent is not %NULL and item is in parent, reorders item within parent group. When parent is not %NULL and item is not in parent, moves item into parent group. When parent is %NULL, moves item from current parent to top level.\n"
+                                  "\n"
+                                  "Requires item is in same tree as not %NULL parent, else returns error. Layers, Channels, and Paths are in separate trees.\n"
+                                  "\n"
+                                  "Requires item is not ancestor of parent, else returns error, to preclude cycles.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2010");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item to reorder",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("parent",
-                                                        "parent",
-                                                        "The new parent item",
-                                                        pdb->gimp, TRUE,
-                                                        GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("position",
-                                                      "position",
-                                                      "The new position of the item",
-                                                      G_MININT32, G_MAXINT32, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item to reorder",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_item ("parent",
+                                                     "parent",
+                                                     "The new parent item",
+                                                     TRUE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("position",
+                                                 "position",
+                                                 "The new position of the item",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-flatten
    */
-  procedure = gimp_procedure_new (image_flatten_invoker);
+  procedure = gimp_procedure_new (image_flatten_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-flatten");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-flatten",
-                                     "Flatten all visible layers into a single layer. Discard all invisible layers.",
-                                     "This procedure combines the visible layers in a manner analogous to merging with the CLIP_TO_IMAGE merge type. Non-visible layers are discarded, and the resulting image is stripped of its alpha channel.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Flatten all visible layers into a single layer. Discard all invisible layers.",
+                                  "This procedure combines the visible layers in a manner analogous to merging with the CLIP_TO_IMAGE merge type. Non-visible layers are discarded, and the resulting image is stripped of its alpha channel.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_layer_id ("layer",
-                                                             "layer",
-                                                             "The resulting layer",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_layer ("layer",
+                                                          "layer",
+                                                          "The resulting layer",
+                                                          FALSE,
+                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-merge-visible-layers
    */
-  procedure = gimp_procedure_new (image_merge_visible_layers_invoker);
+  procedure = gimp_procedure_new (image_merge_visible_layers_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-merge-visible-layers");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-merge-visible-layers",
-                                     "Merge the visible image layers into one.",
-                                     "This procedure combines the visible layers into a single layer using the specified merge type. A merge type of EXPAND_AS_NECESSARY expands the final layer to encompass the areas of the visible layers. A merge type of CLIP_TO_IMAGE clips the final layer to the extents of the image. A merge type of CLIP_TO_BOTTOM_LAYER clips the final layer to the size of the bottommost layer.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Merge the visible image layers into one.",
+                                  "This procedure combines the visible layers into a single layer using the specified merge type. A merge type of EXPAND_AS_NECESSARY expands the final layer to encompass the areas of the visible layers. A merge type of CLIP_TO_IMAGE clips the final layer to the extents of the image. A merge type of CLIP_TO_BOTTOM_LAYER clips the final layer to the size of the bottommost layer.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_enum ("merge-type",
                                                      "merge type",
@@ -4403,40 +4436,40 @@ register_image_procs (GimpPDB *pdb)
   gimp_param_spec_enum_exclude_value (GIMP_PARAM_SPEC_ENUM (procedure->args[1]),
                                       GIMP_FLATTEN_IMAGE);
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_layer_id ("layer",
-                                                             "layer",
-                                                             "The resulting layer",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_layer ("layer",
+                                                          "layer",
+                                                          "The resulting layer",
+                                                          FALSE,
+                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-merge-down
    */
-  procedure = gimp_procedure_new (image_merge_down_invoker);
+  procedure = gimp_procedure_new (image_merge_down_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-merge-down");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-merge-down",
-                                     "Merge the layer passed and the first visible layer below.",
-                                     "This procedure combines the passed layer and the first visible layer below it using the specified merge type. A merge type of EXPAND_AS_NECESSARY expands the final layer to encompass the areas of the visible layers. A merge type of CLIP_TO_IMAGE clips the final layer to the extents of the image. A merge type of CLIP_TO_BOTTOM_LAYER clips the final layer to the size of the bottommost layer.",
-                                     "Larry Ewing",
-                                     "Larry Ewing",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Merge the layer passed and the first visible layer below.",
+                                  "This procedure combines the passed layer and the first visible layer below it using the specified merge type. A merge type of EXPAND_AS_NECESSARY expands the final layer to encompass the areas of the visible layers. A merge type of CLIP_TO_IMAGE clips the final layer to the extents of the image. A merge type of CLIP_TO_BOTTOM_LAYER clips the final layer to the size of the bottommost layer.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Larry Ewing",
+                                         "Larry Ewing",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_layer_id ("merge-layer",
-                                                         "merge layer",
-                                                         "The layer to merge down from",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_layer ("merge-layer",
+                                                      "merge layer",
+                                                      "The layer to merge down from",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_enum ("merge-type",
                                                      "merge type",
@@ -4447,208 +4480,105 @@ register_image_procs (GimpPDB *pdb)
   gimp_param_spec_enum_exclude_value (GIMP_PARAM_SPEC_ENUM (procedure->args[2]),
                                       GIMP_FLATTEN_IMAGE);
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_layer_id ("layer",
-                                                             "layer",
-                                                             "The resulting layer",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-merge-layer-group
-   */
-  procedure = gimp_procedure_new (image_merge_layer_group_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-merge-layer-group");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-merge-layer-group",
-                                     "Merge the passed layer group's layers into one normal layer.",
-                                     "This procedure combines the layers of the passed layer group into a single normal layer, replacing the group.",
-                                     "Ell",
-                                     "Ell",
-                                     "2019",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_layer_id ("layer-group",
-                                                         "layer group",
-                                                         "The layer group to merge",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_layer_id ("layer",
-                                                             "layer",
-                                                             "The resulting layer",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-add-layer-mask
-   */
-  procedure = gimp_procedure_new (image_add_layer_mask_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-add-layer-mask");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-add-layer-mask",
-                                     "Deprecated: Use 'gimp-layer-add-mask' instead.",
-                                     "Deprecated: Use 'gimp-layer-add-mask' instead.",
-                                     "",
-                                     "",
-                                     "",
-                                     "gimp-layer-add-mask");
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_layer_id ("layer",
-                                                         "layer",
-                                                         "The layer to receive the mask",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_layer_mask_id ("mask",
-                                                              "mask",
-                                                              "The mask to add to the layer",
-                                                              pdb->gimp, FALSE,
-                                                              GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-remove-layer-mask
-   */
-  procedure = gimp_procedure_new (image_remove_layer_mask_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-remove-layer-mask");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-remove-layer-mask",
-                                     "Deprecated: Use 'gimp-layer-remove-mask' instead.",
-                                     "Deprecated: Use 'gimp-layer-remove-mask' instead.",
-                                     "",
-                                     "",
-                                     "",
-                                     "gimp-layer-remove-mask");
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_layer_id ("layer",
-                                                         "layer",
-                                                         "The layer from which to remove mask",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               g_param_spec_enum ("mode",
-                                                  "mode",
-                                                  "Removal mode",
-                                                  GIMP_TYPE_MASK_APPLY_MODE,
-                                                  GIMP_MASK_APPLY,
-                                                  GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-get-colormap
-   */
-  procedure = gimp_procedure_new (image_get_colormap_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-colormap");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-colormap",
-                                     "Returns the image's colormap",
-                                     "This procedure returns an actual pointer to the image's colormap, as well as the number of bytes contained in the colormap. The actual number of colors in the transmitted colormap will be 'num-bytes' / 3. If the image is not in Indexed color mode, no colormap is returned.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-bytes",
-                                                          "num bytes",
-                                                          "Number of bytes in the colormap array",
-                                                          0, G_MAXINT32, 0,
+                                   gimp_param_spec_layer ("layer",
+                                                          "layer",
+                                                          "The resulting layer",
+                                                          FALSE,
                                                           GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int8_array ("colormap",
-                                                               "colormap",
-                                                               "The image's colormap. The returned value must be freed with g_free()",
-                                                               GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-set-colormap
+   * gimp-image-get-palette
    */
-  procedure = gimp_procedure_new (image_set_colormap_invoker);
+  procedure = gimp_procedure_new (image_get_palette_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-set-colormap");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-colormap",
-                                     "Sets the entries in the image's colormap.",
-                                     "This procedure sets the entries in the specified image's colormap. The number of entries is specified by the 'num-bytes' parameter and corresponds to the number of INT8 triples that must be contained in the 'colormap' array. The actual number of colors in the transmitted colormap is 'num-bytes' / 3.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-image-get-palette");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the image's colormap",
+                                  "This procedure returns the image's colormap as a %GimpPalette. If the image is not in Indexed color mode, %NULL is returned.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2023");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   gimp_param_spec_palette ("palette",
+                                                            "palette",
+                                                            "The image's colormap palette.",
+                                                            FALSE,
+                                                            NULL,
+                                                            FALSE,
+                                                            GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-set-palette
+   */
+  procedure = gimp_procedure_new (image_set_palette_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-set-palette");
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the image's colormap to a copy of @palette",
+                                  "This procedure changes the image's colormap to an exact copy of @palette and returns the palette of @image.\n"
+                                  "If the image is not in Indexed color mode, nothing happens and %NULL is returned.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2024");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("num-bytes",
-                                                      "num bytes",
-                                                      "Number of bytes in the colormap array",
-                                                      0, 768, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int8_array ("colormap",
-                                                           "colormap",
-                                                           "The new colormap values",
-                                                           GIMP_PARAM_READWRITE));
+                               gimp_param_spec_palette ("new-palette",
+                                                        "new palette",
+                                                        "The palette to copy from.",
+                                                        FALSE,
+                                                        NULL,
+                                                        FALSE,
+                                                        GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   gimp_param_spec_palette ("palette",
+                                                            "palette",
+                                                            "The image's colormap palette.",
+                                                            FALSE,
+                                                            NULL,
+                                                            FALSE,
+                                                            GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-get-metadata
    */
-  procedure = gimp_procedure_new (image_get_metadata_invoker);
+  procedure = gimp_procedure_new (image_get_metadata_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-metadata");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-metadata",
-                                     "Returns the image's metadata.",
-                                     "Returns exif/iptc/xmp metadata from the image.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the image's metadata.",
+                                  "Returns exif/iptc/xmp metadata from the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("metadata-string",
                                                            "metadata string",
@@ -4662,23 +4592,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-set-metadata
    */
-  procedure = gimp_procedure_new (image_set_metadata_invoker);
+  procedure = gimp_procedure_new (image_set_metadata_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-set-metadata");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-metadata",
-                                     "Set the image's metadata.",
-                                     "Sets exif/iptc/xmp metadata on the image.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the image's metadata.",
+                                  "Sets exif/iptc/xmp metadata on the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("metadata-string",
                                                        "metadata string",
@@ -4692,46 +4622,46 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-clean-all
    */
-  procedure = gimp_procedure_new (image_clean_all_invoker);
+  procedure = gimp_procedure_new (image_clean_all_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-clean-all");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-clean-all",
-                                     "Set the image dirty count to 0.",
-                                     "This procedure sets the specified image's dirty count to 0, allowing operations to occur without having a 'dirtied' image. This is especially useful for creating and loading images which should not initially be considered dirty, even though layers must be created, filled, and installed in the image. Note that save plug-ins must NOT call this function themselves after saving the image.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the image dirty count to 0.",
+                                  "This procedure sets the specified image's dirty count to 0, allowing operations to occur without having a 'dirtied' image. This is especially useful for creating and loading images which should not initially be considered dirty, even though layers must be created, filled, and installed in the image. Note that save plug-ins must NOT call this function themselves after saving the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-is-dirty
    */
-  procedure = gimp_procedure_new (image_is_dirty_invoker);
+  procedure = gimp_procedure_new (image_is_dirty_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-is-dirty");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-is-dirty",
-                                     "Checks if the image has unsaved changes.",
-                                     "This procedure checks the specified image's dirty count to see if it needs to be saved. Note that saving the image does not automatically set the dirty count to 0, you need to call 'gimp-image-clean-all' after calling a save procedure to make the image clean.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Checks if the image has unsaved changes.",
+                                  "This procedure checks the specified image's dirty count to see if it needs to be saved. Note that saving the image does not automatically set the dirty count to 0, you need to call 'gimp-image-clean-all' after calling a save procedure to make the image clean.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("dirty",
                                                          "dirty",
@@ -4744,290 +4674,315 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-thumbnail
    */
-  procedure = gimp_procedure_new (image_thumbnail_invoker);
+  procedure = gimp_procedure_new (image_thumbnail_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-thumbnail");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-thumbnail",
-                                     "Get a thumbnail of an image.",
-                                     "This function gets data from which a thumbnail of an image preview can be created. Maximum x or y dimension is 1024 pixels. The pixels are returned in RGB[A] or GRAY[A] format. The bpp return value gives the number of bits per pixel in the image.",
-                                     "Andy Thomas",
-                                     "Andy Thomas",
-                                     "1999",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get a thumbnail of an image.",
+                                  "This function gets data from which a thumbnail of an image preview can be created. Maximum x or y dimension is 1024 pixels. The pixels are returned in RGB[A] or GRAY[A] format. The bpp return value gives the number of bits per pixel in the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Andy Thomas",
+                                         "Andy Thomas",
+                                         "1999");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("width",
-                                                      "width",
-                                                      "The requested thumbnail width",
-                                                      1, 1024, 1,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("height",
-                                                      "height",
-                                                      "The requested thumbnail height",
-                                                      1, 1024, 1,
+                               g_param_spec_int ("width",
+                                                 "width",
+                                                 "The requested thumbnail width",
+                                                 1, 1024, 1,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("height",
+                                                 "height",
+                                                 "The requested thumbnail height",
+                                                 1, 1024, 1,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_int ("actual-width",
+                                                     "actual width",
+                                                     "The previews width",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_int ("actual-height",
+                                                     "actual height",
+                                                     "The previews height",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_int ("bpp",
+                                                     "bpp",
+                                                     "The previews bpp",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_boxed ("thumbnail-data",
+                                                       "thumbnail data",
+                                                       "The thumbnail data",
+                                                       G_TYPE_BYTES,
+                                                       GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-get-selected-layers
+   */
+  procedure = gimp_procedure_new (image_get_selected_layers_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-get-selected-layers");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the specified image's selected layers.",
+                                  "This procedure returns the list of selected layers in the specified image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2020");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("actual-width",
-                                                          "actual width",
-                                                          "The previews width",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("actual-height",
-                                                          "actual height",
-                                                          "The previews height",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("bpp",
-                                                          "bpp",
-                                                          "The previews bpp",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("thumbnail-data-count",
-                                                          "thumbnail data count",
-                                                          "The number of bytes in thumbnail data",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int8_array ("thumbnail-data",
-                                                               "thumbnail data",
-                                                               "The thumbnail data",
-                                                               GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_core_object_array ("layers",
+                                                                      "layers",
+                                                                      "The list of selected layers in the image.",
+                                                                      GIMP_TYPE_LAYER,
+                                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-get-active-layer
+   * gimp-image-set-selected-layers
    */
-  procedure = gimp_procedure_new (image_get_active_layer_invoker);
+  procedure = gimp_procedure_new (image_set_selected_layers_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-active-layer");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-active-layer",
-                                     "Returns the specified image's active layer.",
-                                     "If there is an active layer, its ID will be returned, otherwise, -1. If a channel is currently active, then no layer will be. If a layer mask is active, then this will return the associated layer.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-image-set-selected-layers");
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the specified image's selected layers.",
+                                  "The layers are set as the selected layers in the image. Any previous selected layers or channels are unselected. An exception is a previously existing floating selection, in which case this procedure will return an execution error.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2021");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_core_object_array ("layers",
+                                                                  "layers",
+                                                                  "The list of layers to select",
+                                                                  GIMP_TYPE_LAYER,
+                                                                  GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-get-selected-channels
+   */
+  procedure = gimp_procedure_new (image_get_selected_channels_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-get-selected-channels");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the specified image's selected channels.",
+                                  "This procedure returns the list of selected channels in the specified image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2022");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_layer_id ("active-layer",
-                                                             "active layer",
-                                                             "The active layer",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_core_object_array ("channels",
+                                                                      "channels",
+                                                                      "The list of selected channels in the image.",
+                                                                      GIMP_TYPE_CHANNEL,
+                                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-set-active-layer
+   * gimp-image-set-selected-channels
    */
-  procedure = gimp_procedure_new (image_set_active_layer_invoker);
+  procedure = gimp_procedure_new (image_set_selected_channels_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-set-active-layer");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-active-layer",
-                                     "Sets the specified image's active layer.",
-                                     "If the layer exists, it is set as the active layer in the image. Any previous active layer or channel is set to inactive. An exception is a previously existing floating selection, in which case this procedure will return an execution error.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-image-set-selected-channels");
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the specified image's selected channels.",
+                                  "The channels are set as the selected channels in the image. Any previous selected layers or channels are unselected. An exception is a previously existing floating selection, in which case this procedure will return an execution error.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2022");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_layer_id ("active-layer",
-                                                         "active layer",
-                                                         "The new image active layer",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_core_object_array ("channels",
+                                                                  "channels",
+                                                                  "The list of channels to select",
+                                                                  GIMP_TYPE_CHANNEL,
+                                                                  GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-get-active-channel
+   * gimp-image-get-selected-paths
    */
-  procedure = gimp_procedure_new (image_get_active_channel_invoker);
+  procedure = gimp_procedure_new (image_get_selected_paths_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-active-channel");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-active-channel",
-                                     "Returns the specified image's active channel.",
-                                     "If there is an active channel, this will return the channel ID, otherwise, -1.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-image-get-selected-paths");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the specified image's selected paths.",
+                                  "This procedure returns the list of selected paths in the specified image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2022");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_channel_id ("active-channel",
-                                                               "active channel",
-                                                               "The active channel",
-                                                               pdb->gimp, FALSE,
-                                                               GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_core_object_array ("paths",
+                                                                      "paths",
+                                                                      "The list of selected paths in the image.",
+                                                                      GIMP_TYPE_PATH,
+                                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-set-active-channel
+   * gimp-image-set-selected-paths
    */
-  procedure = gimp_procedure_new (image_set_active_channel_invoker);
+  procedure = gimp_procedure_new (image_set_selected_paths_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-set-active-channel");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-active-channel",
-                                     "Sets the specified image's active channel.",
-                                     "If the channel exists, it is set as the active channel in the image. Any previous active channel or layer is set to inactive. An exception is a previously existing floating selection, in which case this procedure will return an execution error.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-image-set-selected-paths");
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the specified image's selected paths.",
+                                  "The paths are set as the selected paths in the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2022");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_channel_id ("active-channel",
-                                                           "active channel",
-                                                           "The new image active channel",
-                                                           pdb->gimp, FALSE,
-                                                           GIMP_PARAM_READWRITE));
+                               gimp_param_spec_core_object_array ("paths",
+                                                                  "paths",
+                                                                  "The list of paths to select",
+                                                                  GIMP_TYPE_PATH,
+                                                                  GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-get-active-vectors
+   * gimp-image-get-selected-drawables
    */
-  procedure = gimp_procedure_new (image_get_active_vectors_invoker);
+  procedure = gimp_procedure_new (image_get_selected_drawables_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-active-vectors");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-active-vectors",
-                                     "Returns the specified image's active vectors.",
-                                     "If there is an active path, its ID will be returned, otherwise, -1.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-image-get-selected-drawables");
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the image's selected drawables",
+                                  "This procedure returns the list of selected drawable in the specified image. This can be either layers, channels, or a layer mask.\n"
+                                  "The active drawables are the active image channels. If there are none, these are the active image layers. If the active image layer has a layer mask and the layer mask is in edit mode, then the layer mask is the active drawable.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2022");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_vectors_id ("active-vectors",
-                                                               "active vectors",
-                                                               "The active vectors",
-                                                               pdb->gimp, FALSE,
-                                                               GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-set-active-vectors
-   */
-  procedure = gimp_procedure_new (image_set_active_vectors_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-set-active-vectors");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-active-vectors",
-                                     "Sets the specified image's active vectors.",
-                                     "If the path exists, it is set as the active path in the image.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_vectors_id ("active-vectors",
-                                                           "active vectors",
-                                                           "The new image active vectors",
-                                                           pdb->gimp, FALSE,
-                                                           GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_core_object_array ("drawables",
+                                                                      "drawables",
+                                                                      "The list of selected drawables in the image.",
+                                                                      GIMP_TYPE_DRAWABLE,
+                                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-get-selection
    */
-  procedure = gimp_procedure_new (image_get_selection_invoker);
+  procedure = gimp_procedure_new (image_get_selection_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-selection");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-selection",
-                                     "Returns the specified image's selection.",
-                                     "This will always return a valid ID for a selection -- which is represented as a channel internally.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the specified image's selection.",
+                                  "This will always return a valid ID for a selection -- which is represented as a channel internally.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_selection_id ("selection",
-                                                                 "selection",
-                                                                 "The selection channel",
-                                                                 pdb->gimp, FALSE,
-                                                                 GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_selection ("selection",
+                                                              "selection",
+                                                              "The selection channel",
+                                                              FALSE,
+                                                              GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-get-component-active
    */
-  procedure = gimp_procedure_new (image_get_component_active_invoker);
+  procedure = gimp_procedure_new (image_get_component_active_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-component-active");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-component-active",
-                                     "Returns if the specified image's image component is active.",
-                                     "This procedure returns if the specified image's image component (i.e. Red, Green, Blue intensity channels in an RGB image) is active or inactive -- whether or not it can be modified. If the specified component is not valid for the image type, an error is returned.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns if the specified image's image component is active.",
+                                  "This procedure returns if the specified image's image component (i.e. Red, Green, Blue intensity channels in an RGB image) is active or inactive -- whether or not it can be modified. If the specified component is not valid for the image type, an error is returned.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("component",
                                                   "component",
@@ -5047,23 +5002,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-set-component-active
    */
-  procedure = gimp_procedure_new (image_set_component_active_invoker);
+  procedure = gimp_procedure_new (image_set_component_active_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-set-component-active");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-component-active",
-                                     "Sets if the specified image's image component is active.",
-                                     "This procedure sets if the specified image's image component (i.e. Red, Green, Blue intensity channels in an RGB image) is active or inactive -- whether or not it can be modified. If the specified component is not valid for the image type, an error is returned.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets if the specified image's image component is active.",
+                                  "This procedure sets if the specified image's image component (i.e. Red, Green, Blue intensity channels in an RGB image) is active or inactive -- whether or not it can be modified. If the specified component is not valid for the image type, an error is returned.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("component",
                                                   "component",
@@ -5083,23 +5038,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-component-visible
    */
-  procedure = gimp_procedure_new (image_get_component_visible_invoker);
+  procedure = gimp_procedure_new (image_get_component_visible_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-component-visible");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-component-visible",
-                                     "Returns if the specified image's image component is visible.",
-                                     "This procedure returns if the specified image's image component (i.e. Red, Green, Blue intensity channels in an RGB image) is visible or invisible -- whether or not it can be seen. If the specified component is not valid for the image type, an error is returned.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns if the specified image's image component is visible.",
+                                  "This procedure returns if the specified image's image component (i.e. Red, Green, Blue intensity channels in an RGB image) is visible or invisible -- whether or not it can be seen. If the specified component is not valid for the image type, an error is returned.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("component",
                                                   "component",
@@ -5119,23 +5074,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-set-component-visible
    */
-  procedure = gimp_procedure_new (image_set_component_visible_invoker);
+  procedure = gimp_procedure_new (image_set_component_visible_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-set-component-visible");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-component-visible",
-                                     "Sets if the specified image's image component is visible.",
-                                     "This procedure sets if the specified image's image component (i.e. Red, Green, Blue intensity channels in an RGB image) is visible or invisible -- whether or not it can be seen. If the specified component is not valid for the image type, an error is returned.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets if the specified image's image component is visible.",
+                                  "This procedure sets if the specified image's image component (i.e. Red, Green, Blue intensity channels in an RGB image) is visible or invisible -- whether or not it can be seen. If the specified component is not valid for the image type, an error is returned.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("component",
                                                   "component",
@@ -5153,209 +5108,175 @@ register_image_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-image-get-filename
+   * gimp-image-get-file
    */
-  procedure = gimp_procedure_new (image_get_filename_invoker);
+  procedure = gimp_procedure_new (image_get_file_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-filename");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-filename",
-                                     "Returns the specified image's filename.",
-                                     "This procedure returns the specified image's filename in the filesystem encoding. The image has a filename only if it was loaded or imported from a file or has since been saved or exported. Otherwise, this function returns %NULL. See also 'gimp-image-get-uri'.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-image-get-file");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the file for the specified image.",
+                                  "This procedure returns the file associated with the specified image. The image has a file only if it was loaded or imported from a file or has since been saved or exported. Otherwise, this function returns %NULL. See also gimp-image-get-imported-file to get the current file if it was imported from a non-GIMP file format and not yet saved, or gimp-image-get-exported-file if the image has been exported to a non-GIMP file format.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Sven Neumann <sven@gimp.org>",
+                                         "Sven Neumann",
+                                         "2009");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_string ("filename",
-                                                           "filename",
-                                                           "The filename. The returned value must be freed with g_free()",
-                                                           FALSE, FALSE, FALSE,
-                                                           NULL,
-                                                           GIMP_PARAM_READWRITE));
+                                   g_param_spec_object ("file",
+                                                        "file",
+                                                        "The file.",
+                                                        G_TYPE_FILE,
+                                                        GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-set-filename
+   * gimp-image-set-file
    */
-  procedure = gimp_procedure_new (image_set_filename_invoker);
+  procedure = gimp_procedure_new (image_set_file_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-set-filename");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-filename",
-                                     "Sets the specified image's filename.",
-                                     "This procedure sets the specified image's filename. The filename should be in the filesystem encoding.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-image-set-file");
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the specified XCF image's file.",
+                                  "This procedure sets the specified image's file.\n"
+                                  "This is to set the XCF file associated with your image. In particular, do not use this function to set the imported file in file import plug-ins. This is done by the core process.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_string ("filename",
-                                                       "filename",
-                                                       "The new image filename",
-                                                       TRUE, FALSE, FALSE,
-                                                       NULL,
-                                                       GIMP_PARAM_READWRITE));
+                               g_param_spec_object ("file",
+                                                    "file",
+                                                    "The new image file",
+                                                    G_TYPE_FILE,
+                                                    GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-get-uri
+   * gimp-image-get-xcf-file
    */
-  procedure = gimp_procedure_new (image_get_uri_invoker);
+  procedure = gimp_procedure_new (image_get_xcf_file_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-uri");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-uri",
-                                     "Returns the URI for the specified image.",
-                                     "This procedure returns the URI associated with the specified image. The image has an URI only if it was loaded or imported from a file or has since been saved or exported. Otherwise, this function returns %NULL. See also gimp-image-get-imported-uri to get the URI of the current file if it was imported from a non-GIMP file format and not yet saved, or gimp-image-get-exported-uri if the image has been exported to a non-GIMP file format.",
-                                     "Sven Neumann <sven@gimp.org>",
-                                     "Sven Neumann",
-                                     "2009",
-                                     NULL);
+                               "gimp-image-get-xcf-file");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the XCF file for the specified image.",
+                                  "This procedure returns the XCF file associated with the image. If there is no such file, this procedure returns %NULL.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Eric Grivel <gimp@lumenssolutions.com>",
+                                         "Eric Grivel",
+                                         "2011");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_string ("uri",
-                                                           "uri",
-                                                           "The URI. The returned value must be freed with g_free()",
-                                                           FALSE, FALSE, FALSE,
-                                                           NULL,
-                                                           GIMP_PARAM_READWRITE));
+                                   g_param_spec_object ("file",
+                                                        "file",
+                                                        "The imported XCF file.",
+                                                        G_TYPE_FILE,
+                                                        GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-get-xcf-uri
+   * gimp-image-get-imported-file
    */
-  procedure = gimp_procedure_new (image_get_xcf_uri_invoker);
+  procedure = gimp_procedure_new (image_get_imported_file_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-xcf-uri");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-xcf-uri",
-                                     "Returns the XCF URI for the specified image.",
-                                     "This procedure returns the XCF URI associated with the image. If there is no such URI, this procedure returns %NULL.",
-                                     "Eric Grivel <gimp@lumenssolutions.com>",
-                                     "Eric Grivel",
-                                     "2011",
-                                     NULL);
+                               "gimp-image-get-imported-file");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the imported file for the specified image.",
+                                  "This procedure returns the file associated with the specified image if the image was imported from a non-native Gimp format. If the image was not imported, or has since been saved in the native Gimp format, this procedure returns %NULL.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Eric Grivel <gimp@lumenssolutions.com>",
+                                         "Eric Grivel",
+                                         "2011");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_string ("uri",
-                                                           "uri",
-                                                           "The imported URI. The returned value must be freed with g_free()",
-                                                           FALSE, FALSE, FALSE,
-                                                           NULL,
-                                                           GIMP_PARAM_READWRITE));
+                                   g_param_spec_object ("file",
+                                                        "file",
+                                                        "The imported file.",
+                                                        G_TYPE_FILE,
+                                                        GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-get-imported-uri
+   * gimp-image-get-exported-file
    */
-  procedure = gimp_procedure_new (image_get_imported_uri_invoker);
+  procedure = gimp_procedure_new (image_get_exported_file_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-imported-uri");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-imported-uri",
-                                     "Returns the imported URI for the specified image.",
-                                     "This procedure returns the URI associated with the specified image if the image was imported from a non-native Gimp format. If the image was not imported, or has since been saved in the native Gimp format, this procedure returns %NULL.",
-                                     "Eric Grivel <gimp@lumenssolutions.com>",
-                                     "Eric Grivel",
-                                     "2011",
-                                     NULL);
+                               "gimp-image-get-exported-file");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the exported file for the specified image.",
+                                  "This procedure returns the file associated with the specified image if the image was exported a non-native GIMP format. If the image was not exported, this procedure returns %NULL.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Eric Grivel <gimp@lumenssolutions.com>",
+                                         "Eric Grivel",
+                                         "2011");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_string ("uri",
-                                                           "uri",
-                                                           "The imported URI. The returned value must be freed with g_free()",
-                                                           FALSE, FALSE, FALSE,
-                                                           NULL,
-                                                           GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-image-get-exported-uri
-   */
-  procedure = gimp_procedure_new (image_get_exported_uri_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-exported-uri");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-exported-uri",
-                                     "Returns the exported URI for the specified image.",
-                                     "This procedure returns the URI associated with the specified image if the image was exported a non-native GIMP format. If the image was not exported, this procedure returns %NULL.",
-                                     "Eric Grivel <gimp@lumenssolutions.com>",
-                                     "Eric Grivel",
-                                     "2011",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_string ("uri",
-                                                           "uri",
-                                                           "The exported URI. The returned value must be freed with g_free()",
-                                                           FALSE, FALSE, FALSE,
-                                                           NULL,
-                                                           GIMP_PARAM_READWRITE));
+                                   g_param_spec_object ("file",
+                                                        "file",
+                                                        "The exported file.",
+                                                        G_TYPE_FILE,
+                                                        GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-get-name
    */
-  procedure = gimp_procedure_new (image_get_name_invoker);
+  procedure = gimp_procedure_new (image_get_name_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-name");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-name",
-                                     "Returns the specified image's name.",
-                                     "This procedure returns the image's name. If the image has a filename or an URI, then the returned name contains the filename's or URI's base name (the last component of the path). Otherwise it is the translated string \"Untitled\". The returned name is formatted like the image name in the image window title, it may contain '[]', '(imported)' etc. and should only be used to label user interface elements. Never use it to construct filenames.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the specified image's name.",
+                                  "This procedure returns the image's name. If the image has a filename or an URI, then the returned name contains the filename's or URI's base name (the last component of the path). Otherwise it is the translated string \"Untitled\". The returned name is formatted like the image name in the image window title, it may contain '[]', '(imported)' etc. and should only be used to label user interface elements. Never use it to construct filenames.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("name",
                                                            "name",
-                                                           "The name. The returned value must be freed with g_free()",
+                                                           "The name.",
                                                            FALSE, FALSE, FALSE,
                                                            NULL,
                                                            GIMP_PARAM_READWRITE));
@@ -5365,23 +5286,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-resolution
    */
-  procedure = gimp_procedure_new (image_get_resolution_invoker);
+  procedure = gimp_procedure_new (image_get_resolution_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-resolution");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-resolution",
-                                     "Returns the specified image's resolution.",
-                                     "This procedure returns the specified image's resolution in dots per inch. This value is independent of any of the layers in this image.",
-                                     "Austin Donnelly",
-                                     "Austin Donnelly",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the specified image's resolution.",
+                                  "This procedure returns the specified image's resolution in dots per inch. This value is independent of any of the layers in this image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Austin Donnelly",
+                                         "Austin Donnelly",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_double ("xresolution",
                                                         "xresolution",
@@ -5400,23 +5321,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-set-resolution
    */
-  procedure = gimp_procedure_new (image_set_resolution_invoker);
+  procedure = gimp_procedure_new (image_set_resolution_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-set-resolution");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-resolution",
-                                     "Sets the specified image's resolution.",
-                                     "This procedure sets the specified image's resolution in dots per inch. This value is independent of any of the layers in this image. No scaling or resizing is performed.",
-                                     "Austin Donnelly",
-                                     "Austin Donnelly",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the specified image's resolution.",
+                                  "This procedure sets the specified image's resolution in dots per inch. This value is independent of any of the layers in this image. No scaling or resizing is performed.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Austin Donnelly",
+                                         "Austin Donnelly",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_double ("xresolution",
                                                     "xresolution",
@@ -5435,30 +5356,30 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-unit
    */
-  procedure = gimp_procedure_new (image_get_unit_invoker);
+  procedure = gimp_procedure_new (image_get_unit_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-unit");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-unit",
-                                     "Returns the specified image's unit.",
-                                     "This procedure returns the specified image's unit. This value is independent of any of the layers in this image. See the gimp_unit_*() procedure definitions for the valid range of unit IDs and a description of the unit system.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the specified image's unit.",
+                                  "This procedure returns the specified image's unit. This value is independent of any of the layers in this image. See the gimp_unit_*() procedure definitions for the valid range of unit IDs and a description of the unit system.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_unit ("unit",
                                                          "unit",
                                                          "The unit",
-                                                         TRUE,
                                                          FALSE,
-                                                         GIMP_UNIT_PIXEL,
+                                                         FALSE,
+                                                         gimp_unit_inch (),
                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -5466,30 +5387,30 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-set-unit
    */
-  procedure = gimp_procedure_new (image_set_unit_invoker);
+  procedure = gimp_procedure_new (image_set_unit_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-set-unit");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-unit",
-                                     "Sets the specified image's unit.",
-                                     "This procedure sets the specified image's unit. No scaling or resizing is performed. This value is independent of any of the layers in this image. See the gimp_unit_*() procedure definitions for the valid range of unit IDs and a description of the unit system.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the specified image's unit.",
+                                  "This procedure sets the specified image's unit. No scaling or resizing is performed. This value is independent of any of the layers in this image. See the gimp_unit_*() procedure definitions for the valid range of unit IDs and a description of the unit system.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_unit ("unit",
                                                      "unit",
                                                      "The new image unit",
                                                      FALSE,
                                                      FALSE,
-                                                     GIMP_UNIT_INCH,
+                                                     gimp_unit_inch (),
                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
@@ -5497,23 +5418,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-tattoo-state
    */
-  procedure = gimp_procedure_new (image_get_tattoo_state_invoker);
+  procedure = gimp_procedure_new (image_get_tattoo_state_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-tattoo-state");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-tattoo-state",
-                                     "Returns the tattoo state associated with the image.",
-                                     "This procedure returns the tattoo state of the image. Use only by save/load plug-ins that wish to preserve an images tattoo state. Using this function at other times will produce unexpected results.",
-                                     "Andy Thomas",
-                                     "Andy Thomas",
-                                     "2000",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the tattoo state associated with the image.",
+                                  "This procedure returns the tattoo state of the image. Use only by save/load plug-ins that wish to preserve an images tattoo state. Using this function at other times will produce unexpected results.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Andy Thomas",
+                                         "Andy Thomas",
+                                         "2000");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_uint ("tattoo-state",
                                                       "tattoo state",
@@ -5526,23 +5447,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-set-tattoo-state
    */
-  procedure = gimp_procedure_new (image_set_tattoo_state_invoker);
+  procedure = gimp_procedure_new (image_set_tattoo_state_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-set-tattoo-state");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-tattoo-state",
-                                     "Set the tattoo state associated with the image.",
-                                     "This procedure sets the tattoo state of the image. Use only by save/load plug-ins that wish to preserve an images tattoo state. Using this function at other times will produce unexpected results. A full check of uniqueness of states in layers, channels and paths will be performed by this procedure and a execution failure will be returned if this fails. A failure will also be returned if the new tattoo state value is less than the maximum tattoo value from all of the tattoos from the paths, layers and channels. After the image data has been loaded and all the tattoos have been set then this is the last procedure that should be called. If effectively does a status check on the tattoo values that have been set to make sure that all is OK.",
-                                     "Andy Thomas",
-                                     "Andy Thomas",
-                                     "2000",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the tattoo state associated with the image.",
+                                  "This procedure sets the tattoo state of the image. Use only by save/load plug-ins that wish to preserve an images tattoo state. Using this function at other times will produce unexpected results. A full check of uniqueness of states in layers, channels and paths will be performed by this procedure and a execution failure will be returned if this fails. A failure will also be returned if the new tattoo state value is less than the maximum tattoo value from all of the tattoos from the paths, layers and channels. After the image data has been loaded and all the tattoos have been set then this is the last procedure that should be called. If effectively does a status check on the tattoo values that have been set to make sure that all is OK.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Andy Thomas",
+                                         "Andy Thomas",
+                                         "2000");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_uint ("tattoo-state",
                                                   "tattoo state",
@@ -5555,23 +5476,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-layer-by-tattoo
    */
-  procedure = gimp_procedure_new (image_get_layer_by_tattoo_invoker);
+  procedure = gimp_procedure_new (image_get_layer_by_tattoo_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-layer-by-tattoo");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-layer-by-tattoo",
-                                     "Find a layer with a given tattoo in an image.",
-                                     "This procedure returns the layer with the given tattoo in the specified image.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Find a layer with a given tattoo in an image.",
+                                  "This procedure returns the layer with the given tattoo in the specified image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_uint ("tattoo",
                                                   "tattoo",
@@ -5579,34 +5500,34 @@ register_image_procs (GimpPDB *pdb)
                                                   1, G_MAXUINT32, 1,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_layer_id ("layer",
-                                                             "layer",
-                                                             "The layer with the specified tattoo",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_layer ("layer",
+                                                          "layer",
+                                                          "The layer with the specified tattoo",
+                                                          FALSE,
+                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-get-channel-by-tattoo
    */
-  procedure = gimp_procedure_new (image_get_channel_by_tattoo_invoker);
+  procedure = gimp_procedure_new (image_get_channel_by_tattoo_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-channel-by-tattoo");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-channel-by-tattoo",
-                                     "Find a channel with a given tattoo in an image.",
-                                     "This procedure returns the channel with the given tattoo in the specified image.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Find a channel with a given tattoo in an image.",
+                                  "This procedure returns the channel with the given tattoo in the specified image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_uint ("tattoo",
                                                   "tattoo",
@@ -5614,69 +5535,69 @@ register_image_procs (GimpPDB *pdb)
                                                   1, G_MAXUINT32, 1,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_channel_id ("channel",
-                                                               "channel",
-                                                               "The channel with the specified tattoo",
-                                                               pdb->gimp, FALSE,
-                                                               GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_channel ("channel",
+                                                            "channel",
+                                                            "The channel with the specified tattoo",
+                                                            FALSE,
+                                                            GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-get-vectors-by-tattoo
+   * gimp-image-get-path-by-tattoo
    */
-  procedure = gimp_procedure_new (image_get_vectors_by_tattoo_invoker);
+  procedure = gimp_procedure_new (image_get_path_by_tattoo_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-vectors-by-tattoo");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-vectors-by-tattoo",
-                                     "Find a vectors with a given tattoo in an image.",
-                                     "This procedure returns the vectors with the given tattoo in the specified image.",
-                                     "Simon Budig",
-                                     "Simon Budig",
-                                     "2005",
-                                     NULL);
+                               "gimp-image-get-path-by-tattoo");
+  gimp_procedure_set_static_help (procedure,
+                                  "Find a path with a given tattoo in an image.",
+                                  "This procedure returns the path with the given tattoo in the specified image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Simon Budig",
+                                         "Simon Budig",
+                                         "2005");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_uint ("tattoo",
                                                   "tattoo",
-                                                  "The tattoo of the vectors to find",
+                                                  "The tattoo of the path to find",
                                                   1, G_MAXUINT32, 1,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_vectors_id ("vectors",
-                                                               "vectors",
-                                                               "The vectors with the specified tattoo",
-                                                               pdb->gimp, FALSE,
-                                                               GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_path ("path",
+                                                         "path",
+                                                         "The path with the specified tattoo",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-get-layer-by-name
    */
-  procedure = gimp_procedure_new (image_get_layer_by_name_invoker);
+  procedure = gimp_procedure_new (image_get_layer_by_name_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-layer-by-name");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-layer-by-name",
-                                     "Find a layer with a given name in an image.",
-                                     "This procedure returns the layer with the given name in the specified image.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2011",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Find a layer with a given name in an image.",
+                                  "This procedure returns the layer with the given name in the specified image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2011");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("name",
                                                        "name",
@@ -5685,34 +5606,34 @@ register_image_procs (GimpPDB *pdb)
                                                        NULL,
                                                        GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_layer_id ("layer",
-                                                             "layer",
-                                                             "The layer with the specified name",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_layer ("layer",
+                                                          "layer",
+                                                          "The layer with the specified name",
+                                                          FALSE,
+                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-get-channel-by-name
    */
-  procedure = gimp_procedure_new (image_get_channel_by_name_invoker);
+  procedure = gimp_procedure_new (image_get_channel_by_name_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-channel-by-name");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-channel-by-name",
-                                     "Find a channel with a given name in an image.",
-                                     "This procedure returns the channel with the given name in the specified image.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2011",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Find a channel with a given name in an image.",
+                                  "This procedure returns the channel with the given name in the specified image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2011");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("name",
                                                        "name",
@@ -5721,70 +5642,70 @@ register_image_procs (GimpPDB *pdb)
                                                        NULL,
                                                        GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_channel_id ("channel",
-                                                               "channel",
-                                                               "The channel with the specified name",
-                                                               pdb->gimp, FALSE,
-                                                               GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_channel ("channel",
+                                                            "channel",
+                                                            "The channel with the specified name",
+                                                            FALSE,
+                                                            GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-image-get-vectors-by-name
+   * gimp-image-get-path-by-name
    */
-  procedure = gimp_procedure_new (image_get_vectors_by_name_invoker);
+  procedure = gimp_procedure_new (image_get_path_by_name_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-image-get-vectors-by-name");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-vectors-by-name",
-                                     "Find a vectors with a given name in an image.",
-                                     "This procedure returns the vectors with the given name in the specified image.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2011",
-                                     NULL);
+                               "gimp-image-get-path-by-name");
+  gimp_procedure_set_static_help (procedure,
+                                  "Find a path with a given name in an image.",
+                                  "This procedure returns the path with the given name in the specified image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2011");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("name",
                                                        "name",
-                                                       "The name of the vectors to find",
+                                                       "The name of the path to find",
                                                        FALSE, FALSE, TRUE,
                                                        NULL,
                                                        GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_vectors_id ("vectors",
-                                                               "vectors",
-                                                               "The vectors with the specified name",
-                                                               pdb->gimp, FALSE,
-                                                               GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_path ("path",
+                                                         "path",
+                                                         "The path with the specified name",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-attach-parasite
    */
-  procedure = gimp_procedure_new (image_attach_parasite_invoker);
+  procedure = gimp_procedure_new (image_attach_parasite_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-attach-parasite");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-attach-parasite",
-                                     "Add a parasite to an image.",
-                                     "This procedure attaches a parasite to an image. It has no return values.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Add a parasite to an image.",
+                                  "This procedure attaches a parasite to an image. It has no return values.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_parasite ("parasite",
                                                          "parasite",
@@ -5796,23 +5717,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-detach-parasite
    */
-  procedure = gimp_procedure_new (image_detach_parasite_invoker);
+  procedure = gimp_procedure_new (image_detach_parasite_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-detach-parasite");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-detach-parasite",
-                                     "Removes a parasite from an image.",
-                                     "This procedure detaches a parasite from an image. It has no return values.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Removes a parasite from an image.",
+                                  "This procedure detaches a parasite from an image. It has no return values.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("name",
                                                        "name",
@@ -5826,23 +5747,23 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-parasite
    */
-  procedure = gimp_procedure_new (image_get_parasite_invoker);
+  procedure = gimp_procedure_new (image_get_parasite_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-parasite");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-parasite",
-                                     "Look up a parasite in an image",
-                                     "Finds and returns the parasite that was previously attached to an image.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Look up a parasite in an image",
+                                  "Finds and returns the parasite that was previously attached to an image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("name",
                                                        "name",
@@ -5861,34 +5782,92 @@ register_image_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-parasite-list
    */
-  procedure = gimp_procedure_new (image_get_parasite_list_invoker);
+  procedure = gimp_procedure_new (image_get_parasite_list_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-parasite-list");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-parasite-list",
-                                     "List all parasites.",
-                                     "Returns a list of all currently attached parasites.",
-                                     "Marc Lehmann",
-                                     "Marc Lehmann",
-                                     "1999",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "List all parasites.",
+                                  "Returns a list of the names of all currently attached parasites. These names can later be used to get the actual #GimpParasite with 'gimp-image-get-parasite' when needed.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Marc Lehmann",
+                                         "Marc Lehmann",
+                                         "1999");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-parasites",
-                                                          "num parasites",
-                                                          "The number of attached parasites",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_string_array ("parasites",
-                                                                 "parasites",
-                                                                 "The names of currently attached parasites",
-                                                                 GIMP_PARAM_READWRITE));
+                                   g_param_spec_boxed ("parasites",
+                                                       "parasites",
+                                                       "The names of currently attached parasites",
+                                                       G_TYPE_STRV,
+                                                       GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-policy-rotate
+   */
+  procedure = gimp_procedure_new (image_policy_rotate_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-policy-rotate");
+  gimp_procedure_set_static_help (procedure,
+                                  "Execute the \"Orientation\" metadata policy.",
+                                  "Process the image according to the rotation policy as set in Preferences. If GIMP is running as a GUI and interactive is TRUE, a dialog may be presented to the user depending on the set policy. Otherwise, if the policy does not mandate the action to perform, the image will be rotated following the Orientation metadata.\n"
+                                  "If you wish absolutely to rotate a loaded image following the Orientation metadata, do not use this function and process the metadata yourself. Indeed even with `interactive` to FALSE, user settings may leave the image unrotated.\n"
+                                  "Finally it is unnecessary to call this function in a format load procedure because this is called automatically by the core code when loading any image. You should only call this function explicitly when loading an image through a PDB call.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2020");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boolean ("interactive",
+                                                     "interactive",
+                                                     "Querying the user through a dialog is a possibility",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-policy-color-profile
+   */
+  procedure = gimp_procedure_new (image_policy_color_profile_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-policy-color-profile");
+  gimp_procedure_set_static_help (procedure,
+                                  "Execute the color profile conversion policy.",
+                                  "Process the image according to the color profile policy as set in Preferences.\n"
+                                  "If GIMP is running as a GUI and interactive is TRUE, a dialog may be presented to the user depending on the policy. Otherwise, if the policy does not mandate the conversion to perform, the conversion to the preferred RGB or grayscale profile will happen, defaulting to built-in profiles if no preferred profiles were set in `Preferences`.\n"
+                                  "This function should be used only if you want to follow user settings. If you intend to convert to a specific profile, call preferably 'gimp-image-convert-color-profile'. And if you wish to leave whatever profile an image has, do not call any of these functions.\n"
+                                  "Finally it is unnecessary to call this function in a format load procedure because this is called automatically by the core code when loading any image. You should only call this function explicitly when loading an image through a PDB call.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2020");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boolean ("interactive",
+                                                     "interactive",
+                                                     "Querying the user through a dialog is a possibility",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 }

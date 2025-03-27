@@ -22,14 +22,15 @@
 #define __PSD_LAYER_RES_LOAD_H__
 
 
-gint  get_layer_resource_header (PSDlayerres  *res_a,
-                                 FILE         *f,
-                                 GError      **error);
+gint  get_layer_resource_header (PSDlayerres   *res_a,
+                                 guint16        psd_version,
+                                 GInputStream  *input,
+                                 GError       **error);
 
-gint  load_layer_resource       (PSDlayerres  *res_a,
-                                 PSDlayer     *lyr_a,
-                                 FILE         *f,
-                                 GError      **error);
+gint  load_layer_resource       (PSDlayerres   *res_a,
+                                 PSDlayer      *lyr_a,
+                                 GInputStream  *input,
+                                 GError       **error);
 
 
 #endif /* __PSD_LAYER_RES_LOAD_H__ */

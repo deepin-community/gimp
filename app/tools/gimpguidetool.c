@@ -167,18 +167,10 @@ gimp_guide_tool_button_release (GimpTool              *tool,
       for (i = 0; i < guide_tool->n_guides; i++)
         {
           GimpGuideToolGuide *guide = &guide_tool->guides[i];
-          gint                max_position;
-
-          if (guide->orientation == GIMP_ORIENTATION_HORIZONTAL)
-            max_position = gimp_image_get_height (image);
-          else
-            max_position = gimp_image_get_width (image);
 
           n_non_custom_guides += ! guide->custom;
 
-          if (guide->position == GIMP_GUIDE_POSITION_UNDEFINED ||
-              guide->position <  0                             ||
-              guide->position > max_position)
+          if (guide->position == GIMP_GUIDE_POSITION_UNDEFINED)
             {
               remove_guides = TRUE;
             }
@@ -435,7 +427,7 @@ gimp_guide_tool_push_status (GimpGuideTool *guide_tool,
     }
   else
     {
-      GimpGuideToolGuide *guides[2];
+      GimpGuideToolGuide *guides[2] = { 0, };
       gint                n_guides = 0;
       gint                i;
 

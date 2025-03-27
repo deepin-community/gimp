@@ -36,6 +36,14 @@ struct _GimpSourceOptions
 {
   GimpPaintOptions     parent_instance;
 
+  GList               *src_drawables;
+  gint                 src_x;
+  gint                 src_y;
+
+  /* The pickable to use when not in sample merged mode. */
+  GimpPickable        *src_pickable;
+  GimpImage           *src_image;
+
   GimpSourceAlignMode  align_mode;
   gboolean             sample_merged;
 };

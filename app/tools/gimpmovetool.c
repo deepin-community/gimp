@@ -155,8 +155,8 @@ gimp_move_tool_init (GimpMoveTool *move_tool)
 
   move_tool->saved_type         = GIMP_TRANSFORM_TYPE_LAYER;
 
-  move_tool->old_active_layer   = NULL;
-  move_tool->old_active_vectors = NULL;
+  move_tool->old_selected_layers   = NULL;
+  move_tool->old_selected_vectors = NULL;
 }
 
 static void
@@ -165,6 +165,8 @@ gimp_move_tool_finalize (GObject *object)
   GimpMoveTool *move = GIMP_MOVE_TOOL (object);
 
   g_clear_pointer (&move->guides, g_list_free);
+  g_clear_pointer (&move->old_selected_layers, g_list_free);
+  g_clear_pointer (&move->old_selected_vectors, g_list_free);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -182,9 +184,12 @@ gimp_move_tool_button_press (GimpTool            *tool,
   GimpDisplayShell  *shell          = gimp_display_get_shell (display);
   GimpImage         *image          = gimp_display_get_image (display);
   GimpItem          *active_item    = NULL;
+  GList             *selected_items = NULL;
+  GList             *iter;
   GimpTranslateMode  translate_mode = GIMP_TRANSLATE_MODE_MASK;
   const gchar       *null_message   = NULL;
   const gchar       *locked_message = NULL;
+  GimpItem          *locked_item    = NULL;
 
   tool->display = display;
 
@@ -198,18 +203,21 @@ gimp_move_tool_button_press (GimpTool            *tool,
 
       if (options->move_type == GIMP_TRANSFORM_TYPE_PATH)
         {
-          GimpVectors *vectors;
+          GimpPath *vectors;
 
-          vectors = gimp_image_pick_vectors (image,
-                                             coords->x, coords->y,
-                                             FUNSCALEX (shell, snap_distance),
-                                             FUNSCALEY (shell, snap_distance));
+          vectors = gimp_image_pick_path (image,
+                                          coords->x, coords->y,
+                                          FUNSCALEX (shell, snap_distance),
+                                          FUNSCALEY (shell, snap_distance));
           if (vectors)
             {
-              move->old_active_vectors =
-                gimp_image_get_active_vectors (image);
+              GList *new_selected_paths = g_list_prepend (NULL, vectors);
 
-              gimp_image_set_active_vectors (image, vectors);
+              move->old_selected_vectors =
+                g_list_copy (gimp_image_get_selected_paths (image));
+
+              gimp_image_set_selected_paths (image, new_selected_paths);
+              g_list_free (new_selected_paths);
             }
           else
             {
@@ -254,9 +262,12 @@ gimp_move_tool_button_press (GimpTool            *tool,
                 }
               else
                 {
-                  move->old_active_layer = gimp_image_get_active_layer (image);
+                  GList *new_selected_layers = g_list_prepend (NULL, layer);
 
-                  gimp_image_set_active_layer (image, layer);
+                  move->old_selected_layers = g_list_copy (gimp_image_get_selected_layers (image));
+
+                  gimp_image_set_selected_layers (image, new_selected_layers);
+                  g_list_free (new_selected_layers);
                 }
             }
           else
@@ -272,17 +283,27 @@ gimp_move_tool_button_press (GimpTool            *tool,
     {
     case GIMP_TRANSFORM_TYPE_PATH:
       {
-        active_item = GIMP_ITEM (gimp_image_get_active_vectors (image));
+        selected_items = gimp_image_get_selected_paths (image);
+        selected_items = g_list_copy (selected_items);
 
         translate_mode = GIMP_TRANSLATE_MODE_VECTORS;
 
-        if (! active_item)
+        if (! selected_items)
           {
-            null_message = _("There is no path to move.");
+            null_message = _("There are no paths to move.");
           }
-        else if (gimp_item_is_position_locked (active_item))
+        else
           {
-            locked_message = _("The active path's position is locked.");
+            gint n_items = 0;
+
+            for (iter = selected_items; iter; iter = iter->next)
+              {
+                if (! gimp_item_is_position_locked (iter->data, &locked_item))
+                  n_items++;
+              }
+
+            if (n_items == 0)
+              locked_message = _("All selected path's position are locked.");
           }
       }
       break;
@@ -301,7 +322,7 @@ gimp_move_tool_button_press (GimpTool            *tool,
             /* cannot happen, don't translate this message */
             null_message  = "There is no selection to move.";
           }
-        else if (gimp_item_is_position_locked (active_item))
+        else if (gimp_item_is_position_locked (active_item, &locked_item))
           {
             locked_message = "The selection's position is locked.";
           }
@@ -310,36 +331,39 @@ gimp_move_tool_button_press (GimpTool            *tool,
 
     case GIMP_TRANSFORM_TYPE_LAYER:
       {
-        active_item = GIMP_ITEM (gimp_image_get_active_drawable (image));
+        selected_items = gimp_image_get_selected_drawables (image);
 
-        if (! active_item)
+        if (! selected_items)
           {
             null_message = _("There is no layer to move.");
           }
-        else if (GIMP_IS_LAYER_MASK (active_item))
+        else if (GIMP_IS_LAYER_MASK (selected_items->data))
           {
+            g_return_if_fail (g_list_length (selected_items) == 1);
+
             translate_mode = GIMP_TRANSLATE_MODE_LAYER_MASK;
 
-            if (gimp_item_is_position_locked (active_item))
-              locked_message = _("The active layer's position is locked.");
-            else if (gimp_item_is_content_locked (active_item))
-              locked_message = _("The active layer's pixels are locked.");
+            if (gimp_item_is_position_locked (selected_items->data, &locked_item))
+              locked_message = _("The selected layer's position is locked.");
+            else if (gimp_item_is_content_locked (selected_items->data, NULL))
+              locked_message = _("The selected layer's pixels are locked.");
           }
-        else if (GIMP_IS_CHANNEL (active_item))
+        else if (GIMP_IS_CHANNEL (selected_items->data))
           {
             translate_mode = GIMP_TRANSLATE_MODE_CHANNEL;
 
-            if (gimp_item_is_position_locked (active_item))
-              locked_message = _("The active channel's position is locked.");
-            else if (gimp_item_is_content_locked (active_item))
-              locked_message = _("The active channel's pixels are locked.");
+            for (iter = selected_items; iter; iter = iter->next)
+              if (gimp_item_is_position_locked (iter->data, &locked_item) ||
+                  gimp_item_is_content_locked (iter->data, &locked_item))
+              locked_message = _("A selected channel's position or pixels are locked.");
           }
         else
           {
             translate_mode = GIMP_TRANSLATE_MODE_LAYER;
 
-            if (gimp_item_is_position_locked (active_item))
-              locked_message = _("The active layer's position is locked.");
+            for (iter = selected_items; iter; iter = iter->next)
+              if (gimp_item_is_position_locked (iter->data, &locked_item))
+              locked_message = _("A selected layer's position is locked.");
           }
       }
       break;
@@ -348,9 +372,10 @@ gimp_move_tool_button_press (GimpTool            *tool,
       g_return_if_reached ();
     }
 
-  if (! active_item)
+  if (! active_item && ! selected_items)
     {
       gimp_tool_message_literal (tool, display, null_message);
+      gimp_tools_show_tool_options (display->gimp);
       gimp_widget_blink (options->type_box);
       gimp_tool_control (tool, GIMP_TOOL_ACTION_HALT, display);
       return;
@@ -358,8 +383,13 @@ gimp_move_tool_button_press (GimpTool            *tool,
   else if (locked_message)
     {
       gimp_tool_message_literal (tool, display, locked_message);
-      gimp_tools_blink_lock_box (display->gimp, active_item);
+
+      if (locked_item == NULL)
+        locked_item = active_item ? active_item : selected_items->data;
+
+      gimp_tools_blink_lock_box (display->gimp, locked_item);
       gimp_tool_control (tool, GIMP_TOOL_ACTION_HALT, display);
+      g_list_free (selected_items);
       return;
     }
 
@@ -368,6 +398,7 @@ gimp_move_tool_button_press (GimpTool            *tool,
   gimp_edit_selection_tool_start (tool, display, coords,
                                   translate_mode,
                                   TRUE);
+  g_list_free (selected_items);
 }
 
 static void
@@ -388,18 +419,18 @@ gimp_move_tool_button_release (GimpTool              *tool,
   if (! config->move_tool_changes_active ||
       (release_type == GIMP_BUTTON_RELEASE_CANCEL))
     {
-      if (move->old_active_layer)
+      if (move->old_selected_layers)
         {
-          gimp_image_set_active_layer (image, move->old_active_layer);
-          move->old_active_layer = NULL;
+          gimp_image_set_selected_layers (image, move->old_selected_layers);
+          g_clear_pointer (&move->old_selected_layers, g_list_free);
 
           flush = TRUE;
         }
 
-      if (move->old_active_vectors)
+      if (move->old_selected_vectors)
         {
-          gimp_image_set_active_vectors (image, move->old_active_vectors);
-          move->old_active_vectors = NULL;
+          gimp_image_set_selected_paths (image, move->old_selected_vectors);
+          g_clear_pointer (&move->old_selected_vectors, g_list_free);
 
           flush = TRUE;
         }
@@ -429,7 +460,7 @@ gimp_move_tool_key_press (GimpTool    *tool,
   return gimp_edit_selection_tool_translate (tool, kevent,
                                              options->move_type,
                                              display,
-                                             options->type_box);
+                                             &options->type_box);
 }
 
 static void
@@ -561,17 +592,25 @@ gimp_move_tool_cursor_update (GimpTool         *tool,
 
       if (options->move_current)
         {
-          GimpItem *item = GIMP_ITEM (gimp_image_get_active_vectors (image));
+          GList *selected = gimp_image_get_selected_paths (image);
+          GList *iter;
+          gint   n_items = 0;
 
-          if (! item || gimp_item_is_position_locked (item))
+          for (iter = selected; iter; iter = iter->next)
+            {
+              if (! gimp_item_is_position_locked (iter->data, NULL))
+                n_items++;
+            }
+
+          if (n_items == 0)
             modifier = GIMP_CURSOR_MODIFIER_BAD;
         }
       else
         {
-          if (gimp_image_pick_vectors (image,
-                                       coords->x, coords->y,
-                                       FUNSCALEX (shell, snap_distance),
-                                       FUNSCALEY (shell, snap_distance)))
+          if (gimp_image_pick_path (image,
+                                    coords->x, coords->y,
+                                    FUNSCALEX (shell, snap_distance),
+                                    FUNSCALEY (shell, snap_distance)))
             {
               tool_cursor = GIMP_TOOL_CURSOR_HAND;
             }
@@ -591,10 +630,17 @@ gimp_move_tool_cursor_update (GimpTool         *tool,
     }
   else if (options->move_current)
     {
-      GimpItem *item = GIMP_ITEM (gimp_image_get_active_drawable (image));
+      GList *items   = gimp_image_get_selected_drawables (image);
+      GList *iter;
+      gint   n_items = 0;
 
-      if (! item || gimp_item_is_position_locked (item))
+      for (iter = items; iter; iter = iter->next)
+        if (! gimp_item_is_position_locked (iter->data, NULL))
+          n_items++;
+      if (n_items == 0)
         modifier = GIMP_CURSOR_MODIFIER_BAD;
+
+      g_list_free (items);
     }
   else
     {
@@ -619,11 +665,11 @@ gimp_move_tool_cursor_update (GimpTool         *tool,
               tool_cursor = GIMP_TOOL_CURSOR_MOVE;
               modifier    = GIMP_CURSOR_MODIFIER_ANCHOR;
             }
-          else if (gimp_item_is_position_locked (GIMP_ITEM (layer)))
+          else if (gimp_item_is_position_locked (GIMP_ITEM (layer), NULL))
             {
               modifier = GIMP_CURSOR_MODIFIER_BAD;
             }
-          else if (layer != gimp_image_get_active_layer (image))
+          else if (! g_list_find (gimp_image_get_selected_layers (image), layer))
             {
               tool_cursor = GIMP_TOOL_CURSOR_HAND;
               modifier    = GIMP_CURSOR_MODIFIER_MOVE;

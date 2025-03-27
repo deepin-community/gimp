@@ -3,7 +3,7 @@
 ;
 ; Change the colormap of an image to the colors in a specified palette.
 ; Included is script-fu-make-cmap-array (available for use in scripts) which
-; returns an INT8ARRAY containing the colors from a specified palette.
+; returns a GBytes containing the colors from a specified palette.
 ; This array can be used as the cmap argument for gimp-image-set-colormap.
 
 ; GIMP - The GNU Image Manipulation Program
@@ -24,7 +24,9 @@
 
 (define (script-fu-make-cmap-array palette)
   (let* (
-        (num-colors (car (gimp-palette-get-info palette)))
+        (num-colors (car (gimp-palette-get-color-count palette)))
+        ; cons-array is not Scheme standard
+        ; but was in SIOD and is in script-fu-compat.init
         (cmap (cons-array (* num-colors 3) 'byte))
         (color 0)
         (i 0)
@@ -32,9 +34,9 @@
 
     (while (< i num-colors)
       (set! color (car (gimp-palette-entry-get-color palette i)))
-      (aset cmap (* i 3) (car color))
-      (aset cmap (+ (* i 3) 1) (cadr color))
-      (aset cmap (+ (* i 3) 2) (caddr color))
+      (vector-set! cmap (* i 3) (car color))
+      (vector-set! cmap (+ (* i 3) 1) (cadr color))
+      (vector-set! cmap (+ (* i 3) 2) (caddr color))
       (set! i (+ i 1))
     )
 
@@ -42,23 +44,20 @@
   )
 )
 
-(define (script-fu-set-cmap img drawable palette)
-  (gimp-image-set-colormap img
-                           (* (car (gimp-palette-get-info palette)) 3)
-                           (script-fu-make-cmap-array palette))
+(define (script-fu-set-cmap img drawables palette)
+  (gimp-image-set-palette img palette)
   (gimp-displays-flush)
 )
 
-(script-fu-register "script-fu-set-cmap"
+(script-fu-register-filter "script-fu-set-cmap"
     _"Se_t Colormap..."
     _"Change the colormap of an image to the colors in a specified palette."
     "Kevin Cozens <kcozens@interlog.com>"
     "Kevin Cozens"
     "September 29, 2004"
     "INDEXED*"
-    SF-IMAGE     "Image"    0
-    SF-DRAWABLE  "Drawable" 0
+    SF-ONE-OR-MORE-DRAWABLE
     SF-PALETTE  _"Palette"  "Default"
 )
 
-(script-fu-menu-register "script-fu-set-cmap" "<Image>/Colors/Map/Colormap")
+(script-fu-menu-register "script-fu-set-cmap" "<Image>/Colors/Map/[Colormap]")
