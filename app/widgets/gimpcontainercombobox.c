@@ -25,6 +25,8 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "widgets-types.h"
 
 #include "core/gimpcontainer.h"
@@ -72,11 +74,14 @@ static void     gimp_container_combo_box_reorder_item (GimpContainerView      *v
 static void     gimp_container_combo_box_rename_item  (GimpContainerView      *view,
                                                        GimpViewable           *viewable,
                                                        gpointer                insert_data);
-static gboolean  gimp_container_combo_box_select_item (GimpContainerView      *view,
-                                                       GimpViewable           *viewable,
-                                                       gpointer                insert_data);
+static gboolean  gimp_container_combo_box_select_items(GimpContainerView      *view,
+                                                       GList                  *viewables,
+                                                       GList                  *paths);
 static void     gimp_container_combo_box_clear_items  (GimpContainerView      *view);
 static void    gimp_container_combo_box_set_view_size (GimpContainerView      *view);
+static gint    gimp_container_combo_box_get_selected  (GimpContainerView      *view,
+                                                       GList                 **items,
+                                                       GList                 **items_data);
 
 static void     gimp_container_combo_box_changed      (GtkComboBox            *combo_box,
                                                        GimpContainerView      *view);
@@ -124,9 +129,10 @@ gimp_container_combo_box_view_iface_init (GimpContainerViewInterface *iface)
   iface->remove_item   = gimp_container_combo_box_remove_item;
   iface->reorder_item  = gimp_container_combo_box_reorder_item;
   iface->rename_item   = gimp_container_combo_box_rename_item;
-  iface->select_item   = gimp_container_combo_box_select_item;
+  iface->select_items  = gimp_container_combo_box_select_items;
   iface->clear_items   = gimp_container_combo_box_clear_items;
   iface->set_view_size = gimp_container_combo_box_set_view_size;
+  iface->get_selected  = gimp_container_combo_box_get_selected;
 
   iface->insert_data_free = (GDestroyNotify) gtk_tree_iter_free;
 }
@@ -156,10 +162,12 @@ gimp_container_combo_box_init (GimpContainerComboBox *combo)
   gtk_cell_layout_set_attributes (layout, cell,
                                   "renderer",
                                   GIMP_CONTAINER_TREE_STORE_COLUMN_RENDERER,
+                                  "sensitive",
+                                  GIMP_CONTAINER_TREE_STORE_COLUMN_NAME_SENSITIVE,
                                   NULL);
 
   gimp_container_tree_store_add_renderer_cell (GIMP_CONTAINER_TREE_STORE (model),
-                                               cell);
+                                               cell, -1);
 
   combo->viewable_renderer = cell;
 
@@ -168,6 +176,8 @@ gimp_container_combo_box_init (GimpContainerComboBox *combo)
   gtk_cell_layout_set_attributes (layout, cell,
                                   "text",
                                   GIMP_CONTAINER_TREE_STORE_COLUMN_NAME,
+                                  "sensitive",
+                                  GIMP_CONTAINER_TREE_STORE_COLUMN_NAME_SENSITIVE,
                                   NULL);
 
   combo->text_renderer = cell;
@@ -347,23 +357,47 @@ gimp_container_combo_box_rename_item (GimpContainerView *view,
 }
 
 static gboolean
-gimp_container_combo_box_select_item (GimpContainerView *view,
-                                      GimpViewable      *viewable,
-                                      gpointer           insert_data)
+gimp_container_combo_box_select_items (GimpContainerView *view,
+                                       GList             *viewables,
+                                       GList             *paths)
 {
   GtkComboBox *combo_box = GTK_COMBO_BOX (view);
 
+  g_return_val_if_fail (GIMP_IS_CONTAINER_VIEW (view), FALSE);
+  /* Only zero or one items may selected in a GimpContainerComboBox. */
+  g_return_val_if_fail (g_list_length (viewables) < 2, FALSE);
+
   if (gtk_combo_box_get_model (GTK_COMBO_BOX (view)))
     {
-      GtkTreeIter *iter = insert_data;
-
-     g_signal_handlers_block_by_func (combo_box,
+      g_signal_handlers_block_by_func (combo_box,
                                        gimp_container_combo_box_changed,
                                        view);
 
-      if (iter)
+      if (viewables)
         {
-          gtk_combo_box_set_active_iter (combo_box, iter);
+          GtkTreeModel *model = gtk_combo_box_get_model (GTK_COMBO_BOX (view));
+          GtkTreeIter   iter;
+          gboolean      iter_valid;
+
+          for (iter_valid = gtk_tree_model_get_iter_first (model, &iter);
+               iter_valid;
+               iter_valid = gtk_tree_model_iter_next (model, &iter))
+            {
+              GimpViewRenderer *renderer;
+
+              gtk_tree_model_get (model, &iter,
+                                  GIMP_CONTAINER_TREE_STORE_COLUMN_RENDERER, &renderer,
+                                  -1);
+
+              if (renderer->viewable == viewables->data)
+                {
+                  gtk_combo_box_set_active_iter (combo_box, &iter);
+                  g_object_unref (renderer);
+
+                  break;
+                }
+              g_object_unref (renderer);
+            }
         }
       else
         {
@@ -398,6 +432,38 @@ gimp_container_combo_box_set_view_size (GimpContainerView *view)
 
   if (model)
     gimp_container_tree_store_set_view_size (GIMP_CONTAINER_TREE_STORE (model));
+}
+
+static gint
+gimp_container_combo_box_get_selected (GimpContainerView  *view,
+                                       GList             **items,
+                                       GList             **items_data)
+{
+  GtkComboBox      *combo_box = GTK_COMBO_BOX (view);
+  GimpViewRenderer *renderer  = NULL;
+  GtkTreeIter       iter;
+  gint              selected  = 0;
+
+  if (gtk_combo_box_get_active_iter (combo_box, &iter))
+    gtk_tree_model_get (gtk_combo_box_get_model (combo_box), &iter,
+                        GIMP_CONTAINER_TREE_STORE_COLUMN_RENDERER, &renderer,
+                        -1);
+
+  if (items)
+    {
+      if (renderer != NULL && renderer->viewable != NULL)
+        {
+          *items   = g_list_prepend (NULL, renderer->viewable);
+          selected = 1;
+        }
+      else
+        {
+          *items = NULL;
+        }
+    }
+  g_clear_object (&renderer);
+
+  return selected;
 }
 
 static void

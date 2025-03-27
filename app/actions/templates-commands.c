@@ -103,8 +103,7 @@ templates_create_image_cmd_callback (GimpAction *action,
 
       image = gimp_image_new_from_template (gimp, template, context);
       gimp_create_display (gimp, image, gimp_template_get_unit (template), 1.0,
-                           G_OBJECT (gtk_widget_get_screen (widget)),
-                           gimp_widget_get_monitor (widget));
+                           G_OBJECT (gimp_widget_get_monitor (widget)));
       g_object_unref (image);
 
       gimp_image_new_set_last_template (gimp, template);
@@ -242,7 +241,7 @@ templates_delete_cmd_callback (GimpAction *action,
       delete_data->template  = template;
 
       dialog =
-        gimp_message_dialog_new (_("Delete Template"), "edit-delete",
+        gimp_message_dialog_new (_("Delete Template"), GIMP_ICON_EDIT_DELETE,
                                  GTK_WIDGET (editor), 0,
                                  gimp_standard_help_func, NULL,
 
@@ -251,7 +250,7 @@ templates_delete_cmd_callback (GimpAction *action,
 
                                  NULL);
 
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                                GTK_RESPONSE_OK,
                                                GTK_RESPONSE_CANCEL,
                                                -1);

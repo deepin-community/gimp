@@ -51,7 +51,8 @@ struct _GimpCursorViewClass
 
 GType       gimp_cursor_view_get_type          (void) G_GNUC_CONST;
 
-GtkWidget * gimp_cursor_view_new               (GimpMenuFactory *menu_factory);
+GtkWidget * gimp_cursor_view_new               (Gimp            *gimp,
+                                                GimpMenuFactory *menu_factory);
 
 void        gimp_cursor_view_set_sample_merged (GimpCursorView  *view,
                                                 gboolean         sample_merged);
@@ -59,7 +60,8 @@ gboolean    gimp_cursor_view_get_sample_merged (GimpCursorView  *view);
 
 void        gimp_cursor_view_update_cursor     (GimpCursorView  *view,
                                                 GimpImage       *image,
-                                                GimpUnit         shell_unit,
+                                                GimpUnit        *shell_unit,
+                                                gboolean         shell_show_all,
                                                 gdouble          x,
                                                 gdouble          y);
 void        gimp_cursor_view_clear_cursor      (GimpCursorView  *view);

@@ -19,9 +19,15 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
+#include <cairo.h>
+
 #include <gegl.h>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
+
+#include "libgimpcolor/gimpcolor.h"
 
 #include "libgimpbase/gimpbase.h"
 
@@ -30,13 +36,19 @@
 #include "config/gimpcoreconfig.h"
 #include "core/gimp.h"
 #include "core/gimpchannel-select.h"
+#include "core/gimpcontainer.h"
 #include "core/gimpdrawable-fill.h"
+#include "core/gimpdrawable-filters.h"
 #include "core/gimpdrawable-foreground-extract.h"
 #include "core/gimpdrawable-offset.h"
 #include "core/gimpdrawable-preview.h"
 #include "core/gimpdrawable-shadow.h"
 #include "core/gimpdrawable.h"
+#include "core/gimpdrawablefilter.h"
+#include "core/gimpimage-undo-push.h"
 #include "core/gimpimage.h"
+#include "core/gimplayer.h"
+#include "core/gimplist.h"
 #include "core/gimpparamspecs.h"
 #include "core/gimptempbuf.h"
 #include "gegl/gimp-babl-compat.h"
@@ -46,6 +58,7 @@
 #include "plug-in/gimppluginmanager.h"
 
 #include "gimppdb.h"
+#include "gimppdberror.h"
 #include "gimppdb-utils.h"
 #include "gimppdbcontext.h"
 #include "gimpprocedure.h"
@@ -67,14 +80,15 @@ drawable_get_format_invoker (GimpProcedure         *procedure,
   GimpDrawable *drawable;
   gchar *format = NULL;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      if (gimp->plug_in_manager->current_plug_in)
-        gimp_plug_in_enable_precision (gimp->plug_in_manager->current_plug_in);
-
-      format = g_strdup (babl_get_name (gimp_drawable_get_format (drawable)));
+      /* this only transfers the encoding, losing the space, see the
+       * code in libgimp/gimpdrawable.c which reconstructs the actual
+       * format in the plug-in process
+       */
+      format = g_strdup (babl_format_get_encoding (gimp_drawable_get_format (drawable)));
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
@@ -99,7 +113,7 @@ drawable_get_thumbnail_format_invoker (GimpProcedure         *procedure,
   GimpDrawable *drawable;
   gchar *format = NULL;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -117,6 +131,97 @@ drawable_get_thumbnail_format_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
+drawable_get_pixel_invoker (GimpProcedure         *procedure,
+                            Gimp                  *gimp,
+                            GimpContext           *context,
+                            GimpProgress          *progress,
+                            const GimpValueArray  *args,
+                            GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  GimpDrawable *drawable;
+  gint x_coord;
+  gint y_coord;
+  GeglColor *color = NULL;
+
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
+  x_coord = g_value_get_int (gimp_value_array_index (args, 1));
+  y_coord = g_value_get_int (gimp_value_array_index (args, 2));
+
+  if (success)
+    {
+      const Babl *format = gimp_drawable_get_format (drawable);
+
+      if (x_coord < gimp_item_get_width  (GIMP_ITEM (drawable)) &&
+          y_coord < gimp_item_get_height (GIMP_ITEM (drawable)))
+        {
+          gint     n_bytes = babl_format_get_bytes_per_pixel (format);
+          gpointer pixel;
+
+          pixel = g_malloc0 (n_bytes);
+
+          gegl_buffer_sample (gimp_drawable_get_buffer (drawable),
+                              x_coord, y_coord, NULL, pixel, format,
+                              GEGL_SAMPLER_NEAREST, GEGL_ABYSS_NONE);
+          color = gegl_color_new ("black");
+          gegl_color_set_pixel (color, format, pixel);
+
+          g_free (pixel);
+        }
+      else
+        success = FALSE;
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_take_object (gimp_value_array_index (return_vals, 1), color);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+drawable_set_pixel_invoker (GimpProcedure         *procedure,
+                            Gimp                  *gimp,
+                            GimpContext           *context,
+                            GimpProgress          *progress,
+                            const GimpValueArray  *args,
+                            GError               **error)
+{
+  gboolean success = TRUE;
+  GimpDrawable *drawable;
+  gint x_coord;
+  gint y_coord;
+  GeglColor *color;
+
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
+  x_coord = g_value_get_int (gimp_value_array_index (args, 1));
+  y_coord = g_value_get_int (gimp_value_array_index (args, 2));
+  color = g_value_get_object (gimp_value_array_index (args, 3));
+
+  if (success)
+    {
+      if (gimp_pdb_item_is_modifiable (GIMP_ITEM (drawable),
+                                       GIMP_PDB_ITEM_CONTENT, error) &&
+          gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error) &&
+          x_coord < gimp_item_get_width  (GIMP_ITEM (drawable)) &&
+          y_coord < gimp_item_get_height (GIMP_ITEM (drawable)))
+        {
+          gegl_buffer_set_color (gimp_drawable_get_buffer (drawable),
+                                 GEGL_RECTANGLE (x_coord, y_coord, 1, 1),
+                                 color);
+        }
+      else
+        success = FALSE;
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
 drawable_type_invoker (GimpProcedure         *procedure,
                        Gimp                  *gimp,
                        GimpContext           *context,
@@ -127,9 +232,9 @@ drawable_type_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpDrawable *drawable;
-  gint32 type = 0;
+  gint type = 0;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -156,9 +261,9 @@ drawable_type_with_alpha_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpDrawable *drawable;
-  gint32 type_with_alpha = 0;
+  gint type_with_alpha = 0;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -189,7 +294,7 @@ drawable_has_alpha_invoker (GimpProcedure         *procedure,
   GimpDrawable *drawable;
   gboolean has_alpha = FALSE;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -218,7 +323,7 @@ drawable_is_rgb_invoker (GimpProcedure         *procedure,
   GimpDrawable *drawable;
   gboolean is_rgb = FALSE;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -247,7 +352,7 @@ drawable_is_gray_invoker (GimpProcedure         *procedure,
   GimpDrawable *drawable;
   gboolean is_gray = FALSE;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -276,7 +381,7 @@ drawable_is_indexed_invoker (GimpProcedure         *procedure,
   GimpDrawable *drawable;
   gboolean is_indexed = FALSE;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -293,29 +398,23 @@ drawable_is_indexed_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-drawable_bpp_invoker (GimpProcedure         *procedure,
-                      Gimp                  *gimp,
-                      GimpContext           *context,
-                      GimpProgress          *progress,
-                      const GimpValueArray  *args,
-                      GError               **error)
+drawable_get_bpp_invoker (GimpProcedure         *procedure,
+                          Gimp                  *gimp,
+                          GimpContext           *context,
+                          GimpProgress          *progress,
+                          const GimpValueArray  *args,
+                          GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpDrawable *drawable;
-  gint32 bpp = 0;
+  gint bpp = 0;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
       const Babl *format = gimp_drawable_get_format (drawable);
-
-      if (! gimp->plug_in_manager->current_plug_in ||
-          ! gimp_plug_in_precision_enabled (gimp->plug_in_manager->current_plug_in))
-        {
-          format = gimp_babl_compat_u8_format (format);
-        }
 
       bpp = babl_format_get_bytes_per_pixel (format);
     }
@@ -330,19 +429,19 @@ drawable_bpp_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-drawable_width_invoker (GimpProcedure         *procedure,
-                        Gimp                  *gimp,
-                        GimpContext           *context,
-                        GimpProgress          *progress,
-                        const GimpValueArray  *args,
-                        GError               **error)
+drawable_get_width_invoker (GimpProcedure         *procedure,
+                            Gimp                  *gimp,
+                            GimpContext           *context,
+                            GimpProgress          *progress,
+                            const GimpValueArray  *args,
+                            GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpDrawable *drawable;
-  gint32 width = 0;
+  gint width = 0;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -359,19 +458,19 @@ drawable_width_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-drawable_height_invoker (GimpProcedure         *procedure,
-                         Gimp                  *gimp,
-                         GimpContext           *context,
-                         GimpProgress          *progress,
-                         const GimpValueArray  *args,
-                         GError               **error)
+drawable_get_height_invoker (GimpProcedure         *procedure,
+                             Gimp                  *gimp,
+                             GimpContext           *context,
+                             GimpProgress          *progress,
+                             const GimpValueArray  *args,
+                             GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpDrawable *drawable;
-  gint32 height = 0;
+  gint height = 0;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -388,20 +487,20 @@ drawable_height_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-drawable_offsets_invoker (GimpProcedure         *procedure,
-                          Gimp                  *gimp,
-                          GimpContext           *context,
-                          GimpProgress          *progress,
-                          const GimpValueArray  *args,
-                          GError               **error)
+drawable_get_offsets_invoker (GimpProcedure         *procedure,
+                              Gimp                  *gimp,
+                              GimpContext           *context,
+                              GimpProgress          *progress,
+                              const GimpValueArray  *args,
+                              GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpDrawable *drawable;
-  gint32 offset_x = 0;
-  gint32 offset_y = 0;
+  gint offset_x = 0;
+  gint offset_y = 0;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -421,31 +520,6 @@ drawable_offsets_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-drawable_set_image_invoker (GimpProcedure         *procedure,
-                            Gimp                  *gimp,
-                            GimpContext           *context,
-                            GimpProgress          *progress,
-                            const GimpValueArray  *args,
-                            GError               **error)
-{
-  gboolean success = TRUE;
-  GimpDrawable *drawable;
-  GimpImage *image;
-
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
-  image = gimp_value_get_image (gimp_value_array_index (args, 1), gimp);
-
-  if (success)
-    {
-      if (image != gimp_item_get_image (GIMP_ITEM (drawable)))
-        success = FALSE;
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
-}
-
-static GimpValueArray *
 drawable_mask_bounds_invoker (GimpProcedure         *procedure,
                               Gimp                  *gimp,
                               GimpContext           *context,
@@ -457,12 +531,12 @@ drawable_mask_bounds_invoker (GimpProcedure         *procedure,
   GimpValueArray *return_vals;
   GimpDrawable *drawable;
   gboolean non_empty = FALSE;
-  gint32 x1 = 0;
-  gint32 y1 = 0;
-  gint32 x2 = 0;
-  gint32 y2 = 0;
+  gint x1 = 0;
+  gint y1 = 0;
+  gint x2 = 0;
+  gint y2 = 0;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -499,12 +573,12 @@ drawable_mask_intersect_invoker (GimpProcedure         *procedure,
   GimpValueArray *return_vals;
   GimpDrawable *drawable;
   gboolean non_empty = FALSE;
-  gint32 x = 0;
-  gint32 y = 0;
-  gint32 width = 0;
-  gint32 height = 0;
+  gint x = 0;
+  gint y = 0;
+  gint width = 0;
+  gint height = 0;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -531,6 +605,180 @@ drawable_mask_intersect_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
+drawable_append_filter_private_invoker (GimpProcedure         *procedure,
+                                        Gimp                  *gimp,
+                                        GimpContext           *context,
+                                        GimpProgress          *progress,
+                                        const GimpValueArray  *args,
+                                        GError               **error)
+{
+  gboolean success = TRUE;
+  GimpDrawable *drawable;
+  GimpDrawableFilter *filter;
+
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
+  filter = g_value_get_object (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      GeglNode *node;
+
+      if (gimp_drawable_filter_get_drawable (filter) != drawable)
+        {
+          g_set_error (error, GIMP_PDB_ERROR, GIMP_PDB_ERROR_INVALID_ARGUMENT,
+                       "%s: the filter was not created for this drawable.",
+                       G_STRFUNC);
+          success = FALSE;
+        }
+      else if (! GIMP_IS_LAYER (drawable))
+        {
+          g_set_error (error, GIMP_PDB_ERROR, GIMP_PDB_ERROR_INVALID_ARGUMENT,
+                       "%s: only drawables of type GimpLayer can have non-destructive effects.",
+                       G_STRFUNC);
+          success = FALSE;
+        }
+
+      node = gimp_drawable_filter_get_operation (filter);
+      if (success && gegl_node_has_pad (node, "aux"))
+        {
+          /* Filters with aux input should not be NDE. See: gimp_filter_tool_create_filter(). */
+          g_set_error (error, GIMP_PDB_ERROR, GIMP_PDB_ERROR_INVALID_ARGUMENT,
+                       "%s: effects with an 'aux' pad cannot be applied non-destructively.",
+                       G_STRFUNC);
+          success = FALSE;
+        }
+
+      if (success)
+        {
+          GimpImage *image = gimp_item_get_image (GIMP_ITEM (drawable));
+
+          gimp_image_undo_push_filter_add (image, _("Add filter"), drawable, filter);
+          gimp_drawable_filter_apply (filter, NULL);
+          gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+          gimp_drawable_filter_layer_mask_freeze (filter);
+
+          g_object_unref (filter);
+        }
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
+drawable_merge_filter_private_invoker (GimpProcedure         *procedure,
+                                       Gimp                  *gimp,
+                                       GimpContext           *context,
+                                       GimpProgress          *progress,
+                                       const GimpValueArray  *args,
+                                       GError               **error)
+{
+  gboolean success = TRUE;
+  GimpDrawable *drawable;
+  GimpDrawableFilter *filter;
+
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
+  filter = g_value_get_object (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      if (gimp_drawable_filter_get_drawable (filter) != drawable)
+        {
+          g_set_error (error, GIMP_PDB_ERROR, GIMP_PDB_ERROR_INVALID_ARGUMENT,
+                       "%s: the filter was not created for this drawable.",
+                       G_STRFUNC);
+          success = FALSE;
+        }
+
+      if (success)
+        {
+          GimpContainer *filters;
+          gint           count;
+
+          gimp_drawable_filter_apply (filter, NULL);
+
+          filters = gimp_drawable_get_filters (drawable);
+          count   = gimp_container_get_n_children (filters);
+          if (count > 1)
+            gimp_container_reorder (filters, GIMP_OBJECT (filter), count - 1);
+
+          gimp_drawable_filter_layer_mask_freeze (filter);
+          gimp_drawable_filter_commit (filter, FALSE, NULL, FALSE);
+
+          g_object_unref (filter);
+        }
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
+drawable_get_filters_invoker (GimpProcedure         *procedure,
+                              Gimp                  *gimp,
+                              GimpContext           *context,
+                              GimpProgress          *progress,
+                              const GimpValueArray  *args,
+                              GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  GimpDrawable *drawable;
+  GimpDrawableFilter **filters = NULL;
+
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      GimpContainer *container;
+      GList         *iter;
+      gsize          num_filters;
+      gint           i;
+
+      container   = gimp_drawable_get_filters (drawable);
+      num_filters = gimp_container_get_n_children (container);
+      filters     = g_new0 (GimpDrawableFilter *, num_filters + 1);
+
+      iter = GIMP_LIST (container)->queue->head;
+      for (i = 0; i < num_filters; i++, iter = iter->next)
+        filters[i] = iter->data;
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), filters);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+drawable_merge_filters_invoker (GimpProcedure         *procedure,
+                                Gimp                  *gimp,
+                                GimpContext           *context,
+                                GimpProgress          *progress,
+                                const GimpValueArray  *args,
+                                GError               **error)
+{
+  gboolean success = TRUE;
+  GimpDrawable *drawable;
+
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      if (gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
+        gimp_drawable_merge_filters (drawable);
+      else
+        success = FALSE;
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
 drawable_merge_shadow_invoker (GimpProcedure         *procedure,
                                Gimp                  *gimp,
                                GimpContext           *context,
@@ -542,7 +790,7 @@ drawable_merge_shadow_invoker (GimpProcedure         *procedure,
   GimpDrawable *drawable;
   gboolean undo;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
   undo = g_value_get_boolean (gimp_value_array_index (args, 1));
 
   if (success)
@@ -577,7 +825,7 @@ drawable_free_shadow_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpDrawable *drawable;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -602,12 +850,12 @@ drawable_update_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpDrawable *drawable;
-  gint32 x;
-  gint32 y;
-  gint32 width;
-  gint32 height;
+  gint x;
+  gint y;
+  gint width;
+  gint height;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
   x = g_value_get_int (gimp_value_array_index (args, 1));
   y = g_value_get_int (gimp_value_array_index (args, 2));
   width = g_value_get_int (gimp_value_array_index (args, 3));
@@ -616,112 +864,6 @@ drawable_update_invoker (GimpProcedure         *procedure,
   if (success)
     {
       gimp_drawable_update (drawable, x, y, width, height);
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
-}
-
-static GimpValueArray *
-drawable_get_pixel_invoker (GimpProcedure         *procedure,
-                            Gimp                  *gimp,
-                            GimpContext           *context,
-                            GimpProgress          *progress,
-                            const GimpValueArray  *args,
-                            GError               **error)
-{
-  gboolean success = TRUE;
-  GimpValueArray *return_vals;
-  GimpDrawable *drawable;
-  gint32 x_coord;
-  gint32 y_coord;
-  gint32 num_channels = 0;
-  guint8 *pixel = NULL;
-
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
-  x_coord = g_value_get_int (gimp_value_array_index (args, 1));
-  y_coord = g_value_get_int (gimp_value_array_index (args, 2));
-
-  if (success)
-    {
-      const Babl *format = gimp_drawable_get_format (drawable);
-
-      if (! gimp->plug_in_manager->current_plug_in ||
-          ! gimp_plug_in_precision_enabled (gimp->plug_in_manager->current_plug_in))
-        {
-          format = gimp_babl_compat_u8_format (format);
-        }
-
-      if (x_coord < gimp_item_get_width  (GIMP_ITEM (drawable)) &&
-          y_coord < gimp_item_get_height (GIMP_ITEM (drawable)))
-        {
-          num_channels = babl_format_get_bytes_per_pixel (format);
-          pixel = g_new0 (guint8, num_channels);
-
-          gegl_buffer_sample (gimp_drawable_get_buffer (drawable),
-                              x_coord, y_coord, NULL, pixel, format,
-                              GEGL_SAMPLER_NEAREST, GEGL_ABYSS_NONE);
-        }
-      else
-        success = FALSE;
-    }
-
-  return_vals = gimp_procedure_get_return_values (procedure, success,
-                                                  error ? *error : NULL);
-
-  if (success)
-    {
-      g_value_set_int (gimp_value_array_index (return_vals, 1), num_channels);
-      gimp_value_take_int8array (gimp_value_array_index (return_vals, 2), pixel, num_channels);
-    }
-
-  return return_vals;
-}
-
-static GimpValueArray *
-drawable_set_pixel_invoker (GimpProcedure         *procedure,
-                            Gimp                  *gimp,
-                            GimpContext           *context,
-                            GimpProgress          *progress,
-                            const GimpValueArray  *args,
-                            GError               **error)
-{
-  gboolean success = TRUE;
-  GimpDrawable *drawable;
-  gint32 x_coord;
-  gint32 y_coord;
-  gint32 num_channels;
-  const guint8 *pixel;
-
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
-  x_coord = g_value_get_int (gimp_value_array_index (args, 1));
-  y_coord = g_value_get_int (gimp_value_array_index (args, 2));
-  num_channels = g_value_get_int (gimp_value_array_index (args, 3));
-  pixel = gimp_value_get_int8array (gimp_value_array_index (args, 4));
-
-  if (success)
-    {
-      const Babl *format = gimp_drawable_get_format (drawable);
-
-      if (! gimp->plug_in_manager->current_plug_in ||
-          ! gimp_plug_in_precision_enabled (gimp->plug_in_manager->current_plug_in))
-        {
-          format = gimp_babl_compat_u8_format (format);
-        }
-
-      if (gimp_pdb_item_is_modifiable (GIMP_ITEM (drawable),
-                                       GIMP_PDB_ITEM_CONTENT, error) &&
-          gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error) &&
-          x_coord < gimp_item_get_width  (GIMP_ITEM (drawable)) &&
-          y_coord < gimp_item_get_height (GIMP_ITEM (drawable)) &&
-          num_channels == babl_format_get_bytes_per_pixel (format))
-        {
-          gegl_buffer_set (gimp_drawable_get_buffer (drawable),
-                           GEGL_RECTANGLE (x_coord, y_coord, 1, 1),
-                           0, format, pixel, GEGL_AUTO_ROWSTRIDE);
-        }
-      else
-        success = FALSE;
     }
 
   return gimp_procedure_get_return_values (procedure, success,
@@ -738,9 +880,9 @@ drawable_fill_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpDrawable *drawable;
-  gint32 fill_type;
+  gint fill_type;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
   fill_type = g_value_get_enum (gimp_value_array_index (args, 1));
 
   if (success)
@@ -770,15 +912,17 @@ drawable_offset_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpDrawable *drawable;
   gboolean wrap_around;
-  gint32 fill_type;
-  gint32 offset_x;
-  gint32 offset_y;
+  gint fill_type;
+  GeglColor *color;
+  gint offset_x;
+  gint offset_y;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
   wrap_around = g_value_get_boolean (gimp_value_array_index (args, 1));
   fill_type = g_value_get_enum (gimp_value_array_index (args, 2));
-  offset_x = g_value_get_int (gimp_value_array_index (args, 3));
-  offset_y = g_value_get_int (gimp_value_array_index (args, 4));
+  color = g_value_get_object (gimp_value_array_index (args, 3));
+  offset_x = g_value_get_int (gimp_value_array_index (args, 4));
+  offset_y = g_value_get_int (gimp_value_array_index (args, 5));
 
   if (success)
     {
@@ -786,7 +930,7 @@ drawable_offset_invoker (GimpProcedure         *procedure,
                                      GIMP_PDB_ITEM_CONTENT, error) &&
           gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
         gimp_drawable_offset (drawable, context, wrap_around, fill_type,
-                              offset_x, offset_y);
+                              color, offset_x, offset_y);
       else
         success = FALSE;
     }
@@ -806,15 +950,14 @@ drawable_thumbnail_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpDrawable *drawable;
-  gint32 width;
-  gint32 height;
-  gint32 actual_width = 0;
-  gint32 actual_height = 0;
-  gint32 bpp = 0;
-  gint32 thumbnail_data_count = 0;
-  guint8 *thumbnail_data = NULL;
+  gint width;
+  gint height;
+  gint actual_width = 0;
+  gint actual_height = 0;
+  gint bpp = 0;
+  GBytes *thumbnail_data = NULL;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
   width = g_value_get_int (gimp_value_array_index (args, 1));
   height = g_value_get_int (gimp_value_array_index (args, 2));
 
@@ -848,9 +991,8 @@ drawable_thumbnail_invoker (GimpProcedure         *procedure,
           actual_width         = gimp_temp_buf_get_width  (buf);
           actual_height        = gimp_temp_buf_get_height (buf);
           bpp                  = babl_format_get_bytes_per_pixel (gimp_temp_buf_get_format (buf));
-          thumbnail_data_count = gimp_temp_buf_get_data_size (buf);
-          thumbnail_data       = g_memdup (gimp_temp_buf_get_data (buf),
-                                           thumbnail_data_count);
+          thumbnail_data       = g_bytes_new (gimp_temp_buf_get_data (buf),
+                                              gimp_temp_buf_get_data_size (buf));
 
           gimp_temp_buf_unref (buf);
         }
@@ -866,8 +1008,7 @@ drawable_thumbnail_invoker (GimpProcedure         *procedure,
       g_value_set_int (gimp_value_array_index (return_vals, 1), actual_width);
       g_value_set_int (gimp_value_array_index (return_vals, 2), actual_height);
       g_value_set_int (gimp_value_array_index (return_vals, 3), bpp);
-      g_value_set_int (gimp_value_array_index (return_vals, 4), thumbnail_data_count);
-      gimp_value_take_int8array (gimp_value_array_index (return_vals, 5), thumbnail_data, thumbnail_data_count);
+      g_value_take_boxed (gimp_value_array_index (return_vals, 4), thumbnail_data);
     }
 
   return return_vals;
@@ -884,19 +1025,18 @@ drawable_sub_thumbnail_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpDrawable *drawable;
-  gint32 src_x;
-  gint32 src_y;
-  gint32 src_width;
-  gint32 src_height;
-  gint32 dest_width;
-  gint32 dest_height;
-  gint32 width = 0;
-  gint32 height = 0;
-  gint32 bpp = 0;
-  gint32 thumbnail_data_count = 0;
-  guint8 *thumbnail_data = NULL;
+  gint src_x;
+  gint src_y;
+  gint src_width;
+  gint src_height;
+  gint dest_width;
+  gint dest_height;
+  gint width = 0;
+  gint height = 0;
+  gint bpp = 0;
+  GBytes *thumbnail_data = NULL;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
   src_x = g_value_get_int (gimp_value_array_index (args, 1));
   src_y = g_value_get_int (gimp_value_array_index (args, 2));
   src_width = g_value_get_int (gimp_value_array_index (args, 3));
@@ -927,9 +1067,8 @@ drawable_sub_thumbnail_invoker (GimpProcedure         *procedure,
               width                = gimp_temp_buf_get_width  (buf);
               height               = gimp_temp_buf_get_height (buf);
               bpp                  = babl_format_get_bytes_per_pixel (gimp_temp_buf_get_format (buf));
-              thumbnail_data_count = gimp_temp_buf_get_data_size (buf);
-              thumbnail_data       = g_memdup (gimp_temp_buf_get_data (buf),
-                                               thumbnail_data_count);
+              thumbnail_data       = g_bytes_new (gimp_temp_buf_get_data (buf),
+                                                  gimp_temp_buf_get_data_size (buf));
 
               gimp_temp_buf_unref (buf);
             }
@@ -948,8 +1087,7 @@ drawable_sub_thumbnail_invoker (GimpProcedure         *procedure,
       g_value_set_int (gimp_value_array_index (return_vals, 1), width);
       g_value_set_int (gimp_value_array_index (return_vals, 2), height);
       g_value_set_int (gimp_value_array_index (return_vals, 3), bpp);
-      g_value_set_int (gimp_value_array_index (return_vals, 4), thumbnail_data_count);
-      gimp_value_take_int8array (gimp_value_array_index (return_vals, 5), thumbnail_data, thumbnail_data_count);
+      g_value_take_boxed (gimp_value_array_index (return_vals, 4), thumbnail_data);
     }
 
   return return_vals;
@@ -965,12 +1103,12 @@ drawable_foreground_extract_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpDrawable *drawable;
-  gint32 mode;
+  gint mode;
   GimpDrawable *mask;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
   mode = g_value_get_enum (gimp_value_array_index (args, 1));
-  mask = gimp_value_get_drawable (gimp_value_array_index (args, 2), gimp);
+  mask = g_value_get_object (gimp_value_array_index (args, 2));
 
   if (success)
     {
@@ -1017,23 +1155,24 @@ register_drawable_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-get-format
    */
-  procedure = gimp_procedure_new (drawable_get_format_invoker);
+  procedure = gimp_procedure_new (drawable_get_format_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-get-format");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-get-format",
-                                     "Returns the drawable's Babl format",
-                                     "This procedure returns the drawable's Babl format.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2012",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the drawable's Babl format",
+                                  "This procedure returns the drawable's Babl format.\n"
+                                  "Note that the actual PDB procedure only transfers the format's encoding. In order to get to the real format, the libbgimp C wrapper must be used.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2012");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("format",
                                                            "format",
@@ -1047,24 +1186,24 @@ register_drawable_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-get-thumbnail-format
    */
-  procedure = gimp_procedure_new (drawable_get_thumbnail_format_invoker);
+  procedure = gimp_procedure_new (drawable_get_thumbnail_format_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-get-thumbnail-format");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-get-thumbnail-format",
-                                     "Returns the drawable's thumbnail Babl format",
-                                     "This procedure returns the drawable's thumbnail Babl format.\n"
-                                     "Thumbnails are always 8-bit images, see 'gimp-drawable-thumbnail' and 'gimp-drawable-sub-thmbnail'.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2019",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the drawable's thumbnail Babl format",
+                                  "This procedure returns the drawable's thumbnail Babl format.\n"
+                                  "Thumbnails are always 8-bit images, see 'gimp-drawable-thumbnail' and 'gimp-drawable-sub-thmbnail'.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2019");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("format",
                                                            "format",
@@ -1076,25 +1215,109 @@ register_drawable_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
+   * gimp-drawable-get-pixel
+   */
+  procedure = gimp_procedure_new (drawable_get_pixel_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-drawable-get-pixel");
+  gimp_procedure_set_static_help (procedure,
+                                  "Gets the value of the pixel at the specified coordinates.",
+                                  "This procedure gets the pixel value at the specified coordinates.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1997");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("x-coord",
+                                                 "x coord",
+                                                 "The x coordinate",
+                                                 0, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("y-coord",
+                                                 "y coord",
+                                                 "The y coordinate",
+                                                 0, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   gimp_param_spec_color ("color",
+                                                          "color",
+                                                          "The pixel color",
+                                                          FALSE,
+                                                          NULL,
+                                                          GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-drawable-set-pixel
+   */
+  procedure = gimp_procedure_new (drawable_set_pixel_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-drawable-set-pixel");
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the value of the pixel at the specified coordinates.",
+                                  "This procedure sets the pixel value at the specified coordinates. Note that this function is not undoable, you should use it only on drawables you just created yourself.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1997");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("x-coord",
+                                                 "x coord",
+                                                 "The x coordinate",
+                                                 0, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("y-coord",
+                                                 "y coord",
+                                                 "The y coordinate",
+                                                 0, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_color ("color",
+                                                      "color",
+                                                      "The pixel color",
+                                                      FALSE,
+                                                      NULL,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
    * gimp-drawable-type
    */
-  procedure = gimp_procedure_new (drawable_type_invoker);
+  procedure = gimp_procedure_new (drawable_type_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-type");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-type",
-                                     "Returns the drawable's type.",
-                                     "This procedure returns the drawable's type.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the drawable's type.",
+                                  "This procedure returns the drawable's type.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_enum ("type",
                                                       "type",
@@ -1108,23 +1331,23 @@ register_drawable_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-type-with-alpha
    */
-  procedure = gimp_procedure_new (drawable_type_with_alpha_invoker);
+  procedure = gimp_procedure_new (drawable_type_with_alpha_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-type-with-alpha");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-type-with-alpha",
-                                     "Returns the drawable's type with alpha.",
-                                     "This procedure returns the drawable's type as if had an alpha channel. If the type is currently Gray, for instance, the returned type would be GrayA. If the drawable already has an alpha channel, the drawable's type is simply returned.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the drawable's type with alpha.",
+                                  "This procedure returns the drawable's type as if had an alpha channel. If the type is currently Gray, for instance, the returned type would be GrayA. If the drawable already has an alpha channel, the drawable's type is simply returned.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_enum ("type-with-alpha",
                                                          "type with alpha",
@@ -1144,23 +1367,23 @@ register_drawable_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-has-alpha
    */
-  procedure = gimp_procedure_new (drawable_has_alpha_invoker);
+  procedure = gimp_procedure_new (drawable_has_alpha_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-has-alpha");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-has-alpha",
-                                     "Returns TRUE if the drawable has an alpha channel.",
-                                     "This procedure returns whether the specified drawable has an alpha channel. This can only be true for layers, and the associated type will be one of: { RGBA , GRAYA, INDEXEDA }.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns TRUE if the drawable has an alpha channel.",
+                                  "This procedure returns whether the specified drawable has an alpha channel. This can only be true for layers, and the associated type will be one of: { RGBA , GRAYA, INDEXEDA }.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("has-alpha",
                                                          "has alpha",
@@ -1173,23 +1396,23 @@ register_drawable_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-is-rgb
    */
-  procedure = gimp_procedure_new (drawable_is_rgb_invoker);
+  procedure = gimp_procedure_new (drawable_is_rgb_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-is-rgb");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-is-rgb",
-                                     "Returns whether the drawable is an RGB type.",
-                                     "This procedure returns TRUE if the specified drawable is of type { RGB, RGBA }.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the drawable is an RGB type.",
+                                  "This procedure returns TRUE if the specified drawable is of type { RGB, RGBA }.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("is-rgb",
                                                          "is rgb",
@@ -1202,23 +1425,23 @@ register_drawable_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-is-gray
    */
-  procedure = gimp_procedure_new (drawable_is_gray_invoker);
+  procedure = gimp_procedure_new (drawable_is_gray_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-is-gray");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-is-gray",
-                                     "Returns whether the drawable is a grayscale type.",
-                                     "This procedure returns TRUE if the specified drawable is of type { Gray, GrayA }.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the drawable is a grayscale type.",
+                                  "This procedure returns TRUE if the specified drawable is of type { Gray, GrayA }.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("is-gray",
                                                          "is gray",
@@ -1231,23 +1454,23 @@ register_drawable_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-is-indexed
    */
-  procedure = gimp_procedure_new (drawable_is_indexed_invoker);
+  procedure = gimp_procedure_new (drawable_is_indexed_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-is-indexed");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-is-indexed",
-                                     "Returns whether the drawable is an indexed type.",
-                                     "This procedure returns TRUE if the specified drawable is of type { Indexed, IndexedA }.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the drawable is an indexed type.",
+                                  "This procedure returns TRUE if the specified drawable is of type { Indexed, IndexedA }.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("is-indexed",
                                                          "is indexed",
@@ -1258,177 +1481,148 @@ register_drawable_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-drawable-bpp
+   * gimp-drawable-get-bpp
    */
-  procedure = gimp_procedure_new (drawable_bpp_invoker);
+  procedure = gimp_procedure_new (drawable_get_bpp_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-drawable-bpp");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-bpp",
-                                     "Returns the bytes per pixel.",
-                                     "This procedure returns the number of bytes per pixel, which corresponds to the number of components unless 'gimp-plugin-enable-precision' was called.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-drawable-get-bpp");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the bytes per pixel.",
+                                  "This procedure returns the number of bytes per pixel.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("bpp",
-                                                          "bpp",
-                                                          "Bytes per pixel",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-drawable-width
-   */
-  procedure = gimp_procedure_new (drawable_width_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-drawable-width");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-width",
-                                     "Returns the width of the drawable.",
-                                     "This procedure returns the specified drawable's width in pixels.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("width",
-                                                          "width",
-                                                          "Width of drawable",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-drawable-height
-   */
-  procedure = gimp_procedure_new (drawable_height_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-drawable-height");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-height",
-                                     "Returns the height of the drawable.",
-                                     "This procedure returns the specified drawable's height in pixels.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("height",
-                                                          "height",
-                                                          "Height of drawable",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-drawable-offsets
-   */
-  procedure = gimp_procedure_new (drawable_offsets_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-drawable-offsets");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-offsets",
-                                     "Returns the offsets for the drawable.",
-                                     "This procedure returns the specified drawable's offsets. This only makes sense if the drawable is a layer since channels are anchored. The offsets of a channel will be returned as 0.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("offset-x",
-                                                          "offset x",
-                                                          "x offset of drawable",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("offset-y",
-                                                          "offset y",
-                                                          "y offset of drawable",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-drawable-set-image
-   */
-  procedure = gimp_procedure_new (drawable_set_image_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-drawable-set-image");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-set-image",
-                                     "Deprecated: There is no replacement for this procedure.",
-                                     "Deprecated: There is no replacement for this procedure.",
-                                     "",
-                                     "",
-                                     "",
-                                     "NONE");
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
                                                          GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_int ("bpp",
+                                                     "bpp",
+                                                     "Bytes per pixel",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-drawable-get-width
+   */
+  procedure = gimp_procedure_new (drawable_get_width_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-drawable-get-width");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the width of the drawable.",
+                                  "This procedure returns the specified drawable's width in pixels.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_int ("width",
+                                                     "width",
+                                                     "Width of drawable",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-drawable-get-height
+   */
+  procedure = gimp_procedure_new (drawable_get_height_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-drawable-get-height");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the height of the drawable.",
+                                  "This procedure returns the specified drawable's height in pixels.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_int ("height",
+                                                     "height",
+                                                     "Height of drawable",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-drawable-get-offsets
+   */
+  procedure = gimp_procedure_new (drawable_get_offsets_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-drawable-get-offsets");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the offsets for the drawable.",
+                                  "This procedure returns the specified drawable's offsets. This only makes sense if the drawable is a layer since channels are anchored. The offsets of a channel will be returned as 0.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_int ("offset-x",
+                                                     "offset x",
+                                                     "x offset of drawable",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_int ("offset-y",
+                                                     "offset y",
+                                                     "y offset of drawable",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-drawable-mask-bounds
    */
-  procedure = gimp_procedure_new (drawable_mask_bounds_invoker);
+  procedure = gimp_procedure_new (drawable_mask_bounds_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-mask-bounds");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-mask-bounds",
-                                     "Find the bounding box of the current selection in relation to the specified drawable.",
-                                     "This procedure returns whether there is a selection. If there is one, the upper left and lower right-hand corners of its bounding box are returned. These coordinates are specified relative to the drawable's origin, and bounded by the drawable's extents. Please note that the pixel specified by the lower right-hand coordinate of the bounding box is not part of the selection. The selection ends at the upper left corner of this pixel. This means the width of the selection can be calculated as (x2 - x1), its height as (y2 - y1).\n"
-                                     "Note that the returned boolean does NOT correspond with the returned region being empty or not, it always returns whether the selection is non_empty. See 'gimp-drawable-mask-intersect' for a boolean return value which is more useful in most cases.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Find the bounding box of the current selection in relation to the specified drawable.",
+                                  "This procedure returns whether there is a selection. If there is one, the upper left and lower right-hand corners of its bounding box are returned. These coordinates are specified relative to the drawable's origin, and bounded by the drawable's extents. Please note that the pixel specified by the lower right-hand coordinate of the bounding box is not part of the selection. The selection ends at the upper left corner of this pixel. This means the width of the selection can be calculated as (x2 - x1), its height as (y2 - y1).\n"
+                                  "Note that the returned boolean does NOT correspond with the returned region being empty or not, it always returns whether the selection is non_empty. See 'gimp-drawable-mask-intersect' for a boolean return value which is more useful in most cases.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("non-empty",
                                                          "non empty",
@@ -1436,53 +1630,53 @@ register_drawable_procs (GimpPDB *pdb)
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("x1",
-                                                          "x1",
-                                                          "x coordinate of the upper left corner of selection bounds",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("x1",
+                                                     "x1",
+                                                     "x coordinate of the upper left corner of selection bounds",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("y1",
-                                                          "y1",
-                                                          "y coordinate of the upper left corner of selection bounds",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("y1",
+                                                     "y1",
+                                                     "y coordinate of the upper left corner of selection bounds",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("x2",
-                                                          "x2",
-                                                          "x coordinate of the lower right corner of selection bounds",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("x2",
+                                                     "x2",
+                                                     "x coordinate of the lower right corner of selection bounds",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("y2",
-                                                          "y2",
-                                                          "y coordinate of the lower right corner of selection bounds",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("y2",
+                                                     "y2",
+                                                     "y coordinate of the lower right corner of selection bounds",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-drawable-mask-intersect
    */
-  procedure = gimp_procedure_new (drawable_mask_intersect_invoker);
+  procedure = gimp_procedure_new (drawable_mask_intersect_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-mask-intersect");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-mask-intersect",
-                                     "Find the bounding box of the current selection in relation to the specified drawable.",
-                                     "This procedure returns whether there is an intersection between the drawable and the selection. Unlike 'gimp-drawable-mask-bounds', the intersection's bounds are returned as x, y, width, height.\n"
-                                     "If there is no selection this function returns TRUE and the returned bounds are the extents of the whole drawable.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2004",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Find the bounding box of the current selection in relation to the specified drawable.",
+                                  "This procedure returns whether there is an intersection between the drawable and the selection. Unlike 'gimp-drawable-mask-bounds', the intersection's bounds are returned as x, y, width, height.\n"
+                                  "If there is no selection this function returns TRUE and the returned bounds are the extents of the whole drawable.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2004");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("non-empty",
                                                          "non empty",
@@ -1490,52 +1684,168 @@ register_drawable_procs (GimpPDB *pdb)
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("x",
-                                                          "x",
-                                                          "x coordinate of the upper left corner of the intersection",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("x",
+                                                     "x",
+                                                     "x coordinate of the upper left corner of the intersection",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("y",
-                                                          "y",
-                                                          "y coordinate of the upper left corner of the intersection",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("y",
+                                                     "y",
+                                                     "y coordinate of the upper left corner of the intersection",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("width",
-                                                          "width",
-                                                          "width of the intersection",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("width",
+                                                     "width",
+                                                     "width of the intersection",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("height",
-                                                          "height",
-                                                          "height of the intersection",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("height",
+                                                     "height",
+                                                     "height of the intersection",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-drawable-append-filter-private
+   */
+  procedure = gimp_procedure_new (drawable_append_filter_private_invoker, TRUE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-drawable-append-filter-private");
+  gimp_procedure_set_static_help (procedure,
+                                  "Append the specified effect to the top of the list of drawable effects.",
+                                  "This procedure adds the specified drawable effect at the top of the effect list of @drawable.\n"
+                                  "The @drawable argument must be the same as the one used when you created the effect with [ctor@Gimp.DrawableFilter.new].\n"
+                                  "Some effects may be slower than others to render. In order to minimize processing time, it is preferred to customize the operation's arguments as received with [method@Gimp.DrawableFilter.get_config] then sync them to the application with [method@Gimp.DrawableFilter.update] before adding the effect.\n"
+                                  "This function is private and should not be used. Use [method@Gimp.Drawable.append_filter] instead.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2024");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable_filter ("filter",
+                                                                "filter",
+                                                                "The drawable filter to append",
+                                                                FALSE,
+                                                                GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-drawable-merge-filter-private
+   */
+  procedure = gimp_procedure_new (drawable_merge_filter_private_invoker, TRUE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-drawable-merge-filter-private");
+  gimp_procedure_set_static_help (procedure,
+                                  "Apply the specified effect directly to the drawable.",
+                                  "This procedure applies the specified drawable effect on @drawable and merge it (therefore before non-destructive effects are computed).\n"
+                                  "The @drawable argument must be the same as the one used when you created the effect with [ctor@Gimp.DrawableFilter.new].\n"
+                                  "Once this is run, @filter is not valid anymore and you should not try to do anything with it. In particular, you must customize the operation's arguments as received with [method@Gimp.DrawableFilter.get_config] then sync them to the application with [method@Gimp.DrawableFilter.update] before merging the effect.\n"
+                                  "This function is private and should not be used. Use [method@Gimp.Drawable.merge_filter] instead.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2024");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable_filter ("filter",
+                                                                "filter",
+                                                                "The drawable filter to merge",
+                                                                FALSE,
+                                                                GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-drawable-get-filters
+   */
+  procedure = gimp_procedure_new (drawable_get_filters_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-drawable-get-filters");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the list of filters applied to the drawable.",
+                                  "This procedure returns the list of filters which are currently applied non-destructively to @drawable. The order of filters is from topmost to bottommost.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2024");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   gimp_param_spec_core_object_array ("filters",
+                                                                      "filters",
+                                                                      "The list of filters on the drawable.",
+                                                                      GIMP_TYPE_DRAWABLE_FILTER,
+                                                                      GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-drawable-merge-filters
+   */
+  procedure = gimp_procedure_new (drawable_merge_filters_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-drawable-merge-filters");
+  gimp_procedure_set_static_help (procedure,
+                                  "Merge the layer effect filters to the specified drawable.",
+                                  "This procedure combines the contents of the drawable's filter stack (for export) with the specified drawable.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-drawable-merge-shadow
    */
-  procedure = gimp_procedure_new (drawable_merge_shadow_invoker);
+  procedure = gimp_procedure_new (drawable_merge_shadow_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-merge-shadow");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-merge-shadow",
-                                     "Merge the shadow buffer with the specified drawable.",
-                                     "This procedure combines the contents of the drawable's shadow buffer (for temporary processing) with the specified drawable. The 'undo' parameter specifies whether to add an undo step for the operation. Requesting no undo is useful for such applications as 'auto-apply'.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Merge the shadow buffer with the specified drawable.",
+                                  "This procedure combines the contents of the drawable's shadow buffer (for temporary processing) with the specified drawable. The 'undo' parameter specifies whether to add an undo step for the operation. Requesting no undo is useful for such applications as 'auto-apply'.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_boolean ("undo",
                                                      "undo",
@@ -1548,186 +1858,94 @@ register_drawable_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-free-shadow
    */
-  procedure = gimp_procedure_new (drawable_free_shadow_invoker);
+  procedure = gimp_procedure_new (drawable_free_shadow_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-free-shadow");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-free-shadow",
-                                     "Free the specified drawable's shadow data (if it exists).",
-                                     "This procedure is intended as a memory saving device. If any shadow memory has been allocated, it will be freed automatically when the drawable is removed from the image, or when the plug-in procedure which allocated it returns.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2008",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Free the specified drawable's shadow data (if it exists).",
+                                  "This procedure is intended as a memory saving device. If any shadow memory has been allocated, it will be freed automatically when the drawable is removed from the image, or when the plug-in procedure which allocated it returns.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2008");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-drawable-update
    */
-  procedure = gimp_procedure_new (drawable_update_invoker);
+  procedure = gimp_procedure_new (drawable_update_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-update");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-update",
-                                     "Update the specified region of the drawable.",
-                                     "This procedure updates the specified region of the drawable. The (x, y) coordinate pair is relative to the drawable's origin, not to the image origin. Therefore, the entire drawable can be updated using (0, 0, width, height).",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Update the specified region of the drawable.",
+                                  "This procedure updates the specified region of the drawable. The (x, y) coordinate pair is relative to the drawable's origin, not to the image origin. Therefore, the entire drawable can be updated using (0, 0, width, height).",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("x",
-                                                      "x",
-                                                      "x coordinate of upper left corner of update region",
-                                                      G_MININT32, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("x",
+                                                 "x",
+                                                 "x coordinate of upper left corner of update region",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("y",
-                                                      "y",
-                                                      "y coordinate of upper left corner of update region",
-                                                      G_MININT32, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("y",
+                                                 "y",
+                                                 "y coordinate of upper left corner of update region",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("width",
-                                                      "width",
-                                                      "Width of update region",
-                                                      G_MININT32, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("width",
+                                                 "width",
+                                                 "Width of update region",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("height",
-                                                      "height",
-                                                      "Height of update region",
-                                                      G_MININT32, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-drawable-get-pixel
-   */
-  procedure = gimp_procedure_new (drawable_get_pixel_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-drawable-get-pixel");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-get-pixel",
-                                     "Gets the value of the pixel at the specified coordinates.",
-                                     "This procedure gets the pixel value at the specified coordinates. The 'num_channels' argument must always be equal to the bytes-per-pixel value for the specified drawable.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1997",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("x-coord",
-                                                      "x coord",
-                                                      "The x coordinate",
-                                                      0, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("y-coord",
-                                                      "y coord",
-                                                      "The y coordinate",
-                                                      0, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-channels",
-                                                          "num channels",
-                                                          "The number of channels for the pixel",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int8_array ("pixel",
-                                                               "pixel",
-                                                               "The pixel value",
-                                                               GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-drawable-set-pixel
-   */
-  procedure = gimp_procedure_new (drawable_set_pixel_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-drawable-set-pixel");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-set-pixel",
-                                     "Sets the value of the pixel at the specified coordinates.",
-                                     "This procedure sets the pixel value at the specified coordinates. The 'num_channels' argument must always be equal to the bytes-per-pixel value for the specified drawable. Note that this function is not undoable, you should use it only on drawables you just created yourself.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1997",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("x-coord",
-                                                      "x coord",
-                                                      "The x coordinate",
-                                                      0, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("y-coord",
-                                                      "y coord",
-                                                      "The y coordinate",
-                                                      0, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("num-channels",
-                                                      "num channels",
-                                                      "The number of channels for the pixel",
-                                                      0, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int8_array ("pixel",
-                                                           "pixel",
-                                                           "The pixel value",
-                                                           GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("height",
+                                                 "height",
+                                                 "Height of update region",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-drawable-fill
    */
-  procedure = gimp_procedure_new (drawable_fill_invoker);
+  procedure = gimp_procedure_new (drawable_fill_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-fill");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-fill",
-                                     "Fill the drawable with the specified fill mode.",
-                                     "This procedure fills the drawable. If the fill mode is foreground the current foreground color is used. If the fill mode is background, the current background color is used. If the fill type is white, then white is used. Transparent fill only affects layers with an alpha channel, in which case the alpha channel is set to transparent. If the drawable has no alpha channel, it is filled to white. No fill leaves the drawable's contents undefined.\n"
-                                     "This procedure is unlike 'gimp-edit-fill' or the bucket fill tool because it fills regardless of a selection. Its main purpose is to fill a newly created drawable before adding it to the image. This operation cannot be undone.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Fill the drawable with the specified fill mode.",
+                                  "This procedure fills the drawable. If the fill mode is foreground the current foreground color is used. If the fill mode is background, the current background color is used. If the fill type is white, then white is used. Transparent fill only affects layers with an alpha channel, in which case the alpha channel is set to transparent. If the drawable has no alpha channel, it is filled to white. No fill leaves the drawable's contents undefined.\n"
+                                  "This procedure is unlike 'gimp-drawable-edit-fill' or the bucket fill tool because it fills regardless of a selection. Its main purpose is to fill a newly created drawable before adding it to the image. This operation cannot be undone.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("fill-type",
                                                   "fill type",
@@ -1741,23 +1959,23 @@ register_drawable_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-offset
    */
-  procedure = gimp_procedure_new (drawable_offset_invoker);
+  procedure = gimp_procedure_new (drawable_offset_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-offset");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-offset",
-                                     "Offset the drawable by the specified amounts in the X and Y directions",
-                                     "This procedure offsets the specified drawable by the amounts specified by 'offset_x' and 'offset_y'. If 'wrap_around' is set to TRUE, then portions of the drawable which are offset out of bounds are wrapped around. Alternatively, the undefined regions of the drawable can be filled with transparency or the background color, as specified by the 'fill-type' parameter.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1997",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Offset the drawable by the specified amounts in the X and Y directions",
+                                  "This procedure offsets the specified drawable by the amounts specified by 'offset_x' and 'offset_y'. If 'wrap_around' is set to TRUE, then portions of the drawable which are offset out of bounds are wrapped around. Alternatively, the undefined regions of the drawable can be filled with transparency or the background color, as specified by the 'fill-type' parameter.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1997");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable to offset",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable to offset",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_boolean ("wrap-around",
                                                      "wrap around",
@@ -1769,208 +1987,205 @@ register_drawable_procs (GimpPDB *pdb)
                                                   "fill type",
                                                   "fill vacated regions of drawable with background or transparent",
                                                   GIMP_TYPE_OFFSET_TYPE,
-                                                  GIMP_OFFSET_BACKGROUND,
+                                                  GIMP_OFFSET_COLOR,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("offset-x",
-                                                      "offset x",
-                                                      "offset by this amount in X direction",
-                                                      G_MININT32, G_MAXINT32, 0,
+                               gimp_param_spec_color ("color",
+                                                      "color",
+                                                      "fills in the background color when fill_type is set to OFFSET-COLOR",
+                                                      FALSE,
+                                                      NULL,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("offset-y",
-                                                      "offset y",
-                                                      "offset by this amount in Y direction",
-                                                      G_MININT32, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("offset-x",
+                                                 "offset x",
+                                                 "offset by this amount in X direction",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("offset-y",
+                                                 "offset y",
+                                                 "offset by this amount in Y direction",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-drawable-thumbnail
    */
-  procedure = gimp_procedure_new (drawable_thumbnail_invoker);
+  procedure = gimp_procedure_new (drawable_thumbnail_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-thumbnail");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-thumbnail",
-                                     "Get a thumbnail of a drawable.",
-                                     "This function gets data from which a thumbnail of a drawable preview can be created. Maximum x or y dimension is 1024 pixels. The pixels are returned in RGB[A] or GRAY[A] format. The bpp return value gives the number of bytes in the image.",
-                                     "Andy Thomas",
-                                     "Andy Thomas",
-                                     "1999",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get a thumbnail of a drawable.",
+                                  "This function gets data from which a thumbnail of a drawable preview can be created. Maximum x or y dimension is 1024 pixels. The pixels are returned in RGB[A] or GRAY[A] format. The bpp return value gives the number of bytes in the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Andy Thomas",
+                                         "Andy Thomas",
+                                         "1999");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("width",
-                                                      "width",
-                                                      "The requested thumbnail width",
-                                                      1, 1024, 1,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("width",
+                                                 "width",
+                                                 "The requested thumbnail width",
+                                                 1, 1024, 1,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("height",
-                                                      "height",
-                                                      "The requested thumbnail height",
-                                                      1, 1024, 1,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("height",
+                                                 "height",
+                                                 "The requested thumbnail height",
+                                                 1, 1024, 1,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("actual-width",
-                                                          "actual width",
-                                                          "The previews width",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("actual-width",
+                                                     "actual width",
+                                                     "The previews width",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("actual-height",
-                                                          "actual height",
-                                                          "The previews height",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("actual-height",
+                                                     "actual height",
+                                                     "The previews height",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("bpp",
-                                                          "bpp",
-                                                          "The previews bpp",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("bpp",
+                                                     "bpp",
+                                                     "The previews bpp",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("thumbnail-data-count",
-                                                          "thumbnail data count",
-                                                          "The number of bytes in thumbnail data",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int8_array ("thumbnail-data",
-                                                               "thumbnail data",
-                                                               "The thumbnail data",
-                                                               GIMP_PARAM_READWRITE));
+                                   g_param_spec_boxed ("thumbnail-data",
+                                                       "thumbnail data",
+                                                       "The thumbnail data",
+                                                       G_TYPE_BYTES,
+                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-drawable-sub-thumbnail
    */
-  procedure = gimp_procedure_new (drawable_sub_thumbnail_invoker);
+  procedure = gimp_procedure_new (drawable_sub_thumbnail_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-sub-thumbnail");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-sub-thumbnail",
-                                     "Get a thumbnail of a sub-area of a drawable drawable.",
-                                     "This function gets data from which a thumbnail of a drawable preview can be created. Maximum x or y dimension is 1024 pixels. The pixels are returned in RGB[A] or GRAY[A] format. The bpp return value gives the number of bytes in the image.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2004",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get a thumbnail of a sub-area of a drawable drawable.",
+                                  "This function gets data from which a thumbnail of a drawable preview can be created. Maximum x or y dimension is 1024 pixels. The pixels are returned in RGB[A] or GRAY[A] format. The bpp return value gives the number of bytes in the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2004");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("src-x",
-                                                      "src x",
-                                                      "The x coordinate of the area",
-                                                      0, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("src-x",
+                                                 "src x",
+                                                 "The x coordinate of the area",
+                                                 0, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("src-y",
-                                                      "src y",
-                                                      "The y coordinate of the area",
-                                                      0, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("src-y",
+                                                 "src y",
+                                                 "The y coordinate of the area",
+                                                 0, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("src-width",
-                                                      "src width",
-                                                      "The width of the area",
-                                                      1, G_MAXINT32, 1,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("src-width",
+                                                 "src width",
+                                                 "The width of the area",
+                                                 1, G_MAXINT32, 1,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("src-height",
-                                                      "src height",
-                                                      "The height of the area",
-                                                      1, G_MAXINT32, 1,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("src-height",
+                                                 "src height",
+                                                 "The height of the area",
+                                                 1, G_MAXINT32, 1,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("dest-width",
-                                                      "dest width",
-                                                      "The thumbnail width",
-                                                      1, 1024, 1,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("dest-width",
+                                                 "dest width",
+                                                 "The thumbnail width",
+                                                 1, 1024, 1,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("dest-height",
-                                                      "dest height",
-                                                      "The thumbnail height",
-                                                      1, 1024, 1,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("dest-height",
+                                                 "dest height",
+                                                 "The thumbnail height",
+                                                 1, 1024, 1,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("width",
-                                                          "width",
-                                                          "The previews width",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("width",
+                                                     "width",
+                                                     "The previews width",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("height",
-                                                          "height",
-                                                          "The previews height",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("height",
+                                                     "height",
+                                                     "The previews height",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("bpp",
-                                                          "bpp",
-                                                          "The previews bpp",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("bpp",
+                                                     "bpp",
+                                                     "The previews bpp",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("thumbnail-data-count",
-                                                          "thumbnail data count",
-                                                          "The number of bytes in thumbnail data",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int8_array ("thumbnail-data",
-                                                               "thumbnail data",
-                                                               "The thumbnail data",
-                                                               GIMP_PARAM_READWRITE));
+                                   g_param_spec_boxed ("thumbnail-data",
+                                                       "thumbnail data",
+                                                       "The thumbnail data",
+                                                       G_TYPE_BYTES,
+                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-drawable-foreground-extract
    */
-  procedure = gimp_procedure_new (drawable_foreground_extract_invoker);
+  procedure = gimp_procedure_new (drawable_foreground_extract_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-foreground-extract");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-foreground-extract",
-                                     "Extract the foreground of a drawable using a given trimap.",
-                                     "Image Segmentation by Uniform Color Clustering, see https://www.inf.fu-berlin.de/inst/pubs/tr-b-05-07.pdf",
-                                     "Gerald Friedland <fland@inf.fu-berlin.de>, Kristian Jantz <jantz@inf.fu-berlin.de>, Sven Neumann <sven@gimp.org>",
-                                     "Gerald Friedland",
-                                     "2005",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Extract the foreground of a drawable using a given trimap.",
+                                  "Image Segmentation by Uniform Color Clustering, see https://www.inf.fu-berlin.de/inst/pubs/tr-b-05-07.pdf",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Gerald Friedland <fland@inf.fu-berlin.de>, Kristian Jantz <jantz@inf.fu-berlin.de>, Sven Neumann <sven@gimp.org>",
+                                         "Gerald Friedland",
+                                         "2005");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("mode",
                                                   "mode",
                                                   "The algorithm to use",
                                                   GIMP_TYPE_FOREGROUND_EXTRACT_MODE,
-                                                  GIMP_FOREGROUND_EXTRACT_SIOX,
+                                                  GIMP_FOREGROUND_EXTRACT_MATTING,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("mask",
-                                                            "mask",
-                                                            "Tri-Map",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("mask",
+                                                         "mask",
+                                                         "Tri-Map",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 }

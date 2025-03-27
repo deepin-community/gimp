@@ -18,13 +18,18 @@
 #include "config.h"
 
 #include <gegl.h>
+#include <gegl-plugin.h>
 #include <gtk/gtk.h>
 
 #include "menus-types.h"
 
+#include "gegl/gimp-gegl-utils.h"
+
 #include "core/gimp.h"
 #include "core/gimp-filter-history.h"
 
+#include "widgets/gimpactiongroup.h"
+#include "widgets/gimpstringaction.h"
 #include "widgets/gimpuimanager.h"
 
 #include "filters-menu.h"
@@ -36,29 +41,80 @@ void
 filters_menu_setup (GimpUIManager *manager,
                     const gchar   *ui_path)
 {
-  guint merge_id;
-  gint  i;
+  GimpActionGroup  *group;
+  gchar           **gegl_actions;
+  gint              i;
 
   g_return_if_fail (GIMP_IS_UI_MANAGER (manager));
   g_return_if_fail (ui_path != NULL);
 
-  merge_id = gimp_ui_manager_new_merge_id (manager);
-
   for (i = 0; i < gimp_filter_history_size (manager->gimp); i++)
     {
       gchar *action_name;
-      gchar *action_path;
 
       action_name = g_strdup_printf ("filters-recent-%02d", i + 1);
-      action_path = g_strdup_printf ("%s/Filters/Recently Used/Filters",
-                                     ui_path);
 
-      gimp_ui_manager_add_ui (manager, merge_id,
-                              action_path, action_name, action_name,
-                              GTK_UI_MANAGER_MENUITEM,
-                              FALSE);
+      gimp_ui_manager_add_ui (manager, "/Filters/Recently Used/[Filters]",
+                              action_name, FALSE);
 
       g_free (action_name);
-      g_free (action_path);
+    }
+
+  group        = gimp_ui_manager_get_action_group (manager, "filters");
+  gegl_actions = g_object_get_data (G_OBJECT (group), "filters-group-generated-gegl-actions");
+
+  g_return_if_fail (gegl_actions != NULL);
+
+  for (i = 0; i < g_strv_length (gegl_actions); i++)
+    {
+      GimpAction  *action;
+      gchar       *path;
+      gchar       *root;
+      const gchar *op_name;
+
+      action  = gimp_action_group_get_action (group, gegl_actions[i]);
+      op_name = (const gchar *) GIMP_STRING_ACTION (action)->value;
+      path    = (gchar *) gegl_operation_get_key (op_name, "gimp:menu-path");
+
+      if (path == NULL)
+        continue;
+
+      path = g_strdup (path);
+      root = strstr (path, "/");
+
+      if (root == NULL || root == path)
+        {
+          g_printerr ("GEGL operation \"%s\" attempted to register a menu item "
+                      "with an invalid value for key \"gimp:menu-path\": \"%s\"\n"
+                      "Expected format is \"<MenuName>/menu/submenu.\n",
+                      gegl_actions[i], path);
+        }
+      else
+        {
+          GList *managers;
+
+          *root    = '\0';
+          managers = gimp_ui_managers_from_name (path);
+
+          if (managers == NULL)
+            {
+              g_printerr ("GEGL operation \"%s\" attempted to register an item in "
+                          "the invalid menu \"%s\": use either \"<Image>\", "
+                          "\"<Layers>\", \"<Channels>\", \"<Paths>\", "
+                          "\"<Colormap>\", \"<Brushes>\", \"<Dynamics>\", "
+                          "\"<MyPaintBrushes>\", \"<Gradients>\", \"<Palettes>\", "
+                          "\"<Patterns>\", \"<ToolPresets>\", \"<Fonts>\" "
+                          "\"<Buffers>\" or \"<QuickMask>\".\n",
+                          gegl_actions[i], path);
+            }
+          else
+            {
+              *root = '/';
+
+              for (GList *m = managers; m; m = m->next)
+                gimp_ui_manager_add_ui (m->data, root, gegl_actions[i], FALSE);
+            }
+        }
+      g_free (path);
     }
 }

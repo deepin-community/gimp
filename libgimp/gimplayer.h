@@ -30,33 +30,44 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-gint32   gimp_layer_new                (gint32           image_ID,
-                                        const gchar     *name,
-                                        gint             width,
-                                        gint             height,
-                                        GimpImageType    type,
-                                        gdouble          opacity,
-                                        GimpLayerMode    mode);
-gint32   gimp_layer_copy               (gint32           layer_ID);
+#include <libgimp/gimpdrawable.h>
 
-gint32   gimp_layer_new_from_pixbuf    (gint32           image_ID,
-                                        const gchar     *name,
-                                        GdkPixbuf       *pixbuf,
-                                        gdouble          opacity,
-                                        GimpLayerMode    mode,
-                                        gdouble          progress_start,
-                                        gdouble          progress_end);
-gint32   gimp_layer_new_from_surface   (gint32           image_ID,
-                                        const gchar     *name,
-                                        cairo_surface_t *surface,
-                                        gdouble          progress_start,
-                                        gdouble          progress_end);
 
-GIMP_DEPRECATED_FOR(gimp_layer_get_lock_alpha)
-gboolean gimp_layer_get_preserve_trans (gint32           layer_ID);
-GIMP_DEPRECATED_FOR(gimp_layer_set_lock_alpha)
-gboolean gimp_layer_set_preserve_trans (gint32           layer_ID,
-                                        gboolean         preserve_trans);
+#define GIMP_TYPE_LAYER (gimp_layer_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpLayer, gimp_layer, GIMP, LAYER, GimpDrawable)
+
+struct _GimpLayerClass
+{
+  GimpDrawableClass parent_class;
+
+  /* Padding for future expansion */
+  void (*_gimp_reserved0) (void);
+  void (*_gimp_reserved1) (void);
+  void (*_gimp_reserved2) (void);
+  void (*_gimp_reserved3) (void);
+  void (*_gimp_reserved4) (void);
+  void (*_gimp_reserved5) (void);
+  void (*_gimp_reserved6) (void);
+  void (*_gimp_reserved7) (void);
+  void (*_gimp_reserved8) (void);
+  void (*_gimp_reserved9) (void);
+};
+
+GimpLayer * gimp_layer_get_by_id          (gint32           layer_id);
+
+GimpLayer * gimp_layer_new_from_pixbuf    (GimpImage       *image,
+                                           const gchar     *name,
+                                           GdkPixbuf       *pixbuf,
+                                           gdouble          opacity,
+                                           GimpLayerMode    mode,
+                                           gdouble          progress_start,
+                                           gdouble          progress_end) G_GNUC_WARN_UNUSED_RESULT;
+GimpLayer * gimp_layer_new_from_surface   (GimpImage       *image,
+                                           const gchar     *name,
+                                           cairo_surface_t *surface,
+                                           gdouble          progress_start,
+                                           gdouble          progress_end) G_GNUC_WARN_UNUSED_RESULT;
+
 
 G_END_DECLS
 

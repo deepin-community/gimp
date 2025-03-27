@@ -184,9 +184,9 @@ choose_best_brush (ppm_t *p, ppm_t *a, int tx, int ty,
               if ((h = brush->col[(y * brush->width * 3) + x * 3]))
                 {
                   v = h / 255.0;
-                  dev += abs (row[k+0] - r) * v;
-                  dev += abs (row[k+1] - g) * v;
-                  dev += abs (row[k+2] - b) * v;
+                  dev += fabs (row[k+0] - r) * v;
+                  dev += fabs (row[k+1] - g) * v;
+                  dev += fabs (row[k+2] - b) * v;
                   if (img_has_alpha)
                     dev += a->col[(ty + y) * a->width * 3 + (tx + x) * 3] * v;
                 }
@@ -205,7 +205,7 @@ choose_best_brush (ppm_t *p, ppm_t *a, int tx, int ty,
         {
           best = i;
           bestdev = dev;
-          brlist = g_list_append (brlist, (void *)i);
+          brlist = g_list_append (brlist, GINT_TO_POINTER (i));
         }
       if (dev < runningvals.devthresh)
         break;
@@ -218,7 +218,7 @@ choose_best_brush (ppm_t *p, ppm_t *a, int tx, int ty,
     }
 
   i = g_rand_int_range (random_generator, 0, g_list_length (brlist));
-  best = (long)((g_list_nth (brlist,i))->data);
+  best = GPOINTER_TO_INT ((g_list_nth (brlist,i))->data);
   g_list_free (brlist);
 
   return best;
@@ -543,8 +543,7 @@ repaint (ppm_t *p, ppm_t *a)
       guchar tmpcol[3];
 
       ppm_new (&tmp, p->width, p->height);
-      gimp_rgb_get_uchar (&runningvals.color,
-                          &tmpcol[0], &tmpcol[1], &tmpcol[2]);
+      gegl_color_get_pixel (runningvals.color, babl_format ("R'G'B' u8"), tmpcol);
       fill (&tmp, tmpcol);
     }
   else if (runningvals.general_background_type == BG_TYPE_KEEP_ORIGINAL)

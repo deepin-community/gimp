@@ -27,58 +27,9 @@
 #define __GIMP_COLOR_CONFIG_H__
 
 
-#define GIMP_TYPE_COLOR_CONFIG            (gimp_color_config_get_type ())
-#define GIMP_COLOR_CONFIG(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_COLOR_CONFIG, GimpColorConfig))
-#define GIMP_COLOR_CONFIG_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_COLOR_CONFIG, GimpColorConfigClass))
-#define GIMP_IS_COLOR_CONFIG(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_COLOR_CONFIG))
-#define GIMP_IS_COLOR_CONFIG_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_COLOR_CONFIG))
+#define GIMP_TYPE_COLOR_CONFIG (gimp_color_config_get_type ())
+G_DECLARE_FINAL_TYPE (GimpColorConfig, gimp_color_config, GIMP, COLOR_CONFIG, GObject)
 
-
-typedef struct _GimpColorConfigClass GimpColorConfigClass;
-
-struct _GimpColorConfig
-{
-  GObject                     parent_instance;
-
-  /*< public >*/
-  GimpColorManagementMode     mode;
-  gchar                      *rgb_profile;
-  gchar                      *cmyk_profile;
-  gchar                      *display_profile;
-  gboolean                    display_profile_from_gdk;
-  gchar                      *printer_profile;
-  GimpColorRenderingIntent    display_intent;
-  GimpColorRenderingIntent    simulation_intent;
-
-  gchar                      *display_module;
-
-  gboolean                    simulation_gamut_check;
-  GimpRGB                     out_of_gamut_color;
-
-  gboolean                    display_use_black_point_compensation;
-  gboolean                    simulation_use_black_point_compensation;
-
-  gchar                      *gray_profile;
-
-  /*< private >*/
-  /* Padding for future expansion */
-#if (GLIB_SIZEOF_VOID_P == 8)
-  void (* _gimp_reserved3) (void);
-#endif
-  void (* _gimp_reserved4) (void);
-  void (* _gimp_reserved5) (void);
-  void (* _gimp_reserved6) (void);
-  void (* _gimp_reserved7) (void);
-  void (* _gimp_reserved8) (void);
-};
-
-struct _GimpColorConfigClass
-{
-  GObjectClass                parent_class;
-};
-
-
-GType              gimp_color_config_get_type                     (void) G_GNUC_CONST;
 
 GimpColorManagementMode
                    gimp_color_config_get_mode                     (GimpColorConfig  *config);
@@ -94,6 +45,7 @@ GimpColorRenderingIntent
 gboolean           gimp_color_config_get_simulation_bpc           (GimpColorConfig  *config);
 gboolean           gimp_color_config_get_simulation_optimize      (GimpColorConfig  *config);
 gboolean           gimp_color_config_get_simulation_gamut_check   (GimpColorConfig  *config);
+GeglColor        * gimp_color_config_get_out_of_gamut_color       (GimpColorConfig  *config);
 
 GimpColorProfile * gimp_color_config_get_rgb_color_profile        (GimpColorConfig  *config,
                                                                    GError          **error);

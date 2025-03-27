@@ -28,6 +28,7 @@
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
+#include "libgimpcolor/gimpcolor-private.h"
 #include "libgimpmath/gimpmath.h"
 #include "libgimpconfig/gimpconfig.h"
 
@@ -47,6 +48,7 @@
 enum
 {
   PROP_0,
+  PROP_TRC,
   PROP_LINEAR,
   PROP_CHANNEL,
   PROP_LOW_INPUT,
@@ -104,6 +106,14 @@ gimp_levels_config_class_init (GimpLevelsConfigClass *klass)
 
   viewable_class->default_icon_name = "gimp-tool-levels";
 
+  GIMP_CONFIG_PROP_ENUM (object_class, PROP_TRC,
+                         "trc",
+                         _("Linear/Perceptual"),
+                         _("Work on linear or perceptual RGB"),
+                         GIMP_TYPE_TRC_TYPE,
+                         GIMP_TRC_NON_LINEAR, 0);
+
+  /* compat */
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_LINEAR,
                             "linear",
                             _("Linear"),
@@ -186,8 +196,12 @@ gimp_levels_config_get_property (GObject    *object,
 
   switch (property_id)
     {
+    case PROP_TRC:
+      g_value_set_enum (value, self->trc);
+      break;
+
     case PROP_LINEAR:
-      g_value_set_boolean (value, self->linear);
+      g_value_set_boolean (value, self->trc == GIMP_TRC_LINEAR ? TRUE : FALSE);
       break;
 
     case PROP_CHANNEL:
@@ -238,8 +252,14 @@ gimp_levels_config_set_property (GObject      *object,
 
   switch (property_id)
     {
+    case PROP_TRC:
+      self->trc = g_value_get_enum (value);
+      break;
+
     case PROP_LINEAR:
-      self->linear = g_value_get_boolean (value);
+      self->trc = g_value_get_boolean (value) ?
+                  GIMP_TRC_LINEAR : GIMP_TRC_NON_LINEAR;
+      g_object_notify (object, "trc");
       break;
 
     case PROP_CHANNEL:
@@ -296,7 +316,7 @@ gimp_levels_config_serialize (GimpConfig       *config,
   gboolean              success = TRUE;
 
   if (! gimp_operation_settings_config_serialize_base (config, writer, data)    ||
-      ! gimp_config_serialize_property_by_name (config, "linear",       writer) ||
+      ! gimp_config_serialize_property_by_name (config, "trc",       writer)    ||
       ! gimp_config_serialize_property_by_name (config, "clamp-input",  writer) ||
       ! gimp_config_serialize_property_by_name (config, "clamp-output", writer))
     return FALSE;
@@ -359,7 +379,7 @@ gimp_levels_config_equal (GimpConfig *a,
   GimpHistogramChannel  channel;
 
   if (! gimp_operation_settings_config_equal_base (a, b) ||
-      config_a->linear       != config_b->linear         ||
+      config_a->trc          != config_b->trc            ||
       config_a->clamp_input  != config_b->clamp_input    ||
       config_a->clamp_output != config_b->clamp_output)
     return FALSE;
@@ -397,7 +417,7 @@ gimp_levels_config_reset (GimpConfig *config)
       gimp_levels_config_reset_channel (l_config);
     }
 
-  gimp_config_reset_property (G_OBJECT (config), "linear");
+  gimp_config_reset_property (G_OBJECT (config), "trc");
   gimp_config_reset_property (G_OBJECT (config), "channel");
   gimp_config_reset_property (G_OBJECT (config), "clamp-input");
   gimp_config_reset_property (G_OBJECT (config), "clamp_output");
@@ -432,12 +452,12 @@ gimp_levels_config_copy (GimpConfig  *src,
   g_object_notify (G_OBJECT (dest), "low-output");
   g_object_notify (G_OBJECT (dest), "high-output");
 
-  dest_config->linear       = src_config->linear;
+  dest_config->trc          = src_config->trc;
   dest_config->channel      = src_config->channel;
   dest_config->clamp_input  = src_config->clamp_input;
   dest_config->clamp_output = src_config->clamp_output;
 
-  g_object_notify (G_OBJECT (dest), "linear");
+  g_object_notify (G_OBJECT (dest), "trc");
   g_object_notify (G_OBJECT (dest), "channel");
   g_object_notify (G_OBJECT (dest), "clamp-input");
   g_object_notify (G_OBJECT (dest), "clamp-output");
@@ -582,31 +602,40 @@ gimp_levels_config_stretch_channel (GimpLevelsConfig     *config,
 }
 
 static gdouble
-gimp_levels_config_input_from_color (GimpHistogramChannel  channel,
-                                     const GimpRGB        *color)
+gimp_levels_config_input_from_color (GimpLevelsConfig     *config,
+                                     GimpHistogramChannel  channel,
+                                     const Babl           *target_space,
+                                     GeglColor            *color)
 {
+  gdouble rgba[4];
+
+  if (config->trc == GIMP_TRC_LINEAR)
+    gegl_color_get_pixel (color, babl_format_with_space ("RGBA double", target_space), rgba);
+  else
+    gegl_color_get_pixel (color, babl_format_with_space ("R'G'B'A double", target_space), rgba);
+
   switch (channel)
     {
     case GIMP_HISTOGRAM_VALUE:
-      return MAX (MAX (color->r, color->g), color->b);
+      return MAX (MAX (rgba[0], rgba[1]), rgba[2]);
 
     case GIMP_HISTOGRAM_RED:
-      return color->r;
+      return rgba[0];
 
     case GIMP_HISTOGRAM_GREEN:
-      return color->g;
+      return rgba[1];
 
     case GIMP_HISTOGRAM_BLUE:
-      return color->b;
+      return rgba[2];
 
     case GIMP_HISTOGRAM_ALPHA:
-      return color->a;
+      return rgba[3];
 
     case GIMP_HISTOGRAM_RGB:
-      return MIN (MIN (color->r, color->g), color->b);
+      return MIN (MIN (rgba[0], rgba[1]), rgba[2]);
 
     case GIMP_HISTOGRAM_LUMINANCE:
-      return GIMP_RGB_LUMINANCE (color->r, color->g, color->b);
+      return GIMP_RGB_LUMINANCE (rgba[0], rgba[1], rgba[2]);
     }
 
   return 0.0;
@@ -615,9 +644,10 @@ gimp_levels_config_input_from_color (GimpHistogramChannel  channel,
 void
 gimp_levels_config_adjust_by_colors (GimpLevelsConfig     *config,
                                      GimpHistogramChannel  channel,
-                                     const GimpRGB        *black,
-                                     const GimpRGB        *gray,
-                                     const GimpRGB        *white)
+                                     const Babl           *target_space,
+                                     GeglColor            *black,
+                                     GeglColor            *gray,
+                                     GeglColor            *white)
 {
   g_return_if_fail (GIMP_IS_LEVELS_CONFIG (config));
 
@@ -625,16 +655,14 @@ gimp_levels_config_adjust_by_colors (GimpLevelsConfig     *config,
 
   if (black)
     {
-      config->low_input[channel] = gimp_levels_config_input_from_color (channel,
-                                                                        black);
+      config->low_input[channel] = gimp_levels_config_input_from_color (config, channel, target_space, black);
       g_object_notify (G_OBJECT (config), "low-input");
     }
 
 
   if (white)
     {
-      config->high_input[channel] = gimp_levels_config_input_from_color (channel,
-                                                                         white);
+      config->high_input[channel] = gimp_levels_config_input_from_color (config, channel, target_space, white);
       g_object_notify (G_OBJECT (config), "high-input");
     }
 
@@ -645,11 +673,13 @@ gimp_levels_config_adjust_by_colors (GimpLevelsConfig     *config,
       gdouble inten;
       gdouble out_light;
       gdouble lightness;
+      gdouble rgba[4];
 
       /* Calculate lightness value */
-      lightness = GIMP_RGB_LUMINANCE (gray->r, gray->g, gray->b);
+      gegl_color_get_pixel (gray, babl_format ("RGBA double"), rgba);
+      lightness = GIMP_RGB_LUMINANCE (rgba[0], rgba[1], rgba[2]);
 
-      input = gimp_levels_config_input_from_color (channel, gray);
+      input = gimp_levels_config_input_from_color (config, channel, target_space, gray);
 
       range = config->high_input[channel] - config->low_input[channel];
       if (range <= 0)
@@ -699,7 +729,7 @@ gimp_levels_config_to_curves_config (GimpLevelsConfig *config)
                                             GIMP_CONFIG (curves),
                                             0);
 
-  curves->linear = config->linear;
+  curves->trc = config->trc;
 
   for (channel = GIMP_HISTOGRAM_VALUE;
        channel <= GIMP_HISTOGRAM_ALPHA;
@@ -897,11 +927,11 @@ gimp_levels_config_load_cruft (GimpLevelsConfig  *config,
       config->high_output[i] = high_output[i] / 255.0;
     }
 
-  config->linear       = FALSE;
+  config->trc          = GIMP_TRC_NON_LINEAR;
   config->clamp_input  = TRUE;
   config->clamp_output = TRUE;
 
-  g_object_notify (G_OBJECT (config), "linear");
+  g_object_notify (G_OBJECT (config), "trc");
   g_object_notify (G_OBJECT (config), "low-input");
   g_object_notify (G_OBJECT (config), "high-input");
   g_object_notify (G_OBJECT (config), "clamp-input");

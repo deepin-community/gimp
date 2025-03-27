@@ -183,7 +183,7 @@ gimp_tag_cache_get_memsize (GimpObject *object,
 /**
  * gimp_tag_cache_new:
  *
- * Return value: creates new GimpTagCache object.
+ * Returns: creates new GimpTagCache object.
  **/
 GimpTagCache *
 gimp_tag_cache_new (void)
@@ -511,6 +511,7 @@ gimp_tag_cache_load (GimpTagCache *cache)
     {
       g_printerr ("Failed to parse tag cache: %s\n",
                   error ? error->message : "WTF unknown error");
+      g_clear_error (&error);
     }
 
   g_object_unref (file);

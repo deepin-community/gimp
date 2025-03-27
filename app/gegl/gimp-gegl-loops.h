@@ -56,7 +56,7 @@ void   gimp_gegl_smudge_with_paint     (GeglBuffer               *accum_buffer,
                                         const GeglRectangle      *accum_rect,
                                         GeglBuffer               *canvas_buffer,
                                         const GeglRectangle      *canvas_rect,
-                                        const GimpRGB            *brush_color,
+                                        GeglColor                *brush_color,
                                         GeglBuffer               *paint_buffer,
                                         gboolean                  no_erasing,
                                         gdouble                   flow,
@@ -87,6 +87,15 @@ void   gimp_gegl_index_to_mask         (GeglBuffer               *indexed_buffer
                                         GeglBuffer               *mask_buffer,
                                         const GeglRectangle      *mask_rect,
                                         gint                      index);
+gboolean gimp_gegl_is_index_used       (GeglBuffer               *indexed_buffer,
+                                        const GeglRectangle      *indexed_rect,
+                                        const Babl               *indexed_format,
+                                        gint                      index);
+void     gimp_gegl_shift_index         (GeglBuffer               *indexed_buffer,
+                                        const GeglRectangle      *indexed_rect,
+                                        const Babl               *indexed_format,
+                                        gint                      from_index,
+                                        gint                      shift);
 
 void   gimp_gegl_convert_color_profile (GeglBuffer               *src_buffer,
                                         const GeglRectangle      *src_rect,

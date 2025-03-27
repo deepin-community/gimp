@@ -95,7 +95,7 @@ gimp_toolbox_dnd_init (GimpToolbox *toolbox,
 
   context = gimp_toolbox_get_context (toolbox);
 
-  /* Before caling any dnd helper functions, setup the drag
+  /* Before calling any dnd helper functions, setup the drag
    * destination manually since we want to handle all drag events
    * manually, otherwise we would not be able to give the drag handler
    * a chance to handle drag events
@@ -154,18 +154,26 @@ gimp_toolbox_drop_uri_list (GtkWidget *widget,
   for (list = uri_list; list; list = g_list_next (list))
     {
       GFile             *file = g_file_new_for_uri (list->data);
-      GimpImage         *image;
       GimpPDBStatusType  status;
       GError            *error = NULL;
 
-      image = file_open_with_display (context->gimp, context, NULL,
-                                      file, FALSE,
-                                      G_OBJECT (gtk_widget_get_screen (widget)),
-                                      gimp_widget_get_monitor (widget),
-                                      &status, &error);
+      file_open_with_display (context->gimp, context, NULL,
+                              file, FALSE,
+                              G_OBJECT (gimp_widget_get_monitor (widget)),
+                              &status, &error);
 
-      if (! image && status != GIMP_PDB_CANCEL)
+      if (status != GIMP_PDB_CANCEL && status != GIMP_PDB_SUCCESS)
         {
+          /* file_open_image() took care of always having a filled error when
+           * the status is neither CANCEL nor SUCCESS (and to transform a
+           * wrongful success without a returned image into an EXECUTION_ERROR).
+           *
+           * In some case, we may also have a SUCCESS without an image, when the
+           * file procedure is a `generic_file_proc` (e.g. for a .gex extension
+           * file). So we should not rely on having a returned image or not.
+           * Once again, sanitizing the returned status is handled by
+           * file_open_image().
+           */
           gimp_message (context->gimp, G_OBJECT (widget), GIMP_MESSAGE_ERROR,
                         _("Opening '%s' failed:\n\n%s"),
                         gimp_file_get_utf8_name (file), error->message);
@@ -191,9 +199,8 @@ gimp_toolbox_drop_drawable (GtkWidget    *widget,
 
   new_image = gimp_image_new_from_drawable (context->gimp,
                                             GIMP_DRAWABLE (viewable));
-  gimp_create_display (context->gimp, new_image, GIMP_UNIT_PIXEL, 1.0,
-                       G_OBJECT (gtk_widget_get_screen (widget)),
-                       gimp_widget_get_monitor (widget));
+  gimp_create_display (context->gimp, new_image, gimp_unit_pixel (), 1.0,
+                       G_OBJECT (gimp_widget_get_monitor (widget)));
   g_object_unref (new_image);
 }
 
@@ -227,9 +234,8 @@ gimp_toolbox_drop_buffer (GtkWidget    *widget,
 
   image = gimp_image_new_from_buffer (context->gimp,
                                       GIMP_BUFFER (viewable));
-  gimp_create_display (image->gimp, image, GIMP_UNIT_PIXEL, 1.0,
-                       G_OBJECT (gtk_widget_get_screen (widget)),
-                       gimp_widget_get_monitor (widget));
+  gimp_create_display (image->gimp, image, gimp_unit_pixel (), 1.0,
+                       G_OBJECT (gimp_widget_get_monitor (widget)));
   g_object_unref (image);
 }
 
@@ -249,9 +255,8 @@ gimp_toolbox_drop_component (GtkWidget       *widget,
 
   new_image = gimp_image_new_from_component (context->gimp,
                                              image, component);
-  gimp_create_display (new_image->gimp, new_image, GIMP_UNIT_PIXEL, 1.0,
-                       G_OBJECT (gtk_widget_get_screen (widget)),
-                       gimp_widget_get_monitor (widget));
+  gimp_create_display (new_image->gimp, new_image, gimp_unit_pixel (), 1.0,
+                       G_OBJECT (gimp_widget_get_monitor (widget)));
   g_object_unref (new_image);
 }
 
@@ -270,8 +275,7 @@ gimp_toolbox_drop_pixbuf (GtkWidget *widget,
 
   new_image = gimp_image_new_from_pixbuf (context->gimp, pixbuf,
                                           _("Dropped Buffer"));
-  gimp_create_display (new_image->gimp, new_image, GIMP_UNIT_PIXEL, 1.0,
-                       G_OBJECT (gtk_widget_get_screen (widget)),
-                       gimp_widget_get_monitor (widget));
+  gimp_create_display (new_image->gimp, new_image, gimp_unit_pixel (), 1.0,
+                       G_OBJECT (gimp_widget_get_monitor (widget)));
   g_object_unref (new_image);
 }

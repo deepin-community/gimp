@@ -55,21 +55,21 @@
 static gboolean  debug_benchmark_projection    (GimpDisplay *display);
 static gboolean  debug_show_image_graph        (GimpImage   *source_image);
 
-static void      debug_dump_menus_recurse_menu (GtkWidget   *menu,
-                                                gint         depth,
-                                                gchar       *path);
-
 static void      debug_print_qdata             (GimpObject  *object);
 static void      debug_print_qdata_foreach     (GQuark       key_id,
                                                 gpointer     data,
                                                 gpointer     user_data);
 
-static gboolean  debug_accel_find_func         (GtkAccelKey *key,
-                                                GClosure    *closure,
-                                                gpointer     data);
-
 
 /*  public functions  */
+
+void
+debug_gtk_inspector_cmd_callback (GimpAction *action,
+                                  GVariant   *value,
+                                  gpointer    data)
+{
+  gtk_window_set_interactive_debugging (TRUE);
+}
 
 void
 debug_mem_profile_cmd_callback (GimpAction *action,
@@ -110,93 +110,18 @@ debug_show_image_graph_cmd_callback (GimpAction *action,
 }
 
 void
-debug_dump_menus_cmd_callback (GimpAction *action,
-                               GVariant   *value,
-                               gpointer    data)
-{
-  GList *list;
-
-  for (list = gimp_menu_factory_get_registered_menus (global_menu_factory);
-       list;
-       list = g_list_next (list))
-    {
-      GimpMenuFactoryEntry *entry = list->data;
-      GList                *managers;
-
-      managers = gimp_ui_managers_from_name (entry->identifier);
-
-      if (managers)
-        {
-          GimpUIManager *manager = managers->data;
-          GList         *list;
-
-          for (list = manager->registered_uis; list; list = g_list_next (list))
-            {
-              GimpUIManagerUIEntry *ui_entry = list->data;
-
-              if (GTK_IS_MENU_SHELL (ui_entry->widget))
-                {
-                  g_print ("\n\n"
-                           "========================================\n"
-                           "Menu: %s%s\n"
-                           "========================================\n\n",
-                           entry->identifier, ui_entry->ui_path);
-
-                  debug_dump_menus_recurse_menu (ui_entry->widget, 1,
-                                                 entry->identifier);
-                  g_print ("\n");
-                }
-            }
-        }
-    }
-}
-
-void
-debug_dump_managers_cmd_callback (GimpAction *action,
-                                  GVariant   *value,
-                                  gpointer    data)
-{
-  GList *list;
-
-  for (list = gimp_menu_factory_get_registered_menus (global_menu_factory);
-       list;
-       list = g_list_next (list))
-    {
-      GimpMenuFactoryEntry *entry = list->data;
-      GList                *managers;
-
-      managers = gimp_ui_managers_from_name (entry->identifier);
-
-      if (managers)
-        {
-          g_print ("\n\n"
-                   "========================================\n"
-                   "UI Manager: %s\n"
-                   "========================================\n\n",
-                   entry->identifier);
-
-          g_print ("%s\n", gimp_ui_manager_get_ui (managers->data));
-        }
-    }
-}
-
-void
 debug_dump_keyboard_shortcuts_cmd_callback (GimpAction *action,
                                             GVariant   *value,
                                             gpointer    data)
 {
-  GimpDisplay      *display;
-  GimpImageWindow  *window;
-  GimpUIManager    *manager;
-  GtkAccelGroup    *accel_group;
-  GList            *group_it;
-  GList            *strings = NULL;
+  GimpDisplay   *display;
+  GimpUIManager *manager;
+  GList         *group_it;
+  GList         *strings = NULL;
+
   return_if_no_display (display, data);
 
-  window  = gimp_display_shell_get_window (gimp_display_get_shell (display));
-  manager = gimp_image_window_get_ui_manager (window);
-
-  accel_group = gimp_ui_manager_get_accel_group (manager);
+  manager = menus_get_image_manager_singleton (display->gimp);
 
   /* Gather formatted strings of keyboard shortcuts */
   for (group_it = gimp_ui_manager_get_action_groups (manager);
@@ -212,43 +137,34 @@ debug_dump_keyboard_shortcuts_cmd_callback (GimpAction *action,
 
       for (action_it = actions; action_it; action_it = g_list_next (action_it))
         {
-          GimpAction  *action        = action_it->data;
-          const gchar *name          = gimp_action_get_name (action);
-          GClosure    *accel_closure = NULL;
+          gchar       **accels;
+          GimpAction   *action = action_it->data;
+          const gchar  *name   = gimp_action_get_name (action);
 
-          if (strstr (name, "-menu")  ||
-              strstr (name, "-popup") ||
-              name[0] == '<')
-              continue;
+          if (name[0] == '<')
+            continue;
 
-          accel_closure = gimp_action_get_accel_closure (action);
+          accels = gimp_action_get_display_accels (action);
 
-          if (accel_closure)
+          if (accels && accels[0])
             {
-              GtkAccelKey *key = gtk_accel_group_find (accel_group,
-                                                       debug_accel_find_func,
-                                                       accel_closure);
-              if (key            &&
-                  key->accel_key &&
-                  key->accel_flags & GTK_ACCEL_VISIBLE)
-                {
-                  const gchar *label_tmp;
-                  gchar       *label;
-                  gchar       *key_string;
+              const gchar *label_tmp;
+              gchar       *label;
 
-                  label_tmp  = gimp_action_get_label (action);
-                  label      = gimp_strip_uline (label_tmp);
-                  key_string = gtk_accelerator_get_label (key->accel_key,
-                                                          key->accel_mods);
+              label_tmp  = gimp_action_get_label (action);
+              label      = gimp_strip_uline (label_tmp);
 
-                  strings = g_list_prepend (strings,
-                                            g_strdup_printf ("%-20s %s",
-                                                             key_string, label));
+              strings = g_list_prepend (strings,
+                                        g_strdup_printf ("%-20s %s",
+                                                         accels[0], label));
 
-                  g_free (key_string);
-                  g_free (label);
-                }
+              g_free (label);
+
+              for (gint i = 1; accels[i] != NULL; i++)
+                strings = g_list_prepend (strings, g_strdup (accels[i]));
             }
+
+          g_strfreev (accels);
         }
 
       g_list_free (actions);
@@ -317,8 +233,7 @@ debug_show_image_graph (GimpImage *source_image)
   GimpImage  *new_image;
   GeglNode   *introspect;
   GeglNode   *sink;
-  GeglBuffer *buffer;
-  gchar      *new_name;
+  GeglBuffer *buffer = NULL;
 
   image_graph = gimp_projectable_get_graph (GIMP_PROJECTABLE (source_image));
 
@@ -336,16 +251,25 @@ debug_show_image_graph (GimpImage *source_image)
   gegl_node_link_many (introspect, sink, NULL);
   gegl_node_process (sink);
 
-  new_name = g_strdup_printf ("%s GEGL graph",
-                              gimp_image_get_display_name (source_image));
+  if (buffer)
+    {
+      gchar *new_name;
 
-  new_image = gimp_create_image_from_buffer (source_image->gimp,
-                                             buffer, new_name);
-  gimp_image_set_file (new_image, g_file_new_for_uri (new_name));
+      /* This should not happen but "gegl:introspect" is a bit fickle as
+       * it uses an external binary `dot`. Prevent useless crashes.
+       * I don't output a warning when buffer is NULL because anyway
+       * GEGL will output one itself.
+       */
+      new_name = g_strdup_printf ("%s GEGL graph",
+                                  gimp_image_get_display_name (source_image));
 
-  g_free (new_name);
+      new_image = gimp_create_image_from_buffer (source_image->gimp,
+                                                 buffer, new_name);
+      gimp_image_set_file (new_image, g_file_new_for_uri (new_name));
 
-  g_object_unref (buffer);
+      g_free (new_name);
+      g_object_unref (buffer);
+    }
 
   g_object_unref (sink);
   g_object_unref (introspect);
@@ -353,54 +277,6 @@ debug_show_image_graph (GimpImage *source_image)
   g_object_unref (source_image);
 
   return FALSE;
-}
-
-static void
-debug_dump_menus_recurse_menu (GtkWidget *menu,
-                               gint       depth,
-                               gchar     *path)
-{
-  GList *children;
-  GList *list;
-
-  children = gtk_container_get_children (GTK_CONTAINER (menu));
-
-  for (list = children; list; list = g_list_next (list))
-    {
-      GtkWidget *menu_item = GTK_WIDGET (list->data);
-      GtkWidget *child     = gtk_bin_get_child (GTK_BIN (menu_item));
-
-      if (GTK_IS_LABEL (child))
-        {
-          GtkWidget   *submenu;
-          const gchar *label;
-          gchar       *full_path;
-          gchar       *help_page;
-          gchar       *format_str;
-
-          label = gtk_label_get_text (GTK_LABEL (child));
-          full_path = g_strconcat (path, "/", label, NULL);
-
-          help_page = g_object_get_data (G_OBJECT (menu_item), "gimp-help-id");
-          help_page = g_strdup (help_page);
-
-          format_str = g_strdup_printf ("%%%ds%%%ds %%-20s %%s\n",
-                                        depth * 2, depth * 2 - 40);
-          g_print (format_str,
-                   "", label, "", help_page ? help_page : "");
-          g_free (format_str);
-          g_free (help_page);
-
-          submenu = gtk_menu_item_get_submenu (GTK_MENU_ITEM (menu_item));
-
-          if (submenu)
-            debug_dump_menus_recurse_menu (submenu, depth + 1, full_path);
-
-          g_free (full_path);
-        }
-    }
-
-  g_list_free (children);
 }
 
 static void
@@ -419,12 +295,4 @@ debug_print_qdata_foreach (GQuark   key_id,
                            gpointer user_data)
 {
   g_print ("%s: %p\n", g_quark_to_string (key_id), data);
-}
-
-static gboolean
-debug_accel_find_func (GtkAccelKey *key,
-                       GClosure    *closure,
-                       gpointer     data)
-{
-  return (GClosure *) data == closure;
 }

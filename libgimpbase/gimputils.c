@@ -27,6 +27,7 @@
 
 #ifdef PLATFORM_OSX
 #include <AppKit/AppKit.h>
+#include <libunwind.h>
 #endif
 
 #ifdef HAVE_EXECINFO_H
@@ -84,7 +85,7 @@ static gboolean gimp_utils_gdb_available     (gint         major,
 
 /**
  * gimp_utf8_strtrim:
- * @str: an UTF-8 encoded string (or %NULL)
+ * @str: (nullable): an UTF-8 encoded string (or %NULL)
  * @max_chars: the maximum number of characters before the string get
  * trimmed
  *
@@ -151,8 +152,8 @@ gimp_utf8_strtrim (const gchar *str,
 }
 
 /**
- * gimp_any_to_utf8:
- * @str:            The string to be converted to UTF-8.
+ * gimp_any_to_utf8: (skip)
+ * @str: (array length=len): The string to be converted to UTF-8.
  * @len:            The length of the string, or -1 if the string
  *                  is nul-terminated.
  * @warning_format: The message format for the warning message if conversion
@@ -172,7 +173,7 @@ gimp_utf8_strtrim (const gchar *str,
  * with "(invalid UTF-8 string)" is returned. If not even the start
  * of @str is valid UTF-8, only "(invalid UTF-8 string)" is returned.
  *
- * Return value: The UTF-8 string as described above.
+ * Returns: The UTF-8 string as described above.
  **/
 gchar *
 gimp_any_to_utf8 (const gchar  *str,
@@ -241,7 +242,7 @@ gimp_any_to_utf8 (const gchar  *str,
  * a filename in the filesystem encoding to a function that expects an
  * UTF-8 encoded filename.
  *
- * Return value: A temporarily valid UTF-8 representation of @filename.
+ * Returns: A temporarily valid UTF-8 representation of @filename.
  *               This string must not be changed or freed.
  **/
 const gchar *
@@ -293,7 +294,7 @@ gimp_filename_to_utf8 (const gchar *filename)
  *
  * Since: 2.10
  *
- * Return value: A temporarily valid UTF-8 representation of @file's name.
+ * Returns: A temporarily valid UTF-8 representation of @file's name.
  *               This string must not be changed or freed.
  **/
 const gchar *
@@ -322,7 +323,7 @@ gimp_file_get_utf8_name (GFile *file)
  *
  * Since: 2.10
  *
- * Return value: %TRUE if @file's URI ends with @extension,
+ * Returns: %TRUE if @file's URI ends with @extension,
  *               %FALSE otherwise.
  **/
 gboolean
@@ -362,7 +363,7 @@ gimp_file_has_extension (GFile       *file,
  *
  * Since: 2.10
  *
- * Return value: %TRUE on success, %FALSE otherwise. On %FALSE, @error
+ * Returns: %TRUE on success, %FALSE otherwise. On %FALSE, @error
  *               is set.
  **/
 gboolean
@@ -377,7 +378,6 @@ gimp_file_show_in_file_manager (GFile   *file,
   {
     gboolean ret;
     char *filename;
-    int n;
     LPWSTR w_filename = NULL;
     ITEMIDLIST *pidl = NULL;
 
@@ -385,7 +385,8 @@ gimp_file_show_in_file_manager (GFile   *file,
 
     /* Calling this function multiple times should do no harm, but it is
        easier to put this here as it needs linking against ole32. */
-    CoInitialize (NULL);
+    if (FAILED (CoInitialize (NULL)))
+      return ret;
 
     filename = g_file_get_path (file);
     if (!filename)
@@ -395,20 +396,8 @@ gimp_file_show_in_file_manager (GFile   *file,
         goto out;
       }
 
-    n = MultiByteToWideChar (CP_UTF8, MB_ERR_INVALID_CHARS,
-                             filename, -1, NULL, 0);
-    if (n == 0)
-      {
-        g_set_error_literal (error, G_FILE_ERROR, 0,
-                             _("Error converting UTF-8 filename to wide char"));
-        goto out;
-      }
-
-    w_filename = g_malloc_n (n + 1, sizeof (wchar_t));
-    n = MultiByteToWideChar (CP_UTF8, MB_ERR_INVALID_CHARS,
-                             filename, -1,
-                             w_filename, (n + 1) * sizeof (wchar_t));
-    if (n == 0)
+    w_filename = g_utf8_to_utf16 (filename, -1, NULL, NULL, NULL);
+    if (!w_filename)
       {
         g_set_error_literal (error, G_FILE_ERROR, 0,
                              _("Error converting UTF-8 filename to wide char"));
@@ -431,6 +420,8 @@ gimp_file_show_in_file_manager (GFile   *file,
       ILFree (pidl);
     g_free (w_filename);
     g_free (filename);
+
+    CoUninitialize ();
 
     return ret;
   }
@@ -522,7 +513,7 @@ gimp_file_show_in_file_manager (GFile   *file,
 
 /**
  * gimp_strip_uline:
- * @str: underline infested string (or %NULL)
+ * @str: (nullable): underline infested string (or %NULL)
  *
  * This function returns a copy of @str stripped of underline
  * characters. This comes in handy when needing to strip mnemonics
@@ -533,7 +524,7 @@ gimp_file_show_in_file_manager (GFile   *file,
  * this construct and removes the whole bracket construction to get
  * rid of the mnemonic (see bug 157561).
  *
- * Return value: A (possibly stripped) copy of @str which should be
+ * Returns: A (possibly stripped) copy of @str which should be
  *               freed using g_free() when it is not needed any longer.
  **/
 gchar *
@@ -586,14 +577,14 @@ gimp_strip_uline (const gchar *str)
 
 /**
  * gimp_escape_uline:
- * @str: Underline infested string (or %NULL)
+ * @str: (nullable): Underline infested string (or %NULL)
  *
  * This function returns a copy of @str with all underline converted
  * to two adjacent underlines. This comes in handy when needing to display
  * strings with underlines (like filenames) in a place that would convert
  * them to mnemonics.
  *
- * Return value: A (possibly escaped) copy of @str which should be
+ * Returns: A (possibly escaped) copy of @str which should be
  * freed using g_free() when it is not needed any longer.
  *
  * Since: 2.2
@@ -628,6 +619,46 @@ gimp_escape_uline (const gchar *str)
 }
 
 /**
+ * gimp_is_canonical_identifier:
+ * @identifier: The identifier string to check.
+ *
+ * Checks if @identifier is canonical and non-%NULL.
+ *
+ * Canonical identifiers are e.g. expected by the PDB for procedure
+ * and parameter names. Every character of the input string must be
+ * either '-', 'a-z', 'A-Z' or '0-9'.
+ *
+ * Returns: %TRUE if @identifier is canonical, %FALSE otherwise.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_is_canonical_identifier (const gchar *identifier)
+{
+  if (identifier)
+    {
+      const gchar *p;
+
+      for (p = identifier; *p != 0; p++)
+        {
+          const gchar c = *p;
+
+          if (! (c == '-' ||
+                 (c >= '0' && c <= '9') ||
+                 (c >= 'A' && c <= 'Z') ||
+                 (c >= 'a' && c <= 'z')))
+            {
+              return FALSE;
+            }
+        }
+
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
+/**
  * gimp_canonicalize_identifier:
  * @identifier: The identifier string to canonicalize.
  *
@@ -637,9 +668,9 @@ gimp_escape_uline (const gchar *str)
  * and parameter names. Every character of the input string that is
  * not either '-', 'a-z', 'A-Z' or '0-9' will be replaced by a '-'.
  *
- * Return value: The canonicalized identifier. This is a newly
- *               allocated string that should be freed with g_free()
- *               when no longer needed.
+ * Returns: The canonicalized identifier. This is a newly allocated
+ *          string that should be freed with g_free() when no longer
+ *          needed.
  *
  * Since: 2.4
  **/
@@ -662,7 +693,9 @@ gimp_canonicalize_identifier (const gchar *identifier)
               (c < '0' || c > '9') &&
               (c < 'A' || c > 'Z') &&
               (c < 'a' || c > 'z'))
-            *p = '-';
+            {
+              *p = '-';
+            }
         }
     }
 
@@ -676,11 +709,11 @@ gimp_canonicalize_identifier (const gchar *identifier)
  *
  * Retrieves #GimpEnumDesc associated with the given value, or %NULL.
  *
- * Return value: the value's #GimpEnumDesc.
+ * Returns: (nullable): the value's #GimpEnumDesc.
  *
  * Since: 2.2
  **/
-GimpEnumDesc *
+const GimpEnumDesc *
 gimp_enum_get_desc (GEnumClass *enum_class,
                     gint        value)
 {
@@ -696,7 +729,7 @@ gimp_enum_get_desc (GEnumClass *enum_class,
       while (value_desc->value_desc)
         {
           if (value_desc->value == value)
-            return (GimpEnumDesc *) value_desc;
+            return value_desc;
 
           value_desc++;
         }
@@ -709,18 +742,19 @@ gimp_enum_get_desc (GEnumClass *enum_class,
  * gimp_enum_get_value:
  * @enum_type:  the #GType of a registered enum
  * @value:      an integer value
- * @value_name: return location for the value's name (or %NULL)
- * @value_nick: return location for the value's nick (or %NULL)
- * @value_desc: return location for the value's translated description (or %NULL)
- * @value_help: return location for the value's translated help (or %NULL)
+ * @value_name: (out) (optional): return location for the value's name, or %NULL
+ * @value_nick: (out) (optional): return location for the value's nick, or %NULL
+ * @value_desc: (out) (optional): return location for the value's translated
+ *                                description, or %NULL
+ * @value_help: (out) (optional): return location for the value's translated
+ *                                help, or %NULL
  *
  * Checks if @value is valid for the enum registered as @enum_type.
  * If the value exists in that enum, its name, nick and its translated
  * description and help are returned (if @value_name, @value_nick,
  * @value_desc and @value_help are not %NULL).
  *
- * Return value: %TRUE if @value is valid for the @enum_type,
- *               %FALSE otherwise
+ * Returns: %TRUE if @value is valid for the @enum_type, %FALSE otherwise
  *
  * Since: 2.2
  **/
@@ -732,9 +766,9 @@ gimp_enum_get_value (GType         enum_type,
                      const gchar **value_desc,
                      const gchar **value_help)
 {
-  GEnumClass *enum_class;
-  GEnumValue *enum_value;
-  gboolean    success = FALSE;
+  GEnumClass       *enum_class;
+  const GEnumValue *enum_value;
+  gboolean          success = FALSE;
 
   g_return_val_if_fail (G_TYPE_IS_ENUM (enum_type), FALSE);
 
@@ -751,7 +785,7 @@ gimp_enum_get_value (GType         enum_type,
 
       if (value_desc || value_help)
         {
-          GimpEnumDesc *enum_desc;
+          const GimpEnumDesc *enum_desc;
 
           enum_desc = gimp_enum_get_desc (enum_class, value);
 
@@ -802,16 +836,16 @@ gimp_enum_get_value (GType         enum_type,
  *
  * Retrieves the translated description for a given @enum_value.
  *
- * Return value: the translated description of the enum value
+ * Returns: the translated description of the enum value
  *
  * Since: 2.2
  **/
 const gchar *
-gimp_enum_value_get_desc (GEnumClass *enum_class,
-                          GEnumValue *enum_value)
+gimp_enum_value_get_desc (GEnumClass       *enum_class,
+                          const GEnumValue *enum_value)
 {
-  GType         type = G_TYPE_FROM_CLASS (enum_class);
-  GimpEnumDesc *enum_desc;
+  GType               type = G_TYPE_FROM_CLASS (enum_class);
+  const GimpEnumDesc *enum_desc;
 
   enum_desc = gimp_enum_get_desc (enum_class, enum_value->value);
 
@@ -841,16 +875,16 @@ gimp_enum_value_get_desc (GEnumClass *enum_class,
  *
  * Retrieves the translated help for a given @enum_value.
  *
- * Return value: the translated help of the enum value
+ * Returns: the translated help of the enum value
  *
  * Since: 2.2
  **/
 const gchar *
-gimp_enum_value_get_help (GEnumClass *enum_class,
-                          GEnumValue *enum_value)
+gimp_enum_value_get_help (GEnumClass       *enum_class,
+                          const GEnumValue *enum_value)
 {
-  GType         type = G_TYPE_FROM_CLASS (enum_class);
-  GimpEnumDesc *enum_desc;
+  GType               type = G_TYPE_FROM_CLASS (enum_class);
+  const GimpEnumDesc *enum_desc;
 
   enum_desc = gimp_enum_get_desc (enum_class, enum_value->value);
 
@@ -868,16 +902,16 @@ gimp_enum_value_get_help (GEnumClass *enum_class,
  *
  * Retrieves the translated abbreviation for a given @enum_value.
  *
- * Return value: the translated abbreviation of the enum value
+ * Returns: the translated abbreviation of the enum value
  *
  * Since: 2.10
  **/
 const gchar *
-gimp_enum_value_get_abbrev (GEnumClass *enum_class,
-                            GEnumValue *enum_value)
+gimp_enum_value_get_abbrev (GEnumClass       *enum_class,
+                            const GEnumValue *enum_value)
 {
-  GType         type = G_TYPE_FROM_CLASS (enum_class);
-  GimpEnumDesc *enum_desc;
+  GType               type = G_TYPE_FROM_CLASS (enum_class);
+  const GimpEnumDesc *enum_desc;
 
   enum_desc = gimp_enum_get_desc (enum_class, enum_value->value);
 
@@ -900,11 +934,11 @@ gimp_enum_value_get_abbrev (GEnumClass *enum_class,
  *
  * Retrieves the first #GimpFlagsDesc that matches the given value, or %NULL.
  *
- * Return value: the value's #GimpFlagsDesc.
+ * Returns: (nullable): the value's #GimpFlagsDesc.
  *
  * Since: 2.2
  **/
-GimpFlagsDesc *
+const GimpFlagsDesc *
 gimp_flags_get_first_desc (GFlagsClass *flags_class,
                            guint        value)
 {
@@ -920,7 +954,7 @@ gimp_flags_get_first_desc (GFlagsClass *flags_class,
       while (value_desc->value_desc)
         {
           if ((value_desc->value & value) == value_desc->value)
-            return (GimpFlagsDesc *) value_desc;
+            return value_desc;
 
           value_desc++;
         }
@@ -933,18 +967,19 @@ gimp_flags_get_first_desc (GFlagsClass *flags_class,
  * gimp_flags_get_first_value:
  * @flags_type: the #GType of registered flags
  * @value:      an integer value
- * @value_name: return location for the value's name (or %NULL)
- * @value_nick: return location for the value's nick (or %NULL)
- * @value_desc: return location for the value's translated description (or %NULL)
- * @value_help: return location for the value's translated help (or %NULL)
+ * @value_name: (out) (optional): return location for the value's name, or %NULL
+ * @value_nick: (out) (optional): return location for the value's nick, or %NULL
+ * @value_desc: (out) (optional): return location for the value's translated
+ *                                description, or %NULL
+ * @value_help: (out) (optional): return location for the value's translated
+ *                                help, or %NULL
  *
  * Checks if @value is valid for the flags registered as @flags_type.
  * If the value exists in that flags, its name, nick and its
  * translated description and help are returned (if @value_name,
  * @value_nick, @value_desc and @value_help are not %NULL).
  *
- * Return value: %TRUE if @value is valid for the @flags_type,
- *               %FALSE otherwise
+ * Returns: %TRUE if @value is valid for the @flags_type, %FALSE otherwise
  *
  * Since: 2.2
  **/
@@ -956,8 +991,8 @@ gimp_flags_get_first_value (GType         flags_type,
                             const gchar **value_desc,
                             const gchar **value_help)
 {
-  GFlagsClass *flags_class;
-  GFlagsValue *flags_value;
+  GFlagsClass       *flags_class;
+  const GFlagsValue *flags_value;
 
   g_return_val_if_fail (G_TYPE_IS_FLAGS (flags_type), FALSE);
 
@@ -974,7 +1009,7 @@ gimp_flags_get_first_value (GType         flags_type,
 
       if (value_desc || value_help)
         {
-          GimpFlagsDesc *flags_desc;
+          const GimpFlagsDesc *flags_desc;
 
           flags_desc = gimp_flags_get_first_desc (flags_class, value);
 
@@ -1004,16 +1039,16 @@ gimp_flags_get_first_value (GType         flags_type,
  *
  * Retrieves the translated description for a given @flags_value.
  *
- * Return value: the translated description of the flags value
+ * Returns: the translated description of the flags value
  *
  * Since: 2.2
  **/
 const gchar *
-gimp_flags_value_get_desc (GFlagsClass *flags_class,
-                           GFlagsValue *flags_value)
+gimp_flags_value_get_desc (GFlagsClass       *flags_class,
+                           const GFlagsValue *flags_value)
 {
-  GType         type = G_TYPE_FROM_CLASS (flags_class);
-  GimpFlagsDesc *flags_desc;
+  GType                type = G_TYPE_FROM_CLASS (flags_class);
+  const GimpFlagsDesc *flags_desc;
 
   flags_desc = gimp_flags_get_first_desc (flags_class, flags_value->value);
 
@@ -1043,16 +1078,16 @@ gimp_flags_value_get_desc (GFlagsClass *flags_class,
  *
  * Retrieves the translated help for a given @flags_value.
  *
- * Return value: the translated help of the flags value
+ * Returns: the translated help of the flags value
  *
  * Since: 2.2
  **/
 const gchar *
-gimp_flags_value_get_help (GFlagsClass *flags_class,
-                           GFlagsValue *flags_value)
+gimp_flags_value_get_help (GFlagsClass       *flags_class,
+                           const GFlagsValue *flags_value)
 {
-  GType         type = G_TYPE_FROM_CLASS (flags_class);
-  GimpFlagsDesc *flags_desc;
+  GType                type = G_TYPE_FROM_CLASS (flags_class);
+  const GimpFlagsDesc *flags_desc;
 
   flags_desc = gimp_flags_get_first_desc (flags_class, flags_value->value);
 
@@ -1070,16 +1105,16 @@ gimp_flags_value_get_help (GFlagsClass *flags_class,
  *
  * Retrieves the translated abbreviation for a given @flags_value.
  *
- * Return value: the translated abbreviation of the flags value
+ * Returns: the translated abbreviation of the flags value
  *
  * Since: 2.10
  **/
 const gchar *
-gimp_flags_value_get_abbrev (GFlagsClass *flags_class,
-                             GFlagsValue *flags_value)
+gimp_flags_value_get_abbrev (GFlagsClass       *flags_class,
+                             const GFlagsValue *flags_value)
 {
-  GType          type = G_TYPE_FROM_CLASS (flags_class);
-  GimpFlagsDesc *flags_desc;
+  GType                type = G_TYPE_FROM_CLASS (flags_class);
+  const GimpFlagsDesc *flags_desc;
 
   flags_desc = gimp_flags_get_first_desc (flags_class, flags_value->value);
 
@@ -1099,10 +1134,10 @@ gimp_flags_value_get_abbrev (GFlagsClass *flags_class,
  * gimp_stack_trace_available:
  * @optimal: whether we get optimal traces.
  *
- * Returns #TRUE if we have dependencies to generate backtraces. If
- * @optimal is #TRUE, the function will return #TRUE only when we
+ * Returns %TRUE if we have dependencies to generate backtraces. If
+ * @optimal is %TRUE, the function will return %TRUE only when we
  * are able to generate optimal traces (i.e. with GDB or LLDB);
- * otherwise we return #TRUE even if only backtrace() API is available.
+ * otherwise we return %TRUE even if only backtrace() API is available.
  *
  * On Win32, we return TRUE if Dr. Mingw is built-in, FALSE otherwise.
  *
@@ -1153,8 +1188,9 @@ gimp_stack_trace_available (gboolean optimal)
 /**
  * gimp_stack_trace_print:
  * @prog_name: the program to attach to.
- * @stream: a #FILE * stream.
- * @trace: location to store a newly allocated string of the trace.
+ * @stream: a FILE* stream.
+ * @trace: (out) (optional): location to store a newly allocated string of
+ *                           the trace.
  *
  * Attempts to generate a stack trace at current code position in
  * @prog_name. @prog_name is mostly a helper and can be set to NULL.
@@ -1166,14 +1202,14 @@ gimp_stack_trace_available (gboolean optimal)
  * fails on Win32.
  *
  * The stack trace, once generated, will either be printed to @stream or
- * returned as a newly allocated string in @trace, if not #NULL.
+ * returned as a newly allocated string in @trace, if not %NULL.
  *
  * In some error cases (e.g. segmentation fault), trying to allocate
  * more memory will trigger more segmentation faults and therefore loop
  * our error handling (which is just wrong). Therefore printing to a
  * file description is an implementation without any memory allocation.
 
- * Return value: #TRUE if a stack trace could be generated, #FALSE
+ * Returns: %TRUE if a stack trace could be generated, %FALSE
  * otherwise.
  *
  * Since: 2.10
@@ -1185,6 +1221,61 @@ gimp_stack_trace_print (const gchar   *prog_name,
 {
   gboolean stack_printed = FALSE;
 
+#ifdef PLATFORM_OSX
+  pid_t    pid = getpid();
+  uint64   tid64;
+  long     tid;
+  GString *gtrace = NULL;
+
+  /* On macOS, we can't use gdb or lldb to attach to a process, so we
+   * have to use the stacktrace() API.
+   */
+
+  unw_cursor_t cursor;
+  unw_context_t context;
+
+  unw_getcontext (&context);
+  unw_init_local (&cursor, &context);
+
+
+  pthread_threadid_np (NULL, &tid64);
+  tid = (long) tid64;
+
+  if (stream)
+      g_fprintf (stream,
+                  "\n# Stack traces obtained from PID %d - Thread 0x%lx #\n\n",
+                  pid, tid);
+  if (trace)
+    {
+      gtrace = g_string_new (NULL);
+      g_string_printf (gtrace,
+                        "\n# Stack traces obtained from PID %d - Thread 0x%lx #\n\n",
+                        pid, tid);
+    }
+
+  while (unw_step (&cursor) > 0)
+    {
+      unw_word_t offset, pc;
+      char fname[64];
+
+      unw_get_reg (&cursor, UNW_REG_IP, &pc);
+      fname[0] = '\0';
+      unw_get_proc_name (&cursor, fname, sizeof(fname), &offset);
+
+      stack_printed = TRUE;
+      if (stream)
+        g_fprintf (stream, "%p : (%s+0x%lx)\n", (void *)pc, fname, (unsigned long)offset);
+      if (trace)
+        g_string_append_printf (gtrace, "%p : (%s+0x%lx)\n", (void *) pc, fname, (unsigned long) offset);
+    }
+
+  if (trace)
+    *trace = g_string_free (gtrace, FALSE);
+
+  /* Stack printing conflicts with the OS stack printing */
+  return stack_printed;
+
+#else /* PLATFORM_OSX */
   /* This works only on UNIX systems. */
 #ifndef G_OS_WIN32
   GString *gtrace = NULL;
@@ -1198,12 +1289,6 @@ gimp_stack_trace_print (const gchar   *prog_name,
   gint     eintr_count = 0;
 #if defined(G_OS_WIN32)
   DWORD    tid = GetCurrentThreadId ();
-#elif defined(PLATFORM_OSX)
-  uint64   tid64;
-  long     tid;
-
-  pthread_threadid_np (NULL, &tid64);
-  tid = (long) tid64;
 #elif defined(SYS_gettid)
   long     tid = syscall (SYS_gettid);
 #elif defined(HAVE_THR_SELF)
@@ -1232,6 +1317,11 @@ gimp_stack_trace_print (const gchar   *prog_name,
       /* Child process. */
       gchar *args[9] = { "gdb", "-batch",
                          "-ex", "info threads",
+                         /* A bug, possibly in gdb, could lock the whole
+                          * GIMP process with a full thread backtrace in
+                          * some conditions. We aren't sure if it still
+                          * exists. See issue #7539.
+                          */
                          "-ex", "thread apply all backtrace full",
                          (gchar *) prog_name, NULL, NULL };
 
@@ -1297,7 +1387,7 @@ gimp_stack_trace_print (const gchar   *prog_name,
        */
       close (out_fd[1]);
 
-      while ((read_n = read (out_fd[0], buffer, 256)) != 0)
+      while ((read_n = read (out_fd[0], buffer, 255)) != 0)
         {
           if (read_n < 0)
             {
@@ -1307,6 +1397,7 @@ gimp_stack_trace_print (const gchar   *prog_name,
                * Yet to avoid infinite loop (in case the error really
                * happens at every call), we abandon after a few
                * consecutive errors.
+               * Note: macOS no longer runs through this code path
                */
               if (errno == EINTR && eintr_count <= 5)
                 {
@@ -1318,12 +1409,7 @@ gimp_stack_trace_print (const gchar   *prog_name,
           eintr_count = 0;
           if (! stack_printed)
             {
-#if defined(PLATFORM_OSX)
-              if (stream)
-                g_fprintf (stream,
-                           "\n# Stack traces obtained from PID %d - Thread 0x%lx #\n\n",
-                           pid, tid);
-#elif defined(G_OS_WIN32) || defined(SYS_gettid) || defined(HAVE_THR_SELF)
+#if defined(G_OS_WIN32) || defined(SYS_gettid) || defined(HAVE_THR_SELF)
               if (stream)
                 g_fprintf (stream,
                            "\n# Stack traces obtained from PID %d - Thread %lu #\n\n",
@@ -1332,11 +1418,7 @@ gimp_stack_trace_print (const gchar   *prog_name,
               if (trace)
                 {
                   gtrace = g_string_new (NULL);
-#if defined(PLATFORM_OSX)
-                  g_string_printf (gtrace,
-                                   "\n# Stack traces obtained from PID %d - Thread 0x%lx #\n\n",
-                                   pid, tid);
-#elif defined(G_OS_WIN32) || defined(SYS_gettid) || defined(HAVE_THR_SELF)
+#if defined(G_OS_WIN32) || defined(SYS_gettid) || defined(HAVE_THR_SELF)
                   g_string_printf (gtrace,
                                    "\n# Stack traces obtained from PID %d - Thread %lu #\n\n",
                                    pid, tid);
@@ -1425,6 +1507,7 @@ gimp_stack_trace_print (const gchar   *prog_name,
 #endif /* G_OS_WIN32 */
 
   return stack_printed;
+#endif /* PLATFORM_OSX */
 }
 
 /**
@@ -1442,7 +1525,8 @@ void
 gimp_stack_trace_query (const gchar *prog_name)
 {
 #ifndef G_OS_WIN32
-  gchar buf[16];
+  gchar    buf[16];
+  gboolean eof = FALSE;
 
  retry:
 
@@ -1454,25 +1538,176 @@ gimp_stack_trace_query (const gchar *prog_name)
   fflush (stdout);
 
   if (isatty(0) && isatty(1))
-    fgets (buf, 8, stdin);
+    eof = (fgets (buf, 8, stdin) == NULL);
   else
     strcpy (buf, "E\n");
 
+  if (eof)
+    strcpy (buf, "S\n");
+
   if ((buf[0] == 'E' || buf[0] == 'e')
       && buf[1] == '\n')
-    _exit (0);
+    {
+      _exit (0);
+    }
   else if ((buf[0] == 'P' || buf[0] == 'p')
            && buf[1] == '\n')
-    return;
+    {
+      return;
+    }
   else if ((buf[0] == 'S' || buf[0] == 's')
            && buf[1] == '\n')
     {
       if (! gimp_stack_trace_print (prog_name, stdout, NULL))
         g_fprintf (stderr, "%s\n", "Stack trace not available on your system.");
-      goto retry;
+
+      if (eof)
+        /* As a special exception, if we get an EOF (or a reading error)
+         * on stdin, we just output the stacktrace and exit.
+         */
+        _exit (0);
+      else
+        goto retry;
     }
   else
-    goto retry;
+    {
+      goto retry;
+    }
+#endif
+}
+
+/**
+ * gimp_range_estimate_settings:
+ * @lower: the lower value.
+ * @upper: the higher value.
+ * @step: (out) (optional): the proposed step increment.
+ * @page: (out) (optional): the proposed page increment.
+ * @digits: (out) (optional): the proposed decimal places precision.
+ *
+ * This function proposes reasonable settings for increments and display
+ * digits. These can be used for instance on #GtkRange or other widgets
+ * using a #GtkAdjustment typically.
+ * Note that it will never return @digits with value 0. If you know that
+ * your input needs to display integer values, there is no need to set
+ * @digits.
+ *
+ * There is no universal answer to the best increments and number of
+ * decimal places. It often depends on context of what the value is
+ * meant to represent. This function only tries to provide sensible
+ * generic values which can be used when it doesn't matter too much or
+ * for generated GUI for instance. If you know exactly how you want to
+ * show and interact with a given range, you don't have to use this
+ * function.
+ */
+void
+gimp_range_estimate_settings (gdouble  lower,
+                              gdouble  upper,
+                              gdouble *step,
+                              gdouble *page,
+                              gint    *digits)
+{
+  gdouble range;
+
+  g_return_if_fail (upper >= lower);
+  g_return_if_fail (step || page || digits);
+
+  range = upper - lower;
+
+  if (range > 0 && range <= 1.0)
+    {
+      gdouble places = 10.0;
+
+      if (digits)
+        *digits = 3;
+
+      /* Compute some acceptable step and page increments always in the
+       * format `10**-X` where X is the rounded precision.
+       * So for instance:
+       *  0.8 will have increments 0.01 and 0.1.
+       *  0.3 will have increments 0.001 and 0.01.
+       *  0.06 will also have increments 0.001 and 0.01.
+       */
+      while (range * places < 5.0)
+        {
+          places *= 10.0;
+          if (digits)
+            (*digits)++;
+        }
+
+
+      if (step)
+        *step = 0.1 / places;
+      if (page)
+        *page = 1.0 / places;
+    }
+  else if (range <= 2.0)
+    {
+      if (step)
+        *step = 0.01;
+      if (page)
+        *page = 0.1;
+
+      if (digits)
+        *digits = 3;
+    }
+  else if (range <= 5.0)
+    {
+      if (step)
+        *step = 0.1;
+      if (page)
+        *page = 1.0;
+      if (digits)
+        *digits = 2;
+    }
+  else if (range <= 40.0)
+    {
+      if (step)
+        *step = 1.0;
+      if (page)
+        *page = 2.0;
+      if (digits)
+        *digits = 2;
+    }
+  else
+    {
+      if (step)
+        *step = 1.0;
+      if (page)
+        *page = 10.0;
+      if (digits)
+        *digits = 1;
+    }
+}
+
+/**
+ * gimp_bind_text_domain:
+ * @domain_name: a gettext domain name
+ * @dir_name:    path of the catalog directory
+ *
+ * This function wraps bindtextdomain on UNIX and wbintextdomain on Windows.
+ * @dir_name is expected to be in the encoding used by the C library on UNIX
+ * and UTF-8 on Windows.
+ *
+ * Since: 3.0
+ **/
+void
+gimp_bind_text_domain (const gchar *domain_name,
+                       const gchar *dir_name)
+{
+#if defined (_WIN32) && !defined (__CYGWIN__)
+  wchar_t *dir_name_utf16 = g_utf8_to_utf16 (dir_name, -1, NULL, NULL, NULL);
+
+  if G_UNLIKELY (!dir_name_utf16)
+    {
+      g_printerr ("[%s] Cannot translate the catalog directory to UTF-16\n", __func__);
+    }
+  else
+    {
+      wbindtextdomain (domain_name, dir_name_utf16);
+      g_free (dir_name_utf16);
+    }
+#else
+  bindtextdomain (domain_name, dir_name);
 #endif
 }
 

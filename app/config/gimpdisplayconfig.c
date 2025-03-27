@@ -47,6 +47,8 @@ enum
   PROP_0,
   PROP_TRANSPARENCY_SIZE,
   PROP_TRANSPARENCY_TYPE,
+  PROP_TRANSPARENCY_CUSTOM_COLOR1,
+  PROP_TRANSPARENCY_CUSTOM_COLOR2,
   PROP_SNAP_DISTANCE,
   PROP_MARCHING_ANTS_SPEED,
   PROP_RESIZE_WINDOWS_ON_ZOOM,
@@ -54,6 +56,8 @@ enum
   PROP_DEFAULT_SHOW_ALL,
   PROP_DEFAULT_DOT_FOR_DOT,
   PROP_INITIAL_ZOOM_TO_FIT,
+  PROP_DRAG_ZOOM_MODE,
+  PROP_DRAG_ZOOM_SPEED,
   PROP_CURSOR_MODE,
   PROP_CURSOR_UPDATING,
   PROP_SHOW_BRUSH_OUTLINE,
@@ -61,6 +65,7 @@ enum
   PROP_SHOW_PAINT_TOOL_CURSOR,
   PROP_IMAGE_TITLE_FORMAT,
   PROP_IMAGE_STATUS_FORMAT,
+  PROP_MODIFIERS_MANAGER,
   PROP_MONITOR_XRESOLUTION,
   PROP_MONITOR_YRESOLUTION,
   PROP_MONITOR_RES_FROM_GDK,
@@ -110,7 +115,7 @@ static void
 gimp_display_config_class_init (GimpDisplayConfigClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
-  GimpRGB       color        = { 0, 0, 0, 0 };
+  GeglColor    *color        = gegl_color_new (NULL);
 
   object_class->finalize     = gimp_display_config_finalize;
   object_class->set_property = gimp_display_config_set_property;
@@ -131,6 +136,22 @@ gimp_display_config_class_init (GimpDisplayConfigClass *klass)
                          GIMP_TYPE_CHECK_TYPE,
                          GIMP_CHECK_TYPE_GRAY_CHECKS,
                          GIMP_PARAM_STATIC_STRINGS);
+
+  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR1);
+  GIMP_CONFIG_PROP_COLOR (object_class, PROP_TRANSPARENCY_CUSTOM_COLOR1,
+                          "transparency-custom-color1",
+                          _("Transparency custom color 1"),
+                          TRANSPARENCY_CUSTOM_COLOR1_BLURB,
+                          FALSE, color,
+                          GIMP_PARAM_STATIC_STRINGS);
+
+  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR2);
+  GIMP_CONFIG_PROP_COLOR (object_class, PROP_TRANSPARENCY_CUSTOM_COLOR2,
+                          "transparency-custom-color2",
+                          _("Transparency custom color 2"),
+                          TRANSPARENCY_CUSTOM_COLOR2_BLURB,
+                          FALSE, color,
+                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_INT (object_class, PROP_SNAP_DISTANCE,
                         "snap-distance",
@@ -180,6 +201,21 @@ gimp_display_config_class_init (GimpDisplayConfigClass *klass)
                             INITIAL_ZOOM_TO_FIT_BLURB,
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_ENUM (object_class, PROP_DRAG_ZOOM_MODE,
+                         "drag-zoom-mode",
+                         "Drag-to-zoom behavior",
+                         DRAG_ZOOM_MODE_BLURB,
+                         GIMP_TYPE_DRAG_ZOOM_MODE,
+                         PROP_DRAG_ZOOM_MODE_DISTANCE,
+                         GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_DOUBLE(object_class, PROP_DRAG_ZOOM_SPEED,
+                          "drag-zoom-speed",
+                          "Drag-to-zoom speed",
+                          DRAG_ZOOM_SPEED_BLURB,
+                          25.0, 300.0, 100.0,
+                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_CURSOR_MODE,
                          "cursor-mode",
@@ -342,12 +378,12 @@ gimp_display_config_class_init (GimpDisplayConfigClass *klass)
                             GIMP_PARAM_STATIC_STRINGS |
                             GIMP_CONFIG_PARAM_IGNORE);
 
-  GIMP_CONFIG_PROP_RGB (object_class, PROP_XOR_COLOR,
-                        "xor-color",
-                        NULL, NULL,
-                        FALSE, &color,
-                        GIMP_PARAM_STATIC_STRINGS |
-                        GIMP_CONFIG_PARAM_IGNORE);
+  GIMP_CONFIG_PROP_COLOR (object_class, PROP_XOR_COLOR,
+                          "xor-color",
+                          NULL, NULL,
+                          FALSE, color,
+                          GIMP_PARAM_STATIC_STRINGS |
+                          GIMP_CONFIG_PARAM_IGNORE);
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_PERFECT_MOUSE,
                             "perfect-mouse",
@@ -355,11 +391,34 @@ gimp_display_config_class_init (GimpDisplayConfigClass *klass)
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS |
                             GIMP_CONFIG_PARAM_IGNORE);
+
+  /* Stored as a property because we want to copy the object when we
+   * copy the config (for Preferences, etc.). But we don't want it to be
+   * stored as a config property into the rc files.
+   * Modifiers have their own rc file.
+   */
+  g_object_class_install_property (object_class, PROP_MODIFIERS_MANAGER,
+                                   g_param_spec_object ("modifiers-manager",
+                                                        NULL, NULL,
+                                                        G_TYPE_OBJECT,
+                                                        GIMP_PARAM_READWRITE));
+
+  g_object_unref (color);
 }
 
 static void
 gimp_display_config_init (GimpDisplayConfig *config)
 {
+  GeglColor *color;
+
+  color = gegl_color_new (NULL);
+  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR1);
+  config->transparency_custom_color1 = color;
+
+  color = gegl_color_new (NULL);
+  gegl_color_set_pixel (color, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR2);
+  config->transparency_custom_color2 = color;
+
   config->default_view =
     g_object_new (GIMP_TYPE_DISPLAY_OPTIONS, NULL);
 
@@ -385,6 +444,9 @@ gimp_display_config_finalize (GObject *object)
 
   g_clear_object (&display_config->default_view);
   g_clear_object (&display_config->default_fullscreen_view);
+  g_clear_object (&display_config->modifiers_manager);
+  g_clear_object (&display_config->transparency_custom_color1);
+  g_clear_object (&display_config->transparency_custom_color2);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -404,6 +466,14 @@ gimp_display_config_set_property (GObject      *object,
       break;
     case PROP_TRANSPARENCY_TYPE:
       display_config->transparency_type = g_value_get_enum (value);
+      break;
+    case PROP_TRANSPARENCY_CUSTOM_COLOR1:
+      g_clear_object (&display_config->transparency_custom_color1);
+      display_config->transparency_custom_color1 = gegl_color_duplicate (g_value_get_object (value));
+      break;
+    case PROP_TRANSPARENCY_CUSTOM_COLOR2:
+      g_clear_object (&display_config->transparency_custom_color2);
+      display_config->transparency_custom_color2 = gegl_color_duplicate (g_value_get_object (value));
       break;
     case PROP_SNAP_DISTANCE:
       display_config->snap_distance = g_value_get_int (value);
@@ -425,6 +495,12 @@ gimp_display_config_set_property (GObject      *object,
       break;
     case PROP_INITIAL_ZOOM_TO_FIT:
       display_config->initial_zoom_to_fit = g_value_get_boolean (value);
+      break;
+    case PROP_DRAG_ZOOM_MODE:
+      display_config->drag_zoom_mode = g_value_get_enum (value);
+      break;
+    case PROP_DRAG_ZOOM_SPEED:
+      display_config->drag_zoom_speed = g_value_get_double (value);
       break;
     case PROP_CURSOR_MODE:
       display_config->cursor_mode = g_value_get_enum (value);
@@ -478,6 +554,9 @@ gimp_display_config_set_property (GObject      *object,
     case PROP_SPACE_BAR_ACTION:
       display_config->space_bar_action = g_value_get_enum (value);
       break;
+    case PROP_MODIFIERS_MANAGER:
+      display_config->modifiers_manager = g_value_dup_object (value);
+      break;
     case PROP_ZOOM_QUALITY:
       display_config->zoom_quality = g_value_get_enum (value);
       break;
@@ -517,6 +596,12 @@ gimp_display_config_get_property (GObject    *object,
     case PROP_TRANSPARENCY_TYPE:
       g_value_set_enum (value, display_config->transparency_type);
       break;
+    case PROP_TRANSPARENCY_CUSTOM_COLOR1:
+      g_value_set_object (value, display_config->transparency_custom_color1);
+      break;
+    case PROP_TRANSPARENCY_CUSTOM_COLOR2:
+      g_value_set_object (value, display_config->transparency_custom_color2);
+      break;
     case PROP_SNAP_DISTANCE:
       g_value_set_int (value, display_config->snap_distance);
       break;
@@ -537,6 +622,12 @@ gimp_display_config_get_property (GObject    *object,
       break;
     case PROP_INITIAL_ZOOM_TO_FIT:
       g_value_set_boolean (value, display_config->initial_zoom_to_fit);
+      break;
+    case PROP_DRAG_ZOOM_MODE:
+      g_value_set_enum (value, display_config->drag_zoom_mode);
+      break;
+    case PROP_DRAG_ZOOM_SPEED:
+      g_value_set_double (value, display_config->drag_zoom_speed);
       break;
     case PROP_CURSOR_MODE:
       g_value_set_enum (value, display_config->cursor_mode);
@@ -582,6 +673,9 @@ gimp_display_config_get_property (GObject    *object,
       break;
     case PROP_SPACE_BAR_ACTION:
       g_value_set_enum (value, display_config->space_bar_action);
+      break;
+    case PROP_MODIFIERS_MANAGER:
+      g_value_set_object (value, display_config->modifiers_manager);
       break;
     case PROP_ZOOM_QUALITY:
       g_value_set_enum (value, display_config->zoom_quality);

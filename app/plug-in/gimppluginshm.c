@@ -78,7 +78,7 @@
 
 struct _GimpPlugInShm
 {
-  gint    shm_ID;
+  gint    shm_id;
   guchar *shm_addr;
 
 #if defined(USE_WIN32_SHM)
@@ -97,29 +97,29 @@ gimp_plug_in_shm_new (void)
 
   GimpPlugInShm *shm = g_slice_new0 (GimpPlugInShm);
 
-  shm->shm_ID = -1;
+  shm->shm_id = -1;
 
 #if defined(USE_SYSV_SHM)
 
   /* Use SysV shared memory mechanisms for transferring tile data. */
   {
-    shm->shm_ID = shmget (IPC_PRIVATE, TILE_MAP_SIZE, IPC_CREAT | 0600);
+    shm->shm_id = shmget (IPC_PRIVATE, TILE_MAP_SIZE, IPC_CREAT | 0600);
 
-    if (shm->shm_ID != -1)
+    if (shm->shm_id != -1)
       {
-        shm->shm_addr = (guchar *) shmat (shm->shm_ID, NULL, 0);
+        shm->shm_addr = (guchar *) shmat (shm->shm_id, NULL, 0);
 
         if (shm->shm_addr == (guchar *) -1)
           {
             g_printerr ("shmat() failed: %s\n" ERRMSG_SHM_DISABLE,
                         g_strerror (errno));
-            shmctl (shm->shm_ID, IPC_RMID, NULL);
-            shm->shm_ID = -1;
+            shmctl (shm->shm_id, IPC_RMID, NULL);
+            shm->shm_id = -1;
           }
 
 #ifdef IPC_RMID_DEFERRED_RELEASE
         if (shm->shm_addr != (guchar *) -1)
-          shmctl (shm->shm_ID, IPC_RMID, NULL);
+          shmctl (shm->shm_id, IPC_RMID, NULL);
 #endif
       }
     else
@@ -133,8 +133,9 @@ gimp_plug_in_shm_new (void)
 
   /* Use Win32 shared memory mechanisms for transferring tile data. */
   {
-    gint  pid;
-    gchar fileMapName[MAX_PATH];
+    gint     pid;
+    gchar    fileMapName[MAX_PATH];
+    wchar_t *w_fileMapName         = NULL;
 
     /* Our shared memory id will be our process ID */
     pid = GetCurrentProcessId ();
@@ -142,11 +143,16 @@ gimp_plug_in_shm_new (void)
     /* From the id, derive the file map name */
     g_snprintf (fileMapName, sizeof (fileMapName), "GIMP%d.SHM", pid);
 
+    w_fileMapName = g_utf8_to_utf16 (fileMapName, -1, NULL, NULL, NULL);
+
     /* Create the file mapping into paging space */
-    shm->shm_handle = CreateFileMapping (INVALID_HANDLE_VALUE, NULL,
-                                         PAGE_READWRITE, 0,
-                                         TILE_MAP_SIZE,
-                                         fileMapName);
+    shm->shm_handle = CreateFileMappingW (INVALID_HANDLE_VALUE, NULL,
+                                          PAGE_READWRITE, 0,
+                                          TILE_MAP_SIZE,
+                                          w_fileMapName);
+
+    g_free (w_fileMapName);
+    w_fileMapName = NULL;
 
     if (shm->shm_handle)
       {
@@ -158,7 +164,7 @@ gimp_plug_in_shm_new (void)
         /* Verify that we mapped our view */
         if (shm->shm_addr)
           {
-            shm->shm_ID = pid;
+            shm->shm_id = pid;
           }
         else
           {
@@ -202,7 +208,7 @@ gimp_plug_in_shm_new (void)
             /* Verify that we mapped our view */
             if (shm->shm_addr != MAP_FAILED)
               {
-                shm->shm_ID = pid;
+                shm->shm_id = pid;
               }
             else
               {
@@ -231,14 +237,14 @@ gimp_plug_in_shm_new (void)
 
 #endif
 
-  if (shm->shm_ID == -1)
+  if (shm->shm_id == -1)
     {
       g_slice_free (GimpPlugInShm, shm);
       shm = NULL;
     }
   else
     {
-      GIMP_LOG (SHM, "attached shared memory segment ID = %d", shm->shm_ID);
+      GIMP_LOG (SHM, "attached shared memory segment ID = %d", shm->shm_id);
     }
 
   return shm;
@@ -249,7 +255,7 @@ gimp_plug_in_shm_free (GimpPlugInShm *shm)
 {
   g_return_if_fail (shm != NULL);
 
-  if (shm->shm_ID != -1)
+  if (shm->shm_id != -1)
     {
 
 #if defined (USE_SYSV_SHM)
@@ -257,7 +263,7 @@ gimp_plug_in_shm_free (GimpPlugInShm *shm)
       shmdt (shm->shm_addr);
 
 #ifndef IPC_RMID_DEFERRED_RELEASE
-      shmctl (shm->shm_ID, IPC_RMID, NULL);
+      shmctl (shm->shm_id, IPC_RMID, NULL);
 #endif
 
 #elif defined(USE_WIN32_SHM)
@@ -272,24 +278,24 @@ gimp_plug_in_shm_free (GimpPlugInShm *shm)
       munmap (shm->shm_addr, TILE_MAP_SIZE);
 
       g_snprintf (shm_handle, sizeof (shm_handle), "/gimp-shm-%d",
-                  shm->shm_ID);
+                  shm->shm_id);
 
       shm_unlink (shm_handle);
 
 #endif
 
-      GIMP_LOG (SHM, "detached shared memory segment ID = %d", shm->shm_ID);
+      GIMP_LOG (SHM, "detached shared memory segment ID = %d", shm->shm_id);
     }
 
   g_slice_free (GimpPlugInShm, shm);
 }
 
 gint
-gimp_plug_in_shm_get_ID (GimpPlugInShm *shm)
+gimp_plug_in_shm_get_id (GimpPlugInShm *shm)
 {
   g_return_val_if_fail (shm != NULL, -1);
 
-  return shm->shm_ID;
+  return shm->shm_id;
 }
 
 guchar *

@@ -37,7 +37,6 @@
 #include "gimpbrushcache.h"
 #include "gimpbrushgenerated.h"
 #include "gimpbrushpipe.h"
-#include "gimpmarshal.h"
 #include "gimptagged.h"
 #include "gimptempbuf.h"
 
@@ -122,8 +121,7 @@ gimp_brush_class_init (GimpBrushClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpBrushClass, spacing_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->finalize            = gimp_brush_finalize;
@@ -549,13 +547,11 @@ gimp_brush_get_standard (GimpContext *context)
 
   if (! standard_brush)
     {
-      standard_brush = gimp_brush_new (context, "Standard");
+      g_set_weak_pointer (&standard_brush,
+                          gimp_brush_new (context, "Standard"));
 
       gimp_data_clean (standard_brush);
       gimp_data_make_internal (standard_brush, "gimp-brush-standard");
-
-      g_object_add_weak_pointer (G_OBJECT (standard_brush),
-                                 (gpointer *) &standard_brush);
     }
 
   return standard_brush;

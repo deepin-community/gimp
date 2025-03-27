@@ -142,9 +142,9 @@ HELP
 	  desc => 'The affected drawable' },
 	{ name => 'fill_type', type => 'enum GimpFillType',
 	  desc => 'The type of fill' },
-	{ name => 'x', type => 'float',
+	{ name => 'x', type => 'double',
 	  desc => "The x coordinate of this bucket fill's application." },
-	{ name => 'y', type => 'float',
+	{ name => 'y', type => 'double',
 	  desc => "The y coordinate of this bucket fill's application." }
     );
 
@@ -217,7 +217,7 @@ HELP
 	  desc => 'The affected drawable' },
 	{ name => 'gradient_type',  type => 'enum GimpGradientType',
 	  desc => 'The type of gradient' },
-	{ name => 'offset', type => '0 <= float',
+	{ name => 'offset', type => '0 <= double',
 	  desc => 'Offset relates to the starting and ending coordinates
 		   specified for the blend. This parameter is mode dependent.' },
 	{ name => 'supersample', type => 'boolean',
@@ -225,18 +225,18 @@ HELP
 	{ name => 'supersample_max_depth', type => '1 <= int32 <= 9',
 	  no_validate => 1,
 	  desc => 'Maximum recursion levels for supersampling' },
-	{ name => 'supersample_threshold', type => '0 <= float <= 4',
+	{ name => 'supersample_threshold', type => '0 <= double <= 4',
 	  no_validate => 1,
 	  desc => 'Supersampling threshold' },
 	{ name => 'dither', type => 'boolean',
 	  desc => 'Use dithering to reduce banding' },
-	{ name => 'x1', type => 'float',
+	{ name => 'x1', type => 'double',
 	  desc => "The x coordinate of this gradient's starting point" },
-	{ name => 'y1', type => 'float',
+	{ name => 'y1', type => 'double',
 	  desc => "The y coordinate of this gradient's starting point" },
-	{ name => 'x2', type => 'float',
+	{ name => 'x2', type => 'double',
 	  desc => "The x coordinate of this gradient's ending point" },
-	{ name => 'y2', type => 'float',
+	{ name => 'y2', type => 'double',
 	  desc => "The y coordinate of this gradient's ending point" }
     );
 
@@ -339,6 +339,7 @@ HELP
       GimpImage         *image = gimp_item_get_image (GIMP_ITEM (drawable));
       GimpStrokeOptions *options;
       GimpPaintOptions  *paint_options;
+      GList             *drawables = g_list_prepend (NULL, drawable);
 
       options = gimp_pdb_context_get_stroke_options (GIMP_PDB_CONTEXT (context));
 
@@ -347,10 +348,11 @@ HELP
       paint_options = gimp_config_duplicate (GIMP_CONFIG (paint_options));
 
       success = gimp_item_stroke (GIMP_ITEM (gimp_image_get_mask (image)),
-                                  drawable, context, options, paint_options,
+                                  drawables, context, options, paint_options,
                                   TRUE, progress, error);
 
       g_object_unref (paint_options);
+      g_list_free (drawables);
     }
   else
     success = FALSE;
@@ -401,6 +403,7 @@ HELP
     {
       GimpStrokeOptions *options;
       GimpPaintOptions  *paint_options;
+      GList             *drawables = g_list_prepend (NULL, drawable);
 
       options = gimp_pdb_context_get_stroke_options (GIMP_PDB_CONTEXT (context));
 
@@ -408,11 +411,12 @@ HELP
         gimp_pdb_context_get_paint_options (GIMP_PDB_CONTEXT (context), NULL);
       paint_options = gimp_config_duplicate (GIMP_CONFIG (paint_options));
 
-      success = gimp_item_stroke (item, drawable,
+      success = gimp_item_stroke (item, drawables,
                                   context, options, paint_options,
                                   TRUE, progress, error);
 
       g_object_unref (paint_options);
+      g_list_free (drawables);
     }
   else
     success = FALSE;

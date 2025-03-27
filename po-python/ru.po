@@ -1,740 +1,755 @@
 # translation of gimp python to Russian
 # Copyright (C) 2000-2002,2003, 2004, 2005, 2006 Free Software Foundation, Inc.
 #
-#
 # Valek Filippov <frob@df.ru>, 2000-2002.
 # Anatoly A. Yakushin <jaa@altlinux.ru>, 2003, 2004.
 # AnatolyA. Yakushin <jaa@altlinux.ru>, 2004.
 # Roxana Kolosova <mavka@justos.org>, 2003-2006.
 # Александр Прокудин <alexandre.prokoudine@gmail.com>, 2011.
-# Olesya Gerasimenko <gammaray@basealt.ru>, 2018.
-# Alexandre Prokoudine <alexandre.prokoudine@gmail.com>, 2005-2020.
+# Alexandre Prokoudine <alexandre.prokoudine@gmail.com>, 2005-2022.
 #
 msgid ""
 msgstr ""
-"Project-Id-Version: GIMP Python-Fu 2.8\n"
+"Project-Id-Version: GIMP Python-Fu 2.99\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gimp/issues\n"
-"POT-Creation-Date: 2022-04-01 19:04+0000\n"
-"PO-Revision-Date: 2022-02-21 22:12+0300\n"
-"Last-Translator: Aleksandr Melman <Alexmelman88@gmail.com>\n"
-"Language-Team: русский <gnome-cyr@lists.gnome.org>\n"
+"POT-Creation-Date: 2024-01-03 01:06+0100\n"
+"PO-Revision-Date: 2024-01-03 01:25+0100\n"
+"Last-Translator: Alexandre Prokoudine <alexandre.prokoudine@gmail.com>\n"
+"Language-Team: Russian <gnome-cyr@lists.gnome.org>\n"
 "Language: ru\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n"
-"%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
-"X-Generator: Poedit 3.0.1\n"
+"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+"X-Generator: Poedit 3.4\n"
 
-#: ../plug-ins/pygimp/gimpfu.py:396
-msgid "Missing exception information"
-msgstr "Отсутствует информация о прерывании"
+#: ../plug-ins/python/colorxhtml.py:91
+msgid "Save as colored HTML text..."
+msgstr "Сохранить как раскрашенный текст HTML…"
 
-#: ../plug-ins/pygimp/gimpfu.py:405
-#, python-format
-msgid "An error occurred running %s"
-msgstr "При запуске %s произошла ошибка"
+#: ../plug-ins/python/colorxhtml.py:92 ../plug-ins/python/colorxhtml.py:98
+#: ../plug-ins/python/gradients-save-as-css.py:116
+#: ../plug-ins/python/palette-offset.py:135
+#: ../plug-ins/python/python-console/python-console.py:271
+#: ../plug-ins/python/spyro-plus.py:1719
+msgid "_Cancel"
+msgstr "О_тмена"
 
-#: ../plug-ins/pygimp/gimpfu.py:416
-msgid "_More Information"
-msgstr "_Подробнее"
+#: ../plug-ins/python/colorxhtml.py:93 ../plug-ins/python/colorxhtml.py:99
+#: ../plug-ins/python/gradients-save-as-css.py:117
+#: ../plug-ins/python/palette-offset.py:136
+#: ../plug-ins/python/spyro-plus.py:1720
+msgid "_OK"
+msgstr "_ОК"
 
-#: ../plug-ins/pygimp/gimpfu.py:529 ../plug-ins/pygimp/gimpfu.py:541
-#: ../plug-ins/pygimp/gimpfu.py:547
-msgid "No"
-msgstr "Нет"
+#: ../plug-ins/python/colorxhtml.py:96
+msgid "Read characters from file..."
+msgstr "Прочитать символы из файла…"
 
-#: ../plug-ins/pygimp/gimpfu.py:539 ../plug-ins/pygimp/gimpfu.py:547
-msgid "Yes"
-msgstr "Да"
+#: ../plug-ins/python/colorxhtml.py:115
+msgid "Characters"
+msgstr "Символы"
 
-#: ../plug-ins/pygimp/gimpfu.py:600 ../plug-ins/pygimp/gimpui.py:223
-msgid "Python-Fu File Selection"
-msgstr "Выбор файла в Python-Fu"
+#: ../plug-ins/python/colorxhtml.py:116
+msgid "Characters that will be used as colored pixels. "
+msgstr "Символы, которые будут использованы как раскрашенные пиксели. "
 
-#: ../plug-ins/pygimp/gimpfu.py:649
-msgid "Python-Fu Folder Selection"
-msgstr "Выбор каталога в Python-Fu"
+#: ../plug-ins/python/colorxhtml.py:125
+msgid "Characters or file location"
+msgstr "Символы или расположение файла"
 
-#: ../plug-ins/pygimp/gimpfu.py:738
-#, python-format
-msgid "Invalid input for '%s'"
-msgstr "Некорректный ввод для '%s'"
+#: ../plug-ins/python/colorxhtml.py:131
+msgid "Read characters from file"
+msgstr "Прочитать символы из файла"
 
-#: ../plug-ins/pygimp/gimpui.py:176
-msgid "Python-Fu Color Selection"
-msgstr "Выделение цвета в Python-Fu"
+#: ../plug-ins/python/colorxhtml.py:134
+msgid ""
+"If set, the Characters text entry will be used as a file name, from which "
+"the characters will be read. Otherwise, the characters in the text entry "
+"will be used to render the image."
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:109
+#: ../plug-ins/python/colorxhtml.py:140
+msgid "Choose file"
+msgstr "Выбрать файл"
+
+#: ../plug-ins/python/colorxhtml.py:147
+msgid "Font Size(px)"
+msgstr "Кегль шрифта (px)"
+
+#: ../plug-ins/python/colorxhtml.py:159
+msgid "Write separate CSS file"
+msgstr "Записать отдельный файл CSS"
+
+#: ../plug-ins/python/colorxhtml.py:215
 msgid "Saving as colored XHTML"
 msgstr "Сохранение раскрашенного XHTML"
 
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:186
-msgid "Save as colored XHTML"
-msgstr "Сохранить как раскрашенный XHTML"
+#: ../plug-ins/python/colorxhtml.py:286 ../plug-ins/python/colorxhtml.py:287
+msgid "_Read characters from file, if true, or use text entry"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:191
-msgid "Colored XHTML"
-msgstr "Раскрашенный XHTML"
-
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:198
-msgid "Character _source"
-msgstr "_Источник символа"
-
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:199
-msgid "Source code"
-msgstr "Исходный код"
-
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:200
-msgid "Text file"
-msgstr "Текстовый файл"
-
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:201
-msgid "Entry box"
-msgstr "Поле ввода"
-
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:202
+#: ../plug-ins/python/colorxhtml.py:291 ../plug-ins/python/colorxhtml.py:292
 msgid "_File to read or characters to use"
 msgstr "_Читаемый файл или используемые символы"
 
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:204
+#: ../plug-ins/python/colorxhtml.py:296 ../plug-ins/python/colorxhtml.py:297
 msgid "Fo_nt size in pixels"
 msgstr "_Кегль шрифта в пикселах"
 
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:205
+#: ../plug-ins/python/colorxhtml.py:301 ../plug-ins/python/colorxhtml.py:302
 msgid "_Write a separate CSS file"
 msgstr "З_аписать отдельный файл CSS"
 
-#: ../plug-ins/pygimp/plug-ins/gradients-save-as-css.py:96
-msgid "Gradient to use"
-msgstr "Градиент, который следует использовать"
+#: ../plug-ins/python/colorxhtml.py:322
+msgid "Save as colored HTML text"
+msgstr "Сохранить как раскрашенный текст HTML"
 
-#: ../plug-ins/pygimp/plug-ins/gradients-save-as-css.py:97
-msgid "File Name"
-msgstr "Имя файла"
+#: ../plug-ins/python/colorxhtml.py:325
+msgid "Colored HTML text"
+msgstr "Раскрашенный текст HTML"
 
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:89
-msgid "Exports the image histogram to a text file (CSV)"
-msgstr "Экспортировать гистограмму изображения в текстовый файл (CSV)"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:94
-msgid "_Export histogram..."
-msgstr "_Экспортировать гистограмму..."
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:96
-msgid "_Image"
-msgstr "_Изображение"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:97
-msgid "_Drawable"
-msgstr "_Область рисования"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:98
-msgid "Histogram _File"
-msgstr "_Файл гистограммы"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:99
-msgid "_Bucket Size"
-msgstr "_Размер ячейки"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:100
-msgid "Sample _Average"
-msgstr "Выборочное _среднее"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:101
-msgid "Output format"
-msgstr "Выводной формат"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:102
-msgid "Pixel count"
-msgstr "Число пикселов"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:103
-msgid "Normalized"
-msgstr "Нормализованный"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:104
-msgid "Percent"
-msgstr "Процент"
-
-#: ../plug-ins/pygimp/plug-ins/foggify.py:56
-msgid "Add a layer of fog"
-msgstr "Добавить слой тумана"
-
-#: ../plug-ins/pygimp/plug-ins/foggify.py:61
-msgid "_Fog..."
-msgstr "_Туман..."
-
-#: ../plug-ins/pygimp/plug-ins/foggify.py:66
-msgid "_Layer name"
+#: ../plug-ins/python/foggify.py:100
+msgid "Layer _name"
 msgstr "_Имя слоя"
 
-#: ../plug-ins/pygimp/plug-ins/foggify.py:66
+#: ../plug-ins/python/foggify.py:101
+msgid "Layer name"
+msgstr "Имя слоя"
+
+#: ../plug-ins/python/foggify.py:102
 msgid "Clouds"
 msgstr "Облака"
 
-#: ../plug-ins/pygimp/plug-ins/foggify.py:67
-msgid "_Fog color"
-msgstr "_Цвет тумана"
-
-#: ../plug-ins/pygimp/plug-ins/foggify.py:68
+#: ../plug-ins/python/foggify.py:105
 msgid "_Turbulence"
 msgstr "Т_урбулентность"
 
-#: ../plug-ins/pygimp/plug-ins/foggify.py:69
-msgid "Op_acity"
+#: ../plug-ins/python/foggify.py:106
+msgid "Turbulence"
+msgstr "Турбулентность"
+
+#: ../plug-ins/python/foggify.py:110
+msgid "O_pacity"
 msgstr "_Непрозрачность"
 
-#: ../plug-ins/pygimp/plug-ins/palette-offset.py:44
-msgid "Offset the colors in a palette"
-msgstr "Сместить цвета в палитре"
+#: ../plug-ins/python/foggify.py:111
+msgid "Opacity"
+msgstr "Непрозрачность"
 
-#: ../plug-ins/pygimp/plug-ins/palette-offset.py:49
-msgid "_Offset Palette..."
-msgstr "_Сдвиг палитры..."
+#: ../plug-ins/python/foggify.py:120
+msgid "_Fog color"
+msgstr "_Цвет тумана"
 
-#: ../plug-ins/pygimp/plug-ins/palette-offset.py:52
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:335
-#: ../plug-ins/pygimp/plug-ins/palette-to-gradient.py:59
-#: ../plug-ins/pygimp/plug-ins/palette-to-gradient.py:81
+#: ../plug-ins/python/foggify.py:121
+msgid "Fog color"
+msgstr "Цвет тумана"
+
+#: ../plug-ins/python/foggify.py:137
+msgid "Add a layer of fog"
+msgstr "Добавить слой тумана"
+
+#: ../plug-ins/python/foggify.py:138
+msgid "Adds a layer of fog to the image."
+msgstr "Добавляет слой с туманом в изображение."
+
+#: ../plug-ins/python/foggify.py:140
+msgid "_Fog..."
+msgstr "_Туман..."
+
+#: ../plug-ins/python/gradients-save-as-css.py:97
+msgid "_File..."
+msgstr "_Файл…"
+
+#: ../plug-ins/python/gradients-save-as-css.py:105
+msgid "Choose CSS file..."
+msgstr "Выберите файл CSS…"
+
+#: ../plug-ins/python/gradients-save-as-css.py:114
+msgid "Save as CSS file..."
+msgstr "Сохранить как файл CSS…"
+
+#: ../plug-ins/python/gradients-save-as-css.py:190
+#: ../plug-ins/python/palette-sort.py:345
+#: ../plug-ins/python/python-console/python-console.py:296
+msgid "Run mode"
+msgstr "Режим запуска"
+
+#: ../plug-ins/python/gradients-save-as-css.py:191
+#: ../plug-ins/python/python-console/python-console.py:296
+msgid "The run mode"
+msgstr "Режим запуска"
+
+#: ../plug-ins/python/gradients-save-as-css.py:195
+msgid "_Gradient to use"
+msgstr "Используемый _градиент"
+
+#: ../plug-ins/python/gradients-save-as-css.py:198
+msgid "_File"
+msgstr "_Файл"
+
+#: ../plug-ins/python/gradients-save-as-css.py:214
+#: ../plug-ins/python/gradients-save-as-css.py:215
+msgid "Creates a new palette from a given gradient"
+msgstr "Создает новую палитру из выбранного градиента"
+
+#: ../plug-ins/python/gradients-save-as-css.py:217
+msgid "Save Gradient as CSS..."
+msgstr "Сохранить градиент как CSS…"
+
+#: ../plug-ins/python/histogram-export.py:92
+msgid "Pixel count"
+msgstr "Число пикселей"
+
+#: ../plug-ins/python/histogram-export.py:93
+msgid "Normalized"
+msgstr "Нормированный"
+
+#: ../plug-ins/python/histogram-export.py:94
+msgid "Percent"
+msgstr "Процент"
+
+#: ../plug-ins/python/histogram-export.py:161
+msgid "File is either a directory or file name is empty."
+msgstr "Либо файл является каталогом, либо у него пустое имя."
+
+#: ../plug-ins/python/histogram-export.py:164
+msgid "Directory not found."
+msgstr "Каталог не найден."
+
+#: ../plug-ins/python/histogram-export.py:179
+msgid "Histogram Export..."
+msgstr "Экспорт градиента…"
+
+#: ../plug-ins/python/histogram-export.py:209
+msgid "Histogram _File"
+msgstr "_Файл гистограммы"
+
+#: ../plug-ins/python/histogram-export.py:213
+msgid "_Bucket Size"
+msgstr ""
+
+#: ../plug-ins/python/histogram-export.py:218
+msgid "Sample _Average"
+msgstr ""
+
+#: ../plug-ins/python/histogram-export.py:223
+msgid "Output _format"
+msgstr "Формат в_ывода"
+
+#: ../plug-ins/python/histogram-export.py:245
+msgid "Exports the image histogram to a text file (CSV)"
+msgstr "Экспортирует гистограмму изображения в текстовый файл (CSV)"
+
+#: ../plug-ins/python/histogram-export.py:248
+msgid "_Export histogram..."
+msgstr "_Экспортировать гистограмму..."
+
+#: ../plug-ins/python/palette-offset.py:50
+#: ../plug-ins/python/palette-offset.py:51
+#: ../plug-ins/python/palette-sort.py:351
+#: ../plug-ins/python/palette-sort.py:403
+#: ../plug-ins/python/palette-sort.py:404
 msgid "Palette"
 msgstr "Палитра"
 
-#: ../plug-ins/pygimp/plug-ins/palette-offset.py:53
+#: ../plug-ins/python/palette-offset.py:62
 msgid "Off_set"
 msgstr "Сд_виг"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:25
+#: ../plug-ins/python/palette-offset.py:63
+#: ../plug-ins/python/palette-offset.py:143
+msgid "Offset"
+msgstr "Смещение"
+
+#: ../plug-ins/python/palette-offset.py:73
+msgid "The edited palette"
+msgstr "Измененная палитра"
+
+#: ../plug-ins/python/palette-offset.py:74
+msgid "The newly created palette when read-only, otherwise the input palette"
+msgstr ""
+
+#: ../plug-ins/python/palette-offset.py:94
+msgid "_Offset Palette..."
+msgstr "_Сдвиг палитры..."
+
+#: ../plug-ins/python/palette-offset.py:95
+msgid "Offset the colors in a palette"
+msgstr "Сместить цвета в палитре"
+
+#: ../plug-ins/python/palette-offset.py:133
+#, fuzzy
+msgid "Offset Palette..."
+msgstr "_Сдвиг палитры..."
+
+#: ../plug-ins/python/palette-sort.py:42
 msgid "Red"
 msgstr "Красный"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:25
+#: ../plug-ins/python/palette-sort.py:42
 msgid "Green"
 msgstr "Зелёный"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:25
+#: ../plug-ins/python/palette-sort.py:42
 msgid "Blue"
 msgstr "Синий"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:26
+#: ../plug-ins/python/palette-sort.py:43
 msgid "Luma (Y)"
-msgstr "Яркостный (Y)"
+msgstr "Светимость (Y)"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:27
+#: ../plug-ins/python/palette-sort.py:44
 msgid "Hue"
 msgstr "Тон"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:27
+#: ../plug-ins/python/palette-sort.py:44
 msgid "Saturation"
 msgstr "Насыщенность"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:27
+#: ../plug-ins/python/palette-sort.py:44
 msgid "Value"
 msgstr "Значение"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:28
+#: ../plug-ins/python/palette-sort.py:45
 msgid "Saturation (HSL)"
 msgstr "Насыщенность (HSL)"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:28
+#: ../plug-ins/python/palette-sort.py:45
 msgid "Lightness (HSL)"
 msgstr "Светлота (HSL)"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:29
+#: ../plug-ins/python/palette-sort.py:46
 msgid "Index"
 msgstr "Индекс"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:30
+#: ../plug-ins/python/palette-sort.py:47
 msgid "Random"
-msgstr "Случайный"
+msgstr "Случайно"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:81
+#: ../plug-ins/python/palette-sort.py:92
 msgid "Lightness (LAB)"
 msgstr "Светлота (LAB)"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:82
+#: ../plug-ins/python/palette-sort.py:93
 msgid "A-color"
-msgstr "A-цвет"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:82
+#: ../plug-ins/python/palette-sort.py:93
 msgid "B-color"
-msgstr "B-цвет"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:83
+#: ../plug-ins/python/palette-sort.py:94
 msgid "Chroma (LCHab)"
 msgstr "Цветность (LCHab)"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:84
+#: ../plug-ins/python/palette-sort.py:95
 msgid "Hue (LCHab)"
 msgstr "Тон (LCHab)"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:313
-msgid "Sort the colors in a palette"
-msgstr "Отсортировать цвета в палитре"
-
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:332
-msgid "_Sort Palette..."
-msgstr "Отсортировать _палитру..."
-
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:336
-msgid "Se_lections"
-msgstr "Вы_деления"
-
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:337
+#: ../plug-ins/python/palette-sort.py:340
 msgid "All"
 msgstr "Все"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:337
+#: ../plug-ins/python/palette-sort.py:340
 msgid "Slice / Array"
-msgstr "Срез / Массив"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:337
+#: ../plug-ins/python/palette-sort.py:340
 msgid "Autoslice (fg->bg)"
-msgstr "Автонарезка (п. план -> фон)"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:338
+#: ../plug-ins/python/palette-sort.py:340
 msgid "Partitioned"
-msgstr "Разделённый"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:339
+#: ../plug-ins/python/palette-sort.py:350
+#: ../plug-ins/python/palette-to-gradient.py:129
+msgid "_Palette"
+msgstr "_Палитра"
+
+#: ../plug-ins/python/palette-sort.py:354
+msgid "Select_ions"
+msgstr "Выде_ления"
+
+#: ../plug-ins/python/palette-sort.py:361
 msgid "Slice _expression"
-msgstr "Выражение _нарезки"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:340
-msgid "Channel to _sort"
-msgstr "Сортируемые _каналы"
+#: ../plug-ins/python/palette-sort.py:366
+msgid "Channel _to sort"
+msgstr "Сортируемый _канал"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:342
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:345
+#: ../plug-ins/python/palette-sort.py:371
 msgid "_Ascending"
 msgstr "_Восходящий"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:343
-msgid "Secondary Channel to s_ort"
-msgstr "Сортируемые _дополнительные каналы"
+#: ../plug-ins/python/palette-sort.py:372
+#: ../plug-ins/python/palette-sort.py:382
+msgid "Ascending"
+msgstr "_Восходящий"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:346
+#: ../plug-ins/python/palette-sort.py:376
+msgid "Secondary C_hannel to sort"
+msgstr "Вторичный сортируемый _канал"
+
+#: ../plug-ins/python/palette-sort.py:381
+msgid "Ascen_ding"
+msgstr "Вос_ходящий"
+
+#: ../plug-ins/python/palette-sort.py:386
 msgid "_Quantization"
-msgstr "_Квантование"
+msgstr "_Квантизация"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:347
+#: ../plug-ins/python/palette-sort.py:387
+msgid "Quantization"
+msgstr "Квантизация"
+
+#: ../plug-ins/python/palette-sort.py:391
 msgid "_Partitioning channel"
-msgstr "_Канал разделения"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:349
+#: ../plug-ins/python/palette-sort.py:396
 msgid "Partition q_uantization"
-msgstr "Квантование _раздела"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/palette-to-gradient.py:52
-msgid "Create a repeating gradient using colors from the palette"
-msgstr "Создать повторяющийся градиент из цветов палитры"
+#: ../plug-ins/python/palette-sort.py:397
+msgid "Partition quantization"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/palette-to-gradient.py:57
-msgid "Palette to _Repeating Gradient"
-msgstr "П_алитра в повторяющийся градиент"
+#: ../plug-ins/python/palette-sort.py:421
+msgid "_Sort Palette..."
+msgstr "Отсортировать _палитру..."
 
-#: ../plug-ins/pygimp/plug-ins/palette-to-gradient.py:74
-msgid "Create a gradient using colors from the palette"
-msgstr "Создать градиент, используя цвета палитры"
+#: ../plug-ins/python/palette-sort.py:423
+msgid "Sort the colors in a palette"
+msgstr "Отсортировать цвета в палитре"
 
-#: ../plug-ins/pygimp/plug-ins/palette-to-gradient.py:79
+#: ../plug-ins/python/palette-to-gradient.py:141
+#: ../plug-ins/python/palette-to-gradient.py:142
+msgid "The newly created gradient"
+msgstr "Новый градиент"
+
+#: ../plug-ins/python/palette-to-gradient.py:164
 msgid "Palette to _Gradient"
 msgstr "Палитра в _градиент"
 
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:59
-msgid "Slice"
-msgstr "Нарезка"
+#: ../plug-ins/python/palette-to-gradient.py:165
+msgid "Create a gradient using colors from the palette"
+msgstr "Создать градиент, используя цвета палитры"
 
-#. table snippet means a small piece of HTML code here
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:421
-msgid "Cuts an image along its guides, creates images and a HTML table snippet"
-msgstr "Разрезать изображение по направляющим в HTML-таблицу с его фрагментами"
+#: ../plug-ins/python/palette-to-gradient.py:166
+msgid "Create a new gradient using colors from the palette."
+msgstr "Создать градиент из цветов палитры."
 
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:432
-msgid "_Slice..."
-msgstr "_Нарезка для веба..."
+#: ../plug-ins/python/palette-to-gradient.py:169
+msgid "Palette to _Repeating Gradient"
+msgstr "П_алитра в повторяющийся градиент"
 
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:437
-msgid "Path for HTML export"
-msgstr "Каталог экспорта HTML"
+#: ../plug-ins/python/palette-to-gradient.py:170
+msgid "Create a repeating gradient using colors from the palette"
+msgstr "Создать повторяющийся градиент из цветов палитры"
 
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:438
-msgid "Filename for export"
-msgstr "Имя экспортируемого файла"
+#: ../plug-ins/python/palette-to-gradient.py:171
+msgid "Create a new repeating gradient using colors from the palette."
+msgstr "Создать повторяющийся градиент из цветов палитры."
 
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:439
-msgid "Image name prefix"
-msgstr "Префикс имени файла"
-
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:440
-msgid "Image format"
-msgstr "Формат изображения"
-
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:441
-msgid "Separate image folder"
-msgstr "Изображения в отдельном каталоге"
-
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:443
-msgid "Folder for image export"
-msgstr "Имя каталога изображений"
-
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:444
-msgid "Space between table elements"
-msgstr "Пробел между элементами таблицы"
-
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:446
-msgid "Javascript for onmouseover and clicked"
-msgstr "JavaScript для действий onmouseover и clicked"
-
-#. table caps are table cells on the edge of the table
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:449
-msgid "Skip animation for table caps"
-msgstr "Пропустить анимацию для заголовков таблицы"
-
-#: ../plug-ins/pygimp/plug-ins/python-console.py:57
+#: ../plug-ins/python/python-console/python-console.py:78
 msgid "Python Console"
 msgstr "Консоль Python"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:61
+#: ../plug-ins/python/python-console/python-console.py:80
+#: ../plug-ins/python/python-console/python-console.py:272
+msgid "_Save"
+msgstr "_Сохранить"
+
+#: ../plug-ins/python/python-console/python-console.py:81
+msgid "Cl_ear"
+msgstr "О_чистить"
+
+#: ../plug-ins/python/python-console/python-console.py:82
 msgid "_Browse..."
 msgstr "_Просмотр…"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:154
+#: ../plug-ins/python/python-console/python-console.py:83
+#: ../plug-ins/python/python-console/python-console.py:220
+msgid "_Close"
+msgstr "_Закрыть"
+
+#: ../plug-ins/python/python-console/python-console.py:217
 msgid "Python Procedure Browser"
 msgstr "Браузер процедур Python"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:183
+#: ../plug-ins/python/python-console/python-console.py:219
+msgid "_Apply"
+msgstr "_Применить"
+
+#: ../plug-ins/python/python-console/python-console.py:245
 #, python-format
 msgid "Could not open '%s' for writing: %s"
 msgstr "Не удалось открыть '%s' для записи: %s"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:198
+#: ../plug-ins/python/python-console/python-console.py:260
 #, python-format
 msgid "Could not write to '%s': %s"
 msgstr "Не удалось записать в '%s': %s"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:206
+#: ../plug-ins/python/python-console/python-console.py:269
 msgid "Save Python-Fu Console Output"
 msgstr "Сохранить вывод консоли Python-Fu"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:232
+#: ../plug-ins/python/python-console/python-console.py:317
+msgid "Python _Console"
+msgstr "_Консоль Python"
+
+#: ../plug-ins/python/python-console/python-console.py:318
 msgid "Interactive GIMP Python interpreter"
 msgstr "Интерактивный интерпретатор Python в GIMP"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:237
-msgid "_Console"
-msgstr "_Консоль"
+#: ../plug-ins/python/python-console/python-console.py:319
+msgid "Type in commands and see results"
+msgstr "Вводите команды и смотрите на их вывод"
 
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:60
-msgid "Add a drop shadow to a layer, and optionally bevel it"
-msgstr "Добавить в изображение отбрасываемую тень и добавить бордюр"
-
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:65
-msgid "_Drop Shadow and Bevel..."
-msgstr "_Отбрасываемая тень и скос..."
-
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:70
-msgid "_Shadow blur"
-msgstr "_Размытость тени"
-
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:71
-msgid "_Bevel"
-msgstr "_Бордюр"
-
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:72
-msgid "_Drop shadow"
-msgstr "Отбр_асываемая тень"
-
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:73
-msgid "Drop shadow _X displacement"
-msgstr "Смещение тени по _X"
-
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:74
-msgid "Drop shadow _Y displacement"
-msgstr "Смещение тени по _Y"
-
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:44
+#: ../plug-ins/python/spyro-plus.py:49
 msgid "Spyro Layer"
 msgstr "Слой спирографа"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:45
+#: ../plug-ins/python/spyro-plus.py:50
 msgid "Spyro Path"
 msgstr "Контур спирографа"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:56
-msgid ""
-"Save\n"
-"as New Layer"
-msgstr ""
-"Сохранить\n"
-"в новый слой"
+#: ../plug-ins/python/spyro-plus.py:60
+msgid "As New Layer"
+msgstr "Как новый слой"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:57
-msgid ""
-"Redraw on\n"
-"Active layer"
-msgstr ""
-"Перерисовать\n"
-"активный слой"
+#: ../plug-ins/python/spyro-plus.py:61
+msgid "Redraw on last active layer"
+msgstr "Перерисовать на последнем активном слое"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:58
-msgid ""
-"Save\n"
-"as Path"
-msgstr ""
-"Сохранить\n"
-"как контур"
+#: ../plug-ins/python/spyro-plus.py:62
+msgid "As Path"
+msgstr "Как контур"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:104
+#: ../plug-ins/python/spyro-plus.py:110
 msgid "Circle"
 msgstr "Окружность"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:140
+#: ../plug-ins/python/spyro-plus.py:146
 msgid "Polygon-Star"
-msgstr "Многоугольник / Звезда"
+msgstr "Многоугольник/Звезда"
 
 #. Sine wave on a circle ring.
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:156
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:947
+#: ../plug-ins/python/spyro-plus.py:162 ../plug-ins/python/spyro-plus.py:989
 msgid "Sine"
-msgstr "Синус"
+msgstr "Синусоида"
 
 #. Semi-circles, based on a polygon
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:166
+#: ../plug-ins/python/spyro-plus.py:172
 msgid "Bumps"
-msgstr "Выпуклость"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:271
+#: ../plug-ins/python/spyro-plus.py:277
 msgid "Rack"
-msgstr "Стойка"
+msgstr "Планка"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:315
+#: ../plug-ins/python/spyro-plus.py:321
 msgid "Frame"
-msgstr "Кадр"
+msgstr "Рамка"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:404
+#: ../plug-ins/python/spyro-plus.py:433
 msgid "Selection"
 msgstr "Выделение"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:494
+#: ../plug-ins/python/spyro-plus.py:518
 msgid "Pencil"
 msgstr "Карандаш"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:510
+#: ../plug-ins/python/spyro-plus.py:534
 msgid "AirBrush"
 msgstr "Аэрограф"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:570
+#: ../plug-ins/python/spyro-plus.py:601
 msgid "Preview"
 msgstr "Предпросмотр"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:575
+#: ../plug-ins/python/spyro-plus.py:606
 msgid "Stroke"
-msgstr "Штрих"
+msgstr "Обводка"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:622
+#: ../plug-ins/python/spyro-plus.py:653
 msgid "PaintBrush"
-msgstr "Кисть"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:624
+#: ../plug-ins/python/spyro-plus.py:655
 msgid "Ink"
-msgstr "Перо"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:625
+#: ../plug-ins/python/spyro-plus.py:656
 msgid "MyPaintBrush"
-msgstr "Кисть MyPaint"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:933
+#: ../plug-ins/python/spyro-plus.py:975
 msgid "Spyrograph"
 msgstr "Спирограф"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:940
+#: ../plug-ins/python/spyro-plus.py:982
 msgid "Epitrochoid"
 msgstr "Эпитрохоида"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:967
+#: ../plug-ins/python/spyro-plus.py:1009
 msgid "Lissajous"
 msgstr "Лиссажу"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1397
+#: ../plug-ins/python/spyro-plus.py:1456
 msgid "Curve Type"
 msgstr "Тип кривой"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1398
+#: ../plug-ins/python/spyro-plus.py:1457
 msgid ""
 "An Epitrochoid pattern is when the moving gear is on the outside of the "
 "fixed gear."
 msgstr ""
-"Эпитрохоида получается при перемещении движущейся шестеренки снаружи "
+"Эпитрохоида получается, когда перемещающаяся шестеренка находится снаружи "
 "фиксированной."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1403
+#: ../plug-ins/python/spyro-plus.py:1462
 msgid "Tool"
 msgstr "Инструмент"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1404
+#: ../plug-ins/python/spyro-plus.py:1463
 msgid ""
 "The tool with which to draw the pattern. The Preview tool just draws quickly."
 msgstr ""
-"Каким инструментом рисовать узор. Инструмент «Предпросмотр» выполняет "
-"быструю отрисовку."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1409
+#: ../plug-ins/python/spyro-plus.py:1468
 msgid "Long Gradient"
 msgstr "Длинный градиент"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1411
+#: ../plug-ins/python/spyro-plus.py:1470
 msgid ""
 "When unchecked, the current tool settings will be used. When checked, will "
 "use a long gradient to match the length of the pattern, based on current "
 "gradient and repeat mode from the gradient tool settings."
 msgstr ""
-"Если флажок не установлен, будут использоваться текущие настройки "
-"инструмента. Если флажок установлен, будет использоваться длинный градиент, "
-"соответствующий длине детали, на основе текущего градиента и режима повтора "
-"из настроек инструмента градиента."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1431
+#: ../plug-ins/python/spyro-plus.py:1490
 msgid "Specify pattern using one of the following tabs:"
-msgstr "Задайте узор на одной из вкладок ниже:"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1433
+#: ../plug-ins/python/spyro-plus.py:1492
 msgid ""
 "The pattern is specified only by the active tab. Toy Kit is similar to "
 "Gears, but it uses gears and hole numbers which are found in toy kits. If "
 "you follow the instructions from the toy kit manuals, results should be "
 "similar."
 msgstr ""
-"Узор зависит от того, какая вкладка открыта. «Игрушечный набор» похож на "
-"«Шестеренки», но оперирует шестеренками и числом отверстий, т.е. как в "
-"настоящих игрушечных наборах. Если следовать инструкциям из настоящих "
-"наборов, результаты буду схожими."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1457
+#: ../plug-ins/python/spyro-plus.py:1516
 msgid ""
 "Number of teeth of fixed gear. The size of the fixed gear is proportional to "
 "the number of teeth."
 msgstr ""
-"Количество зубцов фиксированной шестеренки. Размер этой шестеренки "
-"пропорционален количеству зубцов в ней."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1460
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1486
+#: ../plug-ins/python/spyro-plus.py:1519 ../plug-ins/python/spyro-plus.py:1547
 msgid "Fixed Gear Teeth"
-msgstr "Зубцов фиксированной шестеренки"
+msgstr "Зубцы фиксированной шестеренки"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1466
+#: ../plug-ins/python/spyro-plus.py:1527
 msgid ""
 "Number of teeth of moving gear. The size of the moving gear is proportional "
 "to the number of teeth."
 msgstr ""
-"Количество зубцов движущейся шестеренки. Размер этой шестеренки "
-"пропорционален количеству зубцов в ней."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1469
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1491
+#: ../plug-ins/python/spyro-plus.py:1530 ../plug-ins/python/spyro-plus.py:1552
 msgid "Moving Gear Teeth"
-msgstr "Зубцов движущейся шестеренки"
+msgstr "Зубцы перемещающейся шестеренки"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1474
+#: ../plug-ins/python/spyro-plus.py:1535
 msgid "Hole percent"
-msgstr "Процент отверстия"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1475
+#: ../plug-ins/python/spyro-plus.py:1536
 msgid ""
 "How far is the hole from the center of the moving gear. 100% means that the "
 "hole is at the gear's edge."
 msgstr ""
-"Как далеко отверстие находится от центра движущейся шестеренки. 100% "
-"означает, что отверстие — на краю шестеренки."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1496
+#: ../plug-ins/python/spyro-plus.py:1557
 msgid "Hole Number"
-msgstr "Номер отверстия"
+msgstr "Номер дырки"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1497
+#: ../plug-ins/python/spyro-plus.py:1558
 msgid ""
 "Hole #1 is at the edge of the gear. The maximum hole number is near the "
 "center. The maximum hole number is different for each gear."
 msgstr ""
-"Отверстие №1 находится на краю шестеренки. Максимальное количество отверстий "
-"— ближе к её центру и своё для каждой шестеренки."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1508
+#: ../plug-ins/python/spyro-plus.py:1569
 msgid "Flower Petals"
 msgstr "Лепестки цветка"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1508
+#: ../plug-ins/python/spyro-plus.py:1570
 msgid "The number of petals in the pattern."
 msgstr "Количество лепестков в узоре."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1513
+#: ../plug-ins/python/spyro-plus.py:1575
 msgid "Petal Skip"
-msgstr "Пропуск лепестков"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1514
+#: ../plug-ins/python/spyro-plus.py:1576
 msgid "The number of petals to advance for drawing the next petal."
 msgstr ""
-"Количество лепестков, на которое нужно перейти для рисования следующего "
-"лепестка."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1519
+#: ../plug-ins/python/spyro-plus.py:1581
 msgid "Hole Radius(%)"
-msgstr "Радиус отверстия (%)"
+msgstr "Радиус дырки (%)"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1520
+#: ../plug-ins/python/spyro-plus.py:1582
 msgid ""
 "The radius of the hole in the center of the pattern where nothing will be "
 "drawn. Given as a percentage of the size of the pattern. A value of 0 will "
 "produce no hole. A Value of 99 will produce a thin line on the edge."
 msgstr ""
-"Радиус отверстия в центре детали, в котором ничего не будет нарисовано. "
-"Задается в процентах от размера детали. При значении 0 отверстие не "
-"образуется. Значение 99 приведет к появлению тонкой линии на краю."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1533
+#: ../plug-ins/python/spyro-plus.py:1603
 msgid "Width(%)"
 msgstr "Ширина (%)"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1534
+#: ../plug-ins/python/spyro-plus.py:1604
 msgid ""
 "The width of the pattern as a percentage of the size of the pattern. A Value "
 "of 1 will just draw a thin pattern. A Value of 100 will fill the entire "
 "fixed gear."
 msgstr ""
-"Ширина детали в процентах от размера детали. При значении 1 будет нарисован "
-"тонкий узор. Значение 100 заполнит всю фиксированную область."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1544
+#: ../plug-ins/python/spyro-plus.py:1615
 msgid "Visual"
-msgstr "Визуально"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1549
+#: ../plug-ins/python/spyro-plus.py:1621
 msgid "Toy Kit"
 msgstr "Игрушечный набор"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1554
+#: ../plug-ins/python/spyro-plus.py:1627
 msgid "Gears"
 msgstr "Шестеренки"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1566
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1610
+#: ../plug-ins/python/spyro-plus.py:1640 ../plug-ins/python/spyro-plus.py:1684
 msgid "Rotation"
 msgstr "Вращение"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1567
+#: ../plug-ins/python/spyro-plus.py:1641
 msgid ""
 "Rotation of the pattern, in degrees. The starting position of the moving "
 "gear in the fixed gear."
 msgstr ""
-"Вращение узора в градусах. Точка старта движущейся шестеренки внутри "
-"фиксированной."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1590
+#: ../plug-ins/python/spyro-plus.py:1664
 msgid "Shape"
 msgstr "Фигура"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1591
+#: ../plug-ins/python/spyro-plus.py:1665
 msgid ""
 "The shape of the fixed gear to be used inside current selection. Rack is a "
 "long round-edged shape provided in the toy kits. Frame hugs the boundaries "
@@ -742,116 +757,292 @@ msgid ""
 "boundary. Selection will hug boundaries of current selection - try something "
 "non-rectangular."
 msgstr ""
-"Форма неподвижной шестерни, которая будет использоваться внутри текущего "
-"выбора. Стойка - это длинная форма с круглыми краями, поставляемая в наборах "
-"игрушек. Рамка охватывает границы прямоугольного выделения, используйте "
-"отверстие=100 в нотации Gear, чтобы коснуться границы. Выделение будет "
-"охватывать границы текущего выделения - попробуйте что-нибудь "
-"непрямоугольное."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1600
+#: ../plug-ins/python/spyro-plus.py:1674
 msgid "Sides"
-msgstr "Число сторон"
+msgstr "Стороны"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1600
+#: ../plug-ins/python/spyro-plus.py:1674
 msgid "Number of sides of the shape."
-msgstr "Количество сторон у выбранной фигуры."
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1605
+#: ../plug-ins/python/spyro-plus.py:1679
 msgid "Morph"
-msgstr "Морфинг"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1605
+#: ../plug-ins/python/spyro-plus.py:1679
 msgid "Morph fixed gear shape. Only affects some of the shapes."
-msgstr "Морфинг фигуры фиксированной передачи. Меняет только некоторые фигуры."
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1610
+#: ../plug-ins/python/spyro-plus.py:1684
 msgid "Rotation of the fixed gear, in degrees"
-msgstr "Вращение фиксированной передачи, в градусах"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1625
+#: ../plug-ins/python/spyro-plus.py:1699
 msgid "Margin (px)"
-msgstr "Отступ (px)"
+msgstr "Поле (px)"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1625
+#: ../plug-ins/python/spyro-plus.py:1699
 msgid "Margin from edge of selection."
-msgstr "Отступ от края выделения."
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1630
+#: ../plug-ins/python/spyro-plus.py:1704
 msgid "Make width and height equal"
-msgstr "Сделать ширину и высоту равными"
+msgstr "Сделать ширину и высоту одинаковыми"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1632
+#: ../plug-ins/python/spyro-plus.py:1706
 msgid ""
 "When unchecked, the pattern will fill the current image or selection. When "
 "checked, the pattern will have same width and height, and will be centered."
 msgstr ""
-"Если флажок не установлен, узор будет заполнять текущее изображение или "
-"выделение. При установке флажка узор будет иметь одинаковую ширину и высоту "
-"и будет центрирован."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1656
+#: ../plug-ins/python/spyro-plus.py:1721
 msgid "Re_draw"
-msgstr "_Заново"
+msgstr "Пере_рисовать"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1657
+#: ../plug-ins/python/spyro-plus.py:1723
 msgid ""
 "If you change the settings of a tool, change color, or change the selection, "
 "press this to preview how the pattern looks."
 msgstr ""
-"Если вы измените настройки инструмента, измените цвет или выделение, нажмите "
-"эту кнопку, чтобы просмотреть, как выглядит узор."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1659
+#: ../plug-ins/python/spyro-plus.py:1726
 msgid "_Reset"
-msgstr "_Сбросить"
+msgstr "С_брос"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1660
-msgid "_Cancel"
-msgstr "О_тмена"
+#: ../plug-ins/python/spyro-plus.py:1734
+msgid "Save"
+msgstr "Сохранить"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1661
-msgid "_OK"
-msgstr "_ОК"
-
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1667
+#: ../plug-ins/python/spyro-plus.py:1735
 msgid ""
 "Choose whether to save as new layer, redraw on last active layer, or save to "
 "path"
 msgstr ""
-"Выберите, сохранить ли узор в новый слой, переписать им активный слой или "
-"сохранить как кривую Безье"
+"Выберите, сохранить как новый слой, перерисовать на последнем активном слое "
+"или сохранить как контур"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1679
+#: ../plug-ins/python/spyro-plus.py:1749
 msgid "Spyrogimp"
-msgstr "Спирограф"
+msgstr "Spyrogimp"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1688
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:2195
+#: ../plug-ins/python/spyro-plus.py:1758 ../plug-ins/python/spyro-plus.py:2295
 msgid "Draw spyrographs using current tool settings and selection."
 msgstr ""
-"Рисовать спирографы, используя текущие настройки инструмента и выделения."
+"Нарисовать узор спирографа в активном выделении, с текущими параметрами "
+"инструмента."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1701
+#: ../plug-ins/python/spyro-plus.py:1771
 msgid "Curve Pattern"
-msgstr "Узор кривой"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1704
+#: ../plug-ins/python/spyro-plus.py:1774
 msgid "Fixed Gear"
-msgstr "Фикс. передача"
+msgstr "Фиксированная шестеренка"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1707
+#: ../plug-ins/python/spyro-plus.py:1777
 msgid "Size"
 msgstr "Размер"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:2047
+#: ../plug-ins/python/spyro-plus.py:2133
 msgid "Rendering Pattern"
-msgstr "Отрисовка узора"
+msgstr ""
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:2059
+#: ../plug-ins/python/spyro-plus.py:2145
 msgid "Please wait : Rendering Pattern"
 msgstr "Подождите: узор отрисовывается"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:2164
+#: ../plug-ins/python/spyro-plus.py:2211 ../plug-ins/python/spyro-plus.py:2212
+msgid ""
+"The curve type { Spyrograph (0), Epitrochoid (1), Sine (2), Lissajous(3) }"
+msgstr ""
+"Тип кривой { Спирограф (0), Эпитрохоида (1), Синусоида (2), Лиссажу (3) }"
+
+#: ../plug-ins/python/spyro-plus.py:2216 ../plug-ins/python/spyro-plus.py:2217
+msgid "Shape of fixed gear"
+msgstr "Фигура фиксированной шестеренки"
+
+#: ../plug-ins/python/spyro-plus.py:2221 ../plug-ins/python/spyro-plus.py:2222
+msgid "Number of sides of fixed gear (3 or greater). Only used by some shapes."
+msgstr ""
+
+#: ../plug-ins/python/spyro-plus.py:2226 ../plug-ins/python/spyro-plus.py:2227
+msgid "Morph shape of fixed gear, between 0 and 1. Only used by some shapes."
+msgstr ""
+
+#: ../plug-ins/python/spyro-plus.py:2231 ../plug-ins/python/spyro-plus.py:2232
+msgid "Number of teeth for fixed gear"
+msgstr ""
+
+#: ../plug-ins/python/spyro-plus.py:2236 ../plug-ins/python/spyro-plus.py:2237
+msgid "Number of teeth for moving gear"
+msgstr ""
+
+#: ../plug-ins/python/spyro-plus.py:2241 ../plug-ins/python/spyro-plus.py:2243
+msgid ""
+"Location of hole in moving gear in percent, where 100 means that the hole is "
+"at the edge of the gear, and 0 means the hole is at the center"
+msgstr ""
+
+#: ../plug-ins/python/spyro-plus.py:2248 ../plug-ins/python/spyro-plus.py:2249
+msgid "Margin from selection, in pixels"
+msgstr ""
+
+#: ../plug-ins/python/spyro-plus.py:2253 ../plug-ins/python/spyro-plus.py:2254
+msgid "Make height and width equal"
+msgstr "Сделать высоту и ширину одинаковыми"
+
+#: ../plug-ins/python/spyro-plus.py:2258 ../plug-ins/python/spyro-plus.py:2259
+msgid "Pattern rotation, in degrees"
+msgstr "Вращение узора, в градусах"
+
+#: ../plug-ins/python/spyro-plus.py:2263 ../plug-ins/python/spyro-plus.py:2264
+msgid "Shape rotation of fixed gear, in degrees"
+msgstr ""
+
+#: ../plug-ins/python/spyro-plus.py:2268 ../plug-ins/python/spyro-plus.py:2269
+msgid "Tool to use for drawing the pattern."
+msgstr "Каким инструментом рисовать узор."
+
+#: ../plug-ins/python/spyro-plus.py:2273 ../plug-ins/python/spyro-plus.py:2275
+msgid ""
+"Whether to apply a long gradient to match the length of the pattern. Only "
+"applicable to some of the tools."
+msgstr ""
+
+#: ../plug-ins/python/spyro-plus.py:2296
+msgid ""
+"Uses current tool settings to draw Spyrograph patterns. The size and "
+"location of the pattern is based on the current selection."
+msgstr ""
+
+#: ../plug-ins/python/spyro-plus.py:2299
 msgid "Spyrogimp..."
 msgstr "Спирограф…"
+
+#~ msgid "Histogram Export file..."
+#~ msgstr "_Файл c гистограммой…"
+
+#~ msgid "Missing exception information"
+#~ msgstr "Отсутствует информация о прерывании"
+
+#, fuzzy, python-format
+#~ msgid "An error occurred running %s"
+#~ msgstr "При запуске %s произошла ошибка"
+
+#~ msgid "_More Information"
+#~ msgstr "_Подробнее"
+
+#~ msgid "No"
+#~ msgstr "Нет"
+
+#~ msgid "Yes"
+#~ msgstr "Да"
+
+#~ msgid "Python-Fu File Selection"
+#~ msgstr "Выбор файла в Python-Fu"
+
+#~ msgid "Python-Fu Folder Selection"
+#~ msgstr "Выбор каталога в Python-Fu"
+
+#, python-format
+#~ msgid "Invalid input for '%s'"
+#~ msgstr "Некорректный ввод для '%s'"
+
+#~ msgid "Python-Fu Color Selection"
+#~ msgstr "Выделение цвета в Python-Fu"
+
+#~ msgid "Source code"
+#~ msgstr "Исходный код"
+
+#~ msgid "Entry box"
+#~ msgstr "Поле ввода"
+
+#~ msgid "Slice"
+#~ msgstr "Нарезка"
+
+#~ msgid ""
+#~ "Cuts an image along its guides, creates images and a HTML table snippet"
+#~ msgstr ""
+#~ "Разрезать изображение по направляющим в HTML-таблицу с его фрагментами"
+
+#~ msgid "Path for HTML export"
+#~ msgstr "Каталог экспорта HTML"
+
+#~ msgid "Filename for export"
+#~ msgstr "Имя экспортируемого файла"
+
+#~ msgid "Image name prefix"
+#~ msgstr "Префикс имени файла"
+
+#~ msgid "Image format"
+#~ msgstr "Формат изображения"
+
+#~ msgid "Separate image folder"
+#~ msgstr "Изображения в отдельном каталоге"
+
+#~ msgid "Folder for image export"
+#~ msgstr "Имя каталога изображений"
+
+#~ msgid "Space between table elements"
+#~ msgstr "Пробел между элементами таблицы"
+
+#~ msgid "Javascript for onmouseover and clicked"
+#~ msgstr "JavaScript для действий onmouseover и clicked"
+
+#~ msgid "Skip animation for table caps"
+#~ msgstr "Пропустить анимацию для заголовков таблицы"
+
+#~ msgid "_Console"
+#~ msgstr "_Консоль"
+
+#~ msgid "Add a drop shadow to a layer, and optionally bevel it"
+#~ msgstr "Добавить в изображение отбрасываемую тень и добавить бордюр"
+
+#~ msgid "_Drop Shadow and Bevel..."
+#~ msgstr "Отбрасываемая тень с _бордюром"
+
+#~ msgid "_Shadow blur"
+#~ msgstr "_Размытость тени"
+
+#~ msgid "_Bevel"
+#~ msgstr "_Бордюр"
+
+#~ msgid "_Drop shadow"
+#~ msgstr "Отбр_асываемая тень"
+
+#~ msgid "Drop shadow _X displacement"
+#~ msgstr "Смещение тени по _X"
+
+#~ msgid "Drop shadow _Y displacement"
+#~ msgstr "Смещение тени по _Y"
+
+#~ msgid "Color _model"
+#~ msgstr "Цветовая _модель"
+
+#~ msgid "RGB"
+#~ msgstr "RGB"
+
+#~ msgid "HSV"
+#~ msgstr "HSV"
+
+#~ msgid "Red or Hue"
+#~ msgstr "Красный или тон"
+
+#~ msgid "Blue or Value"
+#~ msgstr "Синий или значение"
+
+#~ msgid "Create a new brush with characters from a text sequence"
+#~ msgstr "Создать новую кисть, содержащую последовательность букв"
+
+#~ msgid "New Brush from _Text..."
+#~ msgstr "_Кисть из текста..."
+
+#~ msgid "Font"
+#~ msgstr "Шрифт:"
+
+#~ msgid "Pixel Size"
+#~ msgstr "Кегль (px):"
+
+#~ msgid "Text"
+#~ msgstr "Текст:"

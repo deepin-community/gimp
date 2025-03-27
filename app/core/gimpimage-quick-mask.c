@@ -65,7 +65,7 @@ gimp_image_set_quick_mask_state (GimpImage *image,
   if (private->quick_mask_state)
     channel_was_active = (private->quick_mask_state & CHANNEL_WAS_ACTIVE) != 0;
   else
-    channel_was_active = gimp_image_get_active_channel (image) != NULL;
+    channel_was_active = (gimp_image_get_selected_channels (image) != NULL);
 
   /*  Set private->quick_mask_state early so we can return early when
    *  being called recursively.
@@ -98,7 +98,7 @@ gimp_image_set_quick_mask_state (GimpImage *image,
           if (! gimp_channel_is_empty (selection))
             gimp_channel_clear (selection, NULL, TRUE);
 
-          gimp_channel_set_color (mask, &private->quick_mask_color, FALSE);
+          gimp_channel_set_color (mask, private->quick_mask_color, FALSE);
           gimp_item_rename (GIMP_ITEM (mask), GIMP_IMAGE_QUICK_MASK_NAME,
                             NULL);
 
@@ -132,7 +132,7 @@ gimp_image_set_quick_mask_state (GimpImage *image,
           gimp_image_remove_channel (image, mask, TRUE, NULL);
 
           if (! channel_was_active)
-            gimp_image_unset_active_channel (image);
+            gimp_image_unset_selected_channels (image);
 
           gimp_image_undo_group_end (image);
         }
@@ -150,29 +150,28 @@ gimp_image_get_quick_mask_state (GimpImage *image)
 }
 
 void
-gimp_image_set_quick_mask_color (GimpImage     *image,
-                                 const GimpRGB *color)
+gimp_image_set_quick_mask_color (GimpImage *image,
+                                 GeglColor *color)
 {
   GimpChannel *quick_mask;
 
   g_return_if_fail (GIMP_IS_IMAGE (image));
-  g_return_if_fail (color != NULL);
+  g_return_if_fail (GEGL_IS_COLOR (color));
 
-  GIMP_IMAGE_GET_PRIVATE (image)->quick_mask_color = *color;
+  g_clear_object (&(GIMP_IMAGE_GET_PRIVATE (image)->quick_mask_color));
+  GIMP_IMAGE_GET_PRIVATE (image)->quick_mask_color = gegl_color_duplicate (color);
 
   quick_mask = gimp_image_get_quick_mask (image);
   if (quick_mask)
     gimp_channel_set_color (quick_mask, color, TRUE);
 }
 
-void
-gimp_image_get_quick_mask_color (GimpImage *image,
-                                 GimpRGB   *color)
+GeglColor *
+gimp_image_get_quick_mask_color (GimpImage *image)
 {
-  g_return_if_fail (GIMP_IS_IMAGE (image));
-  g_return_if_fail (color != NULL);
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
 
-  *color = GIMP_IMAGE_GET_PRIVATE (image)->quick_mask_color;
+  return GIMP_IMAGE_GET_PRIVATE (image)->quick_mask_color;
 }
 
 GimpChannel *

@@ -35,12 +35,15 @@
 #include "core/gimpimage-pick-item.h"
 #include "core/gimpimage-undo.h"
 #include "core/gimplayer.h"
+#include "core/gimppickable.h"
+#include "core/gimppickable-auto-shrink.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimpwidgets-utils.h"
 
+#include "display/gimpcanvasitem.h"
 #include "display/gimpdisplay.h"
 #include "display/gimpdisplayshell.h"
 #include "display/gimpdisplayshell-appearance.h"
@@ -95,15 +98,21 @@ static void     gimp_align_tool_cursor_update  (GimpTool              *tool,
                                                 const GimpCoords      *coords,
                                                 GdkModifierType        state,
                                                 GimpDisplay           *display);
+const gchar *   gimp_align_tool_can_undo       (GimpTool              *tool,
+                                                GimpDisplay           *display);
+static gboolean gimp_align_tool_undo           (GimpTool              *tool,
+                                                GimpDisplay           *display);
 
 static void     gimp_align_tool_draw           (GimpDrawTool          *draw_tool);
+static void     gimp_align_tool_redraw         (GimpAlignTool         *align_tool);
 
 static void     gimp_align_tool_align          (GimpAlignTool         *align_tool,
                                                 GimpAlignmentType      align_type);
 
-static void     gimp_align_tool_object_removed (GObject               *object,
+static gint     gimp_align_tool_undo_idle      (gpointer               data);
+static void    gimp_align_tool_display_changed (GimpContext           *context,
+                                                GimpDisplay           *display,
                                                 GimpAlignTool         *align_tool);
-static void     gimp_align_tool_clear_selected (GimpAlignTool         *align_tool);
 
 
 G_DEFINE_TYPE (GimpAlignTool, gimp_align_tool, GIMP_TYPE_DRAW_TOOL)
@@ -120,9 +129,9 @@ gimp_align_tool_register (GimpToolRegisterCallback  callback,
                 gimp_align_options_gui,
                 0,
                 "gimp-align-tool",
-                _("Alignment"),
+                _("Align and Distribute"),
                 _("Alignment Tool: Align or arrange layers and other objects"),
-                N_("_Align"), "Q",
+                N_("_Align and Distribute"), "Q",
                 NULL, GIMP_HELP_TOOL_ALIGN,
                 GIMP_ICON_TOOL_ALIGN,
                 data);
@@ -144,6 +153,8 @@ gimp_align_tool_class_init (GimpAlignToolClass *klass)
   tool_class->key_press      = gimp_align_tool_key_press;
   tool_class->oper_update    = gimp_align_tool_oper_update;
   tool_class->cursor_update  = gimp_align_tool_cursor_update;
+  tool_class->can_undo       = gimp_align_tool_can_undo;
+  tool_class->undo           = gimp_align_tool_undo;
 
   draw_tool_class->draw      = gimp_align_tool_draw;
 }
@@ -158,7 +169,7 @@ gimp_align_tool_init (GimpAlignTool *align_tool)
                                      GIMP_CURSOR_PRECISION_PIXEL_BORDER);
   gimp_tool_control_set_tool_cursor (tool->control, GIMP_TOOL_CURSOR_MOVE);
 
-  align_tool->function = ALIGN_TOOL_IDLE;
+  align_tool->function = ALIGN_TOOL_REF_IDLE;
 }
 
 static void
@@ -174,6 +185,16 @@ gimp_align_tool_constructed (GObject *object)
   g_signal_connect_object (options, "align-button-clicked",
                            G_CALLBACK (gimp_align_tool_align),
                            align_tool, G_CONNECT_SWAPPED);
+  g_signal_connect_object (options, "notify::align-reference",
+                           G_CALLBACK (gimp_align_tool_redraw),
+                           align_tool, G_CONNECT_SWAPPED);
+  g_signal_connect_object (options, "notify::align-contents",
+                           G_CALLBACK (gimp_align_tool_redraw),
+                           align_tool, G_CONNECT_SWAPPED);
+  g_signal_connect_object (gimp_get_user_context (GIMP_CONTEXT (options)->gimp),
+                           "display-changed",
+                           G_CALLBACK (gimp_align_tool_display_changed),
+                           align_tool, 0);
 }
 
 static void
@@ -181,8 +202,6 @@ gimp_align_tool_control (GimpTool       *tool,
                          GimpToolAction  action,
                          GimpDisplay    *display)
 {
-  GimpAlignTool *align_tool = GIMP_ALIGN_TOOL (tool);
-
   switch (action)
     {
     case GIMP_TOOL_ACTION_PAUSE:
@@ -190,7 +209,6 @@ gimp_align_tool_control (GimpTool       *tool,
       break;
 
     case GIMP_TOOL_ACTION_HALT:
-      gimp_align_tool_clear_selected (align_tool);
       break;
 
     case GIMP_TOOL_ACTION_COMMIT:
@@ -246,10 +264,8 @@ gimp_align_tool_button_release (GimpTool              *tool,
   GimpAlignTool    *align_tool = GIMP_ALIGN_TOOL (tool);
   GimpAlignOptions *options    = GIMP_ALIGN_TOOL_GET_OPTIONS (tool);
   GimpDisplayShell *shell      = gimp_display_get_shell (display);
-  GObject          *object     = NULL;
   GimpImage        *image      = gimp_display_get_image (display);
   GdkModifierType   extend_mask;
-  gint              i;
 
   extend_mask = gimp_get_extend_selection_mask ();
 
@@ -266,108 +282,99 @@ gimp_align_tool_button_release (GimpTool              *tool,
       return;
     }
 
-  if (! (state & extend_mask)) /* start a new list */
+  if (state & GDK_MOD1_MASK)
     {
-      gimp_align_tool_clear_selected (align_tool);
-      align_tool->set_reference = FALSE;
-    }
+      GimpGuide *guide = NULL;
 
-  /* if mouse has moved less than EPSILON pixels since button press,
-   * select the nearest thing, otherwise make a rubber-band rectangle
-   */
-  if (hypot (coords->x - align_tool->x1,
-             coords->y - align_tool->y1) < EPSILON)
-    {
-      GimpVectors *vectors;
-      GimpGuide   *guide;
-      GimpLayer   *layer;
-      gint         snap_distance = display->config->snap_distance;
-
-      if ((vectors = gimp_image_pick_vectors (image,
-                                              coords->x, coords->y,
-                                              FUNSCALEX (shell, snap_distance),
-                                              FUNSCALEY (shell, snap_distance))))
+      if (gimp_display_shell_get_show_guides (shell))
         {
-          object = G_OBJECT (vectors);
+          gint snap_distance = display->config->snap_distance;
+
+          guide = gimp_image_pick_guide (image,
+                                          coords->x, coords->y,
+                                          FUNSCALEX (shell, snap_distance),
+                                          FUNSCALEY (shell, snap_distance));
         }
-      else if (gimp_display_shell_get_show_guides (shell) &&
-               (guide = gimp_image_pick_guide (image,
+
+      gimp_align_options_pick_guide (options, guide, (gboolean) state & extend_mask);
+    }
+  else
+    {
+      GObject *object = NULL;
+
+      /* Check if a layer is fully included in the rubber-band rectangle.
+       * Don't verify for too small rectangles.
+       */
+      /* FIXME: look for vectors too */
+      if (hypot (coords->x - align_tool->x1,
+                 coords->y - align_tool->y1) > EPSILON)
+        {
+          gint   X0 = MIN (coords->x, align_tool->x1);
+          gint   X1 = MAX (coords->x, align_tool->x1);
+          gint   Y0 = MIN (coords->y, align_tool->y1);
+          gint   Y1 = MAX (coords->y, align_tool->y1);
+          GList *all_layers;
+          GList *list;
+
+          all_layers = gimp_image_get_layer_list (image);
+
+          for (list = all_layers; list; list = g_list_next (list))
+            {
+              GimpLayer *layer = list->data;
+              gint       x0, y0, x1, y1;
+
+              if (! gimp_item_get_visible (GIMP_ITEM (layer)))
+                continue;
+
+              gimp_item_get_offset (GIMP_ITEM (layer), &x0, &y0);
+              x1 = x0 + gimp_item_get_width  (GIMP_ITEM (layer));
+              y1 = y0 + gimp_item_get_height (GIMP_ITEM (layer));
+
+              if (x0 < X0 || y0 < Y0 || x1 > X1 || y1 > Y1)
+                continue;
+
+              object = G_OBJECT (layer);
+              break;
+            }
+
+          g_list_free (all_layers);
+        }
+
+      if (object == NULL)
+        {
+          GimpPath    *path;
+          GimpGuide   *guide;
+          GimpLayer   *layer;
+          GObject     *previously_picked;
+          gint         snap_distance = display->config->snap_distance;
+
+          previously_picked = gimp_align_options_get_reference (options, FALSE);
+
+
+          if ((path = gimp_image_pick_path (image,
                                                coords->x, coords->y,
                                                FUNSCALEX (shell, snap_distance),
                                                FUNSCALEY (shell, snap_distance))))
-        {
-          object = G_OBJECT (guide);
-        }
-      else if ((layer = gimp_image_pick_layer_by_bounds (image,
-                                                         coords->x, coords->y)))
-        {
-          object = G_OBJECT (layer);
+            {
+              object = G_OBJECT (path);
+            }
+          else if (gimp_display_shell_get_show_guides (shell) &&
+                   (guide = gimp_image_pick_guide (image,
+                                                   coords->x, coords->y,
+                                                   FUNSCALEX (shell, snap_distance),
+                                                   FUNSCALEY (shell, snap_distance))))
+            {
+              object = G_OBJECT (guide);
+            }
+          else if ((layer = gimp_image_pick_layer (image, coords->x, coords->y,
+                                                   previously_picked && GIMP_IS_LAYER (previously_picked)? GIMP_LAYER (previously_picked) : NULL)))
+            {
+              object = G_OBJECT (layer);
+            }
         }
 
       if (object)
-        {
-          if (! g_list_find (align_tool->selected_objects, object))
-            {
-              align_tool->selected_objects =
-                g_list_append (align_tool->selected_objects, object);
-
-              g_signal_connect (object, "removed",
-                                G_CALLBACK (gimp_align_tool_object_removed),
-                                align_tool);
-
-              /* if an object has been selected using unmodified click,
-               * it should be used as the reference
-               */
-              if (! (state & extend_mask))
-                align_tool->set_reference = TRUE;
-            }
-        }
-    }
-  else  /* FIXME: look for vectors too */
-    {
-      gint   X0 = MIN (coords->x, align_tool->x1);
-      gint   X1 = MAX (coords->x, align_tool->x1);
-      gint   Y0 = MIN (coords->y, align_tool->y1);
-      gint   Y1 = MAX (coords->y, align_tool->y1);
-      GList *all_layers;
-      GList *list;
-
-      all_layers = gimp_image_get_layer_list (image);
-
-      for (list = all_layers; list; list = g_list_next (list))
-        {
-          GimpLayer *layer = list->data;
-          gint       x0, y0, x1, y1;
-
-          if (! gimp_item_get_visible (GIMP_ITEM (layer)))
-            continue;
-
-          gimp_item_get_offset (GIMP_ITEM (layer), &x0, &y0);
-          x1 = x0 + gimp_item_get_width  (GIMP_ITEM (layer));
-          y1 = y0 + gimp_item_get_height (GIMP_ITEM (layer));
-
-          if (x0 < X0 || y0 < Y0 || x1 > X1 || y1 > Y1)
-            continue;
-
-          if (g_list_find (align_tool->selected_objects, layer))
-            continue;
-
-          align_tool->selected_objects =
-            g_list_append (align_tool->selected_objects, layer);
-
-          g_signal_connect (layer, "removed",
-                            G_CALLBACK (gimp_align_tool_object_removed),
-                            align_tool);
-        }
-
-      g_list_free (all_layers);
-    }
-
-  for (i = 0; i < ALIGN_OPTIONS_N_BUTTONS; i++)
-    {
-      if (options->button[i])
-        gtk_widget_set_sensitive (options->button[i],
-                                  align_tool->selected_objects != NULL);
+        gimp_align_options_pick_reference (options, object);
     }
 
   align_tool->x2 = align_tool->x1;
@@ -422,23 +429,22 @@ gimp_align_tool_oper_update (GimpTool         *tool,
                              GimpDisplay      *display)
 {
   GimpAlignTool    *align_tool    = GIMP_ALIGN_TOOL (tool);
+  GimpAlignOptions *options       = GIMP_ALIGN_TOOL_GET_OPTIONS (align_tool);
   GimpDisplayShell *shell         = gimp_display_get_shell (display);
   GimpImage        *image         = gimp_display_get_image (display);
   gint              snap_distance = display->config->snap_distance;
-  gboolean          add;
 
-  add = ((state & gimp_get_extend_selection_mask ()) &&
-         align_tool->selected_objects);
+  state &= gimp_get_all_modifiers_mask ();
 
-  if (gimp_image_pick_vectors (image,
-                               coords->x, coords->y,
-                               FUNSCALEX (shell, snap_distance),
-                               FUNSCALEY (shell, snap_distance)))
+  align_tool->function = ALIGN_TOOL_NO_ACTION;
+
+  if (gimp_image_pick_path (image,
+                            coords->x, coords->y,
+                            FUNSCALEX (shell, snap_distance),
+                            FUNSCALEY (shell, snap_distance)))
     {
-      if (add)
-        align_tool->function = ALIGN_TOOL_ADD_PATH;
-      else
-        align_tool->function = ALIGN_TOOL_PICK_PATH;
+      if (options->align_reference == GIMP_ALIGN_REFERENCE_PICK)
+        align_tool->function = ALIGN_TOOL_REF_PICK_PATH;
     }
   else if (gimp_display_shell_get_show_guides (shell) &&
            gimp_image_pick_guide (image,
@@ -446,24 +452,30 @@ gimp_align_tool_oper_update (GimpTool         *tool,
                                   FUNSCALEX (shell, snap_distance),
                                   FUNSCALEY (shell, snap_distance)))
     {
-      if (add)
-        align_tool->function = ALIGN_TOOL_ADD_GUIDE;
-      else
-        align_tool->function = ALIGN_TOOL_PICK_GUIDE;
+      if (state == (gimp_get_extend_selection_mask () | GDK_MOD1_MASK))
+        align_tool->function = ALIGN_TOOL_ALIGN_ADD_GUIDE;
+      else if (state == GDK_MOD1_MASK)
+        align_tool->function = ALIGN_TOOL_ALIGN_PICK_GUIDE;
+      else if (options->align_reference == GIMP_ALIGN_REFERENCE_PICK)
+        align_tool->function = ALIGN_TOOL_REF_PICK_GUIDE;
     }
   else if (gimp_image_pick_layer_by_bounds (image, coords->x, coords->y))
     {
-      if (add)
-        align_tool->function = ALIGN_TOOL_ADD_LAYER;
-      else
-        align_tool->function = ALIGN_TOOL_PICK_LAYER;
+      if (options->align_reference == GIMP_ALIGN_REFERENCE_PICK)
+        align_tool->function = ALIGN_TOOL_REF_PICK_LAYER;
     }
   else
     {
-      align_tool->function = ALIGN_TOOL_IDLE;
+      if (state & GDK_MOD1_MASK)
+        align_tool->function = ALIGN_TOOL_ALIGN_IDLE;
+      else if (options->align_reference == GIMP_ALIGN_REFERENCE_PICK)
+        align_tool->function = ALIGN_TOOL_REF_IDLE;
     }
 
   gimp_align_tool_status_update (tool, display, state, proximity);
+
+  if (! gimp_draw_tool_is_active (GIMP_DRAW_TOOL (tool)))
+    gimp_draw_tool_start (GIMP_DRAW_TOOL (tool), display);
 }
 
 static void
@@ -476,32 +488,30 @@ gimp_align_tool_cursor_update (GimpTool         *tool,
   GimpToolCursorType  tool_cursor = GIMP_TOOL_CURSOR_NONE;
   GimpCursorModifier  modifier    = GIMP_CURSOR_MODIFIER_NONE;
 
-  /* always add '+' when Shift is pressed, even if nothing is selected */
-  if (state & gimp_get_extend_selection_mask ())
-    modifier = GIMP_CURSOR_MODIFIER_PLUS;
-
   switch (align_tool->function)
     {
-    case ALIGN_TOOL_IDLE:
+    case ALIGN_TOOL_REF_IDLE:
+    case ALIGN_TOOL_ALIGN_IDLE:
       tool_cursor = GIMP_TOOL_CURSOR_RECT_SELECT;
       break;
 
-    case ALIGN_TOOL_PICK_LAYER:
-    case ALIGN_TOOL_ADD_LAYER:
+    case ALIGN_TOOL_REF_PICK_LAYER:
       tool_cursor = GIMP_TOOL_CURSOR_HAND;
       break;
 
-    case ALIGN_TOOL_PICK_GUIDE:
-    case ALIGN_TOOL_ADD_GUIDE:
+    case ALIGN_TOOL_ALIGN_ADD_GUIDE:
+      modifier = GIMP_CURSOR_MODIFIER_PLUS;
+    case ALIGN_TOOL_REF_PICK_GUIDE:
+    case ALIGN_TOOL_ALIGN_PICK_GUIDE:
       tool_cursor = GIMP_TOOL_CURSOR_MOVE;
       break;
 
-    case ALIGN_TOOL_PICK_PATH:
-    case ALIGN_TOOL_ADD_PATH:
+    case ALIGN_TOOL_REF_PICK_PATH:
       tool_cursor = GIMP_TOOL_CURSOR_PATHS;
       break;
 
-    case ALIGN_TOOL_DRAG_BOX:
+    case ALIGN_TOOL_REF_DRAG_BOX:
+    case ALIGN_TOOL_NO_ACTION:
       break;
     }
 
@@ -512,14 +522,31 @@ gimp_align_tool_cursor_update (GimpTool         *tool,
   GIMP_TOOL_CLASS (parent_class)->cursor_update (tool, coords, state, display);
 }
 
+const gchar *
+gimp_align_tool_can_undo (GimpTool    *tool,
+                          GimpDisplay *display)
+{
+  return _("Arrange Objects");
+}
+
+static gboolean
+gimp_align_tool_undo (GimpTool    *tool,
+                      GimpDisplay *display)
+{
+  g_idle_add ((GSourceFunc) gimp_align_tool_undo_idle, (gpointer) tool);
+
+  return FALSE;
+}
+
 static void
 gimp_align_tool_status_update (GimpTool        *tool,
                                GimpDisplay     *display,
                                GdkModifierType  state,
                                gboolean         proximity)
 {
-  GimpAlignTool   *align_tool = GIMP_ALIGN_TOOL (tool);
-  GdkModifierType  extend_mask;
+  GimpAlignTool    *align_tool = GIMP_ALIGN_TOOL (tool);
+  gchar            *status     = NULL;
+  GdkModifierType   extend_mask;
 
   extend_mask = gimp_get_extend_selection_mask ();
 
@@ -527,75 +554,61 @@ gimp_align_tool_status_update (GimpTool        *tool,
 
   if (proximity)
     {
-      gchar *status = NULL;
-
-      if (! align_tool->selected_objects)
-        {
-          /* no need to suggest Shift if nothing is selected */
-          state |= extend_mask;
-        }
-
       switch (align_tool->function)
         {
-        case ALIGN_TOOL_IDLE:
-          status = gimp_suggest_modifiers (_("Click on a layer, path or guide, "
-                                             "or Click-Drag to pick several "
-                                             "layers"),
+        case ALIGN_TOOL_REF_IDLE:
+          status = g_strdup (_("Click on a layer, path or guide, "
+                               "or Click-Drag to pick a reference"));
+          break;
+        case ALIGN_TOOL_REF_PICK_LAYER:
+          status = g_strdup (_("Click to pick this layer as reference"));
+          break;
+        case ALIGN_TOOL_REF_PICK_GUIDE:
+          status = gimp_suggest_modifiers (_("Click to pick this guide as reference"),
+                                           GDK_MOD1_MASK & ~state,
+                                           NULL, NULL, NULL);
+          break;
+        case ALIGN_TOOL_REF_PICK_PATH:
+          status = g_strdup (_("Click to pick this path as reference"));
+          break;
+
+        case ALIGN_TOOL_REF_DRAG_BOX:
+          break;
+
+        case ALIGN_TOOL_ALIGN_IDLE:
+          status = g_strdup (_("Click on a guide to add it to objects to align, "
+                               "click anywhere else to unselect all guides"));
+          break;
+        case ALIGN_TOOL_ALIGN_PICK_GUIDE:
+          status = gimp_suggest_modifiers (_("Click to select this guide for alignment"),
                                            extend_mask & ~state,
                                            NULL, NULL, NULL);
           break;
-
-        case ALIGN_TOOL_PICK_LAYER:
-          status = gimp_suggest_modifiers (_("Click to pick this layer as "
-                                             "first item"),
-                                           extend_mask & ~state,
-                                           NULL, NULL, NULL);
+        case ALIGN_TOOL_ALIGN_ADD_GUIDE:
+          status = g_strdup (_("Click to add this guide to the list of objects to align"));
           break;
 
-        case ALIGN_TOOL_ADD_LAYER:
-          status = g_strdup (_("Click to add this layer to the list"));
-          break;
-
-        case ALIGN_TOOL_PICK_GUIDE:
-          status = gimp_suggest_modifiers (_("Click to pick this guide as "
-                                             "first item"),
-                                           extend_mask & ~state,
-                                           NULL, NULL, NULL);
-          break;
-
-        case ALIGN_TOOL_ADD_GUIDE:
-          status = g_strdup (_("Click to add this guide to the list"));
-          break;
-
-        case ALIGN_TOOL_PICK_PATH:
-          status = gimp_suggest_modifiers (_("Click to pick this path as "
-                                             "first item"),
-                                           extend_mask & ~state,
-                                           NULL, NULL, NULL);
-          break;
-
-        case ALIGN_TOOL_ADD_PATH:
-          status = g_strdup (_("Click to add this path to the list"));
-          break;
-
-        case ALIGN_TOOL_DRAG_BOX:
+        case ALIGN_TOOL_NO_ACTION:
           break;
         }
+    }
 
-      if (status)
-        {
-          gimp_tool_push_status (tool, display, "%s", status);
-          g_free (status);
-        }
+  if (status)
+    {
+      gimp_tool_push_status (tool, display, "%s", status);
+      g_free (status);
     }
 }
 
 static void
 gimp_align_tool_draw (GimpDrawTool *draw_tool)
 {
-  GimpAlignTool *align_tool = GIMP_ALIGN_TOOL (draw_tool);
-  GList         *list;
-  gint           x, y, w, h;
+  GimpAlignTool    *align_tool = GIMP_ALIGN_TOOL (draw_tool);
+  GimpAlignOptions *options    = GIMP_ALIGN_TOOL_GET_OPTIONS (align_tool);
+  GObject          *reference;
+  GList            *objects;
+  GList            *iter;
+  gint              x, y, w, h;
 
   /* draw rubber-band rectangle */
   x = MIN (align_tool->x2, align_tool->x1);
@@ -603,88 +616,165 @@ gimp_align_tool_draw (GimpDrawTool *draw_tool)
   w = MAX (align_tool->x2, align_tool->x1) - x;
   h = MAX (align_tool->y2, align_tool->y1) - y;
 
-  gimp_draw_tool_add_rectangle (draw_tool, FALSE, x, y, w, h);
+  if (w != 0 && h != 0)
+    gimp_draw_tool_add_rectangle (draw_tool, FALSE, x, y, w, h);
 
-  for (list = align_tool->selected_objects;
-       list;
-       list = g_list_next (list))
+  /* Draw handles on the reference object. */
+  reference = gimp_align_options_get_reference (options, FALSE);
+  if (GIMP_IS_ITEM (reference))
     {
-      if (GIMP_IS_ITEM (list->data))
+      GimpItem *item = GIMP_ITEM (reference);
+      gint      off_x, off_y;
+
+      gimp_item_bounds (item, &x, &y, &w, &h);
+
+      gimp_item_get_offset (item, &off_x, &off_y);
+      x += off_x;
+      y += off_y;
+
+      if (gimp_align_options_align_contents (options) &&
+          GIMP_IS_PICKABLE (reference))
         {
-          GimpItem *item = list->data;
-          gint      off_x, off_y;
+          gint shrunk_x;
+          gint shrunk_y;
 
-          gimp_item_bounds (item, &x, &y, &w, &h);
-
-          gimp_item_get_offset (item, &off_x, &off_y);
-          x += off_x;
-          y += off_y;
-
-          gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
-                                     x, y,
-                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                     GIMP_HANDLE_ANCHOR_NORTH_WEST);
-          gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
-                                     x + w, y,
-                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                     GIMP_HANDLE_ANCHOR_NORTH_EAST);
-          gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
-                                     x, y + h,
-                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                     GIMP_HANDLE_ANCHOR_SOUTH_WEST);
-          gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
-                                     x + w, y + h,
-                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                     GIMP_HANDLE_ANCHOR_SOUTH_EAST);
-        }
-      else if (GIMP_IS_GUIDE (list->data))
-        {
-          GimpGuide *guide = list->data;
-          GimpImage *image = gimp_display_get_image (GIMP_TOOL (draw_tool)->display);
-          gint       x, y;
-          gint       w, h;
-
-          switch (gimp_guide_get_orientation (guide))
+          if (gimp_pickable_auto_shrink (GIMP_PICKABLE (reference),
+                                         0, 0,
+                                         gimp_item_get_width  (GIMP_ITEM (reference)),
+                                         gimp_item_get_height (GIMP_ITEM (reference)),
+                                         &shrunk_x, &shrunk_y, &w, &h) == GIMP_AUTO_SHRINK_SHRINK)
             {
-            case GIMP_ORIENTATION_VERTICAL:
-              x = gimp_guide_get_position (guide);
-              h = gimp_image_get_height (image);
-              gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
-                                         x, h,
-                                         GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                         GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                         GIMP_HANDLE_ANCHOR_SOUTH);
-              gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
-                                         x, 0,
-                                         GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                         GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                         GIMP_HANDLE_ANCHOR_NORTH);
-              break;
-
-            case GIMP_ORIENTATION_HORIZONTAL:
-              y = gimp_guide_get_position (guide);
-              w = gimp_image_get_width (image);
-              gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
-                                         w, y,
-                                         GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                         GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                         GIMP_HANDLE_ANCHOR_EAST);
-              gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
-                                         0, y,
-                                         GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                         GIMP_TOOL_HANDLE_SIZE_SMALL,
-                                         GIMP_HANDLE_ANCHOR_WEST);
-              break;
-
-            default:
-              break;
+              x += shrunk_x;
+              y += shrunk_y;
             }
         }
+
+      gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
+                                 x, y,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_HANDLE_ANCHOR_NORTH_WEST);
+      gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
+                                 x + w, y,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_HANDLE_ANCHOR_NORTH_EAST);
+      gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
+                                 x, y + h,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_HANDLE_ANCHOR_SOUTH_WEST);
+      gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
+                                 x + w, y + h,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_HANDLE_ANCHOR_SOUTH_EAST);
     }
+  else if (GIMP_IS_GUIDE (reference))
+    {
+      GimpGuide *guide = GIMP_GUIDE (reference);
+      GimpImage *image = gimp_display_get_image (draw_tool->display);
+      gint       x, y;
+      gint       w, h;
+
+      switch (gimp_guide_get_orientation (guide))
+        {
+        case GIMP_ORIENTATION_VERTICAL:
+          x = gimp_guide_get_position (guide);
+          h = gimp_image_get_height (image);
+          gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
+                                     x, h,
+                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                     GIMP_HANDLE_ANCHOR_SOUTH);
+          gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
+                                     x, 0,
+                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                     GIMP_HANDLE_ANCHOR_NORTH);
+          break;
+
+        case GIMP_ORIENTATION_HORIZONTAL:
+          y = gimp_guide_get_position (guide);
+          w = gimp_image_get_width (image);
+          gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
+                                     w, y,
+                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                     GIMP_HANDLE_ANCHOR_EAST);
+          gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
+                                     0, y,
+                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                     GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                     GIMP_HANDLE_ANCHOR_WEST);
+          break;
+
+        default:
+          break;
+        }
+    }
+  else if (GIMP_IS_IMAGE (reference))
+    {
+      GimpImage *image  = GIMP_IMAGE (reference);
+      gint       width  = gimp_image_get_width (image);
+      gint       height = gimp_image_get_height (image);
+
+      gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
+                                 0, 0,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_HANDLE_ANCHOR_NORTH_WEST);
+      gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
+                                 width, 0,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_HANDLE_ANCHOR_NORTH_EAST);
+      gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
+                                 0, height,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_HANDLE_ANCHOR_SOUTH_WEST);
+      gimp_draw_tool_add_handle (draw_tool, GIMP_HANDLE_FILLED_SQUARE,
+                                 width, height,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_TOOL_HANDLE_SIZE_SMALL,
+                                 GIMP_HANDLE_ANCHOR_SOUTH_EAST);
+    }
+
+  /* Highlight picked guides, similarly to how they are highlighted in Move
+   * tool.
+   */
+  objects = gimp_align_options_get_objects (options);
+  for (iter = objects; iter; iter = iter->next)
+    {
+      if (GIMP_IS_GUIDE (iter->data))
+        {
+          GimpGuide      *guide = iter->data;
+          GimpCanvasItem *item;
+          GimpGuideStyle  style;
+
+          style = gimp_guide_get_style (guide);
+
+          item = gimp_draw_tool_add_guide (draw_tool,
+                                           gimp_guide_get_orientation (guide),
+                                           gimp_guide_get_position (guide),
+                                           style);
+          gimp_canvas_item_set_highlight (item, TRUE);
+        }
+    }
+}
+
+static void
+gimp_align_tool_redraw (GimpAlignTool *align_tool)
+{
+  GimpDrawTool *draw_tool = GIMP_DRAW_TOOL (align_tool);
+
+  gimp_draw_tool_pause (draw_tool);
+
+  if (! gimp_draw_tool_is_active (draw_tool) && draw_tool->display)
+    gimp_draw_tool_start (draw_tool, draw_tool->display);
+
+  gimp_draw_tool_resume (draw_tool);
 }
 
 static void
@@ -694,131 +784,73 @@ gimp_align_tool_align (GimpAlignTool     *align_tool,
   GimpAlignOptions *options = GIMP_ALIGN_TOOL_GET_OPTIONS (align_tool);
   GimpImage        *image;
   GObject          *reference_object = NULL;
+  GList            *objects;
   GList            *list;
-  gint              offset = 0;
+  gdouble           align_x = 0.0;
+  gdouble           align_y = 0.0;
 
   /* if nothing is selected, just return */
-  if (! align_tool->selected_objects)
+  objects = gimp_align_options_get_objects (options);
+  if (! objects)
     return;
 
-  image  = gimp_display_get_image (GIMP_TOOL (align_tool)->display);
+  image = gimp_context_get_image (gimp_get_user_context (GIMP_CONTEXT (options)->gimp));
+  list  = objects;
 
-  switch (align_type)
+  if (align_type < GIMP_ARRANGE_HFILL)
     {
-    case GIMP_ALIGN_LEFT:
-    case GIMP_ALIGN_HCENTER:
-    case GIMP_ALIGN_RIGHT:
-    case GIMP_ALIGN_TOP:
-    case GIMP_ALIGN_VCENTER:
-    case GIMP_ALIGN_BOTTOM:
-      offset = 0;
-      break;
-
-    case GIMP_ARRANGE_LEFT:
-    case GIMP_ARRANGE_HCENTER:
-    case GIMP_ARRANGE_RIGHT:
-    case GIMP_ARRANGE_HFILL:
-      offset = options->offset_x;
-      break;
-
-    case GIMP_ARRANGE_TOP:
-    case GIMP_ARRANGE_VCENTER:
-    case GIMP_ARRANGE_BOTTOM:
-    case GIMP_ARRANGE_VFILL:
-      offset = options->offset_y;
-      break;
+      reference_object = gimp_align_options_get_reference (options, TRUE);
+      if (! reference_object)
+        return;
     }
-
-  /* if only one object is selected, use the image as reference
-   * if multiple objects are selected, use the first one as reference if
-   * "set_reference" is TRUE, otherwise use NULL.
-   */
-
-  list = align_tool->selected_objects;
-
-  switch (options->align_reference)
-    {
-    case GIMP_ALIGN_REFERENCE_IMAGE:
-      reference_object = G_OBJECT (image);
-      break;
-
-    case GIMP_ALIGN_REFERENCE_FIRST:
-      if (g_list_length (list) == 1)
-        {
-          reference_object = G_OBJECT (image);
-        }
-      else
-        {
-          if (align_tool->set_reference)
-            {
-              reference_object = G_OBJECT (list->data);
-              list = g_list_next (list);
-            }
-          else
-            {
-              reference_object = NULL;
-            }
-        }
-      break;
-
-    case GIMP_ALIGN_REFERENCE_SELECTION:
-      reference_object = G_OBJECT (gimp_image_get_mask (image));
-      break;
-
-    case GIMP_ALIGN_REFERENCE_ACTIVE_LAYER:
-      reference_object = G_OBJECT (gimp_image_get_active_layer (image));
-      break;
-
-    case GIMP_ALIGN_REFERENCE_ACTIVE_CHANNEL:
-      reference_object = G_OBJECT (gimp_image_get_active_channel (image));
-      break;
-
-    case GIMP_ALIGN_REFERENCE_ACTIVE_PATH:
-      reference_object = G_OBJECT (gimp_image_get_active_vectors (image));
-      break;
-    }
-
-  if (! reference_object)
-    return;
 
   gimp_draw_tool_pause (GIMP_DRAW_TOOL (align_tool));
 
+  gimp_align_options_get_pivot (options, &align_x, &align_y);
   gimp_image_arrange_objects (image, list,
-                              align_type,
+                              align_x, align_y,
                               reference_object,
                               align_type,
-                              offset);
+                              gimp_align_options_align_contents (options));
 
   gimp_draw_tool_resume (GIMP_DRAW_TOOL (align_tool));
 
   gimp_image_flush (image);
+  g_list_free (objects);
+}
+
+static gint
+gimp_align_tool_undo_idle (gpointer data)
+{
+  GimpDrawTool *draw_tool = GIMP_DRAW_TOOL (data);
+  GimpDisplay  *display   = draw_tool->display;
+
+  /* This makes sure that we properly undraw then redraw the various handles and
+   * highlighted guides after undoing.
+   */
+  gimp_draw_tool_stop (draw_tool);
+  gimp_draw_tool_start (draw_tool, display);
+
+  return FALSE; /* remove idle */
 }
 
 static void
-gimp_align_tool_object_removed (GObject       *object,
-                                GimpAlignTool *align_tool)
+gimp_align_tool_display_changed (GimpContext   *context,
+                                 GimpDisplay   *display,
+                                 GimpAlignTool *align_tool)
 {
-  gimp_draw_tool_pause (GIMP_DRAW_TOOL (align_tool));
+  GimpTool     *tool      = GIMP_TOOL (align_tool);
+  GimpDrawTool *draw_tool = GIMP_DRAW_TOOL (align_tool);
 
-  if (align_tool->selected_objects)
-    g_signal_handlers_disconnect_by_func (object,
-                                          gimp_align_tool_object_removed,
-                                          align_tool);
+  gimp_draw_tool_pause (draw_tool);
 
-  align_tool->selected_objects = g_list_remove (align_tool->selected_objects,
-                                                object);
+  if (display != tool->display)
+    gimp_tool_control (tool, GIMP_TOOL_ACTION_HALT, display);
 
-  gimp_draw_tool_resume (GIMP_DRAW_TOOL (align_tool));
-}
+  tool->display = display;
 
-static void
-gimp_align_tool_clear_selected (GimpAlignTool *align_tool)
-{
-  gimp_draw_tool_pause (GIMP_DRAW_TOOL (align_tool));
+  if (! gimp_draw_tool_is_active (draw_tool) && display)
+    gimp_draw_tool_start (draw_tool, display);
 
-  while (align_tool->selected_objects)
-    gimp_align_tool_object_removed (align_tool->selected_objects->data,
-                                    align_tool);
-
-  gimp_draw_tool_resume (GIMP_DRAW_TOOL (align_tool));
+  gimp_draw_tool_resume (draw_tool);
 }

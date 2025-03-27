@@ -25,6 +25,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "widgets-types.h"
@@ -35,7 +36,6 @@
 #include "core/gimpdata.h"
 #include "core/gimpdatafactory.h"
 #include "core/gimplist.h"
-#include "core/gimpmarshal.h"
 #include "core/gimptaggedcontainer.h"
 
 #include "gimpcombotagentry.h"
@@ -222,7 +222,7 @@ gimp_data_factory_view_constructed (GObject *object)
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
-  gimp_container_editor_set_selection_mode (editor, GTK_SELECTION_MULTIPLE);
+  gimp_container_editor_set_selection_mode (editor, GTK_SELECTION_SINGLE);
 
   if (GIMP_IS_CONTAINER_TREE_VIEW (editor->view))
     {
@@ -525,7 +525,7 @@ gimp_data_factory_view_select_item (GimpContainerEditor *editor,
       GimpContainerView *container_view = GIMP_CONTAINER_VIEW (editor->view);
       GList             *active_items   = NULL;
 
-      gimp_container_view_get_selected (container_view, &active_items);
+      gimp_container_view_get_selected (container_view, &active_items, NULL);
       gimp_tag_entry_set_selected_items (GIMP_TAG_ENTRY (view->priv->assign_tag_entry),
                                          active_items);
       g_list_free (active_items);

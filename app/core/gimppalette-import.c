@@ -56,7 +56,6 @@ gimp_palette_import_from_gradient (GimpGradient                *gradient,
   GimpPalette         *palette;
   GimpGradientSegment *seg = NULL;
   gdouble              dx, cur_x;
-  GimpRGB              color;
   gint                 i;
 
   g_return_val_if_fail (GIMP_IS_GRADIENT (gradient), NULL);
@@ -70,10 +69,17 @@ gimp_palette_import_from_gradient (GimpGradient                *gradient,
 
   for (i = 0, cur_x = 0; i < n_colors; i++, cur_x += dx)
     {
+      GeglColor *color = NULL;
+
       seg = gimp_gradient_get_color_at (gradient, context,
                                         seg, cur_x, reverse, blend_color_space,
                                         &color);
-      gimp_palette_add_entry (palette, -1, NULL, &color);
+
+      g_return_val_if_fail (color != NULL, palette);
+
+      gimp_palette_add_entry (palette, -1, NULL, color);
+
+      g_clear_object (&color);
     }
 
   return palette;
@@ -197,15 +203,19 @@ gimp_palette_import_create_image_palette (gpointer data,
 {
   GimpPalette *palette   = user_data;
   ImgColors   *color_tab = data;
+  const Babl  *format;
   gint         n_colors;
   gchar       *lab;
-  GimpRGB      color;
+  GeglColor   *color;
+  guint8       rgb[3];
 
   n_colors = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (palette),
                                                  "import-n-colors"));
 
   if (gimp_palette_get_n_colors (palette) >= n_colors)
     return;
+
+  format = gimp_palette_get_restriction (palette);
 
   /* TRANSLATORS: the "%s" is an item title and "%u" is the number of
      occurrences for this item. */
@@ -214,20 +224,22 @@ gimp_palette_import_create_image_palette (gpointer data,
                          color_tab->count);
 
   /* Adjust the colors to the mean of the the sample */
-  gimp_rgba_set_uchar
-    (&color,
-     (guchar) color_tab->r + (color_tab->r_adj / color_tab->count),
-     (guchar) color_tab->g + (color_tab->g_adj / color_tab->count),
-     (guchar) color_tab->b + (color_tab->b_adj / color_tab->count),
-     255);
+  color = gegl_color_new (NULL);
+  rgb[0] = (guchar) color_tab->r + (color_tab->r_adj / color_tab->count);
+  rgb[1] = (guchar) color_tab->g + (color_tab->g_adj / color_tab->count);
+  rgb[2] = (guchar) color_tab->b + (color_tab->b_adj / color_tab->count);
 
-  gimp_palette_add_entry (palette, -1, lab, &color);
+  gegl_color_set_pixel (color, format, rgb);
 
+  gimp_palette_add_entry (palette, -1, lab, color);
+
+  g_object_unref (color);
   g_free (lab);
 }
 
 static GimpPalette *
 gimp_palette_import_make_palette (GHashTable  *table,
+                                  const Babl  *format,
                                   const gchar *palette_name,
                                   GimpContext *context,
                                   gint         n_colors)
@@ -241,6 +253,7 @@ gimp_palette_import_make_palette (GHashTable  *table,
   if (! table)
     return palette;
 
+  gimp_palette_restrict_format (palette, format, FALSE);
   g_hash_table_foreach (table, gimp_palette_import_create_list, &list);
   list = g_slist_sort (list, gimp_palette_import_sort_colors);
 
@@ -262,11 +275,15 @@ gimp_palette_import_make_palette (GHashTable  *table,
 
   g_slist_free (list);
 
+  gimp_palette_restrict_format (palette, NULL, FALSE);
+
   return palette;
 }
 
 static GHashTable *
 gimp_palette_import_extract (GimpImage     *image,
+                             GHashTable    *colors,
+                             const Babl   **format,
                              GimpPickable  *pickable,
                              gint           pickable_off_x,
                              gint           pickable_off_y,
@@ -282,33 +299,33 @@ gimp_palette_import_extract (GimpImage     *image,
   GeglBufferIterator *iter;
   GeglRectangle      *mask_roi = NULL;
   GeglRectangle       rect     = { x, y, width, height };
-  GHashTable         *colors   = NULL;
-  const Babl         *format;
   gint                bpp;
   gint                mask_bpp = 0;
 
   buffer = gimp_pickable_get_buffer (pickable);
-  format = babl_format ("R'G'B'A u8");
+  if (*format == NULL)
+    *format = babl_format_with_space ("R'G'B'A u8", gimp_image_get_layer_space (image));
 
-  iter = gegl_buffer_iterator_new (buffer, &rect, 0, format,
+  iter = gegl_buffer_iterator_new (buffer, &rect, 0, *format,
                                    GEGL_ACCESS_READ, GEGL_ABYSS_NONE, 2);
-  bpp = babl_format_get_bytes_per_pixel (format);
+  bpp = babl_format_get_bytes_per_pixel (*format);
 
   if (selection_only &&
       ! gimp_channel_is_empty (gimp_image_get_mask (image)))
     {
       GimpDrawable *mask = GIMP_DRAWABLE (gimp_image_get_mask (image));
+      const Babl   *selection_format;
 
       rect.x = x + pickable_off_x;
       rect.y = y + pickable_off_y;
 
       buffer = gimp_drawable_get_buffer (mask);
-      format = babl_format ("Y u8");
+      selection_format = babl_format ("Y u8");
 
-      gegl_buffer_iterator_add (iter, buffer, &rect, 0, format,
+      gegl_buffer_iterator_add (iter, buffer, &rect, 0, selection_format,
                                 GEGL_ACCESS_READ, GEGL_ABYSS_NONE);
       mask_roi = &iter->items[1].roi;
-      mask_bpp = babl_format_get_bytes_per_pixel (format);
+      mask_bpp = babl_format_get_bytes_per_pixel (selection_format);
     }
 
   while (gegl_buffer_iterator_next (iter))
@@ -359,6 +376,7 @@ gimp_palette_import_from_image (GimpImage   *image,
                                 gboolean     selection_only)
 {
   GHashTable *colors;
+  const Babl *format = NULL;
   gint        x, y;
   gint        width, height;
 
@@ -384,14 +402,15 @@ gimp_palette_import_from_image (GimpImage   *image,
     }
 
   colors = gimp_palette_import_extract (image,
+                                        NULL, &format,
                                         GIMP_PICKABLE (image),
                                         0, 0,
                                         selection_only,
                                         x, y, width, height,
                                         n_colors, threshold);
 
-  return gimp_palette_import_make_palette (colors, palette_name, context,
-                                           n_colors);
+  return gimp_palette_import_make_palette (colors, format, palette_name,
+                                           context, n_colors);
 }
 
 
@@ -403,35 +422,15 @@ gimp_palette_import_from_indexed_image (GimpImage   *image,
                                         const gchar *palette_name)
 {
   GimpPalette  *palette;
-  const guchar *colormap;
-  guint         n_colors;
-  gint          count;
-  GimpRGB       color;
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
   g_return_val_if_fail (gimp_image_get_base_type (image) == GIMP_INDEXED, NULL);
   g_return_val_if_fail (palette_name != NULL, NULL);
 
-  palette = GIMP_PALETTE (gimp_palette_new (context, palette_name));
+  palette = GIMP_PALETTE (gimp_data_duplicate (GIMP_DATA (gimp_image_get_colormap_palette (image))));
 
-  colormap = gimp_image_get_colormap (image);
-  n_colors = gimp_image_get_colormap_size (image);
-
-  for (count = 0; count < n_colors; ++count)
-    {
-      gchar name[256];
-
-      g_snprintf (name, sizeof (name), _("Index %d"), count);
-
-      gimp_rgba_set_uchar (&color,
-                           colormap[count * 3 + 0],
-                           colormap[count * 3 + 1],
-                           colormap[count * 3 + 2],
-                           255);
-
-      gimp_palette_add_entry (palette, -1, name, &color);
-    }
+  gimp_object_set_name (GIMP_OBJECT (palette), palette_name);
 
   return palette;
 }
@@ -440,51 +439,60 @@ gimp_palette_import_from_indexed_image (GimpImage   *image,
 /*  create a palette from a drawable  ****************************************/
 
 GimpPalette *
-gimp_palette_import_from_drawable (GimpDrawable *drawable,
-                                   GimpContext  *context,
-                                   const gchar  *palette_name,
-                                   gint          n_colors,
-                                   gint          threshold,
-                                   gboolean      selection_only)
+gimp_palette_import_from_drawables (GList       *drawables,
+                                    GimpContext *context,
+                                    const gchar *palette_name,
+                                    gint         n_colors,
+                                    gint         threshold,
+                                    gboolean     selection_only)
 {
   GHashTable *colors = NULL;
+  const Babl *format = NULL;
+  GList      *iter;
   gint        x, y;
   gint        width, height;
   gint        off_x, off_y;
 
-  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
   g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
-  g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (drawable)), NULL);
   g_return_val_if_fail (palette_name != NULL, NULL);
   g_return_val_if_fail (n_colors > 1, NULL);
   g_return_val_if_fail (threshold > 0, NULL);
 
-  if (selection_only)
+  for (iter = drawables; iter; iter = iter->next)
     {
-      if (! gimp_item_mask_intersect (GIMP_ITEM (drawable),
-                                      &x, &y, &width, &height))
-        return NULL;
+      GimpDrawable *drawable = iter->data;
+
+      g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
+      g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (drawable)), NULL);
+
+      if (selection_only)
+        {
+          if (! gimp_item_mask_intersect (GIMP_ITEM (drawable),
+                                          &x, &y, &width, &height))
+            return NULL;
+        }
+      else
+        {
+          x      = 0;
+          y      = 0;
+          width  = gimp_item_get_width  (GIMP_ITEM (drawable));
+          height = gimp_item_get_height (GIMP_ITEM (drawable));
+        }
+
+      gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
+
+      colors =
+        gimp_palette_import_extract (gimp_item_get_image (GIMP_ITEM (drawable)),
+                                     colors, &format,
+                                     GIMP_PICKABLE (drawable),
+                                     off_x, off_y,
+                                     selection_only,
+                                     x, y, width, height,
+                                     n_colors, threshold);
     }
-  else
-    {
-      x      = 0;
-      y      = 0;
-      width  = gimp_item_get_width  (GIMP_ITEM (drawable));
-      height = gimp_item_get_height (GIMP_ITEM (drawable));
-    }
 
-  gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
-
-  colors =
-    gimp_palette_import_extract (gimp_item_get_image (GIMP_ITEM (drawable)),
-                                 GIMP_PICKABLE (drawable),
-                                 off_x, off_y,
-                                 selection_only,
-                                 x, y, width, height,
-                                 n_colors, threshold);
-
-  return gimp_palette_import_make_palette (colors, palette_name, context,
-                                           n_colors);
+  return gimp_palette_import_make_palette (colors, format, palette_name,
+                                           context, n_colors);
 }
 
 
@@ -547,6 +555,10 @@ gimp_palette_import_from_file (GimpContext  *context,
 
     case GIMP_PALETTE_FILE_FORMAT_CSS:
       palette_list = gimp_palette_load_css (context, file, input, error);
+      break;
+
+    case GIMP_PALETTE_FILE_FORMAT_SBZ:
+      palette_list = gimp_palette_load_sbz (context, file, input, error);
       break;
 
     default:

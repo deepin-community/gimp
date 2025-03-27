@@ -22,6 +22,7 @@
 #include <unistd.h>
 #endif /* ENABLE_RELOCATABLE_RESOURCES && ! G_OS_WIN32 */
 
+#include <gio/gio.h>
 #include <glib.h>
 #include <glib/gstdio.h>
 
@@ -36,56 +37,46 @@
 static char *
 _br_find_exe (GimpBinrelocInitError *error)
 {
-#if ! defined(ENABLE_RELOCATABLE_RESOURCES) || defined(G_OS_WIN32)
+#if ! defined(ENABLE_RELOCATABLE_RESOURCES) || defined(G_OS_WIN32) || defined(__APPLE__)
   if (error)
     *error = GIMP_RELOC_INIT_ERROR_DISABLED;
   return NULL;
 #else
-  char *path, *path2, *line, *result;
-  size_t buf_size;
-  ssize_t size;
-  struct stat stat_buf;
-  FILE *f;
+  GDataInputStream *data_input;
+  GInputStream     *input;
+  GFile            *file;
+  GError           *gerror = NULL;
+  gchar            *path;
+  gchar            *sym_path;
+  gchar            *maps_line;
 
-  /* Read from /proc/self/exe (symlink) */
-  if (sizeof (path) > SSIZE_MAX)
-    buf_size = SSIZE_MAX - 1;
-  else
-    buf_size = PATH_MAX - 1;
-  path = g_try_new (char, buf_size);
-  if (path == NULL)
-    {
-      /* Cannot allocate memory. */
-      if (error)
-        *error = GIMP_RELOC_INIT_ERROR_NOMEM;
-      return NULL;
-    }
-  path2 = g_try_new (char, buf_size);
-  if (path2 == NULL)
-    {
-      /* Cannot allocate memory. */
-      if (error)
-        *error = GIMP_RELOC_INIT_ERROR_NOMEM;
-      g_free (path);
-      return NULL;
-    }
-
-  strncpy (path2, "/proc/self/exe", buf_size - 1);
+  sym_path = g_strdup ("/proc/self/exe");
 
   while (1)
     {
-      int i;
+      struct stat stat_buf;
+      int         i;
 
-      size = readlink (path2, path, buf_size - 1);
-      if (size == -1)
+      /* Do not use readlink() with a buffer of size PATH_MAX because
+       * some systems actually allow paths of bigger size. Thus this
+       * macro is kind of bogus. Some systems like Hurd will not even
+       * define it (see MR !424).
+       * g_file_read_link() on the other hand will return a size of
+       * appropriate size, with newline removed and NUL terminator
+       * added.
+       */
+      path = g_file_read_link (sym_path, &gerror);
+      g_free (sym_path);
+      if (! path)
         {
-          /* Error. */
-          g_free (path2);
+          /* Read link fails but we can try reading /proc/self/maps as
+           * an alternate method.
+           */
+          g_printerr ("%s: %s\n", G_STRFUNC, gerror->message);
+          g_clear_error (&gerror);
+
           break;
         }
-
-      /* readlink() success. */
-      path[size] = '\0';
 
       /* Check whether the symlink's target is also a symlink.
        * We want to get the final target. */
@@ -93,87 +84,80 @@ _br_find_exe (GimpBinrelocInitError *error)
       if (i == -1)
         {
           /* Error. */
-          g_free (path2);
           break;
         }
 
       /* stat() success. */
-      if (!S_ISLNK (stat_buf.st_mode))
+      if (! S_ISLNK (stat_buf.st_mode))
         {
           /* path is not a symlink. Done. */
-          g_free (path2);
           return path;
         }
 
       /* path is a symlink. Continue loop and resolve this. */
-      strncpy (path, path2, buf_size - 1);
+      sym_path = path;
     }
-
 
   /* readlink() or stat() failed; this can happen when the program is
    * running in Valgrind 2.2. Read from /proc/self/maps as fallback. */
 
-  buf_size = PATH_MAX + 128;
-  line = (char *) g_try_realloc (path, buf_size);
-  if (line == NULL)
+  file = g_file_new_for_path ("/proc/self/maps");
+  input = G_INPUT_STREAM (g_file_read (file, NULL, &gerror));
+  g_object_unref (file);
+  if (! input)
     {
-      /* Cannot allocate memory. */
-      g_free (path);
-      if (error)
-        *error = GIMP_RELOC_INIT_ERROR_NOMEM;
-      return NULL;
-    }
+      g_printerr ("%s: %s", G_STRFUNC, gerror->message);
+      g_clear_error (&gerror);
 
-  f = g_fopen ("/proc/self/maps", "r");
-  if (f == NULL)
-    {
-      g_free (line);
       if (error)
         *error = GIMP_RELOC_INIT_ERROR_OPEN_MAPS;
+
       return NULL;
     }
 
-  /* The first entry should be the executable name. */
-  result = fgets (line, (int) buf_size, f);
-  if (result == NULL)
+  data_input = g_data_input_stream_new (input);
+  g_object_unref (input);
+
+  /* The first entry with r-xp permission should be the executable name. */
+  while ((maps_line = g_data_input_stream_read_line (data_input, NULL, NULL, &gerror)))
     {
-      fclose (f);
-      g_free (line);
-      if (error)
-        *error = GIMP_RELOC_INIT_ERROR_READ_MAPS;
-      return NULL;
+      if (maps_line == NULL)
+        {
+          if (gerror)
+            {
+              g_printerr ("%s: %s\n", G_STRFUNC, gerror->message);
+              g_error_free (gerror);
+            }
+          g_object_unref (data_input);
+
+          if (error)
+            *error = GIMP_RELOC_INIT_ERROR_READ_MAPS;
+
+          return NULL;
+        }
+
+      /* Extract the filename; it is always an absolute path. */
+      path = strchr (maps_line, '/');
+
+      /* Sanity check. */
+      if (path && strstr (maps_line, " r-xp "))
+        {
+          /* We found the executable name. */
+          path = g_strdup (path);
+          break;
+        }
+
+      g_free (maps_line);
+      maps_line = NULL;
+      path = NULL;
     }
 
-  /* Get rid of newline character. */
-  buf_size = strlen (line);
-  if (buf_size == 0)
-    {
-      /* Huh? An empty string? */
-      fclose (f);
-      g_free (line);
-      if (error)
-        *error = GIMP_RELOC_INIT_ERROR_INVALID_MAPS;
-      return NULL;
-    }
-  if (line[buf_size - 1] == 10)
-    line[buf_size - 1] = 0;
+  if (path == NULL && error)
+    *error = GIMP_RELOC_INIT_ERROR_INVALID_MAPS;
 
-  /* Extract the filename; it is always an absolute path. */
-  path = strchr (line, '/');
+  g_object_unref (data_input);
+  g_free (maps_line);
 
-  /* Sanity check. */
-  if (strstr (line, " r-xp ") == NULL || path == NULL)
-    {
-      fclose (f);
-      g_free (line);
-      if (error)
-        *error = GIMP_RELOC_INIT_ERROR_INVALID_MAPS;
-      return NULL;
-    }
-
-  path = g_strdup (path);
-  g_free (line);
-  fclose (f);
   return path;
 #endif /* ! ENABLE_RELOCATABLE_RESOURCES || G_OS_WIN32 */
 }
@@ -186,72 +170,121 @@ _br_find_exe (GimpBinrelocInitError *error)
 static char *
 _br_find_exe_for_symbol (const void *symbol, GimpBinrelocInitError *error)
 {
-#if ! defined(ENABLE_RELOCATABLE_RESOURCES) || defined(G_OS_WIN32)
+#if ! defined(ENABLE_RELOCATABLE_RESOURCES) || defined(G_OS_WIN32) || defined(__APPLE__)
   if (error)
     *error = GIMP_RELOC_INIT_ERROR_DISABLED;
   return (char *) NULL;
 #else
-#define SIZE PATH_MAX + 100
-  FILE *f;
-  size_t address_string_len;
-  char *address_string, line[SIZE], *found;
+  GDataInputStream *data_input;
+  GInputStream     *input;
+  GFile            *file;
+  GError           *gerror = NULL;
+  gchar            *maps_line;
+  char             *found = NULL;
+  char             *address_string;
+  size_t            address_string_len;
 
   if (symbol == NULL)
     return (char *) NULL;
 
-  f = g_fopen ("/proc/self/maps", "r");
-  if (f == NULL)
-    return (char *) NULL;
+  file = g_file_new_for_path ("/proc/self/maps");
+  input = G_INPUT_STREAM (g_file_read (file, NULL, &gerror));
+  g_object_unref (file);
+  if (! input)
+    {
+      g_printerr ("%s: %s", G_STRFUNC, gerror->message);
+      g_error_free (gerror);
+
+      if (error)
+        *error = GIMP_RELOC_INIT_ERROR_OPEN_MAPS;
+
+      return NULL;
+    }
+
+  data_input = g_data_input_stream_new (input);
+  g_object_unref (input);
 
   address_string_len = 4;
   address_string = g_try_new (char, address_string_len);
-  found = (char *) NULL;
 
-  while (!feof (f))
+  while ((maps_line = g_data_input_stream_read_line (data_input, NULL, NULL, &gerror)))
     {
-      char *start_addr, *end_addr, *end_addr_end, *file;
-      void *start_addr_p, *end_addr_p;
-      size_t len;
+      char   *start_addr, *end_addr, *end_addr_end;
+      char   *path;
+      void   *start_addr_p, *end_addr_p;
+      size_t  len;
 
-      if (fgets (line, SIZE, f) == NULL)
-        break;
+      if (maps_line == NULL)
+        {
+          if (gerror)
+            {
+              g_printerr ("%s: %s\n", G_STRFUNC, gerror->message);
+              g_error_free (gerror);
+            }
+
+          if (error)
+            *error = GIMP_RELOC_INIT_ERROR_READ_MAPS;
+
+          break;
+        }
 
       /* Sanity check. */
-      if (strstr (line, " r-xp ") == NULL || strchr (line, '/') == NULL)
-        continue;
+      /* XXX Early versions of this code would check that the mapped
+       * region was with r-xp permission. It might have been true at
+       * some point in time, but last I tested, the searched pointer was
+       * in a r--p region for libgimpbase. Thus _br_find_exe_for_symbol()
+       * would fail to find the executable's path.
+       * So now we don't test the region's permission anymore.
+       */
+      if (strchr (maps_line, '/') == NULL)
+        {
+          g_free (maps_line);
+          continue;
+        }
 
       /* Parse line. */
-      start_addr = line;
-      end_addr = strchr (line, '-');
-      file = strchr (line, '/');
+      start_addr = maps_line;
+      end_addr = strchr (maps_line, '-');
+      path = strchr (maps_line, '/');
 
       /* More sanity check. */
-      if (!(file > end_addr && end_addr != NULL && end_addr[0] == '-'))
-        continue;
+      if (!(path > end_addr && end_addr != NULL && end_addr[0] == '-'))
+        {
+          g_free (maps_line);
+          continue;
+        }
 
       end_addr[0] = '\0';
       end_addr++;
       end_addr_end = strchr (end_addr, ' ');
       if (end_addr_end == NULL)
-        continue;
+        {
+          g_free (maps_line);
+          continue;
+        }
 
       end_addr_end[0] = '\0';
-      len = strlen (file);
+      len = strlen (path);
       if (len == 0)
-        continue;
-      if (file[len - 1] == '\n')
-        file[len - 1] = '\0';
+        {
+          g_free (maps_line);
+          continue;
+        }
+      if (path[len - 1] == '\n')
+        path[len - 1] = '\0';
 
       /* Get rid of "(deleted)" from the filename. */
-      len = strlen (file);
-      if (len > 10 && strcmp (file + len - 10, " (deleted)") == 0)
-        file[len - 10] = '\0';
+      len = strlen (path);
+      if (len > 10 && strcmp (path + len - 10, " (deleted)") == 0)
+        path[len - 10] = '\0';
 
       /* I don't know whether this can happen but better safe than sorry. */
       len = strlen (start_addr);
       if (len != strlen (end_addr))
-        continue;
-
+        {
+          g_free (maps_line);
+          continue;
+        }
 
       /* Transform the addresses into a string in the form of 0xdeadbeef,
        * then transform that into a pointer. */
@@ -271,21 +304,20 @@ _br_find_exe_for_symbol (const void *symbol, GimpBinrelocInitError *error)
       address_string[2 + len] = '\0';
       sscanf (address_string, "%p", &end_addr_p);
 
-
       if (symbol >= start_addr_p && symbol < end_addr_p)
         {
-          found = file;
+          found = g_strdup (path);
+          g_free (maps_line);
           break;
         }
+
+      g_free (maps_line);
     }
 
   g_free (address_string);
-  fclose (f);
+  g_object_unref (data_input);
 
-  if (found == NULL)
-    return (char *) NULL;
-  else
-    return g_strdup (found);
+  return found;
 #endif /* ! ENABLE_RELOCATABLE_RESOURCES || G_OS_WIN32 */
 }
 
@@ -356,8 +388,10 @@ _gimp_reloc_init_lib (GError **error)
 
   exe = _br_find_exe_for_symbol ((const void *) "", &errcode);
   if (exe != NULL)
-    /* Success! */
-    return TRUE;
+    {
+      /* Success! */
+      return TRUE;
+    }
   else
     {
       /* Failed :-( */
@@ -418,6 +452,7 @@ gchar *
 _gimp_reloc_find_prefix (const gchar *default_prefix)
 {
   gchar *dir1, *dir2;
+  gchar *exe_dir;
 
   if (exe == NULL)
     {
@@ -430,6 +465,24 @@ _gimp_reloc_find_prefix (const gchar *default_prefix)
 
   dir1 = g_path_get_dirname (exe);
   dir2 = g_path_get_dirname (dir1);
+
+  exe_dir = g_path_get_basename (dir1);
+  if (g_strcmp0 (exe_dir, "bin") != 0 && ! g_str_has_prefix (exe_dir, "lib"))
+    {
+      g_free (exe_dir);
+      exe_dir = g_path_get_basename (dir2);
+      if (g_str_has_prefix (exe_dir, "lib"))
+        {
+          /* Supporting multiarch folders, such as lib/x86_64-linux-gnu/ */
+          gchar *dir3 = g_path_get_dirname (dir2);
+
+          g_free (dir2);
+          dir2 = dir3;
+        }
+    }
+
   g_free (dir1);
+  g_free (exe_dir);
+
   return dir2;
 }

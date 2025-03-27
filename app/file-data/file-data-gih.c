@@ -67,15 +67,13 @@ file_gih_load_invoker (GimpProcedure         *procedure,
 {
   GimpValueArray *return_vals;
   GimpImage      *image = NULL;
-  const gchar    *uri;
   GFile          *file;
   GInputStream   *input;
   GError         *my_error = NULL;
 
   gimp_set_busy (gimp);
 
-  uri  = g_value_get_string (gimp_value_array_index (args, 1));
-  file = g_file_new_for_uri (uri);
+  file = g_value_get_object (gimp_value_array_index (args, 1));
 
   input = G_INPUT_STREAM (g_file_read (file, NULL, &my_error));
 
@@ -102,13 +100,11 @@ file_gih_load_invoker (GimpProcedure         *procedure,
                                   gimp_file_get_utf8_name (file));
     }
 
-  g_object_unref (file);
-
   return_vals = gimp_procedure_get_return_values (procedure, image != NULL,
                                                   error ? *error : NULL);
 
   if (image)
-    gimp_value_set_image (gimp_value_array_index (return_vals, 1), image);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), image);
 
   gimp_unset_busy (gimp);
 
@@ -126,7 +122,6 @@ file_gih_save_invoker (GimpProcedure         *procedure,
   GimpValueArray *return_vals;
   GimpImage      *image;
   GimpBrushPipe  *pipe;
-  const gchar    *uri;
   const gchar    *name;
   const gchar    *params;
   GFile          *file;
@@ -135,13 +130,14 @@ file_gih_save_invoker (GimpProcedure         *procedure,
 
   gimp_set_busy (gimp);
 
-  image   = gimp_value_get_image (gimp_value_array_index (args, 1), gimp);
-  uri     = g_value_get_string (gimp_value_array_index (args, 3));
-  spacing = g_value_get_int (gimp_value_array_index (args, 5));
-  name    = g_value_get_string (gimp_value_array_index (args, 6));
-  params  = g_value_get_string (gimp_value_array_index (args, 7));
-
-  file = g_file_new_for_uri (uri);
+  image   = g_value_get_object (gimp_value_array_index (args, 1));
+  /* XXX: drawable list is currently unused. GIH saving just uses the
+   * whole layer list.
+   */
+  file    = g_value_get_object (gimp_value_array_index (args, 3));
+  spacing = g_value_get_int    (gimp_value_array_index (args, 4));
+  name    = g_value_get_string (gimp_value_array_index (args, 5));
+  params  = g_value_get_string (gimp_value_array_index (args, 6));
 
   pipe = file_gih_image_to_pipe (image, name, spacing, params);
 
@@ -150,7 +146,6 @@ file_gih_save_invoker (GimpProcedure         *procedure,
   success = gimp_data_save (GIMP_DATA (pipe), error);
 
   g_object_unref (pipe);
-  g_object_unref (file);
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
@@ -182,7 +177,7 @@ file_gih_pipe_to_image (Gimp          *gimp,
   name = gimp_object_get_name (pipe);
 
   image = gimp_image_new (gimp, 1, 1, base_type,
-                          GIMP_PRECISION_U8_GAMMA);
+                          GIMP_PRECISION_U8_NON_LINEAR);
 
   parasite = gimp_parasite_new ("gimp-brush-pipe-name",
                                 GIMP_PARASITE_PERSISTENT,
@@ -239,6 +234,8 @@ file_gih_pipe_to_image (Gimp          *gimp,
           gimp_parasite_free (parasite);
           g_free (paramstring);
         }
+
+      gimp_pixpipe_params_free (&params);
     }
 
   return image;

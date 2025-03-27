@@ -168,27 +168,24 @@ file_utils_filename_to_file (Gimp         *gimp,
 }
 
 GdkPixbuf *
-file_utils_load_thumbnail (const gchar *filename)
+file_utils_load_thumbnail (GFile *file)
 {
   GimpThumbnail *thumbnail = NULL;
   GdkPixbuf     *pixbuf    = NULL;
   gchar         *uri;
 
-  g_return_val_if_fail (filename != NULL, NULL);
+  g_return_val_if_fail (G_IS_FILE (file), NULL);
 
-  uri = g_filename_to_uri (filename, NULL, NULL);
+  uri = g_file_get_uri (file);
 
-  if (uri)
-    {
-      thumbnail = gimp_thumbnail_new ();
-      gimp_thumbnail_set_uri (thumbnail, uri);
-
-      pixbuf = gimp_thumbnail_load_thumb (thumbnail,
-                                          (GimpThumbSize) GIMP_THUMBNAIL_SIZE_NORMAL,
-                                          NULL);
-    }
+  thumbnail = gimp_thumbnail_new ();
+  gimp_thumbnail_set_uri (thumbnail, uri);
 
   g_free (uri);
+
+  pixbuf = gimp_thumbnail_load_thumb (thumbnail,
+                                      (GimpThumbSize) GIMP_THUMBNAIL_SIZE_NORMAL,
+                                      NULL);
 
   if (pixbuf)
     {
@@ -215,21 +212,25 @@ file_utils_load_thumbnail (const gchar *filename)
 }
 
 gboolean
-file_utils_save_thumbnail (GimpImage   *image,
-                           const gchar *filename)
+file_utils_save_thumbnail (GimpImage *image,
+                           GFile     *file)
 {
-  GFile    *file;
+  GFile    *image_file;
   gboolean  success = FALSE;
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), FALSE);
-  g_return_val_if_fail (filename != NULL, FALSE);
+  g_return_val_if_fail (G_IS_FILE (file), FALSE);
 
-  file = gimp_image_get_file (image);
+  image_file = gimp_image_get_file (image);
+  if (! image_file)
+    image_file = gimp_image_get_exported_file (image);
+  if (! image_file)
+    image_file = gimp_image_get_imported_file (image);
 
-  if (file)
+  if (image_file)
     {
-      gchar *image_uri = g_file_get_uri (file);
-      gchar *uri       = g_filename_to_uri (filename, NULL, NULL);
+      gchar *image_uri = g_file_get_uri (image_file);
+      gchar *uri       = g_file_get_uri (file);
 
       if (uri && image_uri && ! strcmp (uri, image_uri))
         {

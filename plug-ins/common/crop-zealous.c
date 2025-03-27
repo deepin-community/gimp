@@ -22,121 +22,148 @@
 
 #include "libgimp/stdplugins-intl.h"
 
+
 #define PLUG_IN_PROC "plug-in-zealouscrop"
 
 #define EPSILON (1e-5)
 #define FLOAT_IS_ZERO(value) (value > -EPSILON && value < EPSILON)
 #define FLOAT_EQUAL(v1, v2)  ((v1 - v2) > -EPSILON && (v1 - v2) < EPSILON)
 
-/* Declare local functions. */
 
-static void            query        (void);
-static void            run          (const gchar      *name,
-                                     gint              nparams,
-                                     const GimpParam  *param,
-                                     gint             *nreturn_vals,
-                                     GimpParam       **return_vals);
+typedef struct _Crop      Crop;
+typedef struct _CropClass CropClass;
 
-static inline gboolean colors_equal (const gfloat     *col1,
-                                     const gfloat     *col2,
-                                     gint              components,
-                                     gboolean          has_alpha);
-static void            do_zcrop     (gint32    drawable_id,
-                                     gint32    image_id);
-
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _Crop
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
+  GimpPlugIn      parent_instance;
 };
 
+struct _CropClass
+{
+  GimpPlugInClass parent_class;
+};
 
-MAIN ()
+#define CROP_TYPE  (crop_get_type ())
+#define CROP(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), CROP_TYPE, Crop))
+
+GType                   crop_get_type         (void) G_GNUC_CONST;
+
+static GList          * crop_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * crop_create_procedure (GimpPlugIn           *plug_in,
+                                               const gchar          *name);
+
+static GimpValueArray * crop_run              (GimpProcedure        *procedure,
+                                               GimpRunMode           run_mode,
+                                               GimpImage            *image,
+                                               GimpDrawable        **drawables,
+                                               GimpProcedureConfig  *config,
+                                               gpointer              run_data);
+
+static inline gboolean  colors_equal          (const gfloat         *col1,
+                                               const gfloat         *col2,
+                                               gint                  components,
+                                               gboolean              has_alpha);
+static void             do_zcrop              (GimpDrawable         *drawable,
+                                               GimpImage            *image);
+
+
+G_DEFINE_TYPE (Crop, crop, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (CROP_TYPE)
+DEFINE_STD_SET_I18N
+
 
 static void
-query (void)
+crop_class_init (CropClass *klass)
 {
-  static const GimpParamDef args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode", "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",    "Input image"    },
-    { GIMP_PDB_DRAWABLE, "drawable", "Input drawable" }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  gimp_install_procedure (PLUG_IN_PROC,
-                          N_("Autocrop unused space from edges and middle"),
-                          "",
-                          "Adam D. Moss",
-                          "Adam D. Moss",
-                          "1997",
-                          N_("_Zealous Crop"),
-                          "RGB*, GRAY*, INDEXED*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args), 0,
-                          args, NULL);
-
-  gimp_plugin_menu_register (PLUG_IN_PROC, "<Image>/Image/Crop");
+  plug_in_class->query_procedures = crop_query_procedures;
+  plug_in_class->create_procedure = crop_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              n_params,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+crop_init (Crop *crop)
 {
-  static GimpParam   values[1];
-  GimpRunMode        run_mode;
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  gint32             drawable_id;
-  gint32             image_id;
+}
 
-  INIT_I18N ();
+static GList *
+crop_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (PLUG_IN_PROC));
+}
+
+static GimpProcedure *
+crop_create_procedure (GimpPlugIn  *plug_in,
+                       const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, PLUG_IN_PROC))
+    {
+      procedure = gimp_image_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            crop_run, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "*");
+      gimp_procedure_set_sensitivity_mask (procedure,
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLE);
+
+      gimp_procedure_set_menu_label (procedure, _("_Zealous Crop"));
+      gimp_procedure_add_menu_path (procedure, "<Image>/Image/[Crop]");
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Autocrop unused space from "
+                                          "edges and middle"),
+                                        NULL,
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Adam D. Moss",
+                                      "Adam D. Moss",
+                                      "1997");
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+crop_run (GimpProcedure        *procedure,
+          GimpRunMode           run_mode,
+          GimpImage            *image,
+          GimpDrawable        **drawables,
+          GimpProcedureConfig  *config,
+          gpointer              run_data)
+{
+  GimpDrawable *drawable;
+
   gegl_init (NULL, NULL);
 
-  *nreturn_vals = 1;
-  *return_vals  = values;
+  gimp_progress_init (_("Zealous cropping"));
 
-  run_mode = param[0].data.d_int32;
-
-  if (run_mode == GIMP_RUN_NONINTERACTIVE)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
-      if (n_params != 3)
-        {
-          status = GIMP_PDB_CALLING_ERROR;
-        }
+      GError *error = NULL;
+
+      g_set_error (&error, GIMP_PLUG_IN_ERROR, 0,
+                   _("Procedure '%s' only works with one drawable."),
+                   PLUG_IN_PROC);
+
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_CALLING_ERROR,
+                                               error);
+    }
+  else
+    {
+      drawable = drawables[0];
     }
 
-  if (status == GIMP_PDB_SUCCESS)
-    {
-      /*  Get the specified drawable  */
-      image_id    = param[1].data.d_int32;
-      drawable_id = param[2].data.d_int32;
+  do_zcrop (drawable, image);
 
-      /*  Make sure that the drawable is gray or RGB or indexed  */
-      if (gimp_drawable_is_rgb (drawable_id) ||
-          gimp_drawable_is_gray (drawable_id) ||
-          gimp_drawable_is_indexed (drawable_id))
-        {
-          gimp_progress_init (_("Zealous cropping"));
+  if (run_mode != GIMP_RUN_NONINTERACTIVE)
+    gimp_displays_flush ();
 
-          do_zcrop (drawable_id, image_id);
-
-          if (run_mode != GIMP_RUN_NONINTERACTIVE)
-            gimp_displays_flush ();
-        }
-      else
-        {
-          status = GIMP_PDB_EXECUTION_ERROR;
-        }
-    }
-
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
-
-  gegl_exit ();
+  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }
 
 static inline gboolean
@@ -166,28 +193,28 @@ colors_equal (const gfloat   *col1,
 }
 
 static void
-do_zcrop (gint32  drawable_id,
-          gint32  image_id)
+do_zcrop (GimpDrawable *drawable,
+          GimpImage    *image)
 {
-  GeglBuffer  *drawable_buffer;
-  GeglBuffer  *shadow_buffer;
-  gfloat      *linear_buf;
-  const Babl  *format;
+  GeglBuffer   *drawable_buffer;
+  GeglBuffer   *shadow_buffer;
+  gfloat       *linear_buf;
+  const Babl   *format;
 
-  gint         x, y, width, height;
-  gint         components;
-  gint8       *killrows;
-  gint8       *killcols;
-  gint32       livingrows, livingcols, destrow, destcol;
-  gint32       selection_copy_id;
-  gboolean     has_alpha;
+  gint          x, y, width, height;
+  gint          components;
+  gint8        *killrows;
+  gint8        *killcols;
+  gint32        livingrows, livingcols, destrow, destcol;
+  GimpChannel  *selection_copy;
+  gboolean      has_alpha;
 
-  drawable_buffer = gimp_drawable_get_buffer (drawable_id);
-  shadow_buffer   = gimp_drawable_get_shadow_buffer (drawable_id);
+  drawable_buffer = gimp_drawable_get_buffer (drawable);
+  shadow_buffer   = gimp_drawable_get_shadow_buffer (drawable);
 
   width  = gegl_buffer_get_width (drawable_buffer);
   height = gegl_buffer_get_height (drawable_buffer);
-  has_alpha = gimp_drawable_has_alpha (drawable_id);
+  has_alpha = gimp_drawable_has_alpha (drawable);
 
   if (has_alpha)
     format = babl_format ("R'G'B'A float");
@@ -301,21 +328,22 @@ do_zcrop (gint32  drawable_id,
 
   gimp_progress_update (1.00);
 
-  gimp_image_undo_group_start (image_id);
+  gimp_image_undo_group_start (image);
 
-  selection_copy_id = gimp_selection_save (image_id);
-  gimp_selection_none (image_id);
+  selection_copy = GIMP_CHANNEL (gimp_selection_save (image));
+  gimp_selection_none (image);
 
   gegl_buffer_flush (shadow_buffer);
-  gimp_drawable_merge_shadow (drawable_id, TRUE);
+  gimp_drawable_merge_shadow (drawable, TRUE);
   gegl_buffer_flush (drawable_buffer);
 
-  gimp_image_select_item (image_id, GIMP_CHANNEL_OP_REPLACE, selection_copy_id);
-  gimp_image_remove_channel (image_id, selection_copy_id);
+  gimp_image_select_item (image, GIMP_CHANNEL_OP_REPLACE,
+                          GIMP_ITEM (selection_copy));
+  gimp_image_remove_channel (image, selection_copy);
 
-  gimp_image_crop (image_id, livingcols, livingrows, 0, 0);
+  gimp_image_crop (image, livingcols, livingrows, 0, 0);
 
-  gimp_image_undo_group_end (image_id);
+  gimp_image_undo_group_end (image);
 
   g_object_unref (shadow_buffer);
   g_object_unref (drawable_buffer);

@@ -34,19 +34,17 @@
 #include "core/gimppattern.h"
 
 #include "gimpdnd.h"
-#include "gimpview.h"
+#include "gimphelp-ids.h"
 #include "gimptoolbox.h"
 #include "gimptoolbox-indicator-area.h"
+#include "gimpview.h"
 #include "gimpwidgets-utils.h"
 #include "gimpwindowstrategy.h"
 
 #include "gimp-intl.h"
 
 
-#define CELL_SIZE        24  /*  The size of the previews                  */
-#define GRAD_CELL_WIDTH  52  /*  The width of the gradient preview         */
-#define GRAD_CELL_HEIGHT 12  /*  The height of the gradient preview        */
-#define CELL_SPACING      2  /*  How much between brush and pattern cells  */
+#define CELL_SPACING 2  /*  How much between brush and pattern cells  */
 
 
 static void
@@ -59,7 +57,6 @@ brush_preview_clicked (GtkWidget       *widget,
   gimp_window_strategy_show_dockable_dialog (GIMP_WINDOW_STRATEGY (gimp_get_window_strategy (context->gimp)),
                                              context->gimp,
                                              gimp_dock_get_dialog_factory (GIMP_DOCK (toolbox)),
-                                             gtk_widget_get_screen (widget),
                                              gimp_widget_get_monitor (widget),
                                              "gimp-brush-grid|gimp-brush-list");
 }
@@ -86,7 +83,6 @@ pattern_preview_clicked (GtkWidget       *widget,
   gimp_window_strategy_show_dockable_dialog (GIMP_WINDOW_STRATEGY (gimp_get_window_strategy (context->gimp)),
                                              context->gimp,
                                              gimp_dock_get_dialog_factory (GIMP_DOCK (toolbox)),
-                                             gtk_widget_get_screen (widget),
                                              gimp_widget_get_monitor (widget),
                                              "gimp-pattern-grid|gimp-pattern-list");
 }
@@ -113,7 +109,6 @@ gradient_preview_clicked (GtkWidget       *widget,
   gimp_window_strategy_show_dockable_dialog (GIMP_WINDOW_STRATEGY (gimp_get_window_strategy (context->gimp)),
                                              context->gimp,
                                              gimp_dock_get_dialog_factory (GIMP_DOCK (toolbox)),
-                                             gtk_widget_get_screen (widget),
                                              gimp_widget_get_monitor (widget),
                                              "gimp-gradient-list|gimp-gradient-grid");
 }
@@ -137,31 +132,41 @@ GtkWidget *
 gimp_toolbox_indicator_area_create (GimpToolbox *toolbox)
 {
   GimpContext *context;
-  GtkWidget   *indicator_table;
+  GtkWidget   *grid;
   GtkWidget   *brush_view;
   GtkWidget   *pattern_view;
   GtkWidget   *gradient_view;
+  GtkIconSize  tool_icon_size;
+  gint         pixel_size;
+  gint         gradient_width;
 
   g_return_val_if_fail (GIMP_IS_TOOLBOX (toolbox), NULL);
 
   context = gimp_toolbox_get_context (toolbox);
 
-  indicator_table = gtk_table_new (2, 2, FALSE);
-  gtk_table_set_row_spacings (GTK_TABLE (indicator_table), CELL_SPACING);
-  gtk_table_set_col_spacings (GTK_TABLE (indicator_table), CELL_SPACING);
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), CELL_SPACING);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), CELL_SPACING);
+
+  gimp_help_set_help_data (grid, NULL, GIMP_HELP_TOOLBOX_INDICATOR_AREA);
+
+  gtk_widget_style_get (GTK_WIDGET (toolbox),
+                        "tool-icon-size", &tool_icon_size,
+                        NULL);
+  gtk_icon_size_lookup (tool_icon_size, &pixel_size, NULL);
+  gradient_width = pixel_size * (13/6.0f);
 
   /*  brush view  */
 
   brush_view =
     gimp_view_new_full_by_types (context,
                                  GIMP_TYPE_VIEW, GIMP_TYPE_BRUSH,
-                                 CELL_SIZE, CELL_SIZE, 1,
+                                 pixel_size, pixel_size, 1,
                                  FALSE, TRUE, TRUE);
   gimp_view_set_viewable (GIMP_VIEW (brush_view),
                           GIMP_VIEWABLE (gimp_context_get_brush (context)));
-  gtk_table_attach_defaults (GTK_TABLE (indicator_table), brush_view,
-                             0, 1, 0, 1);
-  gtk_widget_show (brush_view);
+  gtk_grid_attach (GTK_GRID (grid), brush_view, 0, 0, 1, 1);
+  gtk_widget_set_visible (brush_view, TRUE);
 
   gimp_help_set_help_data (brush_view,
                            _("The active brush.\n"
@@ -186,14 +191,13 @@ gimp_toolbox_indicator_area_create (GimpToolbox *toolbox)
   pattern_view =
     gimp_view_new_full_by_types (context,
                                  GIMP_TYPE_VIEW, GIMP_TYPE_PATTERN,
-                                 CELL_SIZE, CELL_SIZE, 1,
+                                 pixel_size, pixel_size, 1,
                                  FALSE, TRUE, TRUE);
   gimp_view_set_viewable (GIMP_VIEW (pattern_view),
                           GIMP_VIEWABLE (gimp_context_get_pattern (context)));
 
-  gtk_table_attach_defaults (GTK_TABLE (indicator_table), pattern_view,
-                             1, 2, 0, 1);
-  gtk_widget_show (pattern_view);
+  gtk_grid_attach (GTK_GRID (grid), pattern_view, 1, 0, 1, 1);
+  gtk_widget_set_visible (pattern_view, TRUE);
 
   gimp_help_set_help_data (pattern_view,
                            _("The active pattern.\n"
@@ -218,14 +222,13 @@ gimp_toolbox_indicator_area_create (GimpToolbox *toolbox)
   gradient_view =
     gimp_view_new_full_by_types (context,
                                  GIMP_TYPE_VIEW, GIMP_TYPE_GRADIENT,
-                                 GRAD_CELL_WIDTH, GRAD_CELL_HEIGHT, 1,
+                                 gradient_width, (pixel_size / 2), 1,
                                  FALSE, TRUE, TRUE);
   gimp_view_set_viewable (GIMP_VIEW (gradient_view),
                           GIMP_VIEWABLE (gimp_context_get_gradient (context)));
 
-  gtk_table_attach_defaults (GTK_TABLE (indicator_table), gradient_view,
-                             0, 2, 1, 2);
-  gtk_widget_show (gradient_view);
+  gtk_grid_attach (GTK_GRID (grid), gradient_view, 0, 1, 2, 1);
+  gtk_widget_set_visible (gradient_view, TRUE);
 
   gimp_help_set_help_data (gradient_view,
                            _("The active gradient.\n"
@@ -245,7 +248,7 @@ gimp_toolbox_indicator_area_create (GimpToolbox *toolbox)
                               gradient_preview_drop_gradient,
                               context);
 
-  gtk_widget_show (indicator_table);
+  gtk_widget_set_visible (grid, TRUE);
 
-  return indicator_table;
+  return grid;
 }

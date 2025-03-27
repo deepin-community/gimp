@@ -40,8 +40,8 @@
 /* Courtesy of Austin Donnelly 06-04-2000 to address bug #2742 */
 
 /**
- * gimp_signal_private:
- * @signum: Selects signal to be handled see man 5 signal (or man 7 signal)
+ * gimp_signal_private: (skip)
+ * @signum: Selects signal to be handled (see `man 7 signal`)
  * @handler: Handler that maps to signum. Invoked by O/S.
  *           Handler gets signal that caused invocation. Corresponds
  *           to the @sa_handler field of the @sigaction struct.

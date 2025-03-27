@@ -123,11 +123,16 @@ enum METADATA_SPECIAL_PROCESSING
   METADATA_PREPROCESS_TEXT
 };
 
-extern const metadata_tag default_metadata_tags[];
-extern const gint         n_default_metadata_tags;
+extern const metadata_tag  default_metadata_tags[];
+extern const gint          n_default_metadata_tags;
 
-extern const metadata_tag equivalent_metadata_tags[];
-extern const gint         n_equivalent_metadata_tags;
+extern const iptc_tag_info equivalent_metadata_tags[];
+extern const gint          n_equivalent_metadata_tags;
+
+extern const exif_tag_info exif_equivalent_tags[];
+
+/* Tag indexes in equivalent_metadata_tags that need special processing. */
+#define SPECIAL_PROCESSING_DATE_CREATED 0
 
 /* Digital Source Type Combobox Items
  * http://cv.iptc.org/newscodes/digitalsourcetype/
@@ -190,17 +195,14 @@ extern const gint   n_gpslngref;
 extern const gchar *gpsaltsys[];
 extern const gint   n_gpsaltsys;
 
-extern const TranslateHeaderTag creatorContactInfoHeader;
-
 extern const TranslateTag creatorContactInfoTags[];
-
-extern const TranslateHeaderTag locationCreationInfoHeader;
+extern const gint n_creatorContactInfoTags;
 
 extern const TranslateTag locationCreationInfoTags[];
-
-extern const TranslateHeaderTag imageSupplierInfoHeader;
+extern const gint n_locationCreationInfoTags;
 
 extern const TranslateTag imageSupplierInfoTags[];
+extern const gint n_imageSupplierInfoTags;
 
 /* Plus and IPTC extension tags */
 

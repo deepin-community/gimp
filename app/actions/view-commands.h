@@ -49,10 +49,6 @@ void   view_zoom_explicit_cmd_callback              (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
 
-/* not a GimpActionCallback */
-void   view_zoom_other_cmd_callback                 (GimpAction *action,
-                                                     gpointer    data);
-
 void   view_show_all_cmd_callback                   (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
@@ -74,6 +70,9 @@ void   view_flip_horizontally_cmd_callback          (GimpAction *action,
 void   view_flip_vertically_cmd_callback            (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
+void   view_flip_reset_cmd_callback                 (GimpAction *action,
+                                                     GVariant   *value,
+                                                     gpointer    data);
 
 void   view_rotate_absolute_cmd_callback            (GimpAction *action,
                                                      GVariant   *value,
@@ -82,6 +81,10 @@ void   view_rotate_relative_cmd_callback            (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
 void   view_rotate_other_cmd_callback               (GimpAction *action,
+                                                     GVariant   *value,
+                                                     gpointer    data);
+
+void   view_reset_cmd_callback                      (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
 
@@ -105,15 +108,6 @@ void   view_display_intent_cmd_callback             (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
 void   view_display_bpc_cmd_callback                (GimpAction *action,
-                                                     GVariant   *value,
-                                                     gpointer    data);
-void   view_softproof_profile_cmd_callback          (GimpAction *action,
-                                                     GVariant   *value,
-                                                     gpointer    data);
-void   view_softproof_intent_cmd_callback           (GimpAction *action,
-                                                     GVariant   *value,
-                                                     gpointer    data);
-void   view_softproof_bpc_cmd_callback              (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
 void   view_softproof_gamut_check_cmd_callback      (GimpAction *action,
@@ -161,6 +155,12 @@ void   view_snap_to_canvas_cmd_callback             (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
 void   view_snap_to_vectors_cmd_callback            (GimpAction *action,
+                                                     GVariant   *value,
+                                                     gpointer    data);
+void   view_snap_to_bbox_cmd_callback               (GimpAction *action,
+                                                     GVariant   *value,
+                                                     gpointer    data);
+void   view_snap_to_equidistance_cmd_callback       (GimpAction *action,
                                                      GVariant   *value,
                                                      gpointer    data);
 void   view_padding_color_cmd_callback              (GimpAction *action,

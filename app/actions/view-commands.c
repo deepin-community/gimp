@@ -38,6 +38,7 @@
 #include "widgets/gimpcolordialog.h"
 #include "widgets/gimpdock.h"
 #include "widgets/gimpdialogfactory.h"
+#include "widgets/gimptoggleaction.h"
 #include "widgets/gimpuimanager.h"
 #include "widgets/gimpwidgets-utils.h"
 #include "widgets/gimpwindowstrategy.h"
@@ -58,6 +59,8 @@
 #include "dialogs/color-profile-dialog.h"
 #include "dialogs/dialogs.h"
 
+#include "menus/menus.h"
+
 #include "actions.h"
 #include "view-commands.h"
 
@@ -76,15 +79,8 @@
 
 /*  local function prototypes  */
 
-static void   view_softproof_profile_callback  (GtkWidget                *dialog,
-                                                GimpImage                *image,
-                                                GimpColorProfile         *new_profile,
-                                                GFile                    *new_file,
-                                                GimpColorRenderingIntent  intent,
-                                                gboolean                  bpc,
-                                                gpointer                  user_data);
 static void   view_padding_color_dialog_update (GimpColorDialog          *dialog,
-                                                const GimpRGB            *color,
+                                                GeglColor                *color,
                                                 GimpColorDialogState      state,
                                                 GimpDisplayShell         *shell);
 
@@ -105,8 +101,7 @@ view_new_cmd_callback (GimpAction *action,
   gimp_create_display (display->gimp,
                        gimp_display_get_image (display),
                        shell->unit, gimp_zoom_model_get_factor (shell->zoom),
-                       G_OBJECT (gtk_widget_get_screen (GTK_WIDGET (shell))),
-                       gimp_widget_get_monitor (GTK_WIDGET (shell)));
+                       G_OBJECT (gimp_widget_get_monitor (GTK_WIDGET (shell))));
 }
 
 void
@@ -289,22 +284,7 @@ view_zoom_explicit_cmd_callback (GimpAction *action,
                                   (gdouble) factor / 10000,
                                   GIMP_ZOOM_FOCUS_RETAIN_CENTERING_ELSE_BEST_GUESS);
     }
-}
-
-/* not a GimpActionCallback */
-void
-view_zoom_other_cmd_callback (GimpAction *action,
-                              gpointer    data)
-{
-  GimpDisplayShell *shell;
-  return_if_no_shell (shell, data);
-
-  /* check if we are activated by the user or from
-   * view_actions_set_zoom(), also this is really a GtkToggleAction
-   * NOT a GimpToggleAction
-   */
-  if (gtk_toggle_action_get_active ((GtkToggleAction *) action) &&
-      shell->other_scale != gimp_zoom_model_get_factor (shell->zoom))
+  else
     {
       gimp_display_shell_scale_dialog (shell);
     }
@@ -331,7 +311,7 @@ view_show_all_cmd_callback (GimpAction *action,
       gimp_display_shell_set_show_all (shell, active);
 
       if (window)
-        SET_ACTIVE (gimp_image_window_get_ui_manager (window),
+        SET_ACTIVE (menus_get_image_manager_singleton (display->gimp),
                     "view-show-all", shell->show_all);
 
       if (IS_ACTIVE_DISPLAY (display))
@@ -361,7 +341,7 @@ view_dot_for_dot_cmd_callback (GimpAction *action,
       gimp_display_shell_scale_set_dot_for_dot (shell, active);
 
       if (window)
-        SET_ACTIVE (gimp_image_window_get_ui_manager (window),
+        SET_ACTIVE (menus_get_image_manager_singleton (display->gimp),
                     "view-dot-for-dot", shell->dot_for_dot);
 
       if (IS_ACTIVE_DISPLAY (display))
@@ -411,6 +391,20 @@ view_flip_vertically_cmd_callback (GimpAction *action,
 }
 
 void
+view_flip_reset_cmd_callback (GimpAction *action,
+                              GVariant   *value,
+                              gpointer    data)
+{
+  GimpDisplay      *display;
+  GimpDisplayShell *shell;
+
+  return_if_no_display (display, data);
+
+  shell = gimp_display_get_shell (display);
+  gimp_display_shell_flip (shell, FALSE, FALSE);
+}
+
+void
 view_rotate_absolute_cmd_callback (GimpAction *action,
                                    GVariant   *value,
                                    gpointer    data)
@@ -432,9 +426,6 @@ view_rotate_absolute_cmd_callback (GimpAction *action,
                                TRUE);
 
   gimp_display_shell_rotate_to (shell, angle);
-
-  if (select_type == GIMP_ACTION_SELECT_SET_TO_DEFAULT)
-    gimp_display_shell_flip (shell, FALSE, FALSE);
 }
 
 void
@@ -473,6 +464,21 @@ view_rotate_other_cmd_callback (GimpAction *action,
   shell = gimp_display_get_shell (display);
 
   gimp_display_shell_rotate_dialog (shell);
+}
+
+void
+view_reset_cmd_callback (GimpAction *action,
+                         GVariant   *value,
+                         gpointer    data)
+{
+  GimpDisplay      *display;
+  GimpDisplayShell *shell;
+
+  return_if_no_display (display, data);
+
+  shell = gimp_display_get_shell (display);
+  gimp_display_shell_rotate_to (shell, 0.0);
+  gimp_display_shell_flip (shell, FALSE, FALSE);
 }
 
 void
@@ -548,7 +554,6 @@ view_navigation_window_cmd_callback (GimpAction *action,
   gimp_window_strategy_show_dockable_dialog (GIMP_WINDOW_STRATEGY (gimp_get_window_strategy (gimp)),
                                              gimp,
                                              gimp_dialog_factory_get_singleton (),
-                                             gtk_widget_get_screen (GTK_WIDGET (shell)),
                                              gimp_widget_get_monitor (GTK_WIDGET (shell)),
                                              "gimp-navigation-view");
 }
@@ -708,94 +713,6 @@ view_display_bpc_cmd_callback (GimpAction *action,
     {
       g_object_set (color_config,
                     "display-use-black-point-compensation", active,
-                    NULL);
-      shell->color_config_set = TRUE;
-    }
-}
-
-void
-view_softproof_profile_cmd_callback (GimpAction *action,
-                                     GVariant   *value,
-                                     gpointer    data)
-{
-  GimpImage        *image;
-  GimpDisplayShell *shell;
-  GimpColorConfig  *color_config;
-  GtkWidget        *dialog;
-  return_if_no_image (image, data);
-  return_if_no_shell (shell, data);
-
-  color_config = gimp_display_shell_get_color_config (shell);
-
-#define SOFTPROOF_PROFILE_DIALOG_KEY "gimp-softproof-profile-dialog"
-
-  dialog = dialogs_get_dialog (G_OBJECT (shell), SOFTPROOF_PROFILE_DIALOG_KEY);
-
-  if (! dialog)
-    {
-      GimpColorProfile *current_profile;
-
-      current_profile = gimp_color_config_get_simulation_color_profile (color_config,
-                                                                        NULL);
-
-      dialog = color_profile_dialog_new (COLOR_PROFILE_DIALOG_SELECT_SOFTPROOF_PROFILE,
-                                         image,
-                                         action_data_get_context (data),
-                                         GTK_WIDGET (shell),
-                                         current_profile,
-                                         NULL,
-                                         0, 0,
-                                         view_softproof_profile_callback,
-                                         shell);
-
-      dialogs_attach_dialog (G_OBJECT (shell),
-                             SOFTPROOF_PROFILE_DIALOG_KEY, dialog);
-    }
-
-  gtk_window_present (GTK_WINDOW (dialog));
-}
-
-void
-view_softproof_intent_cmd_callback (GimpAction *action,
-                                    GVariant   *value,
-                                    gpointer    data)
-{
-  GimpDisplayShell          *shell;
-  GimpColorConfig           *color_config;
-  GimpColorRenderingIntent   intent;
-  return_if_no_shell (shell, data);
-
-  intent = (GimpColorRenderingIntent) g_variant_get_int32 (value);
-
-  color_config = gimp_display_shell_get_color_config (shell);
-
-  if (intent != gimp_color_config_get_simulation_intent (color_config))
-    {
-      g_object_set (color_config,
-                    "simulation-rendering-intent", intent,
-                    NULL);
-      shell->color_config_set = TRUE;
-    }
-}
-
-void
-view_softproof_bpc_cmd_callback (GimpAction *action,
-                                 GVariant   *value,
-                                 gpointer    data)
-{
-  GimpDisplayShell *shell;
-  GimpColorConfig  *color_config;
-  gboolean          active;
-  return_if_no_shell (shell, data);
-
-  color_config = gimp_display_shell_get_color_config (shell);
-
-  active = g_variant_get_boolean (value);
-
-  if (active != gimp_color_config_get_simulation_bpc (color_config))
-    {
-      g_object_set (color_config,
-                    "simulation-use-black-point-compensation", active,
                     NULL);
       shell->color_config_set = TRUE;
     }
@@ -1063,6 +980,38 @@ view_snap_to_vectors_cmd_callback (GimpAction *action,
 }
 
 void
+view_snap_to_bbox_cmd_callback (GimpAction *action,
+                                GVariant   *value,
+                                gpointer    data)
+{
+  GimpDisplayShell *shell;
+  gboolean          active;
+  return_if_no_shell (shell, data);
+
+  active = g_variant_get_boolean (value);
+
+  if (active != gimp_display_shell_get_snap_to_bbox (shell))
+    {
+      gimp_display_shell_set_snap_to_bbox (shell, active);
+    }
+}
+
+void
+view_snap_to_equidistance_cmd_callback (GimpAction *action,
+                                        GVariant   *value,
+                                        gpointer    data)
+{
+  GimpDisplayShell *shell;
+  gboolean          active;
+  return_if_no_shell (shell, data);
+
+  active = g_variant_get_boolean (value);
+
+  if (active != gimp_display_shell_get_snap_to_equidistance (shell))
+    gimp_display_shell_set_snap_to_equidistance (shell, active);
+}
+
+void
 view_padding_color_cmd_callback (GimpAction *action,
                                  GVariant   *value,
                                  gpointer    data)
@@ -1102,12 +1051,14 @@ view_padding_color_cmd_callback (GimpAction *action,
       options->padding_mode_set = TRUE;
 
       gimp_display_shell_set_padding (shell, padding_mode,
-                                      &options->padding_color);
+                                      options->padding_color);
       break;
 
     case GIMP_CANVAS_PADDING_MODE_CUSTOM:
       {
-        GtkWidget *dialog;
+        GtkWidget             *dialog;
+        GeglColor             *old_color;
+        GimpCanvasPaddingMode  old_padding_mode;
 
         dialog = dialogs_get_dialog (G_OBJECT (shell), PADDING_COLOR_DIALOG_KEY);
 
@@ -1119,13 +1070,14 @@ view_padding_color_cmd_callback (GimpAction *action,
             dialog =
               gimp_color_dialog_new (GIMP_VIEWABLE (image),
                                      action_data_get_context (data),
+                                     FALSE,
                                      _("Set Canvas Padding Color"),
                                      GIMP_ICON_FONT,
                                      _("Set Custom Canvas Padding Color"),
                                      GTK_WIDGET (shell),
                                      NULL, NULL,
-                                     &options->padding_color,
-                                     FALSE, FALSE);
+                                     options->padding_color,
+                                     TRUE, FALSE);
 
             g_signal_connect (dialog, "update",
                               G_CALLBACK (view_padding_color_dialog_update),
@@ -1134,6 +1086,12 @@ view_padding_color_cmd_callback (GimpAction *action,
             dialogs_attach_dialog (G_OBJECT (shell),
                                    PADDING_COLOR_DIALOG_KEY, dialog);
           }
+        old_color        = gegl_color_duplicate (options->padding_color);
+        old_padding_mode = options->padding_mode;
+        g_object_set_data_full (G_OBJECT (dialog), "old-color",
+                                old_color, g_object_unref);
+        g_object_set_data (G_OBJECT (dialog), "old-padding-mode",
+                           GINT_TO_POINTER (old_padding_mode));
 
         gtk_window_present (GTK_WINDOW (dialog));
       }
@@ -1154,7 +1112,7 @@ view_padding_color_cmd_callback (GimpAction *action,
 
         gimp_display_shell_set_padding (shell,
                                         default_options->padding_mode,
-                                        &default_options->padding_color);
+                                        default_options->padding_color);
         gimp_display_shell_set_padding_in_show_all (shell,
                                                     default_options->padding_in_show_all);
       }
@@ -1215,42 +1173,22 @@ view_fullscreen_cmd_callback (GimpAction *action,
 /*  private functions  */
 
 static void
-view_softproof_profile_callback (GtkWidget                *dialog,
-                                 GimpImage                *image,
-                                 GimpColorProfile         *new_profile,
-                                 GFile                    *new_file,
-                                 GimpColorRenderingIntent  intent,
-                                 gboolean                  bpc,
-                                 gpointer                  user_data)
-{
-  GimpDisplayShell *shell = user_data;
-  GimpColorConfig  *color_config;
-  gchar            *path  = NULL;
-
-  color_config = gimp_display_shell_get_color_config (shell);
-
-  if (new_file)
-    path = g_file_get_path (new_file);
-
-  g_object_set (color_config,
-                "printer-profile", path,
-                NULL);
-  shell->color_config_set = TRUE;
-
-  gtk_widget_destroy (dialog);
-}
-
-static void
 view_padding_color_dialog_update (GimpColorDialog      *dialog,
-                                  const GimpRGB        *color,
+                                  GeglColor            *color,
                                   GimpColorDialogState  state,
                                   GimpDisplayShell     *shell)
 {
-  GimpImageWindow    *window;
-  GimpDisplayOptions *options;
-  gboolean            fullscreen;
+  GimpImageWindow       *window;
+  GimpDisplayOptions    *options;
+  GeglColor             *old_color;
+  GimpCanvasPaddingMode  old_padding_mode;
+  gboolean               fullscreen;
 
-  window = gimp_display_shell_get_window (shell);
+  window           = gimp_display_shell_get_window (shell);
+  old_color        = g_object_get_data (G_OBJECT (dialog), "old-color");
+  old_padding_mode = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (dialog), "old-padding-mode"));
+
+  g_return_if_fail (old_color);
 
   if (window)
     fullscreen = gimp_image_window_get_fullscreen (window);
@@ -1269,10 +1207,19 @@ view_padding_color_dialog_update (GimpColorDialog      *dialog,
 
       gimp_display_shell_set_padding (shell, GIMP_CANVAS_PADDING_MODE_CUSTOM,
                                       color);
-      /* fallthru */
+      gtk_widget_destroy (GTK_WIDGET (dialog));
+      break;
 
     case GIMP_COLOR_DIALOG_CANCEL:
+      gimp_display_shell_set_padding (shell,
+                                      old_padding_mode,
+                                      old_color);
       gtk_widget_destroy (GTK_WIDGET (dialog));
+      break;
+
+    case GIMP_COLOR_DIALOG_UPDATE:
+      gimp_display_shell_set_padding (shell, GIMP_CANVAS_PADDING_MODE_CUSTOM,
+                                      color);
       break;
 
     default:

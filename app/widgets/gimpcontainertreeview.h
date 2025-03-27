@@ -66,18 +66,18 @@ struct _GimpContainerTreeViewClass
 
   gboolean (* drop_possible)  (GimpContainerTreeView   *tree_view,
                                GimpDndType              src_type,
-                               GimpViewable            *src_viewable,
+                               GList                   *src_viewables,
                                GimpViewable            *dest_viewable,
                                GtkTreePath             *drop_path,
                                GtkTreeViewDropPosition  drop_pos,
                                GtkTreeViewDropPosition *return_drop_pos,
                                GdkDragAction           *return_drag_action);
-  void     (* drop_viewable)  (GimpContainerTreeView   *tree_view,
-                               GimpViewable            *src_viewable,
+  void     (* drop_viewables) (GimpContainerTreeView   *tree_view,
+                               GList                   *src_viewables,
                                GimpViewable            *dest_viewable,
                                GtkTreeViewDropPosition  drop_pos);
   void     (* drop_color)     (GimpContainerTreeView   *tree_view,
-                               const GimpRGB           *src_color,
+                               GeglColor               *src_color,
                                GimpViewable            *dest_viewable,
                                GtkTreeViewDropPosition  drop_pos);
   void     (* drop_uri_list)  (GimpContainerTreeView   *tree_view,
@@ -122,7 +122,8 @@ void        gimp_container_tree_view_add_toggle_cell
 
 void        gimp_container_tree_view_add_renderer_cell
                                               (GimpContainerTreeView *tree_view,
-                                               GtkCellRenderer       *cell);
+                                               GtkCellRenderer       *cell,
+                                               gint                   column_number);
 
 void        gimp_container_tree_view_set_dnd_drop_to_empty
                                               (GimpContainerTreeView *tree_view,

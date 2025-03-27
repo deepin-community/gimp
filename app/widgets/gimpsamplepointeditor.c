@@ -23,6 +23,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "widgets-types.h"
@@ -61,8 +62,7 @@ static void   gimp_sample_point_editor_get_property   (GObject               *ob
                                                        GValue                *value,
                                                        GParamSpec            *pspec);
 
-static void   gimp_sample_point_editor_style_set      (GtkWidget             *widget,
-                                                       GtkStyle              *prev_style);
+static void   gimp_sample_point_editor_style_updated  (GtkWidget             *widget);
 static void   gimp_sample_point_editor_set_image      (GimpImageEditor       *editor,
                                                        GimpImage             *image);
 
@@ -109,7 +109,7 @@ gimp_sample_point_editor_class_init (GimpSamplePointEditorClass *klass)
   object_class->get_property    = gimp_sample_point_editor_get_property;
   object_class->set_property    = gimp_sample_point_editor_set_property;
 
-  widget_class->style_set       = gimp_sample_point_editor_style_set;
+  widget_class->style_updated   = gimp_sample_point_editor_style_updated;
 
   image_editor_class->set_image = gimp_sample_point_editor_set_image;
 
@@ -119,6 +119,8 @@ gimp_sample_point_editor_class_init (GimpSamplePointEditorClass *klass)
                                                          TRUE,
                                                          GIMP_PARAM_READWRITE |
                                                          G_PARAM_CONSTRUCT));
+
+  gtk_widget_class_set_css_name (widget_class, "GimpSamplePointEditor");
 }
 
 static void
@@ -165,11 +167,11 @@ gimp_sample_point_editor_init (GimpSamplePointEditor *editor)
                              -1);
   gtk_box_pack_start (GTK_BOX (vbox), editor->empty_label, TRUE, TRUE, 0);
 
-  editor->table = gtk_table_new (1, 2, TRUE);
-  gtk_table_set_row_spacings (GTK_TABLE (editor->table), content_spacing);
-  gtk_table_set_col_spacings (GTK_TABLE (editor->table), content_spacing);
-  gtk_box_pack_start (GTK_BOX (vbox), editor->table, FALSE, FALSE, 0);
-  gtk_widget_show (editor->table);
+  editor->grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (editor->grid), content_spacing);
+  gtk_grid_set_column_spacing (GTK_GRID (editor->grid), content_spacing);
+  gtk_box_pack_start (GTK_BOX (vbox), editor->grid, FALSE, FALSE, 0);
+  gtk_widget_show (editor->grid);
 }
 
 static void
@@ -236,20 +238,23 @@ gimp_sample_point_editor_get_property (GObject    *object,
 }
 
 static void
-gimp_sample_point_editor_style_set (GtkWidget *widget,
-                                    GtkStyle  *prev_style)
+gimp_sample_point_editor_style_updated (GtkWidget *widget)
 {
   GimpSamplePointEditor *editor = GIMP_SAMPLE_POINT_EDITOR (widget);
-  gint                   content_spacing;
 
-  GTK_WIDGET_CLASS (parent_class)->style_set (widget, prev_style);
+  GTK_WIDGET_CLASS (parent_class)->style_updated (widget);
 
-  gtk_widget_style_get (widget,
-                        "content-spacing", &content_spacing,
-                        NULL);
+  if (editor->grid)
+    {
+      gint content_spacing;
 
-  gtk_table_set_row_spacings (GTK_TABLE (editor->table), content_spacing);
-  gtk_table_set_col_spacings (GTK_TABLE (editor->table), content_spacing);
+      gtk_widget_style_get (widget,
+                            "content-spacing", &content_spacing,
+                            NULL);
+
+      gtk_grid_set_row_spacing (GTK_GRID (editor->grid), content_spacing);
+      gtk_grid_set_column_spacing (GTK_GRID (editor->grid), content_spacing);
+    }
 }
 
 static void
@@ -459,19 +464,20 @@ gimp_sample_point_editor_points_changed (GimpSamplePointEditor *editor)
 
           editor->color_frames[i] =
             g_object_new (GIMP_TYPE_COLOR_FRAME,
+                          "gimp",           GIMP (image_editor->image->gimp),
                           "mode",           GIMP_COLOR_PICK_MODE_PIXEL,
                           "has-number",     TRUE,
                           "number",         i + 1,
                           "has-color-area", TRUE,
                           "has-coords",     TRUE,
+                          "hexpand",        TRUE,
                           NULL);
 
           gimp_color_frame_set_color_config (GIMP_COLOR_FRAME (editor->color_frames[i]),
                                              config);
 
-          gtk_table_attach (GTK_TABLE (editor->table), editor->color_frames[i],
-                            column, column + 1, row, row + 1,
-                            GTK_EXPAND | GTK_FILL, GTK_EXPAND | GTK_FILL, 0, 0);
+          gtk_grid_attach (GTK_GRID (editor->grid), editor->color_frames[i],
+                           column, row, 1, 1);
 
           g_signal_connect_object (editor->color_frames[i], "notify::mode",
                                    G_CALLBACK (gimp_sample_point_editor_mode_notify),
@@ -549,7 +555,7 @@ gimp_sample_point_editor_update (GimpSamplePointEditor *editor)
           GimpSamplePoint   *sample_point = list->data;
           const Babl        *format;
           gdouble            pixel[4];
-          GimpRGB            color;
+          GeglColor         *color;
           GimpColorPickMode  pick_mode;
           gint               x;
           gint               y;
@@ -559,6 +565,7 @@ gimp_sample_point_editor_update (GimpSamplePointEditor *editor)
 
           gimp_sample_point_get_position (sample_point, &x, &y);
 
+          color = gegl_color_new ("black");
           if (gimp_image_pick_color (image_editor->image, NULL,
                                      x, y,
                                      FALSE,
@@ -568,9 +575,7 @@ gimp_sample_point_editor_update (GimpSamplePointEditor *editor)
                                      pixel,
                                      &color))
             {
-              gimp_color_frame_set_color (color_frame, FALSE,
-                                          format, pixel, &color,
-                                          x, y);
+              gimp_color_frame_set_color (color_frame, FALSE, color, x, y);
             }
           else
             {
@@ -580,6 +585,8 @@ gimp_sample_point_editor_update (GimpSamplePointEditor *editor)
           pick_mode = gimp_sample_point_get_pick_mode (sample_point);
 
           gimp_color_frame_set_mode (color_frame, pick_mode);
+
+          g_object_unref (color);
         }
     }
 

@@ -30,9 +30,9 @@
 
 #define NUMSIZERADIO 8
 
-static GtkObject *sizenumadjust   = NULL;
-static GtkObject *sizefirstadjust = NULL;
-static GtkObject *sizelastadjust  = NULL;
+static GtkWidget *sizenumadjust   = NULL;
+static GtkWidget *sizefirstadjust = NULL;
+static GtkWidget *sizelastadjust  = NULL;
 static GtkWidget *sizeradio[NUMSIZERADIO];
 
 static void
@@ -58,12 +58,12 @@ void
 size_restore (void)
 {
   size_type_restore ();
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (sizenumadjust),
-                            pcvals.size_num);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (sizefirstadjust),
-                            pcvals.size_first);
-  gtk_adjustment_set_value (GTK_ADJUSTMENT (sizelastadjust),
-                            pcvals.size_last);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (sizenumadjust),
+                             pcvals.size_num);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (sizefirstadjust),
+                             pcvals.size_first);
+  gimp_label_spin_set_value (GIMP_LABEL_SPIN (sizelastadjust),
+                             pcvals.size_last);
 }
 
 static void
@@ -88,7 +88,7 @@ void
 create_sizepage (GtkNotebook *notebook)
 {
   GtkWidget *box2, *box3, *box4, *thispage;
-  GtkWidget *label, *tmpw, *table;
+  GtkWidget *label, *tmpw, *grid;
   GSList    *radio_group = NULL;
 
   label = gtk_label_new_with_mnemonic (_("_Size"));
@@ -97,47 +97,44 @@ create_sizepage (GtkNotebook *notebook)
   gtk_container_set_border_width (GTK_CONTAINER (thispage), 12);
   gtk_widget_show (thispage);
 
-  table = gtk_table_new (3, 3, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_box_pack_start (GTK_BOX (thispage), table, FALSE, FALSE, 0);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+  gtk_box_pack_start (GTK_BOX (thispage), grid, FALSE, FALSE, 0);
+  gtk_widget_show (grid);
 
   sizenumadjust =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 0,
-                          _("Size variants:"),
-                          150, -1, pcvals.size_num,
-                          1.0, 30.0, 1.0, 1.0, 0,
-                          TRUE, 0, 0,
-                          _("The number of sizes of brushes to use"),
-                          NULL);
+    gimp_scale_entry_new (_("Size variants:"), pcvals.size_num, 1.0, 30.0, 0);
+  gimp_help_set_help_data (sizenumadjust,
+                           _("The number of sizes of brushes to use"),
+                           NULL);
   g_signal_connect (sizenumadjust, "value-changed",
-                    G_CALLBACK (gimp_int_adjustment_update),
+                    G_CALLBACK (gimpressionist_scale_entry_update_int),
                     &pcvals.size_num);
+  gtk_grid_attach (GTK_GRID (grid), sizenumadjust, 0, 0, 3, 1);
+  gtk_widget_show (sizenumadjust);
 
   sizefirstadjust =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 1,
-                          _("Minimum size:"),
-                          150, -1, pcvals.size_first,
-                          0.0, 360.0, 1.0, 10.0, 0,
-                          TRUE, 0, 0,
-                          _("The smallest brush to create"),
-                          NULL);
+    gimp_scale_entry_new (_("Minimum size:"), pcvals.size_first, 0.0, 360.0, 0);
+  gimp_help_set_help_data (sizefirstadjust,
+                           _("The smallest brush to create"),
+                           NULL);
   g_signal_connect (sizefirstadjust, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
+                    G_CALLBACK (gimpressionist_scale_entry_update_double),
                     &pcvals.size_first);
+  gtk_grid_attach (GTK_GRID (grid), sizefirstadjust, 0, 1, 3, 1);
+  gtk_widget_show (sizefirstadjust);
 
   sizelastadjust =
-    gimp_scale_entry_new (GTK_TABLE (table), 0, 2,
-                          _("Maximum size:"),
-                          150, -1, pcvals.size_last,
-                          0.0, 360.0, 1.0, 10.0, 0,
-                          TRUE, 0, 0,
-                          _("The largest brush to create"),
-                          NULL);
+    gimp_scale_entry_new (_("Maximum size:"), pcvals.size_last, 0.0, 360.0, 0);
+  gimp_help_set_help_data (sizelastadjust,
+                           _("The largest brush to create"),
+                           NULL);
   g_signal_connect (sizelastadjust, "value-changed",
-                    G_CALLBACK (gimp_double_adjustment_update),
+                    G_CALLBACK (gimpressionist_scale_entry_update_double),
                     &pcvals.size_last);
+  gtk_grid_attach (GTK_GRID (grid), sizelastadjust, 0, 2, 3, 1);
+  gtk_widget_show (sizelastadjust);
 
   box2 = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
   gtk_box_pack_start (GTK_BOX (thispage), box2,FALSE,FALSE,0);

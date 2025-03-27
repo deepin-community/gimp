@@ -196,7 +196,8 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
                                  const gchar      *format)
 {
   GimpImage    *image;
-  GimpDrawable *drawable;
+  GimpDrawable *drawable = NULL;
+  GList        *drawables;
   gint          num, denom;
   gint          i = 0;
   gunichar      c;
@@ -211,7 +212,15 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
       return 0;
     }
 
-  drawable = gimp_image_get_active_drawable (image);
+  /* GIMP window title only take single selected layer into account so
+   * far (not sure how we could have multi-layer concept there, except
+   * wanting never-ending window titles!).
+   * When multiple drawables are selected, we just display nothing.
+   */
+  drawables = gimp_image_get_selected_drawables (image);
+  if (g_list_length (drawables) == 1)
+    drawable = drawables->data;
+  g_list_free (drawables);
 
   gimp_zoom_model_get_fraction (shell->zoom, &num, &denom);
 
@@ -225,7 +234,6 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
           c      = g_utf8_get_char (format);
 
           switch (c)
-
             {
             case 0:
               /* format string ends within %-sequence, print literal '%' */
@@ -245,7 +253,7 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
               break;
 
             case 'p': /* PDB id */
-              i += print (title, title_len, i, "%d", gimp_image_get_ID (image));
+              i += print (title, title_len, i, "%d", gimp_image_get_id (image));
               break;
 
             case 'i': /* instance */
@@ -287,6 +295,7 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
               break;
 
             case 'D': /* dirty flag */
+
               format = g_utf8_next_char (format);
               c      = g_utf8_get_char (format);
 
@@ -301,6 +310,7 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
               break;
 
             case 'C': /* clean flag */
+
               format = g_utf8_next_char (format);
               c      = g_utf8_get_char (format);
 
@@ -325,6 +335,7 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
               break;
 
             case 'N': /* not-exported flag */
+
               format = g_utf8_next_char (format);
               c      = g_utf8_get_char (format);
 
@@ -339,6 +350,7 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
               break;
 
             case 'E': /* exported flag */
+
               format = g_utf8_next_char (format);
               c      = g_utf8_get_char (format);
 
@@ -402,13 +414,13 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
             case 'P': /* active drawable PDB id */
               if (drawable)
                 i += print (title, title_len, i, "%d",
-                            gimp_item_get_ID (GIMP_ITEM (drawable)));
+                            gimp_item_get_id (GIMP_ITEM (drawable)));
               else
                 i += print (title, title_len, i, "%s", _("(none)"));
               break;
 
             case 'W': /* width in real-world units */
-              if (shell->unit != GIMP_UNIT_PIXEL)
+              if (shell->unit != gimp_unit_pixel ())
                 {
                   gdouble xres;
                   gdouble yres;
@@ -431,7 +443,7 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
               break;
 
             case 'H': /* height in real-world units */
-              if (shell->unit != GIMP_UNIT_PIXEL)
+              if (shell->unit != gimp_unit_pixel ())
                 {
                   gdouble xres;
                   gdouble yres;
@@ -464,7 +476,7 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
               break;
 
             case 'X': /* drawable width in real world units */
-              if (drawable && shell->unit != GIMP_UNIT_PIXEL)
+              if (drawable && shell->unit != gimp_unit_pixel ())
                 {
                   gdouble xres;
                   gdouble yres;
@@ -489,7 +501,7 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
               break;
 
             case 'Y': /* drawable height in real world units */
-              if (drawable && shell->unit != GIMP_UNIT_PIXEL)
+              if (drawable && shell->unit != gimp_unit_pixel ())
                 {
                   gdouble xres;
                   gdouble yres;
@@ -514,21 +526,15 @@ gimp_display_shell_format_title (GimpDisplayShell *shell,
               break;
 
             case 'o': /* image's color profile name */
-              if (gimp_image_get_is_color_managed (image))
-                {
-                  GimpColorManaged *managed = GIMP_COLOR_MANAGED (image);
-                  GimpColorProfile *profile;
+              {
+                GimpColorManaged *managed = GIMP_COLOR_MANAGED (image);
+                GimpColorProfile *profile;
 
-                  profile = gimp_color_managed_get_color_profile (managed);
+                profile = gimp_color_managed_get_color_profile (managed);
 
-                  i += print (title, title_len, i, "%s",
-                              gimp_color_profile_get_label (profile));
-                }
-              else
-                {
-                  i += print (title, title_len, i, "%s",
-                              _("not color managed"));
-                }
+                i += print (title, title_len, i, "%s",
+                            gimp_color_profile_get_label (profile));
+              }
               break;
 
             case 'e': /* display's offsets in pixels */

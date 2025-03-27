@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <gegl.h>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -63,7 +65,7 @@ drawable_edit_clear_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpDrawable *drawable;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -91,9 +93,9 @@ drawable_edit_fill_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpDrawable *drawable;
-  gint32 fill_type;
+  gint fill_type;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
   fill_type = g_value_get_enum (gimp_value_array_index (args, 1));
 
   if (success)
@@ -137,11 +139,11 @@ drawable_edit_bucket_fill_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpDrawable *drawable;
-  gint32 fill_type;
+  gint fill_type;
   gdouble x;
   gdouble y;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
   fill_type = g_value_get_enum (gimp_value_array_index (args, 1));
   x = g_value_get_double (gimp_value_array_index (args, 2));
   y = g_value_get_double (gimp_value_array_index (args, 3));
@@ -196,10 +198,10 @@ drawable_edit_gradient_fill_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpDrawable *drawable;
-  gint32 gradient_type;
+  gint gradient_type;
   gdouble offset;
   gboolean supersample;
-  gint32 supersample_max_depth;
+  gint supersample_max_depth;
   gdouble supersample_threshold;
   gboolean dither;
   gdouble x1;
@@ -207,7 +209,7 @@ drawable_edit_gradient_fill_invoker (GimpProcedure         *procedure,
   gdouble x2;
   gdouble y2;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
   gradient_type = g_value_get_enum (gimp_value_array_index (args, 1));
   offset = g_value_get_double (gimp_value_array_index (args, 2));
   supersample = g_value_get_boolean (gimp_value_array_index (args, 3));
@@ -290,7 +292,7 @@ drawable_edit_stroke_selection_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpDrawable *drawable;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -301,6 +303,7 @@ drawable_edit_stroke_selection_invoker (GimpProcedure         *procedure,
           GimpImage         *image = gimp_item_get_image (GIMP_ITEM (drawable));
           GimpStrokeOptions *options;
           GimpPaintOptions  *paint_options;
+          GList             *drawables = g_list_prepend (NULL, drawable);
 
           options = gimp_pdb_context_get_stroke_options (GIMP_PDB_CONTEXT (context));
 
@@ -309,10 +312,11 @@ drawable_edit_stroke_selection_invoker (GimpProcedure         *procedure,
           paint_options = gimp_config_duplicate (GIMP_CONFIG (paint_options));
 
           success = gimp_item_stroke (GIMP_ITEM (gimp_image_get_mask (image)),
-                                      drawable, context, options, paint_options,
+                                      drawables, context, options, paint_options,
                                       TRUE, progress, error);
 
           g_object_unref (paint_options);
+          g_list_free (drawables);
         }
       else
         success = FALSE;
@@ -334,8 +338,8 @@ drawable_edit_stroke_item_invoker (GimpProcedure         *procedure,
   GimpDrawable *drawable;
   GimpItem *item;
 
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 0), gimp);
-  item = gimp_value_get_item (gimp_value_array_index (args, 1), gimp);
+  drawable = g_value_get_object (gimp_value_array_index (args, 0));
+  item = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
@@ -348,6 +352,7 @@ drawable_edit_stroke_item_invoker (GimpProcedure         *procedure,
         {
           GimpStrokeOptions *options;
           GimpPaintOptions  *paint_options;
+          GList             *drawables = g_list_prepend (NULL, drawable);
 
           options = gimp_pdb_context_get_stroke_options (GIMP_PDB_CONTEXT (context));
 
@@ -355,11 +360,12 @@ drawable_edit_stroke_item_invoker (GimpProcedure         *procedure,
             gimp_pdb_context_get_paint_options (GIMP_PDB_CONTEXT (context), NULL);
           paint_options = gimp_config_duplicate (GIMP_CONFIG (paint_options));
 
-          success = gimp_item_stroke (item, drawable,
+          success = gimp_item_stroke (item, drawables,
                                       context, options, paint_options,
                                       TRUE, progress, error);
 
           g_object_unref (paint_options);
+          g_list_free (drawables);
         }
       else
         success = FALSE;
@@ -377,50 +383,50 @@ register_drawable_edit_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-edit-clear
    */
-  procedure = gimp_procedure_new (drawable_edit_clear_invoker);
+  procedure = gimp_procedure_new (drawable_edit_clear_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-edit-clear");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-edit-clear",
-                                     "Clear selected area of drawable.",
-                                     "This procedure clears the specified drawable. If the drawable has an alpha channel, the cleared pixels will become transparent. If the drawable does not have an alpha channel, cleared pixels will be set to the background color. This procedure only affects regions within a selection if there is a selection active.\n"
-                                     "\n"
-                                     "This procedure is affected by the following context setters: 'gimp-context-set-background'.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Clear selected area of drawable.",
+                                  "This procedure clears the specified drawable. If the drawable has an alpha channel, the cleared pixels will become transparent. If the drawable does not have an alpha channel, cleared pixels will be set to the background color. This procedure only affects regions within a selection if there is a selection active.\n"
+                                  "\n"
+                                  "This procedure is affected by the following context setters: 'gimp-context-set-background'.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable to clear from",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable to clear from",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-drawable-edit-fill
    */
-  procedure = gimp_procedure_new (drawable_edit_fill_invoker);
+  procedure = gimp_procedure_new (drawable_edit_fill_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-edit-fill");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-edit-fill",
-                                     "Fill selected area of drawable.",
-                                     "This procedure fills the specified drawable according to fill mode. This procedure only affects regions within a selection if there is a selection active. If you want to fill the whole drawable, regardless of the selection, use 'gimp-drawable-fill'.\n"
-                                     "\n"
-                                     "This procedure is affected by the following context setters: 'gimp-context-set-opacity', 'gimp-context-set-paint-mode', 'gimp-context-set-foreground', 'gimp-context-set-background', 'gimp-context-set-pattern'.",
-                                     "Spencer Kimball & Peter Mattis & Raphael Quinet",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-2000",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Fill selected area of drawable.",
+                                  "This procedure fills the specified drawable according to fill mode. This procedure only affects regions within a selection if there is a selection active. If you want to fill the whole drawable, regardless of the selection, use 'gimp-drawable-fill'.\n"
+                                  "\n"
+                                  "This procedure is affected by the following context setters: 'gimp-context-set-opacity', 'gimp-context-set-paint-mode', 'gimp-context-set-foreground', 'gimp-context-set-background', 'gimp-context-set-pattern'.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis & Raphael Quinet",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-2000");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable to fill to",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable to fill to",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("fill-type",
                                                   "fill type",
@@ -434,26 +440,26 @@ register_drawable_edit_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-edit-bucket-fill
    */
-  procedure = gimp_procedure_new (drawable_edit_bucket_fill_invoker);
+  procedure = gimp_procedure_new (drawable_edit_bucket_fill_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-edit-bucket-fill");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-edit-bucket-fill",
-                                     "Fill the area by a seed fill starting at the specified coordinates.",
-                                     "This procedure does a seed fill at the specified coordinates, using various parameters from the current context.\n"
-                                     "In the case of merged sampling, the x and y coordinates are relative to the image's origin; otherwise, they are relative to the drawable's origin.\n"
-                                     "\n"
-                                     "This procedure is affected by the following context setters: 'gimp-context-set-opacity', 'gimp-context-set-paint-mode', 'gimp-context-set-foreground', 'gimp-context-set-background', 'gimp-context-set-pattern', 'gimp-context-set-sample-threshold', 'gimp-context-set-sample-merged', 'gimp-context-set-sample-criterion', 'gimp-context-set-diagonal-neighbors', 'gimp-context-set-antialias'.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2018",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Fill the area by a seed fill starting at the specified coordinates.",
+                                  "This procedure does a seed fill at the specified coordinates, using various parameters from the current context.\n"
+                                  "In the case of merged sampling, the x and y coordinates are relative to the image's origin; otherwise, they are relative to the drawable's origin.\n"
+                                  "\n"
+                                  "This procedure is affected by the following context setters: 'gimp-context-set-opacity', 'gimp-context-set-paint-mode', 'gimp-context-set-foreground', 'gimp-context-set-background', 'gimp-context-set-pattern', 'gimp-context-set-sample-threshold', 'gimp-context-set-sample-merged', 'gimp-context-set-sample-criterion', 'gimp-context-set-diagonal-neighbors', 'gimp-context-set-antialias'.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2018");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The affected drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The affected drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("fill-type",
                                                   "fill type",
@@ -479,25 +485,25 @@ register_drawable_edit_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-edit-gradient-fill
    */
-  procedure = gimp_procedure_new (drawable_edit_gradient_fill_invoker);
+  procedure = gimp_procedure_new (drawable_edit_gradient_fill_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-edit-gradient-fill");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-edit-gradient-fill",
-                                     "Draw a gradient between the starting and ending coordinates with the specified gradient type.",
-                                     "This tool requires information on the gradient type. It creates the specified variety of gradient using the starting and ending coordinates as defined for each gradient type. For shapeburst gradient types, the context's distance metric is also relevant and can be updated with 'gimp-context-set-distance-metric'.\n"
-                                     "\n"
-                                     "This procedure is affected by the following context setters: 'gimp-context-set-opacity', 'gimp-context-set-paint-mode', 'gimp-context-set-foreground', 'gimp-context-set-background', 'gimp-context-set-gradient' and all gradient property settings, 'gimp-context-set-distance-metric'.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2018",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Draw a gradient between the starting and ending coordinates with the specified gradient type.",
+                                  "This tool requires information on the gradient type. It creates the specified variety of gradient using the starting and ending coordinates as defined for each gradient type. For shapeburst gradient types, the context's distance metric is also relevant and can be updated with 'gimp-context-set-distance-metric'.\n"
+                                  "\n"
+                                  "This procedure is affected by the following context setters: 'gimp-context-set-opacity', 'gimp-context-set-paint-mode', 'gimp-context-set-foreground', 'gimp-context-set-background', 'gimp-context-set-gradient' and all gradient property settings, 'gimp-context-set-distance-metric'.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2018");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The affected drawable",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The affected drawable",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("gradient-type",
                                                   "gradient type",
@@ -518,11 +524,11 @@ register_drawable_edit_procs (GimpPDB *pdb)
                                                      FALSE,
                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("supersample-max-depth",
-                                                      "supersample max depth",
-                                                      "Maximum recursion levels for supersampling",
-                                                      1, 9, 1,
-                                                      GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
+                               g_param_spec_int ("supersample-max-depth",
+                                                 "supersample max depth",
+                                                 "Maximum recursion levels for supersampling",
+                                                 1, 9, 1,
+                                                 GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_double ("supersample-threshold",
                                                     "supersample threshold",
@@ -565,56 +571,56 @@ register_drawable_edit_procs (GimpPDB *pdb)
   /*
    * gimp-drawable-edit-stroke-selection
    */
-  procedure = gimp_procedure_new (drawable_edit_stroke_selection_invoker);
+  procedure = gimp_procedure_new (drawable_edit_stroke_selection_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-edit-stroke-selection");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-edit-stroke-selection",
-                                     "Stroke the current selection",
-                                     "This procedure strokes the current selection, painting along the selection boundary with the active paint method and brush, or using a plain line with configurable properties. The paint is applied to the specified drawable regardless of the active selection.\n"
-                                     "\n"
-                                     "This procedure is affected by the following context setters: 'gimp-context-set-opacity', 'gimp-context-set-paint-mode', 'gimp-context-set-paint-method', 'gimp-context-set-stroke-method', 'gimp-context-set-foreground', 'gimp-context-set-brush' and all brush property settings, 'gimp-context-set-gradient' and all gradient property settings, 'gimp-context-set-line-width' and all line property settings, 'gimp-context-set-antialias'.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Stroke the current selection",
+                                  "This procedure strokes the current selection, painting along the selection boundary with the active paint method and brush, or using a plain line with configurable properties. The paint is applied to the specified drawable regardless of the active selection.\n"
+                                  "\n"
+                                  "This procedure is affected by the following context setters: 'gimp-context-set-opacity', 'gimp-context-set-paint-mode', 'gimp-context-set-paint-method', 'gimp-context-set-stroke-method', 'gimp-context-set-foreground', 'gimp-context-set-brush' and all brush property settings, 'gimp-context-set-gradient' and all gradient property settings, 'gimp-context-set-line-width' and all line property settings, 'gimp-context-set-antialias'.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable to stroke to",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable to stroke to",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-drawable-edit-stroke-item
    */
-  procedure = gimp_procedure_new (drawable_edit_stroke_item_invoker);
+  procedure = gimp_procedure_new (drawable_edit_stroke_item_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-drawable-edit-stroke-item");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-drawable-edit-stroke-item",
-                                     "Stroke the specified item",
-                                     "This procedure strokes the specified item, painting along its outline (e.g. along a path, or along a channel's boundary), with the active paint method and brush, or using a plain line with configurable properties.\n"
-                                     "\n"
-                                     "This procedure is affected by the following context setters: 'gimp-context-set-opacity', 'gimp-context-set-paint-mode', 'gimp-context-set-paint-method', 'gimp-context-set-stroke-method', 'gimp-context-set-foreground', 'gimp-context-set-brush' and all brush property settings, 'gimp-context-set-gradient' and all gradient property settings, 'gimp-context-set-line-width' and all line property settings, 'gimp-context-set-antialias'.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2018",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Stroke the specified item",
+                                  "This procedure strokes the specified item, painting along its outline (e.g. along a path, or along a channel's boundary), with the active paint method and brush, or using a plain line with configurable properties.\n"
+                                  "\n"
+                                  "This procedure is affected by the following context setters: 'gimp-context-set-opacity', 'gimp-context-set-paint-mode', 'gimp-context-set-paint-method', 'gimp-context-set-stroke-method', 'gimp-context-set-foreground', 'gimp-context-set-brush' and all brush property settings, 'gimp-context-set-gradient' and all gradient property settings, 'gimp-context-set-line-width' and all line property settings, 'gimp-context-set-antialias'.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2018");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "drawable",
-                                                            "The drawable to stroke to",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                               gimp_param_spec_drawable ("drawable",
+                                                         "drawable",
+                                                         "The drawable to stroke to",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item to stroke",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item to stroke",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 }

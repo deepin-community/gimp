@@ -32,11 +32,11 @@ void   image_convert_base_type_cmd_callback        (GimpAction *action,
 void   image_convert_precision_cmd_callback        (GimpAction *action,
                                                     GVariant   *value,
                                                     gpointer    data);
-void   image_convert_gamma_cmd_callback            (GimpAction *action,
+void   image_convert_trc_cmd_callback              (GimpAction *action,
                                                     GVariant   *value,
                                                     gpointer    data);
 
-void   image_color_management_enabled_cmd_callback (GimpAction *action,
+void   image_color_profile_use_srgb_cmd_callback   (GimpAction *action,
                                                     GVariant   *value,
                                                     gpointer    data);
 void   image_color_profile_assign_cmd_callback     (GimpAction *action,
@@ -97,5 +97,14 @@ void   image_properties_cmd_callback               (GimpAction *action,
                                                     GVariant   *value,
                                                     gpointer    data);
 
+void   image_softproof_profile_cmd_callback          (GimpAction *action,
+                                                      GVariant   *value,
+                                                      gpointer    data);
+void   image_softproof_intent_cmd_callback           (GimpAction *action,
+                                                      GVariant   *value,
+                                                      gpointer    data);
+void   image_softproof_bpc_cmd_callback              (GimpAction *action,
+                                                      GVariant   *value,
+                                                      gpointer    data);
 
 #endif /* __IMAGE_COMMANDS_H__ */

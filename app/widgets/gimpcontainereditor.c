@@ -23,6 +23,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "widgets-types.h"
@@ -33,7 +34,6 @@
 #include "core/gimpviewable.h"
 
 #include "gimpcontainereditor.h"
-#include "gimpcontainergridview.h"
 #include "gimpcontainericonview.h"
 #include "gimpcontainertreeview.h"
 #include "gimpcontainerview.h"
@@ -85,20 +85,14 @@ static void   gimp_container_editor_get_property     (GObject             *objec
                                                       GValue              *value,
                                                       GParamSpec          *pspec);
 
-static gboolean gimp_container_editor_select_item    (GtkWidget           *widget,
-                                                      GimpViewable        *viewable,
-                                                      gpointer             insert_data,
+static gboolean gimp_container_editor_select_items   (GimpContainerView   *view,
+                                                      GList               *items,
+                                                      GList               *paths,
                                                       GimpContainerEditor *editor);
 static void   gimp_container_editor_activate_item    (GtkWidget           *widget,
                                                       GimpViewable        *viewable,
                                                       gpointer             insert_data,
                                                       GimpContainerEditor *editor);
-static void   gimp_container_editor_context_item     (GtkWidget           *widget,
-                                                      GimpViewable        *viewable,
-                                                      gpointer             insert_data,
-                                                      GimpContainerEditor *editor);
-static void   gimp_container_editor_real_context_item(GimpContainerEditor *editor,
-                                                      GimpViewable        *viewable);
 
 static GtkWidget * gimp_container_editor_get_preview (GimpDocked       *docked,
                                                       GimpContext      *context,
@@ -136,7 +130,6 @@ gimp_container_editor_class_init (GimpContainerEditorClass *klass)
 
   klass->select_item     = NULL;
   klass->activate_item   = NULL;
-  klass->context_item    = gimp_container_editor_real_context_item;
 
   g_object_class_install_property (object_class, PROP_VIEW_TYPE,
                                    g_param_spec_enum ("view-type",
@@ -232,19 +225,11 @@ gimp_container_editor_constructed (GObject *object)
   switch (editor->priv->view_type)
     {
     case GIMP_VIEW_TYPE_GRID:
-#if 0
       editor->view =
         GIMP_CONTAINER_VIEW (gimp_container_icon_view_new (editor->priv->container,
                                                            editor->priv->context,
                                                            editor->priv->view_size,
                                                            editor->priv->view_border_width));
-#else
-      editor->view =
-        GIMP_CONTAINER_VIEW (gimp_container_grid_view_new (editor->priv->container,
-                                                           editor->priv->context,
-                                                           editor->priv->view_size,
-                                                           editor->priv->view_border_width));
-#endif
       break;
 
     case GIMP_VIEW_TYPE_LIST:
@@ -259,9 +244,12 @@ gimp_container_editor_constructed (GObject *object)
       gimp_assert_not_reached ();
     }
 
+  gimp_editor_set_show_name (GIMP_EDITOR (editor->view),
+                             (editor->priv->view_type == GIMP_VIEW_TYPE_GRID));
+
   if (GIMP_IS_LIST (editor->priv->container))
     gimp_container_view_set_reorderable (GIMP_CONTAINER_VIEW (editor->view),
-                                         ! GIMP_LIST (editor->priv->container)->sort_func);
+                                         ! gimp_list_get_sort_func (GIMP_LIST (editor->priv->container)));
 
   if (editor->priv->menu_factory    &&
       editor->priv->menu_identifier &&
@@ -285,28 +273,32 @@ gimp_container_editor_constructed (GObject *object)
                           editor->view,           "visible",
                           G_BINDING_SYNC_CREATE | G_BINDING_INVERT_BOOLEAN);
 
-  /*  Connect "select-item" with G_CONNECT_AFTER because it's a
+  /*  Connect "select-items" with G_CONNECT_AFTER because it's a
    *  RUN_LAST signal and the default handler selecting the row must
    *  run before signal connections. See bug #784176.
    */
-  g_signal_connect_object (editor->view, "select-item",
-                           G_CALLBACK (gimp_container_editor_select_item),
+  g_signal_connect_object (editor->view, "select-items",
+                           G_CALLBACK (gimp_container_editor_select_items),
                            editor, G_CONNECT_AFTER);
 
   g_signal_connect_object (editor->view, "activate-item",
                            G_CALLBACK (gimp_container_editor_activate_item),
                            editor, 0);
-  g_signal_connect_object (editor->view, "context-item",
-                           G_CALLBACK (gimp_container_editor_context_item),
-                           editor, 0);
+  /* g_signal_connect_object (editor->view, "context-item", XXX maybe listen to popup-menu? */
+  /*                          G_CALLBACK (gimp_container_editor_context_item), */
+  /*                          editor, 0); */
 
   {
-    GimpObject *object = gimp_context_get_by_type (editor->priv->context,
-                                                   gimp_container_get_children_type (editor->priv->container));
+    GList      *objects = NULL;
+    GimpObject *object  = gimp_context_get_by_type (editor->priv->context,
+                                                    gimp_container_get_children_type (editor->priv->container));
 
-    gimp_container_editor_select_item (GTK_WIDGET (editor->view),
-                                       (GimpViewable *) object, NULL,
-                                       editor);
+    if (object)
+      objects = g_list_prepend (objects, object);
+
+    gimp_container_editor_select_items (editor->view, objects, NULL, editor);
+
+    g_list_free (objects);
   }
 }
 
@@ -440,19 +432,59 @@ gimp_container_editor_set_selection_mode (GimpContainerEditor *editor,
 /*  private functions  */
 
 static gboolean
-gimp_container_editor_select_item (GtkWidget           *widget,
-                                   GimpViewable        *viewable,
-                                   gpointer             insert_data,
-                                   GimpContainerEditor *editor)
+gimp_container_editor_select_items (GimpContainerView   *view,
+                                    GList               *items,
+                                    GList               *paths,
+                                    GimpContainerEditor *editor)
 {
-  GimpContainerEditorClass *klass = GIMP_CONTAINER_EDITOR_GET_CLASS (editor);
+  GimpContainerEditorClass *klass       = GIMP_CONTAINER_EDITOR_GET_CLASS (editor);
+  GimpViewable             *viewable    = NULL;
+  GimpEditor               *editor_view = NULL;
+
+  /* XXX Right now a GimpContainerEditor only supports 1 item selected
+   * at once. Let's see later if we want to allow more.
+   */
+  /*g_return_val_if_fail (g_list_length (items) < 2, FALSE);*/
+
+  /* The editor view may get destroyed through a chain of signals when
+   * changing the context viewables with gimp_context_set_by_type().
+   * We make sure it still exists before working on it with a weak
+   * pointer.
+   */
+  g_set_weak_pointer (&editor_view, GIMP_EDITOR (editor->view));
+
+  if (items)
+    viewable = items->data;
 
   if (klass->select_item)
     klass->select_item (editor, viewable);
 
-  if (gimp_editor_get_ui_manager (GIMP_EDITOR (editor->view)))
-    gimp_ui_manager_update (gimp_editor_get_ui_manager (GIMP_EDITOR (editor->view)),
-                            gimp_editor_get_popup_data (GIMP_EDITOR (editor->view)));
+  if (editor->priv->container)
+    {
+      const gchar *signal_name;
+      GType        children_type;
+
+      children_type = gimp_container_get_children_type (editor->priv->container);
+      signal_name   = gimp_context_type_to_signal_name (children_type);
+
+      if (signal_name)
+        gimp_context_set_by_type (editor->priv->context, children_type,
+                                  GIMP_OBJECT (viewable));
+    }
+
+  if (viewable && editor_view)
+    {
+      gchar *desc = gimp_viewable_get_description (viewable, NULL);
+
+      gimp_editor_set_name (editor_view, desc);
+      g_free (desc);
+    }
+
+  if (editor_view && gimp_editor_get_ui_manager (editor_view))
+    gimp_ui_manager_update (gimp_editor_get_ui_manager (editor_view),
+                            gimp_editor_get_popup_data (editor_view));
+
+  g_clear_weak_pointer (&editor_view);
 
   return TRUE;
 }
@@ -467,30 +499,6 @@ gimp_container_editor_activate_item (GtkWidget           *widget,
 
   if (klass->activate_item)
     klass->activate_item (editor, viewable);
-}
-
-static void
-gimp_container_editor_context_item (GtkWidget           *widget,
-                                    GimpViewable        *viewable,
-                                    gpointer             insert_data,
-                                    GimpContainerEditor *editor)
-{
-  GimpContainerEditorClass *klass = GIMP_CONTAINER_EDITOR_GET_CLASS (editor);
-
-  if (klass->context_item)
-    klass->context_item (editor, viewable);
-}
-
-static void
-gimp_container_editor_real_context_item (GimpContainerEditor *editor,
-                                         GimpViewable        *viewable)
-{
-  GimpContainer *container = gimp_container_view_get_container (editor->view);
-
-  if (viewable && gimp_container_have (container, GIMP_OBJECT (viewable)))
-    {
-      gimp_editor_popup_menu (GIMP_EDITOR (editor->view), NULL, NULL);
-    }
 }
 
 static GtkWidget *

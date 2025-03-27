@@ -4,7 +4,7 @@ build/windows/installer/lang/setup.isl.in
 data/tags
 data/tips
 desktop
-desktop/gimp.desktop.in
+extensions
 libgimp
 libgimpbase
 libgimpcolor
@@ -13,8 +13,8 @@ libgimpmath
 libgimpmodule
 libgimpthumb
 libgimpwidgets
+menus
 modules
-plug-ins/color-rotate
 plug-ins/common
 plug-ins/file-bmp
 plug-ins/file-compressor
@@ -23,6 +23,7 @@ plug-ins/file-exr
 plug-ins/file-faxg3
 plug-ins/file-fits
 plug-ins/file-fli
+plug-ins/file-icns
 plug-ins/file-ico
 plug-ins/file-jpeg
 plug-ins/file-psd
@@ -43,13 +44,13 @@ plug-ins/ifs-compose
 plug-ins/imagemap
 plug-ins/lighting
 plug-ins/map-object
-plug-ins/maze
 plug-ins/metadata
 plug-ins/pagecurl
 plug-ins/print
-plug-ins/pygimp
+plug-ins/python
 plug-ins/screenshot
-plug-ins/script-fu/scripts/contactsheet.scm
+plug-ins/script-fu/script-fu-refresh.c
+plug-ins/script-fu/scripts/test
 plug-ins/selection-to-path
 plug-ins/twain
 plug-ins/ui

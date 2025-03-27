@@ -34,6 +34,7 @@
 
 #include "gimp-intl.h"
 
+static void gimp_operation_hue_saturation_prepare (GeglOperation *operation);
 
 static gboolean gimp_operation_hue_saturation_process (GeglOperation       *operation,
                                                        void                *in_buf,
@@ -66,6 +67,7 @@ gimp_operation_hue_saturation_class_init (GimpOperationHueSaturationClass *klass
                                  NULL);
 
   point_class->process = gimp_operation_hue_saturation_process;
+  operation_class->prepare = gimp_operation_hue_saturation_prepare;
 
   g_object_class_install_property (object_class,
                                    GIMP_OPERATION_POINT_FILTER_PROP_CONFIG,
@@ -82,28 +84,28 @@ gimp_operation_hue_saturation_init (GimpOperationHueSaturation *self)
 {
 }
 
-static inline gdouble
+static inline gfloat
 map_hue (GimpHueSaturationConfig *config,
          GimpHueRange             range,
-         gdouble                  value)
+         gfloat                   value)
 {
-  value += (config->hue[GIMP_HUE_RANGE_ALL] + config->hue[range]) / 2.0;
+  value += (config->hue[GIMP_HUE_RANGE_ALL] + config->hue[range]) / 2.0f;
 
   if (value < 0)
-    return value + 1.0;
-  else if (value > 1.0)
-    return value - 1.0;
+    return value + 1.0f;
+  else if (value > 1.0f)
+    return value - 1.0f;
   else
     return value;
 }
 
-static inline gdouble
+static inline gfloat
 map_hue_overlap (GimpHueSaturationConfig *config,
                  GimpHueRange             primary_range,
                  GimpHueRange             secondary_range,
-                 gdouble                  value,
-                 gdouble                  primary_intensity,
-                 gdouble                  secondary_intensity)
+                 gfloat                   value,
+                 gfloat                   primary_intensity,
+                 gfloat                   secondary_intensity)
 {
   /*  When calculating an overlap between two ranges, interpolate the
    *  hue adjustment from config->hue[primary_range] and
@@ -116,25 +118,25 @@ map_hue_overlap (GimpHueSaturationConfig *config,
    *
    *  See bugs #527085 and #644032 for examples of such cases.
    */
-  gdouble v = config->hue[primary_range]   * primary_intensity +
-              config->hue[secondary_range] * secondary_intensity;
+  gfloat v = config->hue[primary_range]   * primary_intensity +
+             config->hue[secondary_range] * secondary_intensity;
 
-  value += (config->hue[GIMP_HUE_RANGE_ALL] + v) / 2.0;
+  value += (config->hue[GIMP_HUE_RANGE_ALL] + v) / 2.0f;
 
   if (value < 0)
-    return value + 1.0;
-  else if (value > 1.0)
-    return value - 1.0;
+    return value + 1.0f;
+  else if (value > 1.0f)
+    return value - 1.0f;
   else
     return value;
 }
 
-static inline gdouble
+static inline gfloat
 map_saturation (GimpHueSaturationConfig *config,
                 GimpHueRange             range,
-                gdouble                  value)
+                gfloat                   value)
 {
-  gdouble v = config->saturation[GIMP_HUE_RANGE_ALL] + config->saturation[range];
+  gfloat v = config->saturation[GIMP_HUE_RANGE_ALL] + config->saturation[range];
 
   /* This change affects the way saturation is computed. With the old
    * code (different code for value < 0), increasing the saturation
@@ -146,20 +148,47 @@ map_saturation (GimpHueSaturationConfig *config,
   */
   value *= (v + 1.0);
 
-  return CLAMP (value, 0.0, 1.0);
+  return CLAMP (value, 0.0f, 1.0f);
 }
 
-static inline gdouble
+static inline gfloat
 map_lightness (GimpHueSaturationConfig *config,
                GimpHueRange             range,
-               gdouble                  value)
+               gfloat                   value)
 {
-  gdouble v = (config->lightness[GIMP_HUE_RANGE_ALL] + config->lightness[range]) / 2.0;
+  gfloat v = (config->lightness[GIMP_HUE_RANGE_ALL] + config->lightness[range]);
 
   if (v < 0)
-    return value * (v + 1.0);
+    return value * (v + 1.0f);
   else
-    return value + (v * (1.0 - value));
+    return value + (v * (1.0f - value));
+}
+
+static inline gfloat
+map_lightness_achromatic (GimpHueSaturationConfig *config, gfloat value)
+{
+  gfloat v = config->lightness[GIMP_HUE_RANGE_ALL];
+
+  if (v < 0)
+    return value * (v + 1.0f);
+  else
+    return value + (v * (1.0f - value));
+}
+
+static void
+gimp_operation_hue_saturation_prepare (GeglOperation *operation)
+{
+  /* We work in HSLA within sRGB space which is much faster to convert
+   * to than with specific spaces. Eventually though, I'm not sure if we
+   * may not want to work in the source space. So it would be wise to
+   * study this possible enhancement once babl got faster conversion
+   * from "R'G'B'" with space to HSL. TODO.
+   * See: https://gitlab.gnome.org/GNOME/babl/-/issues/103
+   */
+  const Babl *format = babl_format_with_space ("HSLA float", NULL);
+
+  gegl_operation_set_format (operation, "input", format);
+  gegl_operation_set_format (operation, "output", format);
 }
 
 static gboolean
@@ -183,43 +212,37 @@ gimp_operation_hue_saturation_process (GeglOperation       *operation,
 
   while (samples--)
     {
-      GimpRGB  rgb;
-      GimpHSL  hsl;
-      gdouble  h;
+      gfloat   hsl[4];
+      gfloat   h;
       gint     hue_counter;
       gint     hue                 = 0;
       gint     secondary_hue       = 0;
       gboolean use_secondary_hue   = FALSE;
-      gfloat   primary_intensity   = 0.0;
-      gfloat   secondary_intensity = 0.0;
+      gfloat   primary_intensity   = 0.0f;
+      gfloat   secondary_intensity = 0.0f;
 
-      rgb.r = src[RED];
-      rgb.g = src[GREEN];
-      rgb.b = src[BLUE];
-      rgb.a = src[ALPHA];
-
-      gimp_rgb_to_hsl (&rgb, &hsl);
-
-      h = hsl.h * 6.0;
+      for (gint i = 0; i < 4; i++)
+        hsl[i] = src[i];
+      h = hsl[0] * 6.0f;
 
       for (hue_counter = 0; hue_counter < 7; hue_counter++)
         {
-          gdouble hue_threshold = (gdouble) hue_counter + 0.5;
+          gfloat hue_threshold = (gfloat) hue_counter + 0.5f;
 
-          if (h < ((gdouble) hue_threshold + overlap))
+          if (h < ((gfloat) hue_threshold + overlap))
             {
               hue = hue_counter;
 
-              if (overlap > 0.0 && h > ((gdouble) hue_threshold - overlap))
+              if (overlap > 0.0f && h > ((gfloat) hue_threshold - overlap))
                 {
                   use_secondary_hue = TRUE;
 
                   secondary_hue = hue_counter + 1;
 
                   secondary_intensity =
-                    (h - (gdouble) hue_threshold + overlap) / (2.0 * overlap);
+                    (h - (gfloat) hue_threshold + overlap) / (2.0f * overlap);
 
-                  primary_intensity = 1.0 - secondary_intensity;
+                  primary_intensity = 1.0f - secondary_intensity;
                 }
               else
                 {
@@ -247,28 +270,32 @@ gimp_operation_hue_saturation_process (GeglOperation       *operation,
 
       if (use_secondary_hue)
         {
-          hsl.h = map_hue_overlap (config, hue, secondary_hue, hsl.h,
-                                   primary_intensity, secondary_intensity);
+          hsl[0] = map_hue_overlap (config, hue, secondary_hue, hsl[0],
+                                    primary_intensity, secondary_intensity);
 
-          hsl.s = (map_saturation (config, hue,           hsl.s) * primary_intensity +
-                   map_saturation (config, secondary_hue, hsl.s) * secondary_intensity);
+          hsl[1] = (map_saturation (config, hue,           hsl[1]) * primary_intensity +
+                    map_saturation (config, secondary_hue, hsl[1]) * secondary_intensity);
 
-          hsl.l = (map_lightness (config, hue,           hsl.l) * primary_intensity +
-                   map_lightness (config, secondary_hue, hsl.l) * secondary_intensity);
+          hsl[2] = (map_lightness (config, hue,           hsl[2]) * primary_intensity +
+                    map_lightness (config, secondary_hue, hsl[2]) * secondary_intensity);
         }
       else
         {
-          hsl.h = map_hue        (config, hue, hsl.h);
-          hsl.s = map_saturation (config, hue, hsl.s);
-          hsl.l = map_lightness  (config, hue, hsl.l);
+          if (hsl[1] <= 0.0)
+            {
+              hsl[2] = map_lightness_achromatic (config, hsl[2]);
+            }
+          else
+            {
+              hsl[0] = map_hue (config, hue, hsl[0]);
+              hsl[2] = map_lightness (config, hue, hsl[2]);
+              hsl[1] = map_saturation (config, hue, hsl[1]);
+            }
         }
 
-      gimp_hsl_to_rgb (&hsl, &rgb);
-
-      dest[RED]   = rgb.r;
-      dest[GREEN] = rgb.g;
-      dest[BLUE]  = rgb.b;
-      dest[ALPHA] = rgb.a;
+      for (gint i = 0; i < 3; i++)
+        dest[i] = hsl[i];
+      dest[3] = src[3];
 
       src  += 4;
       dest += 4;
@@ -282,21 +309,22 @@ gimp_operation_hue_saturation_process (GeglOperation       *operation,
 
 void
 gimp_operation_hue_saturation_map (GimpHueSaturationConfig *config,
-                                   const GimpRGB           *color,
-                                   GimpHueRange             range,
-                                   GimpRGB                 *result)
+                                   GeglColor               *color,
+                                   GimpHueRange             range)
 {
-  GimpHSL hsl;
+  const Babl *format;
+  gfloat     hsl[4];
 
   g_return_if_fail (GIMP_IS_HUE_SATURATION_CONFIG (config));
-  g_return_if_fail (color != NULL);
-  g_return_if_fail (result != NULL);
+  g_return_if_fail (GEGL_IS_COLOR (color));
 
-  gimp_rgb_to_hsl (color, &hsl);
+  format = gegl_color_get_format (color);
+  format = babl_format_with_space ("HSLA float", format);
+  gegl_color_get_pixel (color, format, hsl);
 
-  hsl.h = map_hue        (config, range, hsl.h);
-  hsl.s = map_saturation (config, range, hsl.s);
-  hsl.l = map_lightness  (config, range, hsl.l);
+  hsl[0] = map_hue        (config, range, hsl[0]);
+  hsl[1] = map_saturation (config, range, hsl[1]);
+  hsl[2] = map_lightness  (config, range, hsl[2]);
 
-  gimp_hsl_to_rgb (&hsl, result);
+  gegl_color_set_pixel (color, format, hsl);
 }

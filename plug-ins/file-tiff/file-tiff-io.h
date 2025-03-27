@@ -31,6 +31,7 @@
 #define GEOTIFF_DOUBLEPARAMS         34736
 #define GEOTIFF_ASCIIPARAMS          34737
 
+
 static const TIFFFieldInfo geotifftags_fieldinfo[] = {
   { GEOTIFF_MODELPIXELSCALE,      -1, -1, TIFF_DOUBLE, FIELD_CUSTOM, TRUE, TRUE,  "GeoModelPixelScale" },
   { GEOTIFF_MODELTIEPOINT,        -1, -1, TIFF_DOUBLE, FIELD_CUSTOM, TRUE, TRUE,  "GeoTiePoints" },
@@ -40,11 +41,11 @@ static const TIFFFieldInfo geotifftags_fieldinfo[] = {
   { GEOTIFF_ASCIIPARAMS,          -1, -1, TIFF_ASCII,  FIELD_CUSTOM, TRUE, FALSE, "GeoAsciiParams" }
 };
 
-TIFF *     tiff_open                 (GFile        *file,
-                                      const gchar  *mode,
-                                      GError      **error);
+TIFF     * tiff_open                  (GFile        *file,
+                                       const gchar  *mode,
+                                       GError      **error);
+gboolean   tiff_got_file_size_error   (void);
+void       tiff_reset_file_size_error (void);
 
-gboolean  tiff_got_file_size_error   (void);
-void      tiff_reset_file_size_error (void);
 
 #endif /* __FILE_TIFF_IO_H__ */

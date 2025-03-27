@@ -26,6 +26,7 @@
 #include "actions-types.h"
 
 #include "core/gimp.h"
+#include "core/gimpimage.h"
 #include "core/gimptoolinfo.h"
 
 #include "widgets/gimphelp-ids.h"
@@ -126,7 +127,7 @@ text_tool_load_cmd_callback (GimpAction *action,
                                             NULL);
 
       gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                                GTK_RESPONSE_OK,
                                                GTK_RESPONSE_CANCEL,
                                                -1);
@@ -178,8 +179,16 @@ text_tool_text_along_path_cmd_callback (GimpAction *action,
                                         gpointer    data)
 {
   GimpTextTool *text_tool = GIMP_TEXT_TOOL (data);
+  GError       *error     = NULL;
 
-  gimp_text_tool_create_vectors_warped (text_tool);
+  if (! gimp_text_tool_create_vectors_warped (text_tool, &error))
+    {
+      gimp_message (text_tool->image->gimp, G_OBJECT (text_tool),
+                    GIMP_MESSAGE_ERROR,
+                    _("Text along path failed: %s"),
+                    error->message);
+      g_clear_error (&error);
+    }
 }
 
 void

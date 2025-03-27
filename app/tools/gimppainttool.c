@@ -53,6 +53,7 @@
 #include "gimppaintoptions-gui.h"
 #include "gimppainttool.h"
 #include "gimppainttool-paint.h"
+#include "gimpsourcetool.h"
 #include "gimptoolcontrol.h"
 #include "gimptools-utils.h"
 
@@ -158,11 +159,12 @@ gimp_paint_tool_init (GimpPaintTool *paint_tool)
   gimp_tool_control_set_motion_mode    (tool->control, GIMP_MOTION_MODE_EXACT);
   gimp_tool_control_set_scroll_lock    (tool->control, TRUE);
   gimp_tool_control_set_action_opacity (tool->control,
-                                        "context/context-opacity-set");
+                                        "context-opacity-set");
 
-  paint_tool->active        = TRUE;
-  paint_tool->pick_colors   = FALSE;
-  paint_tool->draw_line     = FALSE;
+  paint_tool->active          = TRUE;
+  paint_tool->pick_colors     = FALSE;
+  paint_tool->can_multi_paint = FALSE;
+  paint_tool->draw_line       = FALSE;
 
   paint_tool->show_cursor   = TRUE;
   paint_tool->draw_brush    = TRUE;
@@ -276,7 +278,8 @@ gimp_paint_tool_button_press (GimpTool            *tool,
   GimpGuiConfig    *config     = GIMP_GUI_CONFIG (display->gimp->config);
   GimpDisplayShell *shell      = gimp_display_get_shell (display);
   GimpImage        *image      = gimp_display_get_image (display);
-  GimpDrawable     *drawable   = gimp_image_get_active_drawable (image);
+  GList            *drawables;
+  GList            *iter;
   gboolean          constrain;
   GError           *error = NULL;
 
@@ -287,46 +290,89 @@ gimp_paint_tool_button_press (GimpTool            *tool,
       return;
     }
 
-  if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)))
+  drawables  = gimp_image_get_selected_drawables (image);
+  if (drawables == NULL)
     {
       gimp_tool_message_literal (tool, display,
-                                 _("Cannot paint on layer groups."));
-      return;
-    }
-
-  if (gimp_item_is_content_locked (GIMP_ITEM (drawable)))
-    {
-      gimp_tool_message_literal (tool, display,
-                                 _("The active layer's pixels are locked."));
-      gimp_tools_blink_lock_box (display->gimp, GIMP_ITEM (drawable));
-      return;
-    }
-
-  if (! gimp_paint_tool_check_alpha (paint_tool, drawable, display, &error))
-    {
-      GtkWidget *options_gui;
-      GtkWidget *mode_box;
-
-      gimp_tool_message_literal (tool, display, error->message);
-
-      options_gui = gimp_tools_get_tool_options_gui (
-                      GIMP_TOOL_OPTIONS (options));
-      mode_box    = gimp_paint_options_gui_get_paint_mode_box (options_gui);
-
-      if (gtk_widget_is_sensitive (mode_box))
-        gimp_widget_blink (mode_box);
-
-      g_clear_error (&error);
+                                 _("No selected drawables."));
 
       return;
     }
-
-  if (! gimp_item_is_visible (GIMP_ITEM (drawable)) &&
-      ! config->edit_non_visible)
+  else if (! paint_tool->can_multi_paint)
     {
-      gimp_tool_message_literal (tool, display,
-                                 _("The active layer is not visible."));
-      return;
+      if (g_list_length (drawables) != 1)
+        {
+          gimp_tool_message_literal (tool, display,
+                                     _("Cannot paint on multiple layers. Select only one layer."));
+
+          g_list_free (drawables);
+          return;
+        }
+    }
+
+  for (iter = drawables; iter; iter = iter->next)
+    {
+      GimpDrawable *drawable    = iter->data;
+      GimpItem     *locked_item = NULL;
+
+      if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)))
+        {
+          gimp_tool_message_literal (tool, display,
+                                     _("Cannot paint on layer groups."));
+          g_list_free (drawables);
+
+          return;
+        }
+
+      if (gimp_item_is_content_locked (GIMP_ITEM (drawable), &locked_item))
+        {
+          gboolean constrain_only;
+
+          /* Allow pixel-locked layers to be set as sources */
+          constrain_only = (state & gimp_get_constrain_behavior_mask () &&
+                            ! (state & gimp_get_extend_selection_mask ()));
+          if (! (GIMP_IS_SOURCE_TOOL (tool) && constrain_only))
+            {
+              gimp_tool_message_literal (tool, display,
+                                         _("The selected item's pixels are locked."));
+              gimp_tools_blink_lock_box (display->gimp, locked_item);
+              g_list_free (drawables);
+
+              return;
+            }
+        }
+
+      if (! gimp_paint_tool_check_alpha (paint_tool, drawable, display, &error))
+        {
+          GtkWidget *options_gui;
+          GtkWidget *mode_box;
+
+          gimp_tool_message_literal (tool, display, error->message);
+
+          options_gui = gimp_tools_get_tool_options_gui (GIMP_TOOL_OPTIONS (options));
+          mode_box    = gimp_paint_options_gui_get_paint_mode_box (options_gui);
+
+          if (gtk_widget_is_sensitive (mode_box))
+            {
+              gimp_tools_show_tool_options (display->gimp);
+              gimp_widget_blink (mode_box);
+            }
+
+          g_clear_error (&error);
+          g_list_free (drawables);
+
+          return;
+        }
+
+      if (! gimp_item_is_visible (GIMP_ITEM (drawable)) &&
+          ! config->edit_non_visible)
+        {
+          gimp_tool_message_literal (tool, display,
+                                     _("A selected layer is not visible."));
+          g_list_free (drawables);
+
+          return;
+        }
     }
 
   if (gimp_draw_tool_is_active (draw_tool))
@@ -356,8 +402,8 @@ gimp_paint_tool_button_press (GimpTool            *tool,
       return;
     }
 
-  tool->display  = display;
-  tool->drawable = drawable;
+  tool->display   = display;
+  tool->drawables = drawables;
 
   /*  pause the current selection  */
   gimp_display_shell_selection_pause (shell);
@@ -507,26 +553,53 @@ gimp_paint_tool_cursor_update (GimpTool         *tool,
 
   if (! gimp_color_tool_is_enabled (GIMP_COLOR_TOOL (tool)))
     {
-      GimpImage    *image    = gimp_display_get_image (display);
-      GimpDrawable *drawable = gimp_image_get_active_drawable (image);
+      GimpImage    *image     = gimp_display_get_image (display);
+      GList        *drawables = gimp_image_get_selected_drawables (image);
+      GList        *iter;
 
-      if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable))               ||
-          gimp_item_is_content_locked (GIMP_ITEM (drawable))                  ||
-          ! gimp_paint_tool_check_alpha (paint_tool, drawable, display, NULL) ||
-          ! (gimp_item_is_visible (GIMP_ITEM (drawable)) ||
-             config->edit_non_visible))
+      if (! drawables)
+        return;
+
+      for (iter = drawables; iter; iter = iter->next)
         {
-          modifier        = GIMP_CURSOR_MODIFIER_BAD;
-          toggle_modifier = GIMP_CURSOR_MODIFIER_BAD;
+          GimpDrawable *drawable = iter->data;
+
+          if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable))               ||
+              gimp_item_is_content_locked (GIMP_ITEM (drawable), NULL)            ||
+              ! gimp_paint_tool_check_alpha (paint_tool, drawable, display, NULL) ||
+              ! (gimp_item_is_visible (GIMP_ITEM (drawable)) ||
+                 config->edit_non_visible))
+            {
+              gboolean constrain_only;
+
+              /* Allow pixel-locked layers to be set as sources */
+              constrain_only = (state & gimp_get_constrain_behavior_mask () &&
+                                ! (state & gimp_get_extend_selection_mask ()));
+
+              if (! (GIMP_IS_SOURCE_TOOL (tool) && constrain_only))
+                {
+                  modifier        = GIMP_CURSOR_MODIFIER_BAD;
+                  toggle_modifier = GIMP_CURSOR_MODIFIER_BAD;
+                  break;
+                }
+            }
         }
+
+      g_list_free (drawables);
 
       if (! paint_tool->show_cursor &&
           modifier != GIMP_CURSOR_MODIFIER_BAD)
         {
-          gimp_tool_set_cursor (tool, display,
-                                GIMP_CURSOR_NONE,
-                                GIMP_TOOL_CURSOR_NONE,
-                                GIMP_CURSOR_MODIFIER_NONE);
+          if (paint_tool->draw_brush)
+            gimp_tool_set_cursor (tool, display,
+                                  GIMP_CURSOR_NONE,
+                                  GIMP_TOOL_CURSOR_NONE,
+                                  GIMP_CURSOR_MODIFIER_NONE);
+          else
+            gimp_tool_set_cursor (tool, display,
+                                  GIMP_CURSOR_SINGLE_DOT,
+                                  GIMP_TOOL_CURSOR_NONE,
+                                  GIMP_CURSOR_MODIFIER_NONE);
           return;
         }
 
@@ -561,7 +634,8 @@ gimp_paint_tool_oper_update (GimpTool         *tool,
   GimpPaintCore    *core          = paint_tool->core;
   GimpDisplayShell *shell         = gimp_display_get_shell (display);
   GimpImage        *image         = gimp_display_get_image (display);
-  GimpDrawable     *drawable      = gimp_image_get_active_drawable (image);
+  GList            *drawables;
+  gchar            *status        = NULL;
 
   if (gimp_color_tool_is_enabled (GIMP_COLOR_TOOL (tool)))
     {
@@ -576,8 +650,6 @@ gimp_paint_tool_oper_update (GimpTool         *tool,
       draw_tool->display != display)
     gimp_draw_tool_stop (draw_tool);
 
-  gimp_tool_pop_status (tool, display);
-
   if (tool->display            &&
       tool->display != display &&
       gimp_display_get_image (tool->display) == image)
@@ -591,18 +663,15 @@ gimp_paint_tool_oper_update (GimpTool         *tool,
       tool->display = display;
     }
 
-  if (drawable && proximity)
+  drawables = gimp_image_get_selected_drawables (image);
+
+  if ((g_list_length (drawables) == 1 ||
+       (g_list_length (drawables) > 1 && paint_tool->can_multi_paint)) &&
+      proximity)
     {
-      gchar    *status;
       gboolean  constrain_mask = gimp_get_constrain_behavior_mask ();
-      gint      off_x, off_y;
 
       core->cur_coords = *coords;
-
-      gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
-
-      core->cur_coords.x -= off_x;
-      core->cur_coords.y -= off_y;
 
       if (display == tool->display && (state & GIMP_PAINT_TOOL_LINE_MASK))
         {
@@ -660,8 +729,6 @@ gimp_paint_tool_oper_update (GimpTool         *tool,
                                            NULL);
           paint_tool->draw_line = FALSE;
         }
-      gimp_tool_push_status (tool, display, "%s", status);
-      g_free (status);
 
       paint_tool->cursor_x = core->cur_coords.x;
       paint_tool->cursor_y = core->cur_coords.y;
@@ -674,10 +741,21 @@ gimp_paint_tool_oper_update (GimpTool         *tool,
       gimp_draw_tool_stop (draw_tool);
     }
 
+  if (status != NULL)
+    {
+      gimp_tool_push_status (tool, display, "%s", status);
+      g_free (status);
+    }
+  else
+    {
+      gimp_tool_pop_status (tool, display);
+    }
+
   GIMP_TOOL_CLASS (parent_class)->oper_update (tool, coords, state, proximity,
                                                display);
 
   gimp_draw_tool_resume (draw_tool);
+  g_list_free (drawables);
 }
 
 static void
@@ -685,30 +763,24 @@ gimp_paint_tool_draw (GimpDrawTool *draw_tool)
 {
   GimpPaintTool *paint_tool = GIMP_PAINT_TOOL (draw_tool);
 
-
   if (paint_tool->active &&
       ! gimp_color_tool_is_enabled (GIMP_COLOR_TOOL (draw_tool)))
     {
       GimpPaintCore  *core       = paint_tool->core;
-      GimpImage      *image      = gimp_display_get_image (draw_tool->display);
-      GimpDrawable   *drawable   = gimp_image_get_active_drawable (image);
       GimpCanvasItem *outline    = NULL;
       gboolean        line_drawn = FALSE;
       gdouble         cur_x, cur_y;
-      gint            off_x, off_y;
-
-      gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
 
       if (gimp_paint_tool_paint_is_active (paint_tool) &&
           paint_tool->snap_brush)
         {
-          cur_x = paint_tool->paint_x + off_x;
-          cur_y = paint_tool->paint_y + off_y;
+          cur_x = paint_tool->paint_x;
+          cur_y = paint_tool->paint_y;
         }
       else
         {
-          cur_x = paint_tool->cursor_x + off_x;
-          cur_y = paint_tool->cursor_y + off_y;
+          cur_x = paint_tool->cursor_x;
+          cur_y = paint_tool->cursor_y;
 
           if (paint_tool->draw_line &&
               ! gimp_tool_control_is_active (GIMP_TOOL (draw_tool)->control))
@@ -716,8 +788,8 @@ gimp_paint_tool_draw (GimpDrawTool *draw_tool)
               GimpCanvasGroup *group;
               gdouble          last_x, last_y;
 
-              last_x = core->last_coords.x + off_x;
-              last_y = core->last_coords.y + off_y;
+              last_x = core->last_coords.x;
+              last_y = core->last_coords.y;
 
               group = gimp_draw_tool_add_stroke_group (draw_tool);
               gimp_draw_tool_push_group (draw_tool, group);
@@ -747,6 +819,7 @@ gimp_paint_tool_draw (GimpDrawTool *draw_tool)
         }
 
       gimp_paint_tool_set_draw_fallback (paint_tool, FALSE, 0.0);
+      gimp_paint_tool_set_draw_circle (paint_tool, FALSE, 0.0);
 
       if (paint_tool->draw_brush)
         outline = gimp_paint_tool_get_outline (paint_tool,
@@ -818,20 +891,30 @@ gimp_paint_tool_draw (GimpDrawTool *draw_tool)
                                   0.0, (2.0 * G_PI));
         }
 
-      if (! outline                 &&
-          ! line_drawn              &&
-          ! paint_tool->show_cursor &&
+      if (! outline                   &&
+          ! paint_tool->draw_fallback &&
+          ! line_drawn                &&
+          ! paint_tool->show_cursor   &&
           ! paint_tool->draw_circle)
         {
-          /*  don't leave the user without any indication and draw
-           *  a fallback crosshair
+          /* I am not sure this case can/should ever happen since now we
+           * always set the GIMP_CURSOR_SINGLE_DOT when neither pointer
+           * nor outline options are checked. Yet let's imagine any
+           * weird case where brush outline is wanted, without pointer
+           * cursor, yet we fail to draw the outline while neither
+           * circle nor fallbacks are requested (it depends on per-class
+           * implementation of get_outline()).
+           *
+           * In such a case, we don't want to leave the user without any
+           * indication so we draw a fallback crosshair.
            */
-          gimp_draw_tool_add_handle (draw_tool,
-                                     GIMP_HANDLE_CROSSHAIR,
-                                     cur_x, cur_y,
-                                     GIMP_TOOL_HANDLE_SIZE_CROSSHAIR,
-                                     GIMP_TOOL_HANDLE_SIZE_CROSSHAIR,
-                                     GIMP_HANDLE_ANCHOR_CENTER);
+          if (paint_tool->draw_brush)
+            gimp_draw_tool_add_handle (draw_tool,
+                                       GIMP_HANDLE_CIRCLE,
+                                       cur_x, cur_y,
+                                       GIMP_TOOL_HANDLE_SIZE_CROSSHAIR,
+                                       GIMP_TOOL_HANDLE_SIZE_CROSSHAIR,
+                                       GIMP_HANDLE_ANCHOR_CENTER);
         }
     }
 
@@ -870,24 +953,27 @@ gimp_paint_tool_check_alpha (GimpPaintTool  *paint_tool,
 
   if (klass->is_alpha_only && klass->is_alpha_only (paint_tool, drawable))
     {
+      GimpLayer *locked_layer = NULL;
+
       if (! gimp_drawable_has_alpha (drawable))
         {
           g_set_error_literal (
             error, GIMP_ERROR, GIMP_FAILED,
-            _("The active layer does not have an alpha channel."));
+            _("The selected drawable does not have an alpha channel."));
 
           return FALSE;
         }
 
         if (GIMP_IS_LAYER (drawable) &&
-            gimp_layer_get_lock_alpha (GIMP_LAYER (drawable)))
+            gimp_layer_is_alpha_locked (GIMP_LAYER (drawable),
+                                        &locked_layer))
         {
           g_set_error_literal (
             error, GIMP_ERROR, GIMP_FAILED,
-            _("The active layer's alpha channel is locked."));
+            _("The selected layer's alpha channel is locked."));
 
           if (error)
-            gimp_tools_blink_lock_box (display->gimp, GIMP_ITEM (drawable));
+            gimp_tools_blink_lock_box (display->gimp, GIMP_ITEM (locked_layer));
 
           return FALSE;
         }
@@ -968,6 +1054,21 @@ gimp_paint_tool_enable_color_picker (GimpPaintTool       *tool,
   GIMP_COLOR_TOOL (tool)->pick_target = target;
 }
 
+/**
+ * gimp_paint_tool_enable_multi_paint:
+ * @tool: a #GimpPaintTool
+ *
+ * This is a convenience function used from the init method of paint
+ * tools that want to allow painting with several drawables.
+ **/
+void
+gimp_paint_tool_enable_multi_paint (GimpPaintTool *tool)
+{
+  g_return_if_fail (GIMP_IS_PAINT_TOOL (tool));
+
+  tool->can_multi_paint = TRUE;
+}
+
 void
 gimp_paint_tool_set_draw_fallback (GimpPaintTool *tool,
                                    gboolean       draw_fallback,
@@ -988,4 +1089,31 @@ gimp_paint_tool_set_draw_circle (GimpPaintTool *tool,
 
   tool->draw_circle = draw_circle;
   tool->circle_size = circle_size;
+}
+
+
+/**
+ * gimp_paint_tool_force_draw:
+ * @tool:
+ * @force:
+ *
+ * If @force is %TRUE, the brush, or a fallback, or circle will be
+ * drawn, regardless of the Preferences settings. This can be used for
+ * code such as when modifying brush size or shape on-canvas with a
+ * visual feedback, temporarily bypassing the user setting.
+ */
+void
+gimp_paint_tool_force_draw (GimpPaintTool *tool,
+                            gboolean       force)
+{
+  GimpDisplayConfig *display_config;
+
+  g_return_if_fail (GIMP_IS_PAINT_TOOL (tool));
+
+  display_config = GIMP_DISPLAY_CONFIG (GIMP_TOOL (tool)->tool_info->gimp->config);
+
+  if (force)
+    tool->draw_brush = TRUE;
+  else
+    tool->draw_brush  = display_config->show_brush_outline;
 }

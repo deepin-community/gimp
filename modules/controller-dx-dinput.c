@@ -33,9 +33,7 @@
 #include <string.h>
 #include <math.h>
 
-#define _WIN32_WINNT 0x0501
 #include <windows.h>
-#define DIRECTINPUT_VERSION 0x0800
 #include <dinput.h>
 
 #include <gegl.h>
@@ -125,7 +123,7 @@ struct _ControllerDXDInputClass
 };
 
 
-static GType  controller_dx_dinput_get_type     (void);
+GType         controller_dx_dinput_get_type     (void);
 
 static void   dx_dinput_dispose                 (GObject        *object);
 static void   dx_dinput_finalize                (GObject        *object);

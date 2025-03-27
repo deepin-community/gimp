@@ -130,7 +130,7 @@ convert_indexed_dialog_new (GimpImage                  *image,
   private->user_data          = user_data;
 
   private->dialog = dialog =
-    gimp_viewable_dialog_new (GIMP_VIEWABLE (image), context,
+    gimp_viewable_dialog_new (g_list_prepend (NULL, image), context,
                               _("Indexed Color Conversion"),
                               "gimp-image-convert-indexed",
                               GIMP_ICON_CONVERT_INDEXED,
@@ -144,7 +144,7 @@ convert_indexed_dialog_new (GimpImage                  *image,
 
                               NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
                                            -1);
@@ -177,7 +177,7 @@ convert_indexed_dialog_new (GimpImage                  *image,
                                            GIMP_CONVERT_PALETTE_MONO),
                                           gtk_label_new (_("Colormap")),
                                           G_CALLBACK (convert_dialog_type_update),
-                                          private,
+                                          private, NULL,
                                           &button);
 
   gimp_int_radio_group_set_active (GTK_RADIO_BUTTON (button),
@@ -198,8 +198,7 @@ convert_indexed_dialog_new (GimpImage                  *image,
   if (private->max_colors == 256 && gimp_image_has_alpha (image))
     private->max_colors = 255;
 
-  adjustment = (GtkAdjustment *)
-    gtk_adjustment_new (private->max_colors, 2, 256, 1, 8, 0);
+  adjustment = gtk_adjustment_new (private->max_colors, 2, 256, 1, 8, 0);
   spinbutton = gimp_spin_button_new (adjustment, 1.0, 0);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), spinbutton);
@@ -262,7 +261,7 @@ convert_indexed_dialog_new (GimpImage                  *image,
   gimp_int_combo_box_connect (GIMP_INT_COMBO_BOX (combo),
                               private->dither_type,
                               G_CALLBACK (gimp_int_combo_box_get_active),
-                              &private->dither_type);
+                              &private->dither_type, NULL);
 
   toggle =
     gtk_check_button_new_with_mnemonic (_("Enable dithering of _transparency"));

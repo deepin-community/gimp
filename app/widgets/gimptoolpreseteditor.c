@@ -59,19 +59,21 @@ struct _GimpToolPresetEditorPrivate
 
 /*  local function prototypes  */
 
-static void   gimp_tool_preset_editor_constructed  (GObject              *object);
-static void   gimp_tool_preset_editor_finalize     (GObject              *object);
+static void   gimp_tool_preset_editor_constructed    (GObject              *object);
+static void   gimp_tool_preset_editor_finalize       (GObject              *object);
 
-static void   gimp_tool_preset_editor_set_data     (GimpDataEditor       *editor,
-                                                    GimpData             *data);
+static void   gimp_tool_preset_editor_style_updated (GtkWidget             *widget);
 
-static void   gimp_tool_preset_editor_sync_data    (GimpToolPresetEditor *editor);
-static void   gimp_tool_preset_editor_notify_model (GimpToolPreset       *options,
-                                                    const GParamSpec     *pspec,
-                                                    GimpToolPresetEditor *editor);
-static void   gimp_tool_preset_editor_notify_data  (GimpToolPreset       *options,
-                                                    const GParamSpec     *pspec,
-                                                    GimpToolPresetEditor *editor);
+static void   gimp_tool_preset_editor_set_data       (GimpDataEditor       *editor,
+                                                      GimpData             *data);
+
+static void   gimp_tool_preset_editor_sync_data      (GimpToolPresetEditor *editor);
+static void   gimp_tool_preset_editor_notify_model   (GimpToolPreset       *options,
+                                                      const GParamSpec     *pspec,
+                                                      GimpToolPresetEditor *editor);
+static void   gimp_tool_preset_editor_notify_data    (GimpToolPreset       *options,
+                                                      const GParamSpec     *pspec,
+                                                      GimpToolPresetEditor *editor);
 
 
 
@@ -88,12 +90,15 @@ gimp_tool_preset_editor_class_init (GimpToolPresetEditorClass *klass)
 {
   GObjectClass        *object_class = G_OBJECT_CLASS (klass);
   GimpDataEditorClass *editor_class = GIMP_DATA_EDITOR_CLASS (klass);
+  GtkWidgetClass      *widget_class = GTK_WIDGET_CLASS (klass);
 
   object_class->constructed = gimp_tool_preset_editor_constructed;
   object_class->finalize    = gimp_tool_preset_editor_finalize;
 
   editor_class->set_data    = gimp_tool_preset_editor_set_data;
   editor_class->title       = _("Tool Preset Editor");
+
+  widget_class->style_updated = gimp_tool_preset_editor_style_updated;
 }
 
 static void
@@ -151,12 +156,10 @@ gimp_tool_preset_editor_constructed (GObject *object)
   button = gimp_prop_icon_picker_new (GIMP_VIEWABLE (preset),
                                       data_editor->context->gimp);
   gtk_box_pack_start (GTK_BOX (hbox), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   button = editor->priv->fg_bg_toggle =
     gimp_prop_check_button_new (G_OBJECT (preset), "use-fg-bg", NULL);
   gtk_box_pack_start (GTK_BOX (data_editor), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   button = editor->priv->opacity_paint_mode_toggle =
     gimp_prop_check_button_new (G_OBJECT (preset), "use-opacity-paint-mode", NULL);
@@ -165,37 +168,30 @@ gimp_tool_preset_editor_constructed (GObject *object)
   button = editor->priv->brush_toggle =
     gimp_prop_check_button_new (G_OBJECT (preset), "use-brush", NULL);
   gtk_box_pack_start (GTK_BOX (data_editor), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   button = editor->priv->dynamics_toggle =
     gimp_prop_check_button_new (G_OBJECT (preset), "use-dynamics", NULL);
   gtk_box_pack_start (GTK_BOX (data_editor), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   button = editor->priv->mybrush_toggle =
     gimp_prop_check_button_new (G_OBJECT (preset), "use-mypaint-brush", NULL);
   gtk_box_pack_start (GTK_BOX (data_editor), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   button = editor->priv->gradient_toggle =
     gimp_prop_check_button_new (G_OBJECT (preset), "use-gradient", NULL);
   gtk_box_pack_start (GTK_BOX (data_editor), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   button = editor->priv->pattern_toggle =
     gimp_prop_check_button_new (G_OBJECT (preset), "use-pattern", NULL);
   gtk_box_pack_start (GTK_BOX (data_editor), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   button = editor->priv->palette_toggle =
     gimp_prop_check_button_new (G_OBJECT (preset), "use-palette", NULL);
   gtk_box_pack_start (GTK_BOX (data_editor), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   button = editor->priv->font_toggle =
     gimp_prop_check_button_new (G_OBJECT (preset), "use-font", NULL);
   gtk_box_pack_start (GTK_BOX (data_editor), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   button = gimp_editor_add_action_button (GIMP_EDITOR (editor),
                                           "tool-preset-editor",
@@ -204,6 +200,15 @@ gimp_tool_preset_editor_constructed (GObject *object)
   button = gimp_editor_add_action_button (GIMP_EDITOR (editor),
                                           "tool-preset-editor",
                                           "tool-preset-editor-restore", NULL);
+
+  g_signal_connect_object (data_editor->context->gimp->config,
+                           "notify::override-theme-icon-size",
+                           G_CALLBACK (gimp_tool_preset_editor_style_updated),
+                           editor, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+  g_signal_connect_object (data_editor->context->gimp->config,
+                           "notify::custom-icon-size",
+                           G_CALLBACK (gimp_tool_preset_editor_style_updated),
+                           editor, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
 
   if (data_editor->data)
     gimp_tool_preset_editor_sync_data (editor);
@@ -218,6 +223,23 @@ gimp_tool_preset_editor_finalize (GObject *object)
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
+
+static void
+gimp_tool_preset_editor_style_updated (GtkWidget *widget)
+{
+  GimpToolPresetEditor *editor    = GIMP_TOOL_PRESET_EDITOR (widget);
+  gint                  icon_size = 16;
+  GtkIconSize           button_icon_size;
+
+  GTK_WIDGET_CLASS (parent_class)->style_updated (widget);
+
+  gtk_widget_style_get (widget,
+                        "button-icon-size", &button_icon_size,
+                        NULL);
+  gtk_icon_size_lookup (button_icon_size, &icon_size, NULL);
+  gtk_image_set_pixel_size (GTK_IMAGE (editor->priv->tool_icon), icon_size);
+}
+
 
 static void
 gimp_tool_preset_editor_set_data (GimpDataEditor *editor,

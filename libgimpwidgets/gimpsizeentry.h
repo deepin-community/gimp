@@ -32,56 +32,14 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_SIZE_ENTRY            (gimp_size_entry_get_type ())
-#define GIMP_SIZE_ENTRY(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_SIZE_ENTRY, GimpSizeEntry))
-#define GIMP_SIZE_ENTRY_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_SIZE_ENTRY, GimpSizeEntryClass))
-#define GIMP_IS_SIZE_ENTRY(obj)         (G_TYPE_CHECK_INSTANCE_TYPE (obj, GIMP_TYPE_SIZE_ENTRY))
-#define GIMP_IS_SIZE_ENTRY_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_SIZE_ENTRY))
-#define GIMP_SIZE_ENTRY_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_SIZE_ENTRY, GimpSizeEntryClass))
-
-
-typedef struct _GimpSizeEntryClass  GimpSizeEntryClass;
-
-typedef struct _GimpSizeEntryField  GimpSizeEntryField;
-
-struct _GimpSizeEntry
-{
-  GtkTable   parent_instance;
-
-  GSList    *fields;
-  gint       number_of_fields;
-
-  GtkWidget *unitmenu;
-  GimpUnit   unit;
-  gboolean   menu_show_pixels;
-  gboolean   menu_show_percent;
-
-  gboolean                   show_refval;
-  GimpSizeEntryUpdatePolicy  update_policy;
-};
-
-struct _GimpSizeEntryClass
-{
-  GtkTableClass  parent_class;
-
-  void (* value_changed)  (GimpSizeEntry *gse);
-  void (* refval_changed) (GimpSizeEntry *gse);
-  void (* unit_changed)   (GimpSizeEntry *gse);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-};
+#define GIMP_TYPE_SIZE_ENTRY (gimp_size_entry_get_type ())
+G_DECLARE_FINAL_TYPE (GimpSizeEntry, gimp_size_entry, GIMP, SIZE_ENTRY, GtkGrid)
 
 
 /* For information look into the C source or the html documentation */
 
-GType       gimp_size_entry_get_type (void) G_GNUC_CONST;
-
 GtkWidget * gimp_size_entry_new (gint                       number_of_fields,
-                                 GimpUnit                   unit,
+                                 GimpUnit                  *unit,
                                  const gchar               *unit_format,
                                  gboolean                   menu_show_pixels,
                                  gboolean                   menu_show_percent,
@@ -92,6 +50,11 @@ GtkWidget * gimp_size_entry_new (gint                       number_of_fields,
 void        gimp_size_entry_add_field  (GimpSizeEntry   *gse,
                                         GtkSpinButton   *value_spinbutton,
                                         GtkSpinButton   *refval_spinbutton);
+
+GimpSizeEntryUpdatePolicy
+            gimp_size_entry_get_update_policy     (GimpSizeEntry *gse);
+gint        gimp_size_entry_get_n_fields          (GimpSizeEntry *gse);
+GtkWidget * gimp_size_entry_get_unit_combo        (GimpSizeEntry *gse);
 
 GtkWidget * gimp_size_entry_attach_label          (GimpSizeEntry *gse,
                                                    const gchar   *text,
@@ -134,9 +97,9 @@ void        gimp_size_entry_set_refval            (GimpSizeEntry *gse,
                                                    gint           field,
                                                    gdouble        refval);
 
-GimpUnit    gimp_size_entry_get_unit              (GimpSizeEntry *gse);
+GimpUnit  * gimp_size_entry_get_unit              (GimpSizeEntry *gse);
 void        gimp_size_entry_set_unit              (GimpSizeEntry *gse,
-                                                   GimpUnit       unit);
+                                                   GimpUnit      *unit);
 void        gimp_size_entry_show_unit_menu        (GimpSizeEntry *gse,
                                                    gboolean       show);
 

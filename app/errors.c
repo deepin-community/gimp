@@ -60,6 +60,7 @@ static GimpStackTraceMode   stack_trace_mode   = GIMP_STACK_TRACE_QUERY;
 static gchar               *full_prog_name     = NULL;
 static gchar               *backtrace_file     = NULL;
 static gchar               *backup_path        = NULL;
+static GFile               *backup_file        = NULL;
 static GimpLogHandler       log_domain_handler = 0;
 static guint                global_handler_id  = 0;
 
@@ -116,6 +117,8 @@ errors_init (Gimp               *gimp,
   backup_path = g_build_filename (gimp_directory (), "backups",
                                   "backup-XXX.xcf", NULL);
 
+  backup_file = g_file_new_for_path (backup_path);
+
   log_domain_handler = gimp_log_set_handler (FALSE,
                                              G_LOG_LEVEL_WARNING |
                                              G_LOG_LEVEL_MESSAGE |
@@ -152,6 +155,8 @@ errors_exit (void)
     g_free (full_prog_name);
   if (backup_path)
     g_free (backup_path);
+  if (backup_file)
+    g_object_unref (backup_file);
 }
 
 GList *
@@ -323,9 +328,17 @@ gimp_eek (const gchar *reason,
            * takes precedence over the command line argument.
            */
 #ifdef G_OS_WIN32
-          const gchar *gimpdebug = "gimp-debug-tool-" GIMP_TOOL_VERSION ".exe";
+#ifdef ENABLE_RELOCATABLE_RESOURCES
+          const gchar *gimpdebug = g_build_filename (gimp_installation_directory (), "bin",
+                                                     "gimp-debug-tool-" GIMP_TOOL_VERSION ".exe", NULL);
+#else
+          const gchar *gimpdebug = BINDIR "/gimp-debug-tool-" GIMP_TOOL_VERSION ".exe";
+#endif
 #elif defined (PLATFORM_OSX)
           const gchar *gimpdebug = "gimp-debug-tool-" GIMP_TOOL_VERSION;
+#elif !defined (G_OS_WIN32) && !defined (PLATFORM_OSX) && defined ENABLE_RELOCATABLE_RESOURCES
+          const gchar *gimpdebug = g_build_filename (gimp_installation_directory (),
+                                                     "libexec", "gimp-debug-tool-" GIMP_TOOL_VERSION, NULL);
 #else
           const gchar *gimpdebug = LIBEXECDIR "/gimp-debug-tool-" GIMP_TOOL_VERSION;
 #endif
@@ -339,7 +352,7 @@ gimp_eek (const gchar *reason,
           g_snprintf (pid, 16, "%u", (guint) getpid ());
           args[2] = pid;
 
-          g_snprintf (timestamp, 16, "%lu", the_errors_gimp->config->last_release_timestamp);
+          g_snprintf (timestamp, 16, "%"G_GINT64_FORMAT, the_errors_gimp->config->last_release_timestamp);
           args[7] = timestamp;
 
 #ifndef G_OS_WIN32
@@ -412,8 +425,16 @@ gimp_eek (const gchar *reason,
 #if defined (G_OS_WIN32) && ! defined (GIMP_CONSOLE_COMPILATION)
   /* g_on_error_* don't do anything reasonable on Win32. */
   if (! eek_handled && ! the_errors_gimp->no_interface)
-    MessageBox (NULL, g_strdup_printf ("%s: %s", reason, message),
-                full_prog_name, MB_OK|MB_ICONERROR);
+    {
+      char    *utf8  = g_strdup_printf ("%s: %s", reason, message);
+      wchar_t *utf16 = g_utf8_to_utf16 (utf8, -1, NULL, NULL, NULL);
+
+      MessageBoxW (NULL, utf16 ? utf16 : L"Generic error",
+                   L"GIMP", MB_OK | MB_ICONERROR);
+
+      g_free (utf16);
+      g_free (utf8);
+    }
 #endif
 
   /* Let's try to back-up all unsaved images!
@@ -440,12 +461,9 @@ gimp_eek (const gchar *reason,
       for (; iter && i < 1000; iter = iter->next)
         {
           GimpImage *image = iter->data;
-          GimpItem  *item;
 
           if (! gimp_image_is_dirty (image))
             continue;
-
-          item = GIMP_ITEM (gimp_image_get_active_drawable (image));
 
           /* This is a trick because we want to avoid any memory
            * allocation when the process is abnormally terminated.
@@ -461,12 +479,12 @@ gimp_eek (const gchar *reason,
                                               gimp_get_user_context (the_errors_gimp),
                                               NULL, NULL,
                                               "gimp-xcf-save",
-                                              GIMP_TYPE_INT32, 0,
-                                              GIMP_TYPE_IMAGE_ID,    gimp_image_get_ID (image),
-                                              GIMP_TYPE_DRAWABLE_ID, gimp_item_get_ID (item),
-                                              G_TYPE_STRING,         backup_path,
-                                              G_TYPE_STRING,         backup_path,
+                                              GIMP_TYPE_RUN_MODE,          GIMP_RUN_NONINTERACTIVE,
+                                              GIMP_TYPE_IMAGE,             image,
+                                              GIMP_TYPE_CORE_OBJECT_ARRAY, NULL,
+                                              G_TYPE_FILE,                 backup_file,
                                               G_TYPE_NONE);
+          g_rename (g_file_peek_path (backup_file), backup_path);
           i++;
         }
     }

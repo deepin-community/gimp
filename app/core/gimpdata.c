@@ -29,7 +29,8 @@
 
 #include "gimp-memsize.h"
 #include "gimpdata.h"
-#include "gimpmarshal.h"
+#include "gimpidtable.h"
+#include "gimpimage.h"
 #include "gimptag.h"
 #include "gimptagged.h"
 
@@ -45,7 +46,9 @@ enum
 enum
 {
   PROP_0,
+  PROP_ID,
   PROP_FILE,
+  PROP_IMAGE,
   PROP_WRITABLE,
   PROP_DELETABLE,
   PROP_MIME_TYPE
@@ -54,7 +57,10 @@ enum
 
 struct _GimpDataPrivate
 {
-  GFile  *file;
+  gint       ID;
+  GFile     *file;
+  GimpImage *image;
+
   GQuark  mime_type;
   guint   writable  : 1;
   guint   deletable : 1;
@@ -63,10 +69,10 @@ struct _GimpDataPrivate
   gint    freeze_count;
   gint64  mtime;
 
-  /* Identifies the GimpData object across sessions. Used when there
-   * is not a filename associated with the object.
+  /* Identifies the collection this GimpData belongs to.
+   * Used when there is not a filename associated with the object.
    */
-  gchar  *identifier;
+  gchar  *collection;
 
   GList  *tags;
 };
@@ -106,8 +112,10 @@ static GList    * gimp_data_get_tags          (GimpTagged          *tagged);
 static gchar    * gimp_data_get_identifier    (GimpTagged          *tagged);
 static gchar    * gimp_data_get_checksum      (GimpTagged          *tagged);
 
+static gchar    * gimp_data_get_collection    (GimpData            *data);
 
-G_DEFINE_TYPE_WITH_CODE (GimpData, gimp_data, GIMP_TYPE_VIEWABLE,
+
+G_DEFINE_TYPE_WITH_CODE (GimpData, gimp_data, GIMP_TYPE_RESOURCE,
                          G_ADD_PRIVATE (GimpData)
                          G_IMPLEMENT_INTERFACE (GIMP_TYPE_TAGGED,
                                                 gimp_data_tagged_iface_init))
@@ -115,6 +123,8 @@ G_DEFINE_TYPE_WITH_CODE (GimpData, gimp_data, GIMP_TYPE_VIEWABLE,
 #define parent_class gimp_data_parent_class
 
 static guint data_signals[LAST_SIGNAL] = { 0 };
+
+static GimpIdTable *data_id_table = NULL;
 
 
 static void
@@ -131,8 +141,7 @@ gimp_data_class_init (GimpDataClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpDataClass, dirty),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->constructed        = gimp_data_constructed;
@@ -153,9 +162,20 @@ gimp_data_class_init (GimpDataClass *klass)
   klass->duplicate                 = gimp_data_real_duplicate;
   klass->compare                   = gimp_data_real_compare;
 
+  g_object_class_install_property (object_class, PROP_ID,
+                                   g_param_spec_int ("id", NULL, NULL,
+                                                     0, G_MAXINT, 0,
+                                                     GIMP_PARAM_READABLE));
+
   g_object_class_install_property (object_class, PROP_FILE,
                                    g_param_spec_object ("file", NULL, NULL,
                                                         G_TYPE_FILE,
+                                                        GIMP_PARAM_READWRITE));
+
+  g_object_class_install_property (object_class, PROP_IMAGE,
+                                   g_param_spec_object ("image", NULL, NULL,
+                                                        GIMP_TYPE_IMAGE,
+                                                        G_PARAM_EXPLICIT_NOTIFY |
                                                         GIMP_PARAM_READWRITE));
 
   g_object_class_install_property (object_class, PROP_WRITABLE,
@@ -173,6 +193,8 @@ gimp_data_class_init (GimpDataClass *klass)
                                                         NULL,
                                                         GIMP_PARAM_READWRITE |
                                                         G_PARAM_CONSTRUCT_ONLY));
+
+  data_id_table = gimp_id_table_new ();
 }
 
 static void
@@ -192,6 +214,7 @@ gimp_data_init (GimpData *data)
 
   data->priv = private;
 
+  private->ID        = gimp_id_table_insert (data_id_table, data);
   private->writable  = TRUE;
   private->deletable = TRUE;
   private->dirty     = TRUE;
@@ -218,7 +241,10 @@ gimp_data_finalize (GObject *object)
 {
   GimpDataPrivate *private = GIMP_DATA_GET_PRIVATE (object);
 
+  gimp_id_table_remove (data_id_table, private->ID);
+
   g_clear_object (&private->file);
+  g_clear_weak_pointer (&private->image);
 
   if (private->tags)
     {
@@ -226,7 +252,7 @@ gimp_data_finalize (GObject *object)
       private->tags = NULL;
     }
 
-  g_clear_pointer (&private->identifier, g_free);
+  g_clear_pointer (&private->collection, g_free);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -249,6 +275,12 @@ gimp_data_set_property (GObject      *object,
                           private->deletable);
       break;
 
+    case PROP_IMAGE:
+      gimp_data_set_image (data,
+                           g_value_get_object (value),
+                           private->writable,
+                           private->deletable);
+      break;
     case PROP_WRITABLE:
       private->writable = g_value_get_boolean (value);
       break;
@@ -280,8 +312,16 @@ gimp_data_get_property (GObject    *object,
 
   switch (property_id)
     {
+    case PROP_ID:
+      g_value_set_int (value, private->ID);
+      break;
+
     case PROP_FILE:
       g_value_set_object (value, private->file);
+      break;
+
+    case PROP_IMAGE:
+      g_value_set_object (value, private->image);
       break;
 
     case PROP_WRITABLE:
@@ -374,6 +414,9 @@ gimp_data_real_compare (GimpData *data1,
   if (private1->deletable != private2->deletable)
     return private1->deletable ? -1 : 1;
 
+  if (g_strcmp0 (private1->collection, private2->collection) != 0)
+    return g_strcmp0 (private1->collection, private2->collection);
+
   return gimp_object_name_collate ((GimpObject *) data1,
                                    (GimpObject *) data2);
 }
@@ -431,8 +474,53 @@ gimp_data_get_tags (GimpTagged *tagged)
 static gchar *
 gimp_data_get_identifier (GimpTagged *tagged)
 {
-  GimpDataPrivate *private    = GIMP_DATA_GET_PRIVATE (tagged);
+  GimpData        *data       = GIMP_DATA (tagged);
+  GimpDataPrivate *private    = GIMP_DATA_GET_PRIVATE (data);
   gchar           *identifier = NULL;
+  gchar           *collection = NULL;
+
+  g_return_val_if_fail (private->internal || private->file != NULL || private->image != NULL, NULL);
+
+  collection = gimp_data_get_collection (data);
+  /* The identifier is guaranteed to be unique because we use 2 directory
+   * separators between the collection and the data name. Since the collection
+   * is either a controlled internal name or built from g_file_get_path(), which
+   * is guaranteed to be a canonical path, we know it won't contain 2
+   * separators. Therefore it should be impossible to construct a file path able
+   * to create duplicate identifiers.
+   * The last point is obviously that it should not be possible to have
+   * duplicate data names in a single collection. So every identifier should be
+   * unique.
+   */
+  identifier = g_strdup_printf ("%s:%s%s%s%s",
+                                private->internal ? "internal" : "external",
+                                collection, G_DIR_SEPARATOR_S, G_DIR_SEPARATOR_S,
+                                gimp_object_get_name (GIMP_OBJECT (data)));
+  g_free (collection);
+
+  return identifier;
+}
+
+static gchar *
+gimp_data_get_checksum (GimpTagged *tagged)
+{
+  return NULL;
+}
+
+/*
+ * A data collection name is either generated from the file path, or set when
+ * marking a data as internal.
+ * Several data objects may belong to a same collection. A very common example
+ * of this in fonts are collections of fonts (e.g. TrueType Collection .TTC
+ * files).
+ */
+static gchar *
+gimp_data_get_collection (GimpData *data)
+{
+  GimpDataPrivate *private    = GIMP_DATA_GET_PRIVATE (data);
+  gchar           *collection = NULL;
+
+  g_return_val_if_fail (private->internal || private->file != NULL || private->image != NULL, NULL);
 
   if (private->file)
     {
@@ -446,7 +534,7 @@ gimp_data_get_identifier (GimpTagged *tagged)
           tmp = g_strconcat ("${gimp_data_dir}",
                              path + strlen (data_dir),
                              NULL);
-          identifier = g_filename_to_utf8 (tmp, -1, NULL, NULL, NULL);
+          collection = g_filename_to_utf8 (tmp, -1, NULL, NULL, NULL);
           g_free (tmp);
         }
       else if (g_str_has_prefix (path, gimp_dir))
@@ -454,7 +542,7 @@ gimp_data_get_identifier (GimpTagged *tagged)
           tmp = g_strconcat ("${gimp_dir}",
                              path + strlen (gimp_dir),
                              NULL);
-          identifier = g_filename_to_utf8 (tmp, -1, NULL, NULL, NULL);
+          collection = g_filename_to_utf8 (tmp, -1, NULL, NULL, NULL);
           g_free (tmp);
         }
       else if (g_str_has_prefix (path, MYPAINT_BRUSHES_DIR))
@@ -462,36 +550,51 @@ gimp_data_get_identifier (GimpTagged *tagged)
           tmp = g_strconcat ("${mypaint_brushes_dir}",
                              path + strlen (MYPAINT_BRUSHES_DIR),
                              NULL);
-          identifier = g_filename_to_utf8 (tmp, -1, NULL, NULL, NULL);
+          collection = g_filename_to_utf8 (tmp, -1, NULL, NULL, NULL);
           g_free (tmp);
         }
       else
         {
-          identifier = g_filename_to_utf8 (path, -1,
+          collection = g_filename_to_utf8 (path, -1,
                                            NULL, NULL, NULL);
         }
 
-      if (! identifier)
+      if (! collection)
         {
           g_printerr ("%s: failed to convert '%s' to utf8.\n",
                       G_STRFUNC, path);
-          identifier = g_strdup (path);
+          collection = g_strdup (path);
         }
 
       g_free (path);
     }
+  else if (private->image)
+    {
+      collection = g_strdup_printf ("[image-id-%d]", gimp_image_get_id (private->image));
+    }
   else if (private->internal)
     {
-      identifier = g_strdup (private->identifier);
+      collection = g_strdup (private->collection);
     }
 
-  return identifier;
+  return collection;
 }
 
-static gchar *
-gimp_data_get_checksum (GimpTagged *tagged)
+
+/*  public functions  */
+
+gint
+gimp_data_get_id (GimpData *data)
 {
-  return NULL;
+  g_return_val_if_fail (GIMP_IS_DATA (data), -1);
+
+  return GIMP_DATA_GET_PRIVATE (data)->ID;
+}
+
+GimpData *
+gimp_data_get_by_id (gint data_id)
+{
+  return (GimpData *) gimp_id_table_lookup (data_id_table, data_id);
 }
 
 /**
@@ -521,7 +624,7 @@ gimp_data_save (GimpData  *data,
 
   g_return_val_if_fail (private->writable == TRUE, FALSE);
 
-  if (private->internal)
+  if (private->internal || private->image != NULL)
     {
       private->dirty = FALSE;
       return TRUE;
@@ -780,6 +883,8 @@ gimp_data_set_file (GimpData *data,
   if (private->internal)
     return;
 
+  g_return_if_fail (private->image == NULL);
+
   g_set_object (&private->file, file);
 
   private->writable  = FALSE;
@@ -853,6 +958,55 @@ gimp_data_get_file (GimpData *data)
   private = GIMP_DATA_GET_PRIVATE (data);
 
   return private->file;
+}
+
+/**
+ * gimp_data_set_image:
+ * @data:     A #GimpData object
+ * @image:    Image to assign to @data.
+ * @writable: %TRUE if we want to be able to write to this file.
+ * @deletable: %TRUE if we want to be able to delete this file.
+ *
+ * This function assigns an image to @data. This can only be done if no file has
+ * been assigned (a non-internal data can be attached either to a file or to an
+ * image).
+ **/
+void
+gimp_data_set_image (GimpData  *data,
+                     GimpImage *image,
+                     gboolean   writable,
+                     gboolean   deletable)
+{
+  GimpDataPrivate *private;
+
+  g_return_if_fail (GIMP_IS_DATA (data));
+  g_return_if_fail (GIMP_IS_IMAGE (image));
+
+  private = GIMP_DATA_GET_PRIVATE (data);
+
+  if (private->internal)
+    return;
+
+  g_return_if_fail (private->file == NULL);
+
+  g_set_weak_pointer (&private->image, image);
+
+  private->writable  = writable  ? TRUE : FALSE;
+  private->deletable = deletable ? TRUE : FALSE;
+
+  g_object_notify (G_OBJECT (data), "image");
+}
+
+GimpImage *
+gimp_data_get_image (GimpData *data)
+{
+  GimpDataPrivate *private;
+
+  g_return_val_if_fail (GIMP_IS_DATA (data), NULL);
+
+  private = GIMP_DATA_GET_PRIVATE (data);
+
+  return private->image;
 }
 
 /**
@@ -1134,7 +1288,8 @@ gimp_data_is_duplicatable (GimpData *data)
  * copied:  the newly created object is not automatically given an
  * object name, file name, preview, etc.
  *
- * Returns: the newly created copy, or %NULL if @data cannot be copied.
+ * Returns: (nullable) (transfer full): the newly created copy, or %NULL if
+ *          @data cannot be copied.
  **/
 GimpData *
 gimp_data_duplicate (GimpData *data)
@@ -1162,19 +1317,20 @@ gimp_data_duplicate (GimpData *data)
 
 /**
  * gimp_data_make_internal:
- * @data: a #GimpData object.
+ * @data:       a #GimpData object.
+ * @collection: internal collection title @data belongs to.
  *
  * Mark @data as "internal" to Gimp, which means that it will not be
  * saved to disk.  Note that if you do this, later calls to
  * gimp_data_save() and gimp_data_delete_from_disk() will
  * automatically return successfully without giving any warning.
  *
- * The identifier name shall be an untranslated globally unique string
- * that identifies the internal object across sessions.
+ * The @collection shall be an untranslated globally unique string
+ * that identifies the internal object collection across sessions.
  **/
 void
 gimp_data_make_internal (GimpData    *data,
-                         const gchar *identifier)
+                         const gchar *collection)
 {
   GimpDataPrivate *private;
 
@@ -1184,8 +1340,8 @@ gimp_data_make_internal (GimpData    *data,
 
   g_clear_object (&private->file);
 
-  g_free (private->identifier);
-  private->identifier = g_strdup (identifier);
+  g_free (private->collection);
+  private->collection = g_strdup (collection);
 
   private->writable  = FALSE;
   private->deletable = FALSE;
@@ -1214,7 +1370,7 @@ gimp_data_is_internal (GimpData *data)
  * files. In these three groups, the objects are sorted alphabetically
  * by name, using gimp_object_name_collate().
  *
- * Return value: -1 if @data1 compares before @data2,
+ * Returns: -1 if @data1 compares before @data2,
  *                0 if they compare equal,
  *                1 if @data1 compares after @data2.
  **/
@@ -1231,12 +1387,77 @@ gimp_data_compare (GimpData *data1,
 }
 
 /**
+ * gimp_data_identify:
+ * @data:        a #GimpData object.
+ * @name:        name of the #GimpData object.
+ * @collection:  text uniquely identifying the collection @data belongs to.
+ * @is_internal: whether this is internal data.
+ *
+ * Determine whether (@name, @collection, @is_internal) uniquely identify @data.
+ *
+ * Returns: %TRUE if the triplet identifies @data, %FALSE otherwise.
+ **/
+gboolean
+gimp_data_identify (GimpData    *data,
+                    const gchar *name,
+                    const gchar *collection,
+                    gboolean     is_internal)
+{
+  gchar    *current_collection = gimp_data_get_collection (data);
+  gboolean  identified;
+
+  identified = (is_internal == gimp_data_is_internal (data)      &&
+                g_strcmp0 (collection, current_collection) == 0  &&
+                /* Internal data have unique collection names. Moreover
+                 * their names can be localized so it should not be
+                 * relied upon for comparison.
+                 */
+                (is_internal ? TRUE : g_strcmp0 (name, gimp_object_get_name (GIMP_OBJECT (data))) == 0));
+
+  g_free (current_collection);
+
+  return identified;
+}
+
+/**
+ * gimp_data_get_identifiers:
+ * @data:        a #GimpData object.
+ * @name:        name of the #GimpData object.
+ * @collection:  text uniquely identifying the collection @data belongs to.
+ * @is_internal: whether this is internal data.
+ *
+ * Generates a triplet of identifiers which, together, should uniquely identify
+ * this @data.
+ * @name will be the same value as gimp_object_get_name() and @is_internal the
+ * same value as returned by gimp_data_is_internal(), except that it is not
+ * enough because two data from different sources may end up having the same
+ * name. Nevertheless all data names within a single collection of data are
+ * unique. @collection therefore identifies the source collection. And these 3
+ * identifiers together are enough to identify a GimpData.
+ *
+ * Internally the collection will likely be a single file name, therefore
+ * @collection will be constructed from the file name (if it exists, or an
+ * opaque identifier string otherwise, for internal data). Nevertheless you
+ * should not take this for granted and should always use this string as an
+ * opaque identifier only to be reused in gimp_data_identify().
+ **/
+void
+gimp_data_get_identifiers (GimpData  *data,
+                           gchar    **name,
+                           gchar    **collection,
+                           gboolean  *is_internal)
+{
+  *collection  = gimp_data_get_collection (data);
+  *name        = g_strdup (gimp_object_get_name (GIMP_OBJECT (data)));
+  *is_internal = gimp_data_is_internal (data);
+}
+/**
  * gimp_data_error_quark:
  *
  * This function is used to implement the GIMP_DATA_ERROR macro. It
  * shouldn't be called directly.
  *
- * Return value: the #GQuark to identify error in the GimpData error domain.
+ * Returns: the #GQuark to identify error in the GimpData error domain.
  **/
 GQuark
 gimp_data_error_quark (void)

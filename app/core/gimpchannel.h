@@ -35,7 +35,7 @@ struct _GimpChannel
 {
   GimpDrawable  parent_instance;
 
-  GimpRGB       color;             /*  Also stores the opacity        */
+  GeglColor    *color;             /*  Also stores the opacity        */
   gboolean      show_masked;       /*  Show masked areas--as          */
                                    /*  opposed to selected areas      */
 
@@ -73,6 +73,7 @@ struct _GimpChannelClass
                               gint                     x2,
                               gint                     y2);
   gboolean (* is_empty)      (GimpChannel             *channel);
+  gboolean (* is_full)       (GimpChannel             *channel);
 
   void     (* feather)       (GimpChannel             *channel,
                               gdouble                  radius_x,
@@ -126,19 +127,19 @@ GimpChannel * gimp_channel_new                (GimpImage         *image,
                                                gint               width,
                                                gint               height,
                                                const gchar       *name,
-                                               const GimpRGB     *color);
+                                               GeglColor         *color);
 GimpChannel * gimp_channel_new_from_buffer    (GimpImage         *image,
                                                GeglBuffer        *buffer,
                                                const gchar       *name,
-                                               const GimpRGB     *color);
+                                               GeglColor         *color);
 GimpChannel * gimp_channel_new_from_alpha     (GimpImage         *image,
                                                GimpDrawable      *drawable,
                                                const gchar       *name,
-                                               const GimpRGB     *color);
+                                               GeglColor         *color);
 GimpChannel * gimp_channel_new_from_component (GimpImage         *image,
                                                GimpChannelType    type,
                                                const gchar       *name,
-                                               const GimpRGB     *color);
+                                               GeglColor         *color);
 
 GimpChannel * gimp_channel_get_parent         (GimpChannel       *channel);
 
@@ -147,10 +148,9 @@ void          gimp_channel_set_opacity        (GimpChannel       *channel,
                                                gdouble            opacity,
                                                gboolean           push_undo);
 
-void          gimp_channel_get_color          (GimpChannel       *channel,
-                                               GimpRGB           *color);
+GeglColor   * gimp_channel_get_color          (GimpChannel       *channel);
 void          gimp_channel_set_color          (GimpChannel       *channel,
-                                               const GimpRGB     *color,
+                                               GeglColor         *color,
                                                gboolean           push_undo);
 
 gboolean      gimp_channel_get_show_masked    (GimpChannel       *channel);
@@ -177,6 +177,8 @@ gboolean      gimp_channel_boundary           (GimpChannel            *mask,
                                                gint                    x2,
                                                gint                    y2);
 gboolean      gimp_channel_is_empty           (GimpChannel            *mask);
+
+gboolean      gimp_channel_is_full            (GimpChannel            *mask);
 
 void          gimp_channel_feather            (GimpChannel            *mask,
                                                gdouble                 radius_x,

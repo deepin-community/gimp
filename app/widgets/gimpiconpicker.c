@@ -24,6 +24,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "widgets-types.h"
@@ -107,6 +108,10 @@ static void    gimp_icon_picker_menu_paste      (GtkWidget      *widget,
 static void    gimp_icon_picker_menu_copy       (GtkWidget      *widget,
                                                  GdkEventButton *event,
                                                  gpointer        data);
+#ifdef G_OS_WIN32
+static void    gimp_icon_picker_dialog_realize  (GtkWidget      *dialog,
+                                                 gpointer       *data);
+#endif
 
 
 G_DEFINE_TYPE_WITH_PRIVATE (GimpIconPicker, gimp_icon_picker, GTK_TYPE_BOX)
@@ -490,6 +495,12 @@ gimp_icon_picker_menu_from_file (GtkWidget      *widget,
   gtk_file_filter_add_pixbuf_formats (filter);
   gtk_file_chooser_add_filter (GTK_FILE_CHOOSER (dialog), filter);
 
+#ifdef G_OS_WIN32
+  g_signal_connect (dialog, "realize",
+                    G_CALLBACK (gimp_icon_picker_dialog_realize),
+                    picker);
+#endif
+
   if (gtk_dialog_run (GTK_DIALOG (dialog)) == GTK_RESPONSE_ACCEPT)
     {
       gchar     *filename;
@@ -551,16 +562,6 @@ gimp_icon_picker_menu_paste (GtkWidget      *widget,
 }
 
 static void
-gimp_icon_picker_menu_position (GtkMenu  *menu,
-                                gint     *x,
-                                gint     *y,
-                                gboolean *push_in,
-                                gpointer  user_data)
-{
-  gimp_button_menu_position (user_data, menu, GTK_POS_RIGHT, x, y);
-}
-
-static void
 gimp_icon_picker_clicked (GtkWidget      *widget,
                           GdkEventButton *event,
                           gpointer        object)
@@ -582,10 +583,11 @@ gimp_icon_picker_clicked (GtkWidget      *widget,
   else
     gtk_widget_set_sensitive (private->menu_item_copy, FALSE);
 
-  gtk_menu_popup (GTK_MENU (private->right_click_menu),
-                  NULL, NULL,
-                  gimp_icon_picker_menu_position, widget,
-                  event->button, event->time);
+  gtk_menu_popup_at_widget (GTK_MENU (private->right_click_menu),
+                            widget,
+                            GDK_GRAVITY_EAST,
+                            GDK_GRAVITY_NORTH_WEST,
+                            (GdkEvent *) event);
 }
 
 static void
@@ -614,3 +616,15 @@ gimp_icon_picker_menu_from_name (GtkWidget      *widget,
 
   gimp_popup_show (GIMP_POPUP (popup), GTK_WIDGET (picker));
 }
+
+#ifdef G_OS_WIN32
+static void
+gimp_icon_picker_dialog_realize (GtkWidget *dialog,
+                                 gpointer  *data)
+{
+  GimpIconPicker        *picker  = GIMP_ICON_PICKER (data);
+  GimpIconPickerPrivate *private = GET_PRIVATE (picker);
+
+  gimp_window_set_title_bar_theme (private->gimp, dialog);
+}
+#endif

@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <gegl.h>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -54,21 +56,19 @@ image_add_hguide_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 yposition;
-  gint32 guide = 0;
+  gint yposition;
+  guint guide = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   yposition = g_value_get_int (gimp_value_array_index (args, 1));
 
   if (success)
     {
-      if (yposition <= gimp_image_get_height (image))
-        {
-          GimpGuide *g;
+      GimpGuide *g;
 
-          g = gimp_image_add_hguide (image, yposition, TRUE);
-          guide = gimp_aux_item_get_ID (GIMP_AUX_ITEM (g));
-        }
+      g = gimp_image_add_hguide (image, yposition, TRUE);
+      if (g)
+        guide = gimp_aux_item_get_id (GIMP_AUX_ITEM (g));
       else
         success = FALSE;
     }
@@ -93,21 +93,19 @@ image_add_vguide_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 xposition;
-  gint32 guide = 0;
+  gint xposition;
+  guint guide = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   xposition = g_value_get_int (gimp_value_array_index (args, 1));
 
   if (success)
     {
-      if (xposition <= gimp_image_get_width (image))
-        {
-          GimpGuide *g;
+      GimpGuide *g;
 
-          g = gimp_image_add_vguide (image, xposition, TRUE);
-          guide = gimp_aux_item_get_ID (GIMP_AUX_ITEM (g));
-        }
+      g = gimp_image_add_vguide (image, xposition, TRUE);
+      if (g)
+        guide = gimp_aux_item_get_id (GIMP_AUX_ITEM (g));
       else
         success = FALSE;
     }
@@ -131,9 +129,9 @@ image_delete_guide_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  gint32 guide;
+  guint guide;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   guide = g_value_get_uint (gimp_value_array_index (args, 1));
 
   if (success)
@@ -161,24 +159,24 @@ image_find_next_guide_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 guide;
-  gint32 next_guide = 0;
+  gint guide;
+  guint next_guide = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  guide = g_value_get_uint (gimp_value_array_index (args, 1));
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  guide = g_value_get_int (gimp_value_array_index (args, 1));
 
   if (success)
     {
       GimpGuide *g = gimp_image_get_next_guide (image, guide, &success);
 
       if (g)
-        next_guide = gimp_aux_item_get_ID (GIMP_AUX_ITEM (g));
+        next_guide = gimp_aux_item_get_id (GIMP_AUX_ITEM (g));
 
       if (! success)
         g_set_error (error, GIMP_PDB_ERROR, GIMP_PDB_ERROR_INVALID_ARGUMENT,
                      _("Image '%s' (%d) does not contain guide with ID %d"),
                      gimp_image_get_display_name (image),
-                     gimp_image_get_ID (image),
+                     gimp_image_get_id (image),
                      guide);
     }
 
@@ -202,10 +200,10 @@ image_get_guide_orientation_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 guide;
-  gint32 orientation = 0;
+  guint guide;
+  gint orientation = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   guide = g_value_get_uint (gimp_value_array_index (args, 1));
 
   if (success)
@@ -238,10 +236,10 @@ image_get_guide_position_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 guide;
-  gint32 position = 0;
+  guint guide;
+  gint position = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   guide = g_value_get_uint (gimp_value_array_index (args, 1));
 
   if (success)
@@ -271,29 +269,29 @@ register_image_guides_procs (GimpPDB *pdb)
   /*
    * gimp-image-add-hguide
    */
-  procedure = gimp_procedure_new (image_add_hguide_invoker);
+  procedure = gimp_procedure_new (image_add_hguide_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-add-hguide");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-add-hguide",
-                                     "Add a horizontal guide to an image.",
-                                     "This procedure adds a horizontal guide to an image. It takes the input image and the y-position of the new guide as parameters. It returns the guide ID of the new guide.",
-                                     "Adam D. Moss",
-                                     "Adam D. Moss",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Add a horizontal guide to an image.",
+                                  "This procedure adds a horizontal guide to an image. It takes the input image and the y-position of the new guide as parameters. It returns the guide ID of the new guide.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Adam D. Moss",
+                                         "Adam D. Moss",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("yposition",
-                                                      "yposition",
-                                                      "The guide's y-offset from top of image",
-                                                      0, G_MAXINT32, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("yposition",
+                                                 "yposition",
+                                                 "The guide's y-offset from top of image",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_uint ("guide",
                                                       "guide",
@@ -306,29 +304,29 @@ register_image_guides_procs (GimpPDB *pdb)
   /*
    * gimp-image-add-vguide
    */
-  procedure = gimp_procedure_new (image_add_vguide_invoker);
+  procedure = gimp_procedure_new (image_add_vguide_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-add-vguide");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-add-vguide",
-                                     "Add a vertical guide to an image.",
-                                     "This procedure adds a vertical guide to an image. It takes the input image and the x-position of the new guide as parameters. It returns the guide ID of the new guide.",
-                                     "Adam D. Moss",
-                                     "Adam D. Moss",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Add a vertical guide to an image.",
+                                  "This procedure adds a vertical guide to an image. It takes the input image and the x-position of the new guide as parameters. It returns the guide ID of the new guide.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Adam D. Moss",
+                                         "Adam D. Moss",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("xposition",
-                                                      "xposition",
-                                                      "The guide's x-offset from left of image",
-                                                      0, G_MAXINT32, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("xposition",
+                                                 "xposition",
+                                                 "The guide's x-offset from left of image",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_uint ("guide",
                                                       "guide",
@@ -341,23 +339,23 @@ register_image_guides_procs (GimpPDB *pdb)
   /*
    * gimp-image-delete-guide
    */
-  procedure = gimp_procedure_new (image_delete_guide_invoker);
+  procedure = gimp_procedure_new (image_delete_guide_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-delete-guide");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-delete-guide",
-                                     "Deletes a guide from an image.",
-                                     "This procedure takes an image and a guide ID as input and removes the specified guide from the specified image.",
-                                     "Adam D. Moss",
-                                     "Adam D. Moss",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Deletes a guide from an image.",
+                                  "This procedure takes an image and a guide ID as input and removes the specified guide from the specified image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Adam D. Moss",
+                                         "Adam D. Moss",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_uint ("guide",
                                                   "guide",
@@ -370,29 +368,29 @@ register_image_guides_procs (GimpPDB *pdb)
   /*
    * gimp-image-find-next-guide
    */
-  procedure = gimp_procedure_new (image_find_next_guide_invoker);
+  procedure = gimp_procedure_new (image_find_next_guide_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-find-next-guide");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-find-next-guide",
-                                     "Find next guide on an image.",
-                                     "This procedure takes an image and a guide ID as input and finds the guide ID of the successor of the given guide ID in the image's guide list. If the supplied guide ID is 0, the procedure will return the first Guide. The procedure will return 0 if given the final guide ID as an argument or the image has no guides.",
-                                     "Adam D. Moss",
-                                     "Adam D. Moss",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Find next guide on an image.",
+                                  "This procedure takes an image and a guide ID as input and finds the guide ID of the successor of the given guide ID in the image's guide list. If the supplied guide ID is 0, the procedure will return the first Guide. The procedure will return 0 if given the final guide ID as an argument or the image has no guides.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Adam D. Moss",
+                                         "Adam D. Moss",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               g_param_spec_uint ("guide",
-                                                  "guide",
-                                                  "The ID of the current guide (0 if first invocation)",
-                                                  1, G_MAXUINT32, 1,
-                                                  GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
+                               g_param_spec_int ("guide",
+                                                 "guide",
+                                                 "The ID of the current guide (0 if first invocation)",
+                                                 0, G_MAXINT32, 1,
+                                                 GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_uint ("next-guide",
                                                       "next guide",
@@ -405,23 +403,23 @@ register_image_guides_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-guide-orientation
    */
-  procedure = gimp_procedure_new (image_get_guide_orientation_invoker);
+  procedure = gimp_procedure_new (image_get_guide_orientation_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-guide-orientation");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-guide-orientation",
-                                     "Get orientation of a guide on an image.",
-                                     "This procedure takes an image and a guide ID as input and returns the orientations of the guide.",
-                                     "Adam D. Moss",
-                                     "Adam D. Moss",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get orientation of a guide on an image.",
+                                  "This procedure takes an image and a guide ID as input and returns the orientations of the guide.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Adam D. Moss",
+                                         "Adam D. Moss",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_uint ("guide",
                                                   "guide",
@@ -443,23 +441,23 @@ register_image_guides_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-guide-position
    */
-  procedure = gimp_procedure_new (image_get_guide_position_invoker);
+  procedure = gimp_procedure_new (image_get_guide_position_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-guide-position");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-guide-position",
-                                     "Get position of a guide on an image.",
-                                     "This procedure takes an image and a guide ID as input and returns the position of the guide relative to the top or left of the image.",
-                                     "Adam D. Moss",
-                                     "Adam D. Moss",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get position of a guide on an image.",
+                                  "This procedure takes an image and a guide ID as input and returns the position of the guide relative to the top or left of the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Adam D. Moss",
+                                         "Adam D. Moss",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_uint ("guide",
                                                   "guide",
@@ -467,11 +465,11 @@ register_image_guides_procs (GimpPDB *pdb)
                                                   1, G_MAXUINT32, 1,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("position",
-                                                          "position",
-                                                          "The guide's position relative to top or left of image",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("position",
+                                                     "position",
+                                                     "The guide's position relative to top or left of image",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 }

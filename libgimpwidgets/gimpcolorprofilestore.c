@@ -24,8 +24,10 @@
 #include <string.h>
 
 #include <gtk/gtk.h>
+#include <gegl.h>
 
 #include "libgimpbase/gimpbase.h"
+#include "libgimpcolor/gimpcolor.h"
 #include "libgimpconfig/gimpconfig.h"
 
 #include "gimpwidgetstypes.h"
@@ -54,6 +56,14 @@ enum
 };
 
 
+struct _GimpColorProfileStore
+{
+  GtkListStore  parent_instance;
+
+  GFile        *history;
+};
+
+
 static void      gimp_color_profile_store_constructed    (GObject               *object);
 static void      gimp_color_profile_store_dispose        (GObject               *object);
 static void      gimp_color_profile_store_finalize       (GObject               *object);
@@ -75,15 +85,14 @@ static void      gimp_color_profile_store_get_separator  (GimpColorProfileStore 
                                                           GtkTreeIter            *iter,
                                                           gboolean                top);
 static gboolean  gimp_color_profile_store_save           (GimpColorProfileStore  *store,
-                                                          const gchar            *filename,
+                                                          GFile                  *file,
                                                           GError                **error);
 static gboolean  gimp_color_profile_store_load           (GimpColorProfileStore  *store,
-                                                          const gchar            *filename,
+                                                          GFile                  *file,
                                                           GError                **error);
 
 
-G_DEFINE_TYPE (GimpColorProfileStore,
-               gimp_color_profile_store, GTK_TYPE_LIST_STORE)
+G_DEFINE_TYPE (GimpColorProfileStore, gimp_color_profile_store, GTK_TYPE_LIST_STORE)
 
 #define parent_class gimp_color_profile_store_parent_class
 
@@ -102,16 +111,16 @@ gimp_color_profile_store_class_init (GimpColorProfileStoreClass *klass)
   /**
    * GimpColorProfileStore:history:
    *
-   * Filename of the color history used to populate the profile store.
+   * #GFile of the color history used to populate the profile store.
    *
    * Since: 2.4
    */
   g_object_class_install_property (object_class,
                                    PROP_HISTORY,
-                                   g_param_spec_string ("history",
+                                   g_param_spec_object ("history",
                                                         "History",
-                                                        "Filename of the color history used to populate the profile store",
-                                                        NULL,
+                                                        "Filen of the color history used to populate the profile store",
+                                                        G_TYPE_FILE,
                                                         G_PARAM_CONSTRUCT_ONLY |
                                                         GIMP_PARAM_READWRITE));
 }
@@ -148,9 +157,7 @@ gimp_color_profile_store_constructed (GObject *object)
                       -1);
 
   if (store->history)
-    {
-      gimp_color_profile_store_load (store, store->history, NULL);
-    }
+    gimp_color_profile_store_load (store, store->history, NULL);
 }
 
 static void
@@ -159,9 +166,7 @@ gimp_color_profile_store_dispose (GObject *object)
   GimpColorProfileStore *store = GIMP_COLOR_PROFILE_STORE (object);
 
   if (store->history)
-    {
-      gimp_color_profile_store_save (store, store->history, NULL);
-    }
+    gimp_color_profile_store_save (store, store->history, NULL);
 
   G_OBJECT_CLASS (parent_class)->dispose (object);
 }
@@ -171,7 +176,7 @@ gimp_color_profile_store_finalize (GObject *object)
 {
   GimpColorProfileStore *store = GIMP_COLOR_PROFILE_STORE (object);
 
-  g_clear_pointer (&store->history, g_free);
+  g_clear_object (&store->history);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -188,7 +193,7 @@ gimp_color_profile_store_set_property (GObject      *object,
     {
     case PROP_HISTORY:
       g_return_if_fail (store->history == NULL);
-      store->history = g_value_dup_string (value);
+      store->history = g_value_dup_object (value);
       break;
 
     default:
@@ -208,7 +213,7 @@ gimp_color_profile_store_get_property (GObject    *object,
   switch (property_id)
     {
     case PROP_HISTORY:
-      g_value_set_string (value, store->history);
+      g_value_set_object (value, store->history);
       break;
 
     default:
@@ -220,74 +225,38 @@ gimp_color_profile_store_get_property (GObject    *object,
 
 /**
  * gimp_color_profile_store_new:
- * @history: filename of the profilerc (or %NULL for no history)
+ * @history: #GFile of the profilerc (or %NULL for no history)
  *
  * Creates a new #GimpColorProfileStore object and populates it with
  * last used profiles read from the file @history. The updated history
  * is written back to disk when the store is disposed.
  *
- * The filename passed as @history is typically created using the
+ * The #GFile passed as @history is typically created using the
  * following code snippet:
  * <informalexample><programlisting>
  *  gchar *history = gimp_personal_rc_file ("profilerc");
  * </programlisting></informalexample>
  *
- * Return value: a new #GimpColorProfileStore
+ * Returns: a new #GimpColorProfileStore
  *
  * Since: 2.4
  **/
 GtkListStore *
-gimp_color_profile_store_new (const gchar *history)
+gimp_color_profile_store_new (GFile *history)
 {
+  g_return_val_if_fail (history == NULL || G_IS_FILE (history), NULL);
+
   return g_object_new (GIMP_TYPE_COLOR_PROFILE_STORE,
                        "history", history,
                        NULL);
 }
 
 /**
- * gimp_color_profile_store_add:
- * @store:    a #GimpColorProfileStore
- * @filename: filename of the profile to add (or %NULL)
- * @label:    label to use for the profile
- *            (may only be %NULL if @filename is %NULL)
- *
- * Adds a color profile item to the #GimpColorProfileStore. Items
- * added with this function will be kept at the top, separated from
- * the history of last used color profiles.
- *
- * This function is often used to add a selectable item for the %NULL
- * filename. If you pass %NULL for both @filename and @label, the
- * @label will be set to the string "None" for you (and translated for
- * the user).
- *
- * Deprecated: use gimp_color_profile_store_add_file() instead.
- *
- * Since: 2.4
- **/
-void
-gimp_color_profile_store_add (GimpColorProfileStore *store,
-                              const gchar           *filename,
-                              const gchar           *label)
-{
-  GFile *file = NULL;
-
-  g_return_if_fail (GIMP_IS_COLOR_PROFILE_STORE (store));
-  g_return_if_fail (label != NULL || filename == NULL);
-
-  if (filename)
-    file = g_file_new_for_path (filename);
-
-  gimp_color_profile_store_add_file (store, file, label);
-
-  g_object_unref (file);
-}
-
-/**
  * gimp_color_profile_store_add_file:
  * @store: a #GimpColorProfileStore
- * @file:  file of the profile to add (or %NULL)
+ * @file:  #GFile of the profile to add (or %NULL)
  * @label: label to use for the profile
- *         (may only be %NULL if @filename is %NULL)
+ *         (may only be %NULL if @file is %NULL)
  *
  * Adds a color profile item to the #GimpColorProfileStore. Items
  * added with this function will be kept at the top, separated from
@@ -333,7 +302,7 @@ gimp_color_profile_store_add_file (GimpColorProfileStore *store,
  * @label: label to use for the profile (or %NULL)
  * @iter:  a #GtkTreeIter
  *
- * Return value: %TRUE if the iter is valid and pointing to the item
+ * Returns: %TRUE if the iter is valid and pointing to the item
  *
  * Since: 2.4
  **/
@@ -414,6 +383,83 @@ _gimp_color_profile_store_history_add (GimpColorProfileStore *store,
                                                             ++max);
       g_free (basename);
     }
+
+  return iter_valid;
+}
+
+/**
+ * _gimp_color_profile_store_history_find_profile:
+ * @store:   a #GimpColorProfileStore
+ * @profile: a #GimpColorProfile to find (or %NULL)
+ * @iter:    a #GtkTreeIter
+ *
+ * Returns: %TRUE if the iter is valid and pointing to the item
+ *
+ * Since: 3.0
+ **/
+gboolean
+_gimp_color_profile_store_history_find_profile (GimpColorProfileStore *store,
+                                                GimpColorProfile      *profile,
+                                                GtkTreeIter           *iter)
+{
+  GtkTreeModel *model;
+  gboolean      iter_valid;
+  gint          max = -1;
+
+  g_return_val_if_fail (GIMP_IS_COLOR_PROFILE_STORE (store), FALSE);
+  g_return_val_if_fail (iter != NULL, FALSE);
+
+  model = GTK_TREE_MODEL (store);
+
+  for (iter_valid = gtk_tree_model_get_iter_first (model, iter);
+       iter_valid;
+       iter_valid = gtk_tree_model_iter_next (model, iter))
+    {
+      gint              type;
+      gint              index;
+      GFile            *file;
+      GimpColorProfile *combo_profile = NULL;
+
+      gtk_tree_model_get (model, iter,
+                          GIMP_COLOR_PROFILE_STORE_ITEM_TYPE, &type,
+                          GIMP_COLOR_PROFILE_STORE_INDEX,     &index,
+                          -1);
+
+      if (type != GIMP_COLOR_PROFILE_STORE_ITEM_FILE)
+        continue;
+
+      if (index > max)
+        max = index;
+
+      /*  check if we found a filename match  */
+      gtk_tree_model_get (model, iter,
+                          GIMP_COLOR_PROFILE_STORE_FILE, &file,
+                          -1);
+
+      /* Convert file to GimpColorProfile */
+      if (file)
+        combo_profile = gimp_color_profile_new_from_file (file, NULL);
+
+      if ((combo_profile && profile &&
+           gimp_color_profile_is_equal  (profile, combo_profile)) ||
+          (! file && ! profile))
+        {
+          if (file)
+            g_object_unref (file);
+          if (combo_profile)
+            g_object_unref (combo_profile);
+
+          return TRUE;
+        }
+
+      if (file)
+        g_object_unref (file);
+      if (combo_profile)
+        g_object_unref (combo_profile);
+    }
+
+  if (! profile)
+    return FALSE;
 
   return iter_valid;
 }
@@ -665,14 +711,14 @@ gimp_color_profile_store_load_profile (GimpColorProfileStore *store,
 
 static gboolean
 gimp_color_profile_store_load (GimpColorProfileStore  *store,
-                               const gchar            *filename,
+                               GFile                  *file,
                                GError                **error)
 {
   GScanner   *scanner;
   GTokenType  token;
   gint        i = 0;
 
-  scanner = gimp_scanner_new_file (filename, error);
+  scanner = gimp_scanner_new_file (file, error);
   if (! scanner)
     return FALSE;
 
@@ -710,14 +756,14 @@ gimp_color_profile_store_load (GimpColorProfileStore  *store,
                              _("fatal parse error"), TRUE);
     }
 
-  gimp_scanner_destroy (scanner);
+  gimp_scanner_unref (scanner);
 
   return TRUE;
 }
 
 static gboolean
 gimp_color_profile_store_save (GimpColorProfileStore  *store,
-                               const gchar            *filename,
+                               GFile                  *file,
                                GError                **error)
 {
   GimpConfigWriter *writer;
@@ -728,10 +774,10 @@ gimp_color_profile_store_save (GimpColorProfileStore  *store,
   gboolean          iter_valid;
   gint              i;
 
-  writer = gimp_config_writer_new_file (filename,
-                                        TRUE,
-                                        "GIMP color profile history",
-                                        error);
+  writer = gimp_config_writer_new_from_file (file,
+                                             TRUE,
+                                             "GIMP color profile history",
+                                             error);
   if (! writer)
     return FALSE;
 

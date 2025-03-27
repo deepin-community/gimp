@@ -25,6 +25,8 @@
 
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "gimpwidgetstypes.h"
 
 #include "gimpstringcombobox.h"
@@ -44,30 +46,38 @@ enum
   PROP_0,
   PROP_ID_COLUMN,
   PROP_LABEL_COLUMN,
-  PROP_ELLIPSIZE
+  PROP_ELLIPSIZE,
+  PROP_VALUE
 };
 
 
-typedef struct
+typedef struct _GimpStringComboBoxPrivate
 {
-  gint             id_column;
-  gint             label_column;
-  GtkCellRenderer *text_renderer;
+  gint                       id_column;
+  gint                       label_column;
+  GtkCellRenderer           *text_renderer;
+
+  GimpStringSensitivityFunc  sensitivity_func;
+  gpointer                   sensitivity_data;
+  GDestroyNotify             sensitivity_destroy;
 } GimpStringComboBoxPrivate;
 
-#define GIMP_STRING_COMBO_BOX_GET_PRIVATE(obj) \
-  ((GimpStringComboBoxPrivate *) ((GimpStringComboBox *) (obj))->priv)
 
+static void   gimp_string_combo_box_constructed   (GObject                   *object);
+static void   gimp_string_combo_box_set_property  (GObject                   *object,
+                                                   guint                      property_id,
+                                                   const GValue              *value,
+                                                   GParamSpec                *pspec);
+static void   gimp_string_combo_box_get_property  (GObject                   *object,
+                                                   guint                      property_id,
+                                                   GValue                    *value,
+                                                   GParamSpec                *pspec);
 
-static void   gimp_string_combo_box_constructed  (GObject      *object);
-static void   gimp_string_combo_box_set_property (GObject      *object,
-                                                  guint         property_id,
-                                                  const GValue *value,
-                                                  GParamSpec   *pspec);
-static void   gimp_string_combo_box_get_property (GObject      *object,
-                                                  guint         property_id,
-                                                  GValue       *value,
-                                                  GParamSpec   *pspec);
+static void  gimp_string_combo_box_cell_data_func (GtkCellLayout             *cell_layout,
+                                                   GtkCellRenderer           *cell,
+                                                   GtkTreeModel              *tree_model,
+                                                   GtkTreeIter               *iter,
+                                                   GimpStringComboBoxPrivate *priv);
 
 
 G_DEFINE_TYPE_WITH_PRIVATE (GimpStringComboBox, gimp_string_combo_box,
@@ -103,7 +113,7 @@ gimp_string_combo_box_class_init (GimpStringComboBoxClass *klass)
                                                      GIMP_PARAM_READWRITE |
                                                      G_PARAM_CONSTRUCT_ONLY));
   /**
-   * GimpStringComboBox:id-column:
+   * GimpStringComboBox:label-column:
    *
    * The column in the associated GtkTreeModel that holds strings to
    * be used as labels in the combo-box.
@@ -137,18 +147,34 @@ gimp_string_combo_box_class_init (GimpStringComboBoxClass *klass)
                                                       PANGO_TYPE_ELLIPSIZE_MODE,
                                                       PANGO_ELLIPSIZE_NONE,
                                                       GIMP_PARAM_READWRITE));
+
+  /**
+   * GimpStringComboBox:value:
+   *
+   * The active value (different from the "active" property of
+   * GtkComboBox which is the active index).
+   *
+   * Since: 3.0
+   */
+  g_object_class_install_property (object_class, PROP_VALUE,
+                                   g_param_spec_string ("value",
+                                                        "Value",
+                                                        "Value of active item",
+                                                        NULL,
+                                                        GIMP_PARAM_READWRITE |
+                                                        G_PARAM_EXPLICIT_NOTIFY));
 }
 
 static void
 gimp_string_combo_box_init (GimpStringComboBox *combo_box)
 {
-  combo_box->priv = gimp_string_combo_box_get_instance_private (combo_box);
 }
 
 static void
 gimp_string_combo_box_constructed (GObject *object)
 {
-  GimpStringComboBoxPrivate *priv = GIMP_STRING_COMBO_BOX_GET_PRIVATE (object);
+  GimpStringComboBox        *combo = GIMP_STRING_COMBO_BOX (object);
+  GimpStringComboBoxPrivate *priv = gimp_string_combo_box_get_instance_private (combo);
   GtkCellRenderer           *cell;
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
@@ -159,6 +185,16 @@ gimp_string_combo_box_constructed (GObject *object)
   gtk_cell_layout_set_attributes (GTK_CELL_LAYOUT (object), cell,
                                   "text", priv->label_column,
                                   NULL);
+  gtk_cell_layout_set_cell_data_func (GTK_CELL_LAYOUT (object), priv->text_renderer,
+                                      (GtkCellLayoutDataFunc) gimp_string_combo_box_cell_data_func,
+                                      priv, NULL);
+
+  /* The "changed" signal of the GtkComboBox also triggers a "value" property
+   * notification.
+   */
+  g_signal_connect (object, "changed",
+                    G_CALLBACK (g_object_notify),
+                    "value");
 }
 
 static void
@@ -167,7 +203,8 @@ gimp_string_combo_box_set_property (GObject      *object,
                                     const GValue *value,
                                     GParamSpec   *pspec)
 {
-  GimpStringComboBoxPrivate *priv = GIMP_STRING_COMBO_BOX_GET_PRIVATE (object);
+  GimpStringComboBox        *combo = GIMP_STRING_COMBO_BOX (object);
+  GimpStringComboBoxPrivate *priv = gimp_string_combo_box_get_instance_private (combo);
 
   switch (property_id)
     {
@@ -183,6 +220,11 @@ gimp_string_combo_box_set_property (GObject      *object,
       g_object_set_property (G_OBJECT (priv->text_renderer),
                              pspec->name, value);
       break;
+    case PROP_VALUE:
+      gimp_string_combo_box_set_active (GIMP_STRING_COMBO_BOX (object),
+                                        g_value_get_string (value));
+      break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -195,7 +237,8 @@ gimp_string_combo_box_get_property (GObject    *object,
                                     GValue     *value,
                                     GParamSpec *pspec)
 {
-  GimpStringComboBoxPrivate *priv = GIMP_STRING_COMBO_BOX_GET_PRIVATE (object);
+  GimpStringComboBox        *combo = GIMP_STRING_COMBO_BOX (object);
+  GimpStringComboBoxPrivate *priv = gimp_string_combo_box_get_instance_private (combo);
 
   switch (property_id)
     {
@@ -211,6 +254,15 @@ gimp_string_combo_box_get_property (GObject    *object,
       g_object_get_property (G_OBJECT (priv->text_renderer),
                              pspec->name, value);
       break;
+    case PROP_VALUE:
+      {
+        gchar *v;
+
+        v = gimp_string_combo_box_get_active (GIMP_STRING_COMBO_BOX (object));
+        g_value_take_string (value, v);
+      }
+    break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -260,7 +312,7 @@ gimp_string_model_lookup (GtkTreeModel *model,
  * @id_column:    the model column of the ID
  * @label_column: the modl column of the label
  *
- * Return value: a new #GimpStringComboBox.
+ * Returns: a new #GimpStringComboBox.
  *
  * Since: 2.4
  **/
@@ -290,8 +342,8 @@ gimp_string_combo_box_new (GtkTreeModel *model,
  * Looks up the item that belongs to the given @id and makes it the
  * selected item in the @combo_box.
  *
- * Return value: %TRUE on success or %FALSE if there was no item for
- *               this value.
+ * Returns: %TRUE on success or %FALSE if there was no item for
+ *          this value.
  *
  * Since: 2.4
  **/
@@ -299,7 +351,11 @@ gboolean
 gimp_string_combo_box_set_active (GimpStringComboBox *combo_box,
                                   const gchar        *id)
 {
+  GimpStringComboBoxPrivate *priv;
+
   g_return_val_if_fail (GIMP_IS_STRING_COMBO_BOX (combo_box), FALSE);
+
+  priv = gimp_string_combo_box_get_instance_private (combo_box);
 
   if (id)
     {
@@ -309,11 +365,12 @@ gimp_string_combo_box_set_active (GimpStringComboBox *combo_box,
 
       model = gtk_combo_box_get_model (GTK_COMBO_BOX (combo_box));
 
-      column = GIMP_STRING_COMBO_BOX_GET_PRIVATE (combo_box)->id_column;
+      column = priv->id_column;
 
       if (gimp_string_model_lookup (model, column, id, &iter))
         {
           gtk_combo_box_set_active_iter (GTK_COMBO_BOX (combo_box), &iter);
+          g_object_notify (G_OBJECT (combo_box), "value");
           return TRUE;
         }
 
@@ -322,6 +379,7 @@ gimp_string_combo_box_set_active (GimpStringComboBox *combo_box,
   else
     {
       gtk_combo_box_set_active (GTK_COMBO_BOX (combo_box), -1);
+      g_object_notify (G_OBJECT (combo_box), "value");
 
       return TRUE;
     }
@@ -333,16 +391,19 @@ gimp_string_combo_box_set_active (GimpStringComboBox *combo_box,
  *
  * Retrieves the value of the selected (active) item in the @combo_box.
  *
- * Return value: newly allocated ID string or %NULL if nothing was selected
+ * Returns: newly allocated ID string or %NULL if nothing was selected
  *
  * Since: 2.4
  **/
 gchar *
 gimp_string_combo_box_get_active (GimpStringComboBox *combo_box)
 {
-  GtkTreeIter  iter;
+  GtkTreeIter                iter;
+  GimpStringComboBoxPrivate *priv;
 
   g_return_val_if_fail (GIMP_IS_STRING_COMBO_BOX (combo_box), NULL);
+
+  priv = gimp_string_combo_box_get_instance_private (combo_box);
 
   if (gtk_combo_box_get_active_iter (GTK_COMBO_BOX (combo_box), &iter))
     {
@@ -350,7 +411,7 @@ gimp_string_combo_box_get_active (GimpStringComboBox *combo_box)
       gchar        *value;
       gint          column;
 
-      column = GIMP_STRING_COMBO_BOX_GET_PRIVATE (combo_box)->id_column;
+      column = priv->id_column;
 
       gtk_tree_model_get (model, &iter,
                           column, &value,
@@ -360,4 +421,75 @@ gimp_string_combo_box_get_active (GimpStringComboBox *combo_box)
     }
 
   return NULL;
+}
+
+/**
+ * gimp_string_combo_box_set_sensitivity:
+ * @combo_box: a #GimpStringComboBox
+ * @func:      a function that returns a boolean value, or %NULL to unset
+ * @data:      data to pass to @func
+ * @destroy:   destroy notification for @data
+ *
+ * Sets a function that is used to decide about the sensitivity of
+ * rows in the @combo_box. Use this if you want to set certain rows
+ * insensitive.
+ *
+ * Calling gtk_widget_queue_draw() on the @combo_box will cause the
+ * sensitivity to be updated.
+ *
+ * Since: 3.0
+ **/
+void
+gimp_string_combo_box_set_sensitivity (GimpStringComboBox        *combo_box,
+                                       GimpStringSensitivityFunc  func,
+                                       gpointer                   data,
+                                       GDestroyNotify             destroy)
+{
+  GimpStringComboBoxPrivate *priv;
+
+  g_return_if_fail (GIMP_IS_STRING_COMBO_BOX (combo_box));
+
+  priv = gimp_string_combo_box_get_instance_private (combo_box);
+
+  if (priv->sensitivity_destroy)
+    {
+      GDestroyNotify d = priv->sensitivity_destroy;
+
+      priv->sensitivity_destroy = NULL;
+      d (priv->sensitivity_data);
+    }
+
+  priv->sensitivity_func    = func;
+  priv->sensitivity_data    = data;
+  priv->sensitivity_destroy = destroy;
+
+  gtk_widget_queue_draw (GTK_WIDGET (combo_box));
+}
+
+
+/* Private functions. */
+
+static void
+gimp_string_combo_box_cell_data_func (GtkCellLayout             *cell_layout,
+                                      GtkCellRenderer           *cell,
+                                      GtkTreeModel              *tree_model,
+                                      GtkTreeIter               *iter,
+                                      GimpStringComboBoxPrivate *priv)
+{
+  if (priv->sensitivity_func)
+    {
+      gchar    *id;
+      gboolean  sensitive;
+
+      gtk_tree_model_get (tree_model, iter,
+                          priv->id_column, &id,
+                          -1);
+
+      sensitive = priv->sensitivity_func (id, priv->sensitivity_data);
+
+      g_object_set (cell,
+                    "sensitive", sensitive,
+                    NULL);
+      g_free (id);
+    }
 }

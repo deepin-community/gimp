@@ -29,6 +29,8 @@
 
 #include "gimpwidgetstypes.h"
 
+#include "gimpdialog.h"
+
 #undef GIMP_DISABLE_DEPRECATED
 #include "gimpfileentry.h"
 
@@ -53,7 +55,7 @@
  * case the filename listbox of the #GtkFileChooser dialog will be
  * set to directory mode.
  *
- * If you specify @check_valid as #TRUE in gimp_file_entry_new() the
+ * If you specify @check_valid as %TRUE in _gimp_file_entry_new() the
  * entered filename will be checked for validity and a pixmap will be
  * shown which indicates if the file exists or not.
  *
@@ -66,6 +68,21 @@ enum
 {
   FILENAME_CHANGED,
   LAST_SIGNAL
+};
+
+struct _GimpFileEntry
+{
+  GtkBox     parent_instance;
+
+  GtkWidget *file_exists;
+  GtkWidget *entry;
+  GtkWidget *browse_button;
+
+  GtkWidget *file_dialog;
+
+  gchar     *title;
+  gboolean   dir_only;
+  gboolean   check_valid;
 };
 
 
@@ -85,15 +102,15 @@ static void   gimp_file_entry_browse_clicked       (GtkWidget     *widget,
 static void   gimp_file_entry_check_filename       (GimpFileEntry *entry);
 
 
-G_DEFINE_TYPE (GimpFileEntry, gimp_file_entry, GTK_TYPE_BOX)
+G_DEFINE_TYPE (GimpFileEntry, _gimp_file_entry, GTK_TYPE_BOX)
 
-#define parent_class gimp_file_entry_parent_class
+#define parent_class _gimp_file_entry_parent_class
 
 static guint gimp_file_entry_signals[LAST_SIGNAL] = { 0 };
 
 
 static void
-gimp_file_entry_class_init (GimpFileEntryClass *klass)
+_gimp_file_entry_class_init (GimpFileEntryClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
@@ -106,18 +123,15 @@ gimp_file_entry_class_init (GimpFileEntryClass *klass)
     g_signal_new ("filename-changed",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (GimpFileEntryClass, filename_changed),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
+                  0,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->dispose   = gimp_file_entry_dispose;
-
-  klass->filename_changed = NULL;
 }
 
 static void
-gimp_file_entry_init (GimpFileEntry *entry)
+_gimp_file_entry_init (GimpFileEntry *entry)
 {
   GtkWidget *image;
   GtkWidget *button;
@@ -193,7 +207,7 @@ gimp_file_entry_dispose (GObject *object)
 }
 
 /**
- * gimp_file_entry_new:
+ * _gimp_file_entry_new:
  * @title:       The title of the #GimpFileEntry dialog.
  * @filename:    The initial filename.
  * @dir_only:    %TRUE if the file entry should accept directories only.
@@ -205,10 +219,10 @@ gimp_file_entry_dispose (GObject *object)
  * Returns: A pointer to the new #GimpFileEntry widget.
  **/
 GtkWidget *
-gimp_file_entry_new (const gchar *title,
-                     const gchar *filename,
-                     gboolean     dir_only,
-                     gboolean     check_valid)
+_gimp_file_entry_new (const gchar *title,
+                      const gchar *filename,
+                      gboolean     dir_only,
+                      gboolean     check_valid)
 {
   GimpFileEntry *entry;
 
@@ -238,13 +252,13 @@ gimp_file_entry_new (const gchar *title,
                                NULL);
     }
 
-  gimp_file_entry_set_filename (entry, filename);
+  _gimp_file_entry_set_filename (entry, filename);
 
   return GTK_WIDGET (entry);
 }
 
 /**
- * gimp_file_entry_get_filename:
+ * _gimp_file_entry_get_filename:
  * @entry: The file entry you want to know the filename from.
  *
  * Note that you have to g_free() the returned string.
@@ -252,7 +266,7 @@ gimp_file_entry_new (const gchar *title,
  * Returns: The file or directory the user has entered.
  **/
 gchar *
-gimp_file_entry_get_filename (GimpFileEntry *entry)
+_gimp_file_entry_get_filename (GimpFileEntry *entry)
 {
   gchar *utf8;
   gchar *filename;
@@ -269,17 +283,17 @@ gimp_file_entry_get_filename (GimpFileEntry *entry)
 }
 
 /**
- * gimp_file_entry_set_filename:
+ * _gimp_file_entry_set_filename:
  * @entry:    The file entry you want to set the filename for.
  * @filename: The new filename.
  *
- * If you specified @check_valid as %TRUE in gimp_file_entry_new()
+ * If you specified @check_valid as %TRUE in _gimp_file_entry_new()
  * the #GimpFileEntry will immediately check the validity of the file
  * name.
  **/
 void
-gimp_file_entry_set_filename (GimpFileEntry *entry,
-                              const gchar   *filename)
+_gimp_file_entry_set_filename (GimpFileEntry *entry,
+                               const gchar   *filename)
 {
   gchar *utf8;
 
@@ -297,6 +311,22 @@ gimp_file_entry_set_filename (GimpFileEntry *entry,
    */
   gimp_file_entry_entry_activate (entry->entry, entry);
 }
+
+/**
+ * _gimp_file_entry_get_entry:
+ * @entry: The #GimpFileEntry.
+ *
+ * Returns: (transfer none): the #GtkEntry internally used by the
+ *          widget. The object belongs to @entry and should not be
+ *          freed.
+ **/
+GtkWidget *
+_gimp_file_entry_get_entry (GimpFileEntry *entry)
+{
+  return entry->entry;
+}
+
+/* Private Functions */
 
 static void
 gimp_file_entry_entry_changed (GtkWidget *widget,
@@ -373,7 +403,7 @@ gimp_file_entry_chooser_response (GtkWidget     *dialog,
       gchar *filename;
 
       filename = gtk_file_chooser_get_filename (GTK_FILE_CHOOSER (dialog));
-      gimp_file_entry_set_filename (entry, filename);
+      _gimp_file_entry_set_filename (entry, filename);
       g_free (filename);
     }
 
@@ -437,10 +467,10 @@ gimp_file_entry_browse_clicked (GtkWidget     *widget,
 
                                      NULL);
 
-        gtk_dialog_set_alternative_button_order (GTK_DIALOG (entry->file_dialog),
-                                                GTK_RESPONSE_OK,
-                                                GTK_RESPONSE_CANCEL,
-                                                -1);
+        gimp_dialog_set_alternative_button_order (GTK_DIALOG (entry->file_dialog),
+                                                  GTK_RESPONSE_OK,
+                                                  GTK_RESPONSE_CANCEL,
+                                                  -1);
 
       chooser = GTK_FILE_CHOOSER (entry->file_dialog);
 

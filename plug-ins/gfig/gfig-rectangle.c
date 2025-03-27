@@ -120,7 +120,7 @@ d_paint_rectangle (GfigObject *obj)
       gimp_context_push ();
       gimp_context_set_feather (selopt.feather);
       gimp_context_set_feather_radius (selopt.feather_radius, selopt.feather_radius);
-      gimp_image_select_rectangle (gfig_context->image_id,
+      gimp_image_select_rectangle (gfig_context->image,
                                    selopt.type,
                                    dpnts[0], dpnts[1],
                                    dpnts[2] - dpnts[0],
@@ -128,7 +128,7 @@ d_paint_rectangle (GfigObject *obj)
       gimp_context_pop ();
 
       paint_layer_fill (dpnts[0], dpnts[1], dpnts[2], dpnts[3]);
-      gimp_selection_none (gfig_context->image_id);
+      gimp_selection_none (gfig_context->image);
     }
 
   if (obj->style.paint_type == PAINT_BRUSH_TYPE)
@@ -137,7 +137,7 @@ d_paint_rectangle (GfigObject *obj)
                               dpnts[2], dpnts[3], dpnts[0], dpnts[3],
                               dpnts[0], dpnts[1] };
 
-      gfig_paint (selvals.brshtype, gfig_context->drawable_id, 10, line_pnts);
+      gfig_paint (selvals.brshtype, gfig_context->drawable, 10, line_pnts);
     }
 }
 
@@ -199,7 +199,8 @@ d_rectangle_start (GdkPoint *pnt,
 }
 
 void
-d_rectangle_end (GdkPoint *pnt,
+d_rectangle_end (GimpGfig *gfig,
+                 GdkPoint *pnt,
                  gboolean  shift_down)
 {
   /* Under control point */
@@ -210,7 +211,7 @@ d_rectangle_end (GdkPoint *pnt,
     }
   else
     {
-      add_to_all_obj (gfig_context->current_obj, obj_creating);
+      add_to_all_obj (gfig, gfig_context->current_obj, obj_creating);
     }
 
   obj_creating = NULL;

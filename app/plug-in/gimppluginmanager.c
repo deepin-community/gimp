@@ -46,7 +46,6 @@
 #include "gimppluginmanager.h"
 #include "gimppluginmanager-data.h"
 #include "gimppluginmanager-help-domain.h"
-#include "gimppluginmanager-locale-domain.h"
 #include "gimppluginmanager-menu-branch.h"
 #include "gimppluginshm.h"
 #include "gimptemporaryprocedure.h"
@@ -88,8 +87,7 @@ gimp_plug_in_manager_class_init (GimpPlugInManagerClass *klass)
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpPlugInManagerClass,
                                    plug_in_opened),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_PLUG_IN);
 
@@ -99,8 +97,7 @@ gimp_plug_in_manager_class_init (GimpPlugInManagerClass *klass)
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpPlugInManagerClass,
                                    plug_in_closed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_PLUG_IN);
 
@@ -136,6 +133,7 @@ gimp_plug_in_manager_finalize (GObject *object)
   g_clear_pointer (&manager->save_procs,     g_slist_free);
   g_clear_pointer (&manager->export_procs,   g_slist_free);
   g_clear_pointer (&manager->raw_load_procs, g_slist_free);
+  g_clear_pointer (&manager->batch_procs,    g_slist_free);
 
   g_clear_pointer (&manager->display_load_procs,     g_slist_free);
   g_clear_pointer (&manager->display_save_procs,     g_slist_free);
@@ -162,7 +160,6 @@ gimp_plug_in_manager_finalize (GObject *object)
   g_clear_pointer (&manager->debug, gimp_plug_in_debug_free);
 
   gimp_plug_in_manager_menu_branch_exit (manager);
-  gimp_plug_in_manager_locale_domain_exit (manager);
   gimp_plug_in_manager_help_domain_exit (manager);
   gimp_plug_in_manager_data_free (manager);
 
@@ -186,13 +183,13 @@ gimp_plug_in_manager_get_memsize (GimpObject *object,
   memsize += gimp_g_slist_get_memsize (manager->save_procs, 0);
   memsize += gimp_g_slist_get_memsize (manager->export_procs, 0);
   memsize += gimp_g_slist_get_memsize (manager->raw_load_procs, 0);
+  memsize += gimp_g_slist_get_memsize (manager->batch_procs, 0);
   memsize += gimp_g_slist_get_memsize (manager->display_load_procs, 0);
   memsize += gimp_g_slist_get_memsize (manager->display_save_procs, 0);
   memsize += gimp_g_slist_get_memsize (manager->display_export_procs, 0);
   memsize += gimp_g_slist_get_memsize (manager->display_raw_load_procs, 0);
 
   memsize += gimp_g_slist_get_memsize (manager->menu_branches,  0 /* FIXME */);
-  memsize += gimp_g_slist_get_memsize (manager->locale_domains, 0 /* FIXME */);
   memsize += gimp_g_slist_get_memsize (manager->help_domains,   0 /* FIXME */);
 
   memsize += gimp_g_slist_get_memsize_foreach (manager->open_plug_ins,
@@ -230,6 +227,7 @@ gimp_plug_in_manager_initialize (GimpPlugInManager  *manager,
                                  GimpInitStatusFunc  status_callback)
 {
   GimpCoreConfig *config;
+  const gchar    *path_str;
   GList          *path;
 
   g_return_if_fail (GIMP_IS_PLUG_IN_MANAGER (manager));
@@ -239,13 +237,20 @@ gimp_plug_in_manager_initialize (GimpPlugInManager  *manager,
 
   status_callback (NULL, _("Plug-in Interpreters"), 0.8);
 
-  path = gimp_config_path_expand_to_files (config->interpreter_path, NULL);
+  path_str = g_getenv ("GIMP_TESTING_INTERPRETER_DIRS");
+  if (! path_str)
+    path_str = config->interpreter_path;
+
+  path = gimp_config_path_expand_to_files (path_str, NULL);
   gimp_interpreter_db_load (manager->interpreter_db, path);
   g_list_free_full (path, (GDestroyNotify) g_object_unref);
 
   status_callback (NULL, _("Plug-in Environment"), 0.9);
 
-  path = gimp_config_path_expand_to_files (config->environ_path, NULL);
+  path_str = g_getenv ("GIMP_TESTING_ENVIRON_DIRS");
+  if (! path_str)
+    path_str = config->environ_path;
+  path = gimp_config_path_expand_to_files (path_str, NULL);
   gimp_environ_table_load (manager->environ_table, path);
   g_list_free_full (path, (GDestroyNotify) g_object_unref);
 
@@ -318,6 +323,7 @@ gimp_plug_in_manager_add_procedure (GimpPlugInManager   *manager,
           manager->save_procs             = g_slist_remove (manager->save_procs,             tmp_proc);
           manager->export_procs           = g_slist_remove (manager->export_procs,           tmp_proc);
           manager->raw_load_procs         = g_slist_remove (manager->raw_load_procs,         tmp_proc);
+          manager->batch_procs            = g_slist_remove (manager->batch_procs,            tmp_proc);
           manager->display_load_procs     = g_slist_remove (manager->display_load_procs,     tmp_proc);
           manager->display_save_procs     = g_slist_remove (manager->display_save_procs,     tmp_proc);
           manager->display_export_procs   = g_slist_remove (manager->display_export_procs,   tmp_proc);
@@ -334,6 +340,25 @@ gimp_plug_in_manager_add_procedure (GimpPlugInManager   *manager,
 
   manager->plug_in_procedures = g_slist_prepend (manager->plug_in_procedures,
                                                  g_object_ref (procedure));
+}
+
+void
+gimp_plug_in_manager_add_batch_procedure (GimpPlugInManager   *manager,
+                                          GimpPlugInProcedure *proc)
+{
+  g_return_if_fail (GIMP_IS_PLUG_IN_MANAGER (manager));
+  g_return_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc));
+
+  if (! g_slist_find (manager->batch_procs, proc))
+    manager->batch_procs = g_slist_prepend (manager->batch_procs, proc);
+}
+
+GSList *
+gimp_plug_in_manager_get_batch_procedures (GimpPlugInManager *manager)
+{
+  g_return_val_if_fail (GIMP_IS_PLUG_IN_MANAGER (manager), NULL);
+
+  return manager->batch_procs;
 }
 
 void

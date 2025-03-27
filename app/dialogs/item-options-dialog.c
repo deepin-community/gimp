@@ -48,16 +48,16 @@ struct _ItemOptionsDialog
   GimpItem                *item;
   GimpContext             *context;
   gboolean                 visible;
-  gboolean                 linked;
   GimpColorTag             color_tag;
   gboolean                 lock_content;
   gboolean                 lock_position;
+  gboolean                 lock_visibility;
   GimpItemOptionsCallback  callback;
   gpointer                 user_data;
 
   GtkWidget               *left_vbox;
-  GtkWidget               *left_table;
-  gint                     table_row;
+  GtkWidget               *left_grid;
+  gint                     grid_row;
   GtkWidget               *name_entry;
   GtkWidget               *right_frame;
   GtkWidget               *right_vbox;
@@ -67,13 +67,14 @@ struct _ItemOptionsDialog
 
 /*  local function prototypes  */
 
-static void        item_options_dialog_free     (ItemOptionsDialog *private);
-static void        item_options_dialog_response (GtkWidget         *dialog,
-                                                 gint               response_id,
-                                                 ItemOptionsDialog *private);
-static GtkWidget * check_button_with_icon_new    (const gchar      *label,
-                                                  const gchar      *icon_name,
-                                                  GtkBox           *vbox);
+static void        item_options_dialog_free          (ItemOptionsDialog *private);
+static void        item_options_dialog_response      (GtkWidget         *dialog,
+                                                      gint               response_id,
+                                                      ItemOptionsDialog *private);
+static GtkWidget * check_button_with_icon_new        (const gchar       *label,
+                                                      const gchar       *icon_name,
+                                                      GtkBox            *vbox);
+static gint        check_button_get_bold_label_width (const gchar       *text);
 
 
 /*  public functions  */
@@ -92,12 +93,13 @@ item_options_dialog_new (GimpImage               *image,
                          const gchar             *lock_content_icon_name,
                          const gchar             *lock_content_label,
                          const gchar             *lock_position_label,
+                         const gchar             *lock_visibility_label,
                          const gchar             *item_name,
                          gboolean                 item_visible,
-                         gboolean                 item_linked,
                          GimpColorTag             item_color_tag,
                          gboolean                 item_lock_content,
                          gboolean                 item_lock_position,
+                         gboolean                 item_lock_visibility,
                          GimpItemOptionsCallback  callback,
                          gpointer                 user_data)
 {
@@ -105,7 +107,7 @@ item_options_dialog_new (GimpImage               *image,
   GtkWidget         *dialog;
   GimpViewable      *viewable;
   GtkWidget         *main_hbox;
-  GtkWidget         *table;
+  GtkWidget         *grid;
   GtkWidget         *button;
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
@@ -121,23 +123,23 @@ item_options_dialog_new (GimpImage               *image,
 
   private = g_slice_new0 (ItemOptionsDialog);
 
-  private->image         = image;
-  private->item          = item;
-  private->context       = context;
-  private->visible       = item_visible;
-  private->linked        = item_linked;
-  private->color_tag     = item_color_tag;
-  private->lock_content  = item_lock_content;
-  private->lock_position = item_lock_position;
-  private->callback      = callback;
-  private->user_data     = user_data;
+  private->image           = image;
+  private->item            = item;
+  private->context         = context;
+  private->visible         = item_visible;
+  private->color_tag       = item_color_tag;
+  private->lock_content    = item_lock_content;
+  private->lock_position   = item_lock_position;
+  private->lock_visibility = item_lock_visibility;
+  private->callback        = callback;
+  private->user_data       = user_data;
 
   if (item)
     viewable = GIMP_VIEWABLE (item);
   else
     viewable = GIMP_VIEWABLE (image);
 
-  dialog = gimp_viewable_dialog_new (viewable, context,
+  dialog = gimp_viewable_dialog_new (g_list_prepend (NULL, viewable), context,
                                      title, role, icon_name, desc,
                                      parent,
                                      gimp_standard_help_func, help_id,
@@ -147,7 +149,9 @@ item_options_dialog_new (GimpImage               *image,
 
                                      NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
+
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
                                            -1);
@@ -171,16 +175,15 @@ item_options_dialog_new (GimpImage               *image,
   gtk_box_pack_start (GTK_BOX (main_hbox), private->left_vbox, TRUE, TRUE, 0);
   gtk_widget_show (private->left_vbox);
 
-  private->left_table = table = gtk_table_new (1, 2, FALSE);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_box_pack_start (GTK_BOX (private->left_vbox), table, FALSE, FALSE, 0);
-  gtk_widget_show (table);
+  private->left_grid = grid = gtk_grid_new ();
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+  gtk_box_pack_start (GTK_BOX (private->left_vbox), grid, FALSE, FALSE, 0);
+  gtk_widget_show (grid);
 
   /*  The name label and entry  */
   if (name_label)
     {
-      GtkWidget *hbox;
       GtkWidget *radio;
       GtkWidget *radio_box;
       GList     *children;
@@ -189,19 +192,23 @@ item_options_dialog_new (GimpImage               *image,
       private->name_entry = gtk_entry_new ();
       gtk_entry_set_activates_default (GTK_ENTRY (private->name_entry), TRUE);
       gtk_entry_set_text (GTK_ENTRY (private->name_entry), item_name);
-      gimp_table_attach_aligned (GTK_TABLE (table), 0, private->table_row++,
-                                 name_label, 0.0, 0.5,
-                                 private->name_entry, 1, FALSE);
-
-      hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
-      gimp_table_attach_aligned (GTK_TABLE (table), 0, private->table_row++,
-                                 _("Color tag:"), 0.0, 0.5,
-                                 hbox, 1, TRUE);
+      gimp_grid_attach_aligned (GTK_GRID (grid), 0, private->grid_row++,
+                                name_label, 0.0, 0.5,
+                                private->name_entry, 1);
+      /* Make the item name entry field have focus on creation */
+      gtk_widget_grab_focus (private->name_entry);
 
       radio_box = gimp_enum_radio_box_new (GIMP_TYPE_COLOR_TAG,
                                            G_CALLBACK (gimp_radio_button_update),
-                                           &private->color_tag,
+                                           &private->color_tag, NULL,
                                            &radio);
+      gtk_widget_set_name (radio_box, "gimp-color-tag-box");
+      gtk_orientable_set_orientation (GTK_ORIENTABLE (radio_box),
+                                      GTK_ORIENTATION_HORIZONTAL);
+      gimp_grid_attach_aligned (GTK_GRID (grid), 0, private->grid_row++,
+                                _("Color tag:"), 0.0, 0.5,
+                                radio_box, 1);
+
       gimp_int_radio_group_set_active (GTK_RADIO_BUTTON (radio),
                                        private->color_tag);
 
@@ -212,32 +219,26 @@ item_options_dialog_new (GimpImage               *image,
            list = g_list_next (list))
         {
           GimpColorTag  color_tag;
-          GimpRGB       color;
+          GeglColor    *rgb = gegl_color_new ("none");
           GtkWidget    *image;
 
           radio = list->data;
 
-          g_object_ref (radio);
-          gtk_container_remove (GTK_CONTAINER (radio_box), radio);
           g_object_set (radio, "draw-indicator", FALSE, NULL);
-          gtk_box_pack_start (GTK_BOX (hbox), radio, FALSE, FALSE, 0);
-          g_object_unref (radio);
 
           gtk_widget_destroy (gtk_bin_get_child (GTK_BIN (radio)));
 
           color_tag = GPOINTER_TO_INT (g_object_get_data (G_OBJECT (radio),
                                                           "gimp-item-data"));
 
-          if (gimp_get_color_tag_color (color_tag, &color, FALSE))
+          if (gimp_get_color_tag_color (color_tag, rgb, FALSE))
             {
-              GtkSettings *settings = gtk_widget_get_settings (dialog);
-              gint         w, h;
+              gint w, h;
 
-              image = gimp_color_area_new (&color, GIMP_COLOR_AREA_FLAT, 0);
+              image = gimp_color_area_new (rgb, GIMP_COLOR_AREA_FLAT, 0);
               gimp_color_area_set_color_config (GIMP_COLOR_AREA (image),
                                                 context->gimp->config->color_management);
-              gtk_icon_size_lookup_for_settings (settings,
-                                                 GTK_ICON_SIZE_MENU, &w, &h);
+              gtk_icon_size_lookup (GTK_ICON_SIZE_MENU, &w, &h);
               gtk_widget_set_size_request (image, w, h);
             }
           else
@@ -245,13 +246,13 @@ item_options_dialog_new (GimpImage               *image,
               image = gtk_image_new_from_icon_name (GIMP_ICON_CLOSE,
                                                     GTK_ICON_SIZE_MENU);
             }
+          g_object_unref (rgb);
 
           gtk_container_add (GTK_CONTAINER (radio), image);
           gtk_widget_show (image);
         }
 
       g_list_free (children);
-      gtk_widget_destroy (radio_box);
     }
 
   /*  The switches frame & vbox  */
@@ -274,15 +275,6 @@ item_options_dialog_new (GimpImage               *image,
                     G_CALLBACK (gimp_toggle_button_update),
                     &private->visible);
 
-  button = check_button_with_icon_new (_("_Linked"),
-                                       GIMP_ICON_LINKED,
-                                       GTK_BOX (private->right_vbox));
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (button),
-                                private->linked);
-  g_signal_connect (button, "toggled",
-                    G_CALLBACK (gimp_toggle_button_update),
-                    &private->linked);
-
   button = check_button_with_icon_new (lock_content_label,
                                        lock_content_icon_name,
                                        GTK_BOX (private->right_vbox));
@@ -293,7 +285,7 @@ item_options_dialog_new (GimpImage               *image,
                     &private->lock_content);
 
   button = check_button_with_icon_new (lock_position_label,
-                                       GIMP_ICON_TOOL_MOVE,
+                                       GIMP_ICON_LOCK_POSITION,
                                        GTK_BOX (private->right_vbox));
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (button),
                                 private->lock_position);
@@ -302,6 +294,15 @@ item_options_dialog_new (GimpImage               *image,
                     &private->lock_position);
 
   private->lock_position_toggle = button;
+
+  button = check_button_with_icon_new (lock_visibility_label,
+                                       GIMP_ICON_LOCK_VISIBILITY,
+                                       GTK_BOX (private->right_vbox));
+  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (button),
+                                private->lock_visibility);
+  g_signal_connect (button, "toggled",
+                    G_CALLBACK (gimp_toggle_button_update),
+                    &private->lock_visibility);
 
   return dialog;
 }
@@ -322,8 +323,8 @@ item_options_dialog_get_vbox (GtkWidget *dialog)
 }
 
 GtkWidget *
-item_options_dialog_get_table (GtkWidget *dialog,
-                               gint      *next_row)
+item_options_dialog_get_grid (GtkWidget *dialog,
+                              gint      *next_row)
 {
   ItemOptionsDialog *private;
 
@@ -335,9 +336,9 @@ item_options_dialog_get_table (GtkWidget *dialog,
 
   g_return_val_if_fail (private != NULL, NULL);
 
-  *next_row = private->table_row;
+  *next_row = private->grid_row;
 
-  return private->left_table;
+  return private->left_grid;
 }
 
 GtkWidget *
@@ -385,10 +386,10 @@ item_options_dialog_add_widget (GtkWidget   *dialog,
 
   g_return_if_fail (private != NULL);
 
-  gimp_table_attach_aligned (GTK_TABLE (private->left_table),
-                             0, private->table_row++,
-                             label, 0.0, 0.5,
-                             widget, 1, FALSE);
+  gimp_grid_attach_aligned (GTK_GRID (private->left_grid),
+                            0, private->grid_row++,
+                            label, 0.0, 0.5,
+                            widget, 1);
 }
 
 GtkWidget *
@@ -454,10 +455,10 @@ item_options_dialog_response (GtkWidget         *dialog,
                          private->context,
                          name,
                          private->visible,
-                         private->linked,
                          private->color_tag,
                          private->lock_content,
                          private->lock_position,
+                         private->lock_visibility,
                          private->user_data);
     }
   else
@@ -474,6 +475,7 @@ check_button_with_icon_new (const gchar *label,
   GtkWidget *hbox;
   GtkWidget *button;
   GtkWidget *image;
+  GtkWidget *label_widget;
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 6);
   gtk_box_pack_start (vbox, hbox, FALSE, FALSE, 0);
@@ -485,7 +487,32 @@ check_button_with_icon_new (const gchar *label,
 
   button = gtk_check_button_new_with_mnemonic (label);
   gtk_box_pack_start (GTK_BOX (hbox), button, TRUE, TRUE, 0);
-  gtk_widget_show (button);
+  gtk_widget_set_visible (button, TRUE);
+
+  /* Resize the label to its bold size to avoid a GUI twitch */
+  label_widget = gtk_bin_get_child (GTK_BIN (button));
+  gtk_widget_set_size_request (label_widget,
+                               check_button_get_bold_label_width (label),
+                               -1);
 
   return button;
+}
+
+static gint
+check_button_get_bold_label_width (const gchar *text)
+{
+  GtkWidget      *temp_label = gtk_label_new (NULL);
+  GtkRequisition  natural_size;
+
+  gtk_label_set_text (GTK_LABEL (temp_label), text);
+  gtk_widget_set_visible (temp_label, TRUE);
+
+  gimp_label_set_attributes (GTK_LABEL (temp_label),
+                             PANGO_ATTR_WEIGHT, PANGO_WEIGHT_BOLD,
+                             -1);
+
+  gtk_widget_get_preferred_size (temp_label, NULL, &natural_size);
+  gtk_widget_destroy (temp_label);
+
+  return natural_size.width;
 }

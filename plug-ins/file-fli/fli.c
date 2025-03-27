@@ -27,101 +27,165 @@
 
 #include <glib/gstdio.h>
 
-#include <string.h>
-#include <stdio.h>
+#include <libgimp/gimp.h>
 
 #include "fli.h"
+
+#include "libgimp/stdplugins-intl.h"
 
 /*
  * To avoid endian-problems I wrote these functions:
  */
-static unsigned char
-fli_read_char (FILE *f)
+static gboolean
+fli_read_char (FILE *f, guchar *value, GError **error)
 {
-  unsigned char b;
-
-  fread (&b, 1, 1, f);
-  return b;
+  if (fread (value, 1, 1, f) != 1)
+    {
+      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                   _("Error reading from file."));
+      return FALSE;
+    }
+  return TRUE;
 }
 
-static unsigned short
-fli_read_short (FILE *f)
+static gboolean
+fli_read_short (FILE *f, gushort *value, GError **error)
 {
-  unsigned char b[2];
+  guchar b[2];
 
-  fread (&b, 1, 2, f);
-  return (unsigned short) (b[1]<<8) | b[0];
+  if (fread (&b, 1, 2, f) != 2)
+    {
+      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                   _("Error reading from file."));
+      return FALSE;
+    }
+
+  *value = (gushort) (b[1]<<8) | b[0];
+  return TRUE;
 }
 
-static unsigned long
-fli_read_long (FILE *f)
+static gboolean
+fli_read_uint32 (FILE *f, guint32 *value, GError **error)
 {
-  unsigned char b[4];
+  guchar b[4];
 
-  fread (&b, 1, 4, f);
-  return (unsigned long) (b[3]<<24) | (b[2]<<16) | (b[1]<<8) | b[0];
+  if (fread (&b, 1, 4, f) != 4)
+    {
+      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                   _("Error reading from file."));
+      return FALSE;
+    }
+
+  *value = (guint32) (b[3]<<24) | (b[2]<<16) | (b[1]<<8) | b[0];
+  return TRUE;
 }
 
-static void
-fli_write_char (FILE          *f,
-                unsigned char  b)
+static gboolean
+fli_write_char (FILE    *f,
+                guchar   b,
+                GError **error)
 {
-  fwrite (&b, 1, 1, f);
+  if (fwrite (&b, 1, 1, f) != 1)
+    {
+      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                   _("Error writing to file."));
+      return FALSE;
+    }
+  return TRUE;
 }
 
-static void
-fli_write_short (FILE           *f,
-                 unsigned short  w)
+static gboolean
+fli_write_short (FILE     *f,
+                 gushort   w,
+                 GError  **error)
 {
-  unsigned char b[2];
+  guchar b[2];
 
   b[0] = w & 255;
   b[1] = (w >> 8) & 255;
-  fwrite (&b, 1, 2, f);
+
+  if (fwrite (&b, 1, 2, f) != 2)
+    {
+      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                   _("Error writing to file."));
+      return FALSE;
+    }
+  return TRUE;
 }
 
-static void
-fli_write_long (FILE          *f,
-                unsigned long  l)
+static gboolean
+fli_write_uint32 (FILE     *f,
+                  guint32   l,
+                  GError  **error)
 {
-  unsigned char b[4];
+  guchar b[4];
 
   b[0] = l & 255;
   b[1] = (l >> 8) & 255;
   b[2] = (l >> 16) & 255;
   b[3] = (l >> 24) & 255;
 
-  fwrite (&b, 1, 4, f);
+  if (fwrite (&b, 1, 4, f) != 4)
+    {
+      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                   _("Error writing to file."));
+      return FALSE;
+    }
+  return TRUE;
 }
 
-void
-fli_read_header (FILE         *f,
-                 s_fli_header *fli_header)
+gboolean
+fli_read_header (FILE          *f,
+                 s_fli_header  *fli_header,
+                 GError       **error)
 {
-  fli_header->filesize = fli_read_long (f);  /* 0 */
-  fli_header->magic    = fli_read_short (f); /* 4 */
-  fli_header->frames   = fli_read_short (f); /* 6 */
-  fli_header->width    = fli_read_short (f); /* 8 */
-  fli_header->height   = fli_read_short (f); /* 10 */
-  fli_header->depth    = fli_read_short (f); /* 12 */
-  fli_header->flags    = fli_read_short (f); /* 14 */
+  goffset actual_size;
+
+  /* Get the actual file size, since filesize in header could be wrong. */
+  fseek(f, 0, SEEK_END);
+  actual_size = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  if (! fli_read_uint32 (f, &fli_header->filesize, error) ||  /*  0 */
+      ! fli_read_short (f, &fli_header->magic, error)     ||  /*  4 */
+      ! fli_read_short (f, &fli_header->frames, error)    ||  /*  6 */
+      ! fli_read_short (f, &fli_header->width, error)     ||  /*  8 */
+      ! fli_read_short (f, &fli_header->height, error)    ||  /* 10 */
+      ! fli_read_short (f, &fli_header->depth, error)     ||  /* 12 */
+      ! fli_read_short (f, &fli_header->flags, error))        /* 14 */
+    {
+      g_prefix_error (error, _("Error reading header. "));
+      return FALSE;
+    }
 
   if (fli_header->magic == HEADER_FLI)
     {
+      gushort speed;
       /* FLI saves speed in 1/70s */
-      fli_header->speed = fli_read_short (f) * 14; /* 16 */
+      if (! fli_read_short (f, &speed, error))  /* 16 */
+        {
+          g_prefix_error (error, _("Error reading header. "));
+          return FALSE;
+        }
+      fli_header->speed = speed * 14;
     }
   else
     {
       if (fli_header->magic == HEADER_FLC)
         {
           /* FLC saves speed in 1/1000s */
-          fli_header->speed = fli_read_long (f); /* 16 */
+          if (! fli_read_uint32 (f, &fli_header->speed, error))  /* 16 */
+            {
+              g_prefix_error (error, _("Error reading header. "));
+              return FALSE;
+            }
         }
       else
         {
-          fprintf (stderr, "error: magic number is wrong !\n");
           fli_header->magic = NO_HEADER;
+          g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                       _("Invalid header: not a FLI/FLC animation!"));
+          return FALSE;
         }
     }
 
@@ -130,123 +194,231 @@ fli_read_header (FILE         *f,
 
   if (fli_header->height == 0)
     fli_header->height = 200;
+
+if (actual_size != fli_header->filesize && actual_size >= 0)
+  {
+    /* Older versions of GIMP or other apps may incorrectly finish chunks on
+     * an odd length, but write filesize as if that last byte was written.
+     * Don't fail on off-by-one file size. */
+    if (actual_size + 1 != fli_header->filesize)
+      {
+        g_warning (_("Incorrect file size in header: %u, should be: %u."),
+                   fli_header->filesize, (guint) actual_size);
+        fli_header->filesize = actual_size;
+      }
+  }
+
+if (fli_header->frames == 0)
+  {
+    g_warning (_("Number of frames is 0. Setting to 2."));
+    fli_header->frames = 2;
+  }
+
+/* A delay longer than 10 seconds is suspicious. */
+if (fli_header->speed > 10000 || fli_header->speed == 0)
+  {
+    g_warning (_("Suspicious frame delay of %ums. Setting delay to 70ms."),
+               fli_header->speed);
+    fli_header->speed = 70;
+  }
+
+  g_debug ("Filesize: %u, magic: %x, frames: %u, wxh: %ux%u, depth: %u, flags: %x, speed: %u",
+           fli_header->filesize, fli_header->magic, fli_header->frames,
+           fli_header->width, fli_header->height, fli_header->depth,
+           fli_header->flags, fli_header->speed);
+
+  return TRUE;
 }
 
-void
-fli_write_header (FILE         *f,
-                  s_fli_header *fli_header)
+gboolean
+fli_write_header (FILE          *f,
+                  s_fli_header  *fli_header,
+                  GError       **error)
 {
   fli_header->filesize = ftell (f);
   fseek (f, 0, SEEK_SET);
-  fli_write_long (f, fli_header->filesize); /* 0 */
-  fli_write_short (f, fli_header->magic);   /* 4 */
-  fli_write_short (f, fli_header->frames);  /* 6 */
-  fli_write_short (f, fli_header->width);   /* 8 */
-  fli_write_short (f, fli_header->height);  /* 10 */
-  fli_write_short (f, fli_header->depth);   /* 12 */
-  fli_write_short (f, fli_header->flags);   /* 14 */
+
+  if (! fli_write_uint32 (f, fli_header->filesize, error) || /* 0 */
+      ! fli_write_short (f, fli_header->magic, error)     || /* 4 */
+      ! fli_write_short (f, fli_header->frames, error)    || /* 6 */
+      ! fli_write_short (f, fli_header->width, error)     || /* 8 */
+      ! fli_write_short (f, fli_header->height, error)    || /* 10 */
+      ! fli_write_short (f, fli_header->depth, error)     || /* 12 */
+      ! fli_write_short (f, fli_header->flags, error))       /* 14 */
+    {
+      g_prefix_error (error, _("Error writing header. "));
+      return FALSE;
+    }
+
   if (fli_header->magic == HEADER_FLI)
     {
       /* FLI saves speed in 1/70s */
-      fli_write_short (f, fli_header->speed / 14); /* 16 */
+      if (! fli_write_short (f, (fli_header->speed + 7) / 14, error)) /* 16 */
+        {
+          g_prefix_error (error, _("Error writing header. "));
+          return FALSE;
+        }
     }
   else
     {
       if (fli_header->magic == HEADER_FLC)
         {
           /* FLC saves speed in 1/1000s */
-          fli_write_long (f, fli_header->speed); /* 16 */
+          if (! fli_write_uint32 (f, fli_header->speed, error))   /* 16 */
+            {
+              g_prefix_error (error, _("Error writing header. "));
+              return FALSE;
+            }
           fseek (f, 80, SEEK_SET);
-          fli_write_long (f, fli_header->oframe1); /* 80 */
-          fli_write_long (f, fli_header->oframe2); /* 84 */
+          if (! fli_write_uint32 (f, fli_header->oframe1, error) || /* 80 */
+              ! fli_write_uint32 (f, fli_header->oframe2, error))   /* 84 */
+            {
+              g_prefix_error (error, _("Error writing header. "));
+              return FALSE;
+            }
         }
       else
         {
-          fprintf (stderr, "error: magic number in header is wrong !\n");
+          g_set_error (error, GIMP_PLUG_IN_ERROR, 0,
+                       _("Invalid header: unrecognized magic number!"));
+          return FALSE;
         }
     }
+
+  return TRUE;
 }
 
-void
+gboolean
 fli_read_frame (FILE          *f,
                 s_fli_header  *fli_header,
-                unsigned char *old_framebuf,
-                unsigned char *old_cmap,
-                unsigned char *framebuf,
-                unsigned char *cmap)
+                guchar        *old_framebuf,
+                guchar        *old_cmap,
+                guchar        *framebuf,
+                guchar        *cmap,
+                GError       **error)
 {
   s_fli_frame   fli_frame;
-  unsigned long framepos;
+  gint64        framepos;
   int           c;
 
-  framepos = ftell (f);
+  while (TRUE)
+    {
+      framepos = ftell (f);
 
-  fli_frame.size   = fli_read_long (f);
-  fli_frame.magic  = fli_read_short (f);
-  fli_frame.chunks = fli_read_short (f);
+      if (framepos < 0 ||
+          ! fli_read_uint32 (f, &fli_frame.size, error) ||
+          ! fli_read_short (f, &fli_frame.magic, error) ||
+          ! fli_read_short (f, &fli_frame.chunks, error))
+        {
+          g_prefix_error (error, _("Error reading frame. "));
+          return FALSE;
+        }
+
+      g_debug ("Offset: %u, frame size: %u, magic: %x, chunks: %u",
+               (guint) framepos, fli_frame.size, fli_frame.magic, fli_frame.chunks);
+
+      if (framepos + fli_frame.size > fli_header->filesize)
+        {
+          g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                       _("Invalid frame size points past end of file!"));
+          return FALSE;
+        }
+      if (fli_frame.magic == FRAME)
+        break;
+      fseek (f, framepos + fli_frame.size, SEEK_SET);
+    }
 
   if (fli_frame.magic == FRAME)
     {
       fseek (f, framepos + 16, SEEK_SET);
       for (c = 0; c < fli_frame.chunks; c++)
         {
-          s_fli_chunk   chunk;
-          unsigned long chunkpos;
+          s_fli_chunk  chunk;
+          gint64       chunkpos;
+          gboolean     read_ok;
 
           chunkpos = ftell (f);
-          chunk.size = fli_read_long (f);
-          chunk.magic = fli_read_short (f);
+          if (chunkpos < 0 ||
+              ! fli_read_uint32 (f, &chunk.size, error) ||
+              ! fli_read_short (f, &chunk.magic, error))
+            {
+              g_prefix_error (error, _("Error reading frame. "));
+              return FALSE;
+            }
+          g_debug ("Chunk offset: %u, chunk size: %u, chunk type: %u",
+                   (guint) chunkpos, chunk.size, chunk.magic);
+          if (chunkpos + chunk.size > fli_header->filesize)
+            {
+              g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                           _("Invalid chunk size points past end of file!"));
+              return FALSE;
+            }
+
+          read_ok = TRUE;
           switch (chunk.magic)
             {
             case FLI_COLOR:
-              fli_read_color (f, fli_header, old_cmap, cmap);
+              read_ok = fli_read_color (f, fli_header, old_cmap, cmap, error);
               break;
             case FLI_COLOR_2:
-              fli_read_color_2 (f, fli_header, old_cmap, cmap);
+              read_ok = fli_read_color_2 (f, fli_header, old_cmap, cmap, error);
               break;
             case FLI_BLACK:
-              fli_read_black (f, fli_header, framebuf);
+              read_ok = fli_read_black (f, fli_header, framebuf, error);
               break;
             case FLI_BRUN:
-              fli_read_brun (f, fli_header, framebuf);
+              read_ok = fli_read_brun (f, fli_header, framebuf, error);
               break;
             case FLI_COPY:
-              fli_read_copy (f, fli_header, framebuf);
+              read_ok = fli_read_copy (f, fli_header, framebuf, error);
               break;
             case FLI_LC:
-              fli_read_lc (f, fli_header, old_framebuf, framebuf);
+              read_ok = fli_read_lc (f, fli_header, old_framebuf, framebuf, error);
               break;
             case FLI_LC_2:
-              fli_read_lc_2 (f, fli_header, old_framebuf, framebuf);
+              read_ok = fli_read_lc_2 (f, fli_header, old_framebuf, framebuf, error);
               break;
             case FLI_MINI:
               /* unused, skip */
               break;
             default:
               /* unknown, skip */
+              g_debug ("Unrecognized chunk magic: %u", chunk.magic);
               break;
             }
-          if (chunk.size & 1)
-            chunk.size++;
+          if (! read_ok)
+            return FALSE;
+
           fseek (f, chunkpos + chunk.size, SEEK_SET);
         }
+      if (fli_frame.chunks == 0)
+        {
+          /* Silence a warning: wxh could in theory be more than INT_MAX. */
+          memcpy (framebuf, old_framebuf, (gint64) fli_header->width * fli_header->height);
+        }
     }
-  /* else: unknown, skip */
+  else /* unknown, skip */
+    {
+      g_debug ("Unrecognized frame magic: %u (%x)", fli_frame.magic, fli_frame.magic);
+    }
 
   fseek (f, framepos + fli_frame.size, SEEK_SET);
+
+  return TRUE;
 }
 
-void
-fli_write_frame (FILE           *f,
-                 s_fli_header   *fli_header,
-                 unsigned char  *old_framebuf,
-                 unsigned char  *old_cmap,
-                 unsigned char  *framebuf,
-                 unsigned char  *cmap,
-                 unsigned short  codec_mask)
+gboolean
+fli_write_frame (FILE          *f,
+                 s_fli_header  *fli_header,
+                 guchar        *old_framebuf,
+                 guchar        *old_cmap,
+                 guchar        *framebuf,
+                 guchar        *cmap,
+                 gushort        codec_mask,
+                 GError       **error)
 {
-  s_fli_frame   fli_frame;
-  unsigned long framepos, frameend;
+  s_fli_frame  fli_frame;
+  guint32      framepos, frameend;
 
   framepos = ftell (f);
   fseek (f, framepos + 16, SEEK_SET);
@@ -270,19 +442,39 @@ fli_write_frame (FILE           *f,
    */
   if (fli_header->magic == HEADER_FLI)
     {
-      if (fli_write_color (f, fli_header, old_cmap, cmap))
-        fli_frame.chunks++;
+      gboolean more = FALSE;
+
+      if (fli_write_color (f, fli_header, old_cmap, cmap, &more, error))
+        {
+          if (more)
+            fli_frame.chunks++;
+        }
+      else
+        {
+          return FALSE;
+        }
     }
   else
     {
       if (fli_header->magic == HEADER_FLC)
         {
-          if (fli_write_color_2 (f, fli_header, old_cmap, cmap))
-            fli_frame.chunks++;
+          gboolean more = FALSE;
+
+          if (fli_write_color_2 (f, fli_header, old_cmap, cmap, &more, error))
+            {
+              if (more)
+                fli_frame.chunks++;
+            }
+          else
+            {
+              return FALSE;
+            }
         }
       else
         {
-          fprintf (stderr, "error: magic number in header is wrong !\n");
+          g_set_error (error, GIMP_PLUG_IN_ERROR, 0,
+                       _("Invalid header: magic number is wrong!"));
+          return FALSE;
         }
     }
 
@@ -301,49 +493,72 @@ fli_write_frame (FILE           *f,
   /* create bitmap chunk */
   if (old_framebuf == NULL)
     {
-      fli_write_brun (f, fli_header, framebuf);
+      if (! fli_write_brun (f, fli_header, framebuf, error))
+        return FALSE;
     }
   else
     {
-      fli_write_lc (f, fli_header, old_framebuf, framebuf);
+      if (! fli_write_lc (f, fli_header, old_framebuf, framebuf, error))
+        return FALSE;
     }
   fli_frame.chunks++;
 
   frameend = ftell (f);
   fli_frame.size = frameend - framepos;
   fseek (f, framepos, SEEK_SET);
-  fli_write_long (f, fli_frame.size);
-  fli_write_short (f, fli_frame.magic);
-  fli_write_short (f, fli_frame.chunks);
+  if (! fli_write_uint32 (f, fli_frame.size, error) ||
+      ! fli_write_short (f, fli_frame.magic, error) ||
+      ! fli_write_short (f, fli_frame.chunks, error))
+    {
+      g_prefix_error (error, _("Error writing frame header. "));
+      return FALSE;
+    }
   fseek (f, frameend, SEEK_SET);
   fli_header->frames++;
+
+  return TRUE;
 }
 
 /*
  * palette chunks from the classical Autodesk Animator.
  */
-void
-fli_read_color (FILE         *f,
-                s_fli_header *fli_header,
-                unsigned char *old_cmap,
-                unsigned char *cmap)
+gboolean
+fli_read_color (FILE          *f,
+                s_fli_header  *fli_header,
+                guchar        *old_cmap,
+                guchar        *cmap,
+                GError       **error)
 {
-  unsigned short num_packets, cnt_packets, col_pos;
+  gushort num_packets, cnt_packets, col_pos;
 
   col_pos = 0;
-  num_packets = fli_read_short (f);
+  if (! fli_read_short (f, &num_packets, error))
+    {
+      g_prefix_error (error, _("Error reading palette. "));
+      return FALSE;
+    }
   for (cnt_packets = num_packets; cnt_packets > 0; cnt_packets--)
     {
-      unsigned short skip_col, num_col, col_cnt;
-      skip_col = fli_read_char (f);
-      num_col = fli_read_char (f);
+      guchar skip_col, num_col, col_cnt;
+
+      if (! fli_read_char (f, &skip_col, error) ||
+          ! fli_read_char (f, &num_col, error))
+        {
+          g_prefix_error (error, _("Error reading palette. "));
+          return FALSE;
+        }
       if (num_col == 0)
         {
           for (col_pos = 0; col_pos < 768; col_pos++)
             {
-              cmap[col_pos] = fli_read_char (f) << 2;
+              if (! fli_read_char (f, &cmap[col_pos], error))
+                {
+                  g_prefix_error (error, _("Error reading palette. "));
+                  return FALSE;
+                }
+              cmap[col_pos] = cmap[col_pos] << 2;
             }
-          return;
+          return TRUE;
         }
       for (col_cnt = skip_col; (col_cnt > 0) && (col_pos < 768); col_cnt--)
         {
@@ -353,41 +568,62 @@ fli_read_color (FILE         *f,
         }
       for (col_cnt = num_col; (col_cnt > 0) && (col_pos < 768); col_cnt--)
         {
-          cmap[col_pos++] = fli_read_char (f) << 2;
-          cmap[col_pos++] = fli_read_char (f) << 2;
-          cmap[col_pos++] = fli_read_char (f) << 2;
+          if (! fli_read_char (f, &cmap[col_pos  ], error) ||
+              ! fli_read_char (f, &cmap[col_pos+1], error) ||
+              ! fli_read_char (f, &cmap[col_pos+2], error))
+            {
+              g_prefix_error (error, _("Error reading palette. "));
+              return FALSE;
+            }
+          cmap[col_pos] = cmap[col_pos] << 2; col_pos++;
+          cmap[col_pos] = cmap[col_pos] << 2; col_pos++;
+          cmap[col_pos] = cmap[col_pos] << 2; col_pos++;
         }
     }
+
+  return TRUE;
 }
 
-int
+gboolean
 fli_write_color (FILE          *f,
                  s_fli_header  *fli_header,
-                 unsigned char *old_cmap,
-                 unsigned char *cmap)
+                 guchar        *old_cmap,
+                 guchar        *cmap,
+                 gboolean      *more,
+                 GError       **error)
 {
-  unsigned long  chunkpos;
-  unsigned short num_packets;
-  s_fli_chunk    chunk;
+  guint32       chunkpos;
+  gushort       num_packets;
+  s_fli_chunk   chunk;
 
+  *more = FALSE;
   chunkpos = ftell (f);
   fseek (f, chunkpos + 8, SEEK_SET);
   num_packets = 0;
   if (old_cmap == NULL)
     {
-      unsigned short col_pos;
+      gushort col_pos;
 
       num_packets = 1;
-      fli_write_char (f, 0); /* skip no color */
-      fli_write_char (f, 0); /* 256 color */
+      if (! fli_write_char (f, 0, error) || /* skip no color */
+          ! fli_write_char (f, 0, error))   /* 256 color */
+        {
+          g_prefix_error (error, _("Error writing color map. "));
+          return FALSE;
+        }
+
       for (col_pos = 0; col_pos < 768; col_pos++)
         {
-          fli_write_char (f, cmap[col_pos] >> 2);
+          if (! fli_write_char (f, cmap[col_pos] >> 2, error))
+            {
+              g_prefix_error (error, _("Error writing color map. "));
+              return FALSE;
+            }
         }
     }
   else
     {
-      unsigned short cnt_skip, cnt_col, col_pos, col_start;
+      gushort cnt_skip, cnt_col, col_pos, col_start;
 
       col_pos = 0;
       do
@@ -415,13 +651,21 @@ fli_write_color (FILE          *f,
             {
               num_packets++;
 
-              fli_write_char (f, cnt_skip & 255);
-              fli_write_char (f, cnt_col & 255);
+              if (! fli_write_char (f, cnt_skip & 255, error) ||
+                  ! fli_write_char (f, cnt_col & 255, error))
+                {
+                  g_prefix_error (error, _("Error writing color map. "));
+                  return FALSE;
+                }
               while (cnt_col > 0)
                 {
-                  fli_write_char (f, cmap[col_start++] >> 2);
-                  fli_write_char (f, cmap[col_start++] >> 2);
-                  fli_write_char (f, cmap[col_start++] >> 2);
+                  if (! fli_write_char (f, cmap[col_start++] >> 2, error) ||
+                      ! fli_write_char (f, cmap[col_start++] >> 2, error) ||
+                      ! fli_write_char (f, cmap[col_start++] >> 2, error))
+                    {
+                      g_prefix_error (error, _("Error writing color map. "));
+                      return FALSE;
+                    }
                   cnt_col--;
                 }
             }
@@ -434,47 +678,65 @@ fli_write_color (FILE          *f,
       chunk.magic = FLI_COLOR;
 
       fseek (f, chunkpos, SEEK_SET);
-      fli_write_long (f, chunk.size);
-      fli_write_short (f, chunk.magic);
-      fli_write_short (f, num_packets);
+      if (! fli_write_uint32 (f, chunk.size, error) ||
+          ! fli_write_short (f, chunk.magic, error) ||
+          ! fli_write_short (f, num_packets, error))
+        {
+          g_prefix_error (error, _("Error writing color map. "));
+          return FALSE;
+        }
 
       if (chunk.size & 1)
         chunk.size++;
 
       fseek (f, chunkpos + chunk.size, SEEK_SET);
-      return 1;
+      *more = TRUE;
+      return TRUE;
     }
 
   fseek (f, chunkpos, SEEK_SET);
-  return 0;
+  return TRUE;
 }
 
 /*
  * palette chunks from Autodesk Animator pro
  */
-void
+gboolean
 fli_read_color_2 (FILE          *f,
                   s_fli_header  *fli_header,
-                  unsigned char *old_cmap,
-                  unsigned char *cmap)
+                  guchar        *old_cmap,
+                  guchar        *cmap,
+                  GError       **error)
 {
-  unsigned short num_packets, cnt_packets, col_pos;
+  gushort num_packets, cnt_packets, col_pos;
 
-  num_packets = fli_read_short (f);
+  if (! fli_read_short (f, &num_packets, error))
+    {
+      g_prefix_error (error, _("Error reading palette. "));
+      return FALSE;
+    }
   col_pos = 0;
   for (cnt_packets = num_packets; cnt_packets > 0; cnt_packets--)
     {
-      unsigned short skip_col, num_col, col_cnt;
+      guchar skip_col, num_col, col_cnt;
 
-      skip_col = fli_read_char (f);
-      num_col = fli_read_char (f);
+      if (! fli_read_char (f, &skip_col, error) ||
+          ! fli_read_char (f, &num_col, error))
+        {
+          g_prefix_error (error, _("Error reading palette. "));
+          return FALSE;
+        }
       if (num_col == 0)
         {
           for (col_pos = 0; col_pos < 768; col_pos++)
             {
-              cmap[col_pos] = fli_read_char (f);
+              if (! fli_read_char (f, &cmap[col_pos], error))
+                {
+                  g_prefix_error (error, _("Error reading palette. "));
+                  return FALSE;
+                }
             }
-          return;
+          return TRUE;
         }
       for (col_cnt = skip_col; (col_cnt > 0) && (col_pos < 768); col_cnt--)
         {
@@ -487,40 +749,60 @@ fli_read_color_2 (FILE          *f,
         }
       for (col_cnt = num_col; (col_cnt > 0) && (col_pos < 768); col_cnt--)
         {
-          cmap[col_pos++] = fli_read_char (f);
-          cmap[col_pos++] = fli_read_char (f);
-          cmap[col_pos++] = fli_read_char (f);
+          if (! fli_read_char (f, &cmap[col_pos++], error) ||
+              ! fli_read_char (f, &cmap[col_pos++], error) ||
+              ! fli_read_char (f, &cmap[col_pos++], error))
+            {
+              g_prefix_error (error, _("Error reading palette. "));
+              return FALSE;
+            }
         }
     }
+
+  return TRUE;
 }
 
-int
+gboolean
 fli_write_color_2 (FILE          *f,
                    s_fli_header  *fli_header,
-                   unsigned char *old_cmap,
-                   unsigned char *cmap)
+                   guchar        *old_cmap,
+                   guchar        *cmap,
+                   gboolean      *more,
+                   GError       **error)
 {
-  unsigned long  chunkpos;
-  unsigned short num_packets;
-  s_fli_chunk    chunk;
+  guint32       chunkpos;
+  gushort       num_packets;
+  s_fli_chunk   chunk;
 
+  *more = FALSE;
   chunkpos = ftell (f);
   fseek (f, chunkpos + 8, SEEK_SET);
   num_packets = 0;
   if (old_cmap == NULL)
     {
-      unsigned short col_pos;
+      gushort col_pos;
+
       num_packets = 1;
-      fli_write_char (f, 0); /* skip no color */
-      fli_write_char (f, 0); /* 256 color */
+      if (! fli_write_char (f, 0, error) || /* skip no color */
+          ! fli_write_char (f, 0, error))   /* 256 color */
+        {
+          g_prefix_error (error, _("Error writing color map. "));
+          return FALSE;
+        }
+
       for (col_pos = 0; col_pos < 768; col_pos++)
         {
-          fli_write_char (f, cmap[col_pos]);
+          if (! fli_write_char (f, cmap[col_pos], error))
+            {
+              g_prefix_error (error, _("Error writing color map. "));
+              return FALSE;
+            }
         }
     }
   else
     {
-      unsigned short cnt_skip, cnt_col, col_pos, col_start;
+      gushort cnt_skip, cnt_col, col_pos, col_start;
+
       col_pos = 0;
       do {
           cnt_skip = 0;
@@ -544,14 +826,23 @@ fli_write_color_2 (FILE          *f,
           if (cnt_col > 0)
             {
               num_packets++;
-              fli_write_char (f, cnt_skip);
-              fli_write_char (f, cnt_col);
+              if (! fli_write_char (f, cnt_skip, error) ||
+                  ! fli_write_char (f, cnt_col, error))
+                {
+                  g_prefix_error (error, _("Error writing color map. "));
+                  return FALSE;
+                }
 
               while (cnt_col > 0)
                 {
-                  fli_write_char (f, cmap[col_start++]);
-                  fli_write_char (f, cmap[col_start++]);
-                  fli_write_char (f, cmap[col_start++]);
+                  if (! fli_write_char (f, cmap[col_start++], error) ||
+                      ! fli_write_char (f, cmap[col_start++], error) ||
+                      ! fli_write_char (f, cmap[col_start++], error))
+                    {
+                      g_prefix_error (error, _("Error writing color map. "));
+                      return FALSE;
+                    }
+
                   cnt_col--;
                 }
             }
@@ -564,143 +855,211 @@ fli_write_color_2 (FILE          *f,
       chunk.magic = FLI_COLOR_2;
 
       fseek (f, chunkpos, SEEK_SET);
-      fli_write_long (f, chunk.size);
-      fli_write_short (f, chunk.magic);
-      fli_write_short (f, num_packets);
+      if (! fli_write_uint32 (f, chunk.size, error) ||
+          ! fli_write_short (f, chunk.magic, error) ||
+          ! fli_write_short (f, num_packets, error))
+        {
+          g_prefix_error (error, _("Error writing color map. "));
+          return FALSE;
+        }
 
       if (chunk.size & 1)
         chunk.size++;
       fseek (f, chunkpos + chunk.size, SEEK_SET);
-      return 1;
+      *more = TRUE;
+      return TRUE;
     }
   fseek (f, chunkpos, SEEK_SET);
-  return 0;
+
+  return TRUE;
 }
 
 /*
  * completely black frame
  */
-void
+gboolean
 fli_read_black (FILE          *f,
                 s_fli_header  *fli_header,
-                unsigned char *framebuf)
+                guchar        *framebuf,
+                GError       **error)
 {
   memset (framebuf, 0, fli_header->width * fli_header->height);
+
+  return TRUE;
 }
 
-void
+gboolean
 fli_write_black (FILE          *f,
                  s_fli_header  *fli_header,
-                 unsigned char *framebuf)
+                 guchar        *framebuf,
+                 GError       **error)
 {
   s_fli_chunk chunk;
 
   chunk.size = 6;
   chunk.magic = FLI_BLACK;
 
-  fli_write_long (f, chunk.size);
-  fli_write_short (f, chunk.magic);
+  if (! fli_write_uint32 (f, chunk.size, error) ||
+      ! fli_write_short (f, chunk.magic, error))
+    {
+      g_prefix_error (error, _("Error writing black. "));
+      return FALSE;
+    }
+
+  return TRUE;
 }
 
 /*
  * Uncompressed frame
  */
-void
+gboolean
 fli_read_copy (FILE          *f,
                s_fli_header  *fli_header,
-               unsigned char *framebuf)
+               guchar        *framebuf,
+               GError       **error)
 {
-  fread (framebuf, fli_header->width, fli_header->height, f);
+  if (fread (framebuf, fli_header->width, fli_header->height, f) != fli_header->height)
+    {
+      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                   _("Error reading from file."));
+      return FALSE;
+    }
+
+  return TRUE;
 }
 
-void
+gboolean
 fli_write_copy (FILE          *f,
                 s_fli_header  *fli_header,
-                unsigned char *framebuf)
+                guchar        *framebuf,
+                GError       **error)
 {
-  unsigned long chunkpos;
-  s_fli_chunk   chunk;
+  guint32      chunkpos;
+  s_fli_chunk  chunk;
 
   chunkpos = ftell (f);
   fseek (f, chunkpos + 6, SEEK_SET);
-  fwrite (framebuf, fli_header->width, fli_header->height, f);
+  if (fwrite (framebuf, fli_header->width, fli_header->height, f) != fli_header->height)
+    {
+      g_prefix_error (error, _("Error writing frame. "));
+      return FALSE;
+    }
   chunk.size = ftell (f) - chunkpos;
   chunk.magic = FLI_COPY;
 
-  fseek (f, chunkpos, SEEK_SET);
-  fli_write_long (f, chunk.size);
-  fli_write_short (f, chunk.magic);
-
   if (chunk.size & 1)
-    chunk.size++;
+    {
+      /* Dummy char to make the chunk end on an even boundary. */
+      if (! fli_write_char (f, 0, error))
+        {
+          g_prefix_error (error, _("Error writing frame. "));
+          return FALSE;
+        }
+      chunk.size++;
+    }
+
+  fseek (f, chunkpos, SEEK_SET);
+  if (! fli_write_uint32 (f, chunk.size, error) ||
+      ! fli_write_short (f, chunk.magic, error))
+    {
+      g_prefix_error (error, _("Error writing frame. "));
+      return FALSE;
+    }
+
   fseek (f, chunkpos + chunk.size, SEEK_SET);
+  return TRUE;
 }
 
 /*
  * This is a RLE algorithm, used for the first image of an animation
  */
-void
+gboolean
 fli_read_brun (FILE          *f,
                s_fli_header  *fli_header,
-               unsigned char *framebuf)
+               guchar        *framebuf,
+               GError       **error)
 {
-  unsigned short  yc;
-  unsigned char  *pos;
+  gushort  yc;
+  guchar  *pos;
 
   for (yc = 0; yc < fli_header->height; yc++)
     {
-      unsigned short pc, pcnt;
+      guchar pc, pcnt;
       size_t n, xc;
 
-      pc = fli_read_char (f);
+      if (! fli_read_char (f, &pc, error))
+        {
+          g_prefix_error (error, _("Error reading compressed data. "));
+          return FALSE;
+        }
       xc = 0;
       pos = framebuf + (fli_header->width * yc);
       n = (size_t) fli_header->width * (fli_header->height - yc);
       for (pcnt = pc; pcnt > 0; pcnt--)
         {
-          unsigned short ps;
+          guchar ps;
 
-          ps = fli_read_char (f);
+          if (! fli_read_char (f, &ps, error))
+            {
+              g_prefix_error (error, _("Error reading compressed data. "));
+              return FALSE;
+            }
           if (ps & 0x80)
             {
-              unsigned short len;
+              gushort len;
 
               for (len = -(signed char) ps; len > 0 && xc < n; len--)
                 {
-                  pos[xc++] = fli_read_char (f);
+                  if (! fli_read_char (f, &pos[xc++], error))
+                    {
+                      g_prefix_error (error, _("Error reading compressed data. "));
+                      return FALSE;
+                    }
+                }
+              if (len > 0 && xc >= n)
+                {
+                  g_set_error (error, G_FILE_ERROR, 0,
+                               _("Overflow reading compressed data. Possibly corrupt file."));
+                  return FALSE;
                 }
             }
           else
             {
-              unsigned char val;
-              size_t        len;
+              guchar  val;
+              size_t  len;
 
               len = MIN (n - xc, ps);
-              val = fli_read_char (f);
+              if (! fli_read_char (f, &val, error))
+                {
+                  g_prefix_error (error, _("Error reading compressed data. "));
+                  return FALSE;
+                }
               memset (&(pos[xc]), val, len);
               xc+=len;
             }
         }
     }
+  return TRUE;
 }
 
-void
+gboolean
 fli_write_brun (FILE          *f,
                 s_fli_header  *fli_header,
-                unsigned char *framebuf)
+                guchar        *framebuf,
+                GError       **error)
 {
-  unsigned long   chunkpos;
-  s_fli_chunk     chunk;
-  unsigned short  yc;
-  unsigned char  *linebuf;
+  guint32       chunkpos;
+  s_fli_chunk   chunk;
+  gushort       yc;
+  guchar       *linebuf;
 
   chunkpos = ftell (f);
   fseek (f, chunkpos + 6, SEEK_SET);
 
   for (yc = 0; yc < fli_header->height; yc++)
     {
-      unsigned short xc, t1, pc, tc;
-      unsigned long  linepos, lineend, bc;
+      gushort  xc, t1, pc, tc;
+      guint32  linepos, lineend, bc;
 
       linepos = ftell (f); bc = 0;
       fseek (f, 1, SEEK_CUR);
@@ -720,13 +1079,21 @@ fli_write_brun (FILE          *f,
               if (tc > 0)
                 {
                   bc++;
-                  fli_write_char (f, (tc - 1)^0xFF);
-                  fwrite (linebuf + t1, 1, tc, f);
+                  if (! fli_write_char (f, (tc - 1)^0xFF, error) ||
+                      fwrite (linebuf + t1, 1, tc, f) != tc)
+                    {
+                      g_prefix_error (error, _("Error writing frame. "));
+                      return FALSE;
+                    }
                   tc = 0;
                 }
               bc++;
-              fli_write_char (f, pc);
-              fli_write_char (f, linebuf[xc]);
+              if (! fli_write_char (f, pc, error) ||
+                  ! fli_write_char (f, linebuf[xc], error))
+                {
+                  g_prefix_error (error, _("Error writing frame. "));
+                  return FALSE;
+                }
               t1 = xc + pc;
             }
           else
@@ -735,8 +1102,12 @@ fli_write_brun (FILE          *f,
               if (tc > 120)
                 {
                   bc++;
-                  fli_write_char (f, (tc - 1)^0xFF);
-                  fwrite (linebuf + t1, 1, tc, f);
+                  if (! fli_write_char (f, (tc - 1)^0xFF, error) ||
+                      fwrite (linebuf + t1, 1, tc, f) != tc)
+                    {
+                      g_prefix_error (error, _("Error writing frame. "));
+                      return FALSE;
+                    }
                   tc = 0;
                   t1 = xc + pc;
                 }
@@ -746,26 +1117,48 @@ fli_write_brun (FILE          *f,
       if (tc > 0)
         {
           bc++;
-          fli_write_char (f, (tc - 1)^0xFF);
-          fwrite (linebuf + t1, 1, tc, f);
+          if (! fli_write_char (f, (tc - 1)^0xFF, error) ||
+              fwrite (linebuf + t1, 1, tc, f) != tc)
+            {
+              g_prefix_error (error, _("Error writing frame. "));
+              return FALSE;
+            }
           tc = 0;
         }
       lineend = ftell (f);
       fseek (f, linepos, SEEK_SET);
-      fli_write_char (f, bc);
+      if (! fli_write_char (f, bc, error))
+        {
+          g_prefix_error (error, _("Error writing frame. "));
+          return FALSE;
+        }
       fseek (f, lineend, SEEK_SET);
     }
 
   chunk.size = ftell (f) - chunkpos;
   chunk.magic = FLI_BRUN;
 
-  fseek (f, chunkpos, SEEK_SET);
-  fli_write_long (f, chunk.size);
-  fli_write_short (f, chunk.magic);
-
   if (chunk.size & 1)
-    chunk.size++;
+    {
+      /* Dummy char to make the chunk end on an even boundary. */
+      if (! fli_write_char (f, 0, error))
+        {
+          g_prefix_error (error, _("Error writing frame. "));
+          return FALSE;
+        }
+      chunk.size++;
+    }
+
+  fseek (f, chunkpos, SEEK_SET);
+  if (! fli_write_uint32 (f, chunk.size, error) ||
+      ! fli_write_short (f, chunk.magic, error))
+    {
+      g_prefix_error (error, _("Error writing frame. "));
+      return FALSE;
+    }
+
   fseek (f, chunkpos + chunk.size, SEEK_SET);
+  return TRUE;
 }
 
 /*
@@ -775,68 +1168,102 @@ fli_write_brun (FILE          *f,
  * image, and unchanged pixels in a line. This chunk is used in FLI
  * files.
  */
-void
+gboolean
 fli_read_lc (FILE          *f,
              s_fli_header  *fli_header,
-             unsigned char *old_framebuf,
-             unsigned char *framebuf)
+             guchar        *old_framebuf,
+             guchar        *framebuf,
+             GError       **error)
 {
-  unsigned short  yc, firstline, numline;
-  unsigned char  *pos;
+  gushort  yc, firstline, numline;
+  guchar  *pos;
 
   memcpy (framebuf, old_framebuf, fli_header->width * fli_header->height);
-  firstline = fli_read_short (f);
-  numline = fli_read_short (f);
+
+  if (! fli_read_short (f, &firstline, error) ||
+      ! fli_read_short (f, &numline, error))
+    {
+      g_prefix_error (error, _("Error reading compressed data. "));
+      return FALSE;
+    }
+
   if (numline > fli_header->height || fli_header->height - numline < firstline)
-    return;
+    return TRUE;
 
   for (yc = 0; yc < numline; yc++)
     {
-      unsigned short pc, pcnt;
-      size_t         n, xc;
+      guchar  pc, pcnt;
+      size_t  n, xc;
 
-      pc = fli_read_char (f);
+      if (! fli_read_char (f, &pc, error))
+        {
+          g_prefix_error (error, _("Error reading compressed data. "));
+          return FALSE;
+        }
       xc = 0;
       pos = framebuf + (fli_header->width * (firstline + yc));
       n = (size_t) fli_header->width * (fli_header->height - firstline - yc);
       for (pcnt = pc; pcnt > 0; pcnt--)
         {
-          unsigned short ps, skip;
+          guchar ps, skip;
 
-          skip = fli_read_char (f);
-          ps = fli_read_char (f);
-          xc+=MIN (n - xc, skip);
+          if (! fli_read_char (f, &skip, error) ||
+              ! fli_read_char (f, &ps, error))
+            {
+              g_prefix_error (error, _("Error reading compressed data. "));
+              return FALSE;
+            }
+
+          xc += MIN (n - xc, skip);
           if (ps & 0x80)
             {
-              unsigned char val;
+              guchar val;
               size_t len;
+
               ps = -(signed char) ps;
-              val = fli_read_char (f);
+              if (! fli_read_char (f, &val, error))
+                {
+                  g_prefix_error (error, _("Error reading compressed data. "));
+                  return FALSE;
+                }
               len = MIN (n - xc, ps);
               memset (&(pos[xc]), val, len);
-              xc+=len;
+              xc += len;
             }
           else
             {
-              size_t len;
+              size_t len, len_read;
+
               len = MIN (n - xc, ps);
-              fread (&(pos[xc]), len, 1, f);
-              xc+=len;
+              if (len > 0)
+                {
+                  len_read = fread (&pos[xc], len, 1, f);
+                  if (len_read != 1)
+                    {
+                      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                                   _("Error reading from file."));
+                      g_prefix_error (error, _("Error reading compressed data. "));
+                      return FALSE;
+                    }
+                }
+              xc += len;
             }
         }
     }
+  return TRUE;
 }
 
-void
+gboolean
 fli_write_lc (FILE          *f,
               s_fli_header  *fli_header,
-              unsigned char *old_framebuf,
-              unsigned char *framebuf)
+              guchar        *old_framebuf,
+              guchar        *framebuf,
+              GError       **error)
 {
-  unsigned long   chunkpos;
-  s_fli_chunk     chunk;
-  unsigned short  yc, firstline, numline, lastline;
-  unsigned char  *linebuf, *old_linebuf;
+  guint32       chunkpos;
+  s_fli_chunk   chunk;
+  gushort       yc, firstline, numline, lastline;
+  guchar       *linebuf, *old_linebuf;
 
   chunkpos = ftell (f);
   fseek (f, chunkpos + 6, SEEK_SET);
@@ -867,13 +1294,17 @@ fli_write_lc (FILE          *f,
   if (numline == 0)
     firstline = 0;
 
-  fli_write_short (f, firstline);
-  fli_write_short (f, numline);
+  if (! fli_write_short (f, firstline, error) ||
+      ! fli_write_short (f, numline, error))
+    {
+      g_prefix_error (error, _("Error writing frame. "));
+      return FALSE;
+    }
 
   for (yc = 0; yc < numline; yc++)
     {
-      unsigned short xc, sc, cc, tc;
-      unsigned long  linepos, lineend, bc;
+      gushort xc, sc, cc, tc;
+      guint32 linepos, lineend, bc;
 
       linepos = ftell (f); bc = 0;
       fseek (f, 1, SEEK_CUR);
@@ -891,7 +1322,11 @@ fli_write_lc (FILE          *f,
               xc++;
               sc++;
             }
-          fli_write_char (f, sc);
+          if (! fli_write_char (f, sc, error))
+            {
+              g_prefix_error (error, _("Error writing frame. "));
+              return FALSE;
+            }
           cc = 1;
           while ((linebuf[xc] == linebuf[xc + cc]) &&
                  ((xc + cc)<fli_header->width)     &&
@@ -902,9 +1337,13 @@ fli_write_lc (FILE          *f,
           if (cc > 2)
             {
               bc++;
-              fli_write_char (f, (cc - 1)^0xFF);
-              fli_write_char (f, linebuf[xc]);
-              xc+=cc;
+              if (! fli_write_char (f, (cc - 1)^0xFF, error) ||
+                  ! fli_write_char (f, linebuf[xc], error))
+                {
+                  g_prefix_error (error, _("Error writing frame. "));
+                  return FALSE;
+                }
+              xc += cc;
             }
           else
             {
@@ -930,27 +1369,49 @@ fli_write_lc (FILE          *f,
                        (sc < 4)   &&
                        ((xc + tc) < fli_header->width));
               bc++;
-              fli_write_char (f, tc);
-              fwrite (linebuf + xc, tc, 1, f);
-              xc+=tc;
+              if (! fli_write_char (f, tc, error) ||
+                  fwrite (linebuf + xc, tc, 1, f) != 1)
+                {
+                  g_prefix_error (error, _("Error writing frame. "));
+                  return FALSE;
+                }
+              xc += tc;
             }
         }
       lineend = ftell (f);
       fseek (f, linepos, SEEK_SET);
-      fli_write_char (f, bc);
+      if (! fli_write_char (f, bc, error))
+        {
+          g_prefix_error (error, _("Error writing frame. "));
+          return FALSE;
+        }
       fseek (f, lineend, SEEK_SET);
     }
 
   chunk.size = ftell (f) - chunkpos;
   chunk.magic = FLI_LC;
 
-  fseek (f, chunkpos, SEEK_SET);
-  fli_write_long (f, chunk.size);
-  fli_write_short (f, chunk.magic);
-
   if (chunk.size & 1)
-    chunk.size++;
+    {
+      /* Dummy char to make the chunk end on an even boundary. */
+      if (! fli_write_char (f, 0, error))
+        {
+          g_prefix_error (error, _("Error writing frame. "));
+          return FALSE;
+        }
+      chunk.size++;
+    }
+
+  fseek (f, chunkpos, SEEK_SET);
+  if (! fli_write_uint32 (f, chunk.size, error) ||
+      ! fli_write_short (f, chunk.magic, error))
+    {
+      g_prefix_error (error, _("Error writing frame. "));
+      return FALSE;
+    }
+
   fseek (f, chunkpos + chunk.size, SEEK_SET);
+  return TRUE;
 }
 
 
@@ -960,24 +1421,42 @@ fli_write_lc (FILE          *f,
  * skipping larger parts of the image. This chunk is used in FLC
  * files.
  */
-void
+gboolean
 fli_read_lc_2 (FILE          *f,
                s_fli_header  *fli_header,
-               unsigned char *old_framebuf,
-               unsigned char *framebuf)
+               guchar        *old_framebuf,
+               guchar        *framebuf,
+               GError       **error)
 {
-  unsigned short  yc, lc, numline;
-  unsigned char  *pos;
+  gushort  yc, lc, numline;
+  guchar  *pos;
+  guint32  len_read;
 
   memcpy (framebuf, old_framebuf, fli_header->width * fli_header->height);
   yc = 0;
-  numline = fli_read_short (f);
+
+  if (! fli_read_short (f, &numline, error))
+    {
+      g_prefix_error (error, _("Error reading compressed data. "));
+      return FALSE;
+    }
+  if (numline > fli_header->height)
+    {
+      g_warning ("Number of lines %u larger than frame height %u.", numline, fli_header->height);
+      numline = fli_header->height;
+    }
+
   for (lc = 0; lc < numline; lc++)
     {
-      unsigned short pc, pcnt, lpf, lpn;
-      size_t         n, xc;
+      gushort pc, pcnt, lpf, lpn;
+      size_t  n, xc;
 
-      pc = fli_read_short (f);
+      if (! fli_read_short (f, &pc, error))
+        {
+          g_prefix_error (error, _("Error reading compressed data. "));
+          return FALSE;
+        }
+
       lpf = 0; lpn = 0;
       while (pc & 0x8000)
         {
@@ -990,7 +1469,12 @@ fli_read_lc_2 (FILE          *f,
               lpf = 1;
               lpn = pc & 0xFF;
             }
-          pc = fli_read_short (f);
+
+          if (! fli_read_short (f, &pc, error))
+            {
+              g_prefix_error (error, _("Error reading compressed data. "));
+              return FALSE;
+            }
         }
       yc = MIN (yc, fli_header->height);
       xc = 0;
@@ -998,18 +1482,27 @@ fli_read_lc_2 (FILE          *f,
       n = (size_t) fli_header->width * (fli_header->height - yc);
       for (pcnt = pc; pcnt > 0; pcnt--)
         {
-          unsigned short ps, skip;
+          guchar ps, skip;
 
-          skip = fli_read_char (f);
-          ps = fli_read_char (f);
+          if (! fli_read_char (f, &skip, error) ||
+              ! fli_read_char (f, &ps, error))
+            {
+              g_prefix_error (error, _("Error reading compressed data. "));
+              return FALSE;
+            }
+
           xc += MIN (n - xc, skip);
           if (ps & 0x80)
             {
-              unsigned char v1, v2;
+              guchar v1, v2;
 
               ps = -(signed char) ps;
-              v1 = fli_read_char (f);
-              v2 = fli_read_char (f);
+              if (! fli_read_char (f, &v1, error) ||
+                  ! fli_read_char (f, &v2, error))
+                {
+                  g_prefix_error (error, _("Error reading compressed data. "));
+                  return FALSE;
+                }
               while (ps > 0 && xc + 1 < n)
                 {
                   pos[xc++] = v1;
@@ -1022,12 +1515,23 @@ fli_read_lc_2 (FILE          *f,
               size_t len;
 
               len = MIN ((n - xc)/2, ps);
-              fread (&(pos[xc]), len, 2, f);
+              if (len > 0)
+                {
+                  len_read = fread (&pos[xc], len, 2, f);
+                  if (len_read != 2)
+                    {
+                      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                                   _("Error reading from file."));
+                      g_prefix_error (error, _("Error reading compressed data. "));
+                      return FALSE;
+                    }
+                }
               xc += len << 1;
             }
         }
-      if (lpf)
+      if (lpf && xc < n)
         pos[xc] = lpn;
       yc++;
     }
+  return TRUE;
 }

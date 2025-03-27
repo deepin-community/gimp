@@ -23,6 +23,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "widgets-types.h"
@@ -142,7 +143,6 @@ static void
 gimp_tool_options_editor_init (GimpToolOptionsEditor *editor)
 {
   GtkScrolledWindow *scrolled_window;
-  GtkWidget         *viewport;
 
   editor->p = gimp_tool_options_editor_get_instance_private (editor);
 
@@ -169,20 +169,15 @@ gimp_tool_options_editor_init (GimpToolOptionsEditor *editor)
   gtk_scrolled_window_set_policy (scrolled_window,
                                   GTK_POLICY_AUTOMATIC,
                                   GTK_POLICY_AUTOMATIC);
+  gtk_scrolled_window_set_overlay_scrolling (scrolled_window, FALSE);
 
   gtk_box_pack_start (GTK_BOX (editor), editor->p->scrolled_window,
                       TRUE, TRUE, 0);
   gtk_widget_show (editor->p->scrolled_window);
 
-  viewport = gtk_viewport_new (gtk_scrolled_window_get_hadjustment (scrolled_window),
-                               gtk_scrolled_window_get_vadjustment (scrolled_window));
-  gtk_viewport_set_shadow_type (GTK_VIEWPORT (viewport), GTK_SHADOW_NONE);
-  gtk_container_add (GTK_CONTAINER (scrolled_window), viewport);
-  gtk_widget_show (viewport);
-
   /*  The vbox containing the tool options  */
   editor->p->options_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 0);
-  gtk_container_add (GTK_CONTAINER (viewport), editor->p->options_vbox);
+  gtk_container_add (GTK_CONTAINER (scrolled_window), editor->p->options_vbox);
   gtk_widget_show (editor->p->options_vbox);
 }
 
@@ -311,13 +306,11 @@ gimp_tool_options_editor_get_preview (GimpDocked   *docked,
                                       GimpContext  *context,
                                       GtkIconSize   size)
 {
-  GtkSettings *settings = gtk_widget_get_settings (GTK_WIDGET (docked));
-  GtkWidget   *view;
-  gint         width;
-  gint         height;
+  GtkWidget *view;
+  gint       width;
+  gint       height;
 
-  gtk_icon_size_lookup_for_settings (settings, size, &width, &height);
-
+  gtk_icon_size_lookup (size, &width, &height);
   view = gimp_prop_view_new (G_OBJECT (context), "tool", context, height);
   GIMP_VIEW (view)->renderer->size = -1;
   gimp_view_renderer_set_size_full (GIMP_VIEW (view)->renderer,
@@ -378,30 +371,22 @@ gimp_tool_options_editor_get_tool_options (GimpToolOptionsEditor *editor)
 /*  private functions  */
 
 static void
-gimp_tool_options_editor_menu_pos (GtkMenu  *menu,
-                                   gint     *x,
-                                   gint     *y,
-                                   gpointer  data)
-{
-  gimp_button_menu_position (GTK_WIDGET (data), menu, GTK_POS_RIGHT, x, y);
-}
-
-static void
 gimp_tool_options_editor_menu_popup (GimpToolOptionsEditor *editor,
                                      GtkWidget             *button,
                                      const gchar           *path)
 {
   GimpEditor *gimp_editor = GIMP_EDITOR (editor);
 
-  gimp_ui_manager_get_widget (gimp_editor_get_ui_manager (gimp_editor),
-                              gimp_editor_get_ui_path (gimp_editor));
   gimp_ui_manager_update (gimp_editor_get_ui_manager (gimp_editor),
                           gimp_editor_get_popup_data (gimp_editor));
 
-  gimp_ui_manager_ui_popup (gimp_editor_get_ui_manager (gimp_editor), path,
-                            button,
-                            gimp_tool_options_editor_menu_pos, button,
-                            NULL, NULL);
+  gimp_ui_manager_ui_popup_at_widget (gimp_editor_get_ui_manager (gimp_editor),
+                                      path, NULL, NULL,
+                                      button,
+                                      GDK_GRAVITY_WEST,
+                                      GDK_GRAVITY_NORTH_EAST,
+                                      NULL,
+                                      NULL, NULL);
 }
 
 static void
@@ -411,7 +396,7 @@ gimp_tool_options_editor_save_clicked (GtkWidget             *widget,
   if (gtk_widget_get_sensitive (editor->p->restore_button) /* evil but correct */)
     {
       gimp_tool_options_editor_menu_popup (editor, widget,
-                                           "/tool-options-popup/Save");
+                                           "/tool-options-popup/Tool Options Menu/Save Tool Preset");
     }
   else
     {
@@ -426,7 +411,7 @@ gimp_tool_options_editor_restore_clicked (GtkWidget             *widget,
                                           GimpToolOptionsEditor *editor)
 {
   gimp_tool_options_editor_menu_popup (editor, widget,
-                                       "/tool-options-popup/Restore");
+                                       "/tool-options-popup/Tool Options Menu/Restore Tool Preset");
 }
 
 static void
@@ -434,7 +419,7 @@ gimp_tool_options_editor_delete_clicked (GtkWidget             *widget,
                                          GimpToolOptionsEditor *editor)
 {
   gimp_tool_options_editor_menu_popup (editor, widget,
-                                       "/tool-options-popup/Delete");
+                                       "/tool-options-popup/Tool Options Menu/Delete Tool Preset");
 }
 
 static void

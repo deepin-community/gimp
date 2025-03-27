@@ -58,6 +58,15 @@ void        gimp_editor_create_menu       (GimpEditor           *editor,
 gboolean    gimp_editor_popup_menu        (GimpEditor           *editor,
                                            GimpMenuPositionFunc  position_func,
                                            gpointer              position_data);
+gboolean    gimp_editor_popup_menu_at_pointer
+                                          (GimpEditor           *editor,
+                                           const GdkEvent       *trigger_event);
+gboolean   gimp_editor_popup_menu_at_rect (GimpEditor           *editor,
+                                           GdkWindow            *window,
+                                           const GdkRectangle   *rect,
+                                           GdkGravity            rect_anchor,
+                                           GdkGravity            menu_anchor,
+                                           const GdkEvent       *trigger_event);
 
 GtkWidget * gimp_editor_add_button        (GimpEditor           *editor,
                                            const gchar          *icon_name,
@@ -76,6 +85,11 @@ GtkWidget * gimp_editor_add_action_button (GimpEditor           *editor,
                                            const gchar          *group_name,
                                            const gchar          *action_name,
                                            ...) G_GNUC_NULL_TERMINATED;
+void     gimp_editor_set_action_sensitive (GimpEditor          *editor,
+                                           const gchar         *group_name,
+                                           const gchar         *action_name,
+                                           gboolean             sensitive,
+                                           const gchar         *reason);
 
 void        gimp_editor_set_show_name       (GimpEditor         *editor,
                                              gboolean            show);

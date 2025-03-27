@@ -35,7 +35,6 @@
 
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimppropwidgets.h"
-#include "widgets/gimpspinscale.h"
 #include "widgets/gimpwidgets-constructors.h"
 
 #include "display/gimpdisplay.h"
@@ -127,16 +126,20 @@ gimp_brightness_contrast_tool_initialize (GimpTool     *tool,
                                           GimpDisplay  *display,
                                           GError      **error)
 {
-  GimpBrightnessContrastTool *bc_tool  = GIMP_BRIGHTNESS_CONTRAST_TOOL (tool);
-  GimpImage                  *image    = gimp_display_get_image (display);
-  GimpDrawable               *drawable = gimp_image_get_active_drawable (image);
+  GimpBrightnessContrastTool *bc_tool   = GIMP_BRIGHTNESS_CONTRAST_TOOL (tool);
+  GimpImage                  *image     = gimp_display_get_image (display);
+  GList                      *drawables;
 
   if (! GIMP_TOOL_CLASS (parent_class)->initialize (tool, display, error))
     {
       return FALSE;
     }
 
-  if (gimp_drawable_get_component_type (drawable) == GIMP_COMPONENT_TYPE_U8)
+  drawables = gimp_image_get_selected_drawables (image);
+  /* Single drawable selection has been checked in parent initialize(). */
+  g_return_val_if_fail (g_list_length (drawables) == 1, FALSE);
+
+  if (gimp_drawable_get_component_type (drawables->data) == GIMP_COMPONENT_TYPE_U8)
     {
       gimp_prop_widget_set_factor (bc_tool->brightness_scale,
                                    127.0, 1.0, 8.0, 0);
@@ -150,6 +153,8 @@ gimp_brightness_contrast_tool_initialize (GimpTool     *tool,
       gimp_prop_widget_set_factor (bc_tool->contrast_scale,
                                    0.5, 0.01, 0.1, 3);
     }
+
+  g_list_free (drawables);
 
   return TRUE;
 }
@@ -274,17 +279,17 @@ gimp_brightness_contrast_tool_dialog (GimpFilterTool *filter_tool)
 
   /*  Create the brightness scale widget  */
   scale = gimp_prop_spin_scale_new (filter_tool->config, "brightness",
-                                    _("_Brightness"), 0.01, 0.1, 3);
+                                    0.01, 0.1, 3);
+  gimp_spin_scale_set_label (GIMP_SPIN_SCALE (scale), _("_Brightness"));
   gtk_box_pack_start (GTK_BOX (main_vbox), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   bc_tool->brightness_scale = scale;
 
   /*  Create the contrast scale widget  */
   scale = gimp_prop_spin_scale_new (filter_tool->config, "contrast",
-                                    _("_Contrast"), 0.01, 0.1, 3);
+                                    0.01, 0.1, 3);
+  gimp_spin_scale_set_label (GIMP_SPIN_SCALE (scale), _("_Contrast"));
   gtk_box_pack_start (GTK_BOX (main_vbox), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   bc_tool->contrast_scale = scale;
 

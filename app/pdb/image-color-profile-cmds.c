@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <cairo.h>
 
 #include <gegl.h>
@@ -53,10 +55,9 @@ image_get_color_profile_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 num_bytes = 0;
-  guint8 *profile_data = NULL;
+  GBytes *profile_data = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -71,8 +72,7 @@ image_get_color_profile_invoker (GimpProcedure         *procedure,
 
           data = gimp_color_profile_get_icc_profile (profile, &length);
 
-          profile_data = g_memdup (data, length);
-          num_bytes = length;
+          profile_data = g_bytes_new (data, length);
         }
     }
 
@@ -80,10 +80,7 @@ image_get_color_profile_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    {
-      g_value_set_int (gimp_value_array_index (return_vals, 1), num_bytes);
-      gimp_value_take_int8array (gimp_value_array_index (return_vals, 2), profile_data, num_bytes);
-    }
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), profile_data);
 
   return return_vals;
 }
@@ -99,10 +96,9 @@ image_get_effective_color_profile_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 num_bytes = 0;
-  guint8 *profile_data = NULL;
+  GBytes *profile_data = NULL;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -117,8 +113,7 @@ image_get_effective_color_profile_invoker (GimpProcedure         *procedure,
 
           data = gimp_color_profile_get_icc_profile (profile, &length);
 
-          profile_data = g_memdup (data, length);
-          num_bytes = length;
+          profile_data = g_bytes_new (data, length);
         }
     }
 
@@ -126,10 +121,7 @@ image_get_effective_color_profile_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    {
-      g_value_set_int (gimp_value_array_index (return_vals, 1), num_bytes);
-      gimp_value_take_int8array (gimp_value_array_index (return_vals, 2), profile_data, num_bytes);
-    }
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), profile_data);
 
   return return_vals;
 }
@@ -144,12 +136,10 @@ image_set_color_profile_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  gint32 num_bytes;
-  const guint8 *color_profile;
+  GBytes *color_profile;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  num_bytes = g_value_get_int (gimp_value_array_index (args, 1));
-  color_profile = gimp_value_get_int8array (gimp_value_array_index (args, 2));
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  color_profile = g_value_get_boxed (gimp_value_array_index (args, 1));
 
   if (success)
     {
@@ -157,13 +147,14 @@ image_set_color_profile_invoker (GimpProcedure         *procedure,
         {
           GimpColorProfile *profile;
 
-          profile = gimp_color_profile_new_from_icc_profile (color_profile,
-                                                             num_bytes,
+          profile = gimp_color_profile_new_from_icc_profile (g_bytes_get_data (color_profile, NULL),
+                                                             g_bytes_get_size (color_profile),
                                                              error);
 
           if (profile)
             {
-              success = gimp_image_set_color_profile (image, profile, error);
+              success = gimp_image_assign_color_profile (image, profile,
+                                                         progress, error);
               g_object_unref (profile);
             }
           else
@@ -171,7 +162,8 @@ image_set_color_profile_invoker (GimpProcedure         *procedure,
         }
       else
         {
-          success = gimp_image_set_color_profile (image, NULL, error);
+          success = gimp_image_assign_color_profile (image, NULL,
+                                                     progress, error);
         }
     }
 
@@ -189,34 +181,268 @@ image_set_color_profile_from_file_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  const gchar *uri;
+  GFile *file;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  uri = g_value_get_string (gimp_value_array_index (args, 1));
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  file = g_value_get_object (gimp_value_array_index (args, 1));
 
   if (success)
     {
-      if (uri)
+      if (file)
         {
-          GFile            *file = g_file_new_for_uri (uri);
           GimpColorProfile *profile;
 
           profile = gimp_color_profile_new_from_file (file, error);
 
           if (profile)
             {
-              success = gimp_image_set_color_profile (image, profile, error);
+              success = gimp_image_assign_color_profile (image, profile,
+                                                         progress, error);
               g_object_unref (profile);
             }
           else
             success = FALSE;
-
-          g_object_unref (file);
         }
       else
         {
-          success = gimp_image_set_color_profile (image, NULL, error);
+          success = gimp_image_assign_color_profile (image, NULL,
+                                                     progress, error);
         }
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
+image_get_simulation_profile_invoker (GimpProcedure         *procedure,
+                                      Gimp                  *gimp,
+                                      GimpContext           *context,
+                                      GimpProgress          *progress,
+                                      const GimpValueArray  *args,
+                                      GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  GimpImage *image;
+  GBytes *profile_data = NULL;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      GimpColorProfile *profile;
+
+      profile = gimp_image_get_simulation_profile (image);
+
+      if (profile)
+        {
+          const guint8 *data;
+          gsize         length;
+
+          data = gimp_color_profile_get_icc_profile (profile, &length);
+
+          profile_data = g_bytes_new (data, length);
+        }
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), profile_data);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+image_set_simulation_profile_invoker (GimpProcedure         *procedure,
+                                      Gimp                  *gimp,
+                                      GimpContext           *context,
+                                      GimpProgress          *progress,
+                                      const GimpValueArray  *args,
+                                      GError               **error)
+{
+  gboolean success = TRUE;
+  GimpImage *image;
+  GBytes *color_profile;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  color_profile = g_value_get_boxed (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      if (color_profile)
+        {
+          GimpColorProfile *profile;
+
+          profile = gimp_color_profile_new_from_icc_profile (g_bytes_get_data (color_profile, NULL),
+                                                             g_bytes_get_size (color_profile),
+                                                             error);
+
+          if (profile)
+            {
+              gimp_image_set_simulation_profile (image, profile);
+              g_object_unref (profile);
+            }
+          else
+            {
+              success = FALSE;
+            }
+        }
+      else
+        {
+          gimp_image_set_simulation_profile (image, NULL);
+        }
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
+image_set_simulation_profile_from_file_invoker (GimpProcedure         *procedure,
+                                                Gimp                  *gimp,
+                                                GimpContext           *context,
+                                                GimpProgress          *progress,
+                                                const GimpValueArray  *args,
+                                                GError               **error)
+{
+  gboolean success = TRUE;
+  GimpImage *image;
+  GFile *file;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  file = g_value_get_object (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      if (file)
+        {
+          GimpColorProfile *profile;
+
+          profile = gimp_color_profile_new_from_file (file, error);
+
+          if (profile)
+            {
+              gimp_image_set_simulation_profile (image, profile);
+              g_object_unref (profile);
+            }
+          else
+            {
+              success = FALSE;
+            }
+        }
+      else
+        {
+          gimp_image_set_simulation_profile (image, NULL);
+        }
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
+image_get_simulation_intent_invoker (GimpProcedure         *procedure,
+                                     Gimp                  *gimp,
+                                     GimpContext           *context,
+                                     GimpProgress          *progress,
+                                     const GimpValueArray  *args,
+                                     GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  GimpImage *image;
+  gint intent = 0;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      intent = gimp_image_get_simulation_intent (image);
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_enum (gimp_value_array_index (return_vals, 1), intent);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+image_set_simulation_intent_invoker (GimpProcedure         *procedure,
+                                     Gimp                  *gimp,
+                                     GimpContext           *context,
+                                     GimpProgress          *progress,
+                                     const GimpValueArray  *args,
+                                     GError               **error)
+{
+  gboolean success = TRUE;
+  GimpImage *image;
+  gint intent;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  intent = g_value_get_enum (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      gimp_image_set_simulation_intent (image, intent);
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
+image_get_simulation_bpc_invoker (GimpProcedure         *procedure,
+                                  Gimp                  *gimp,
+                                  GimpContext           *context,
+                                  GimpProgress          *progress,
+                                  const GimpValueArray  *args,
+                                  GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  GimpImage *image;
+  gboolean bpc = FALSE;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      bpc = gimp_image_get_simulation_bpc (image);
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_boolean (gimp_value_array_index (return_vals, 1), bpc);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+image_set_simulation_bpc_invoker (GimpProcedure         *procedure,
+                                  Gimp                  *gimp,
+                                  GimpContext           *context,
+                                  GimpProgress          *progress,
+                                  const GimpValueArray  *args,
+                                  GError               **error)
+{
+  gboolean success = TRUE;
+  GimpImage *image;
+  gboolean bpc;
+
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  bpc = g_value_get_boolean (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      gimp_image_set_simulation_bpc (image, bpc);
     }
 
   return gimp_procedure_get_return_values (procedure, success,
@@ -233,16 +459,14 @@ image_convert_color_profile_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  gint32 num_bytes;
-  const guint8 *color_profile;
-  gint32 intent;
+  GBytes *color_profile;
+  gint intent;
   gboolean bpc;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  num_bytes = g_value_get_int (gimp_value_array_index (args, 1));
-  color_profile = gimp_value_get_int8array (gimp_value_array_index (args, 2));
-  intent = g_value_get_enum (gimp_value_array_index (args, 3));
-  bpc = g_value_get_boolean (gimp_value_array_index (args, 4));
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  color_profile = g_value_get_boxed (gimp_value_array_index (args, 1));
+  intent = g_value_get_enum (gimp_value_array_index (args, 2));
+  bpc = g_value_get_boolean (gimp_value_array_index (args, 3));
 
   if (success)
     {
@@ -250,8 +474,8 @@ image_convert_color_profile_invoker (GimpProcedure         *procedure,
         {
           GimpColorProfile *profile;
 
-          profile = gimp_color_profile_new_from_icc_profile (color_profile,
-                                                             num_bytes,
+          profile = gimp_color_profile_new_from_icc_profile (g_bytes_get_data (color_profile, NULL),
+                                                             g_bytes_get_size (color_profile),
                                                              error);
 
           if (profile)
@@ -282,20 +506,19 @@ image_convert_color_profile_from_file_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  const gchar *uri;
-  gint32 intent;
+  GFile *file;
+  gint intent;
   gboolean bpc;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
-  uri = g_value_get_string (gimp_value_array_index (args, 1));
+  image = g_value_get_object (gimp_value_array_index (args, 0));
+  file = g_value_get_object (gimp_value_array_index (args, 1));
   intent = g_value_get_enum (gimp_value_array_index (args, 2));
   bpc = g_value_get_boolean (gimp_value_array_index (args, 3));
 
   if (success)
     {
-      if (uri)
+      if (file)
         {
-          GFile            *file = g_file_new_for_uri (uri);
           GimpColorProfile *profile;
 
           profile = gimp_color_profile_new_from_file (file, error);
@@ -309,8 +532,6 @@ image_convert_color_profile_from_file_invoker (GimpProcedure         *procedure,
             }
           else
             success = FALSE;
-
-          g_object_unref (file);
         }
       else
         success = FALSE;
@@ -328,166 +549,350 @@ register_image_color_profile_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-color-profile
    */
-  procedure = gimp_procedure_new (image_get_color_profile_invoker);
+  procedure = gimp_procedure_new (image_get_color_profile_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-color-profile");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-color-profile",
-                                     "Returns the image's color profile",
-                                     "This procedure returns the image's color profile, or NULL if the image has no color profile assigned.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2015",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the image's color profile",
+                                  "This procedure returns the image's color profile, or NULL if the image has no color profile assigned.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2015");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-bytes",
-                                                          "num bytes",
-                                                          "Number of bytes in the color_profile array",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int8_array ("profile-data",
-                                                               "profile data",
-                                                               "The image's serialized color profile. The returned value must be freed with g_free()",
-                                                               GIMP_PARAM_READWRITE));
+                                   g_param_spec_boxed ("profile-data",
+                                                       "profile data",
+                                                       "The image's serialized color profile.",
+                                                       G_TYPE_BYTES,
+                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-get-effective-color-profile
    */
-  procedure = gimp_procedure_new (image_get_effective_color_profile_invoker);
+  procedure = gimp_procedure_new (image_get_effective_color_profile_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-effective-color-profile");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-effective-color-profile",
-                                     "Returns the color profile that is used for the image",
-                                     "This procedure returns the color profile that is actually used for this image, which is the profile returned by 'gimp-image-get-color-profile' if the image has a profile assigned, or a generated default RGB or grayscale profile, according to the image's type.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2015",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the color profile that is used for the image",
+                                  "This procedure returns the color profile that is actually used for this image, which is the profile returned by 'gimp-image-get-color-profile' if the image has a profile assigned, or a generated default RGB or grayscale profile, according to the image's type.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2015");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-bytes",
-                                                          "num bytes",
-                                                          "Number of bytes in the color_profile array",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int8_array ("profile-data",
-                                                               "profile data",
-                                                               "The image's serialized color profile. The returned value must be freed with g_free()",
-                                                               GIMP_PARAM_READWRITE));
+                                   g_param_spec_boxed ("profile-data",
+                                                       "profile data",
+                                                       "The image's serialized color profile.",
+                                                       G_TYPE_BYTES,
+                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-set-color-profile
    */
-  procedure = gimp_procedure_new (image_set_color_profile_invoker);
+  procedure = gimp_procedure_new (image_set_color_profile_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-set-color-profile");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-color-profile",
-                                     "Sets the image's color profile",
-                                     "This procedure sets the image's color profile, or unsets it if NULL is passed as 'color_profile'. This procedure does no color conversion.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2015",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the image's color profile",
+                                  "This procedure sets the image's color profile, or unsets it if NULL is passed as 'color_profile'. This procedure does no color conversion. However, it will change the pixel format of all layers to contain the babl space matching the profile. You must call this procedure before adding layers to the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2015");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("num-bytes",
-                                                      "num bytes",
-                                                      "Number of bytes in the color_profile array",
-                                                      0, G_MAXINT32, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int8_array ("color-profile",
-                                                           "color profile",
-                                                           "The new serialized color profile",
-                                                           GIMP_PARAM_READWRITE));
+                               g_param_spec_boxed ("color-profile",
+                                                   "color profile",
+                                                   "The new serialized color profile",
+                                                   G_TYPE_BYTES,
+                                                   GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-set-color-profile-from-file
    */
-  procedure = gimp_procedure_new (image_set_color_profile_from_file_invoker);
+  procedure = gimp_procedure_new (image_set_color_profile_from_file_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-set-color-profile-from-file");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-set-color-profile-from-file",
-                                     "Sets the image's color profile from an ICC file",
-                                     "This procedure sets the image's color profile from a file containing an ICC profile, or unsets it if NULL is passed as 'uri'. This procedure does no color conversion.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2015",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the image's color profile from an ICC file",
+                                  "This procedure sets the image's color profile from a file containing an ICC profile, or unsets it if NULL is passed as 'file'. This procedure does no color conversion. However, it will change the pixel format of all layers to contain the babl space matching the profile. You must call this procedure before adding layers to the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2015");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_string ("uri",
-                                                       "uri",
-                                                       "The URI of the file containing the new color profile",
-                                                       FALSE, FALSE, FALSE,
-                                                       NULL,
+                               g_param_spec_object ("file",
+                                                    "file",
+                                                    "The file containing the new color profile",
+                                                    G_TYPE_FILE,
+                                                    GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-get-simulation-profile
+   */
+  procedure = gimp_procedure_new (image_get_simulation_profile_invoker, TRUE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-get-simulation-profile");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the image's simulation color profile",
+                                  "This procedure returns the image's simulation color profile, or NULL if the image has no simulation color profile assigned.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Alex S.",
+                                         "Alex S.",
+                                         "2022");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_boxed ("profile-data",
+                                                       "profile data",
+                                                       "The image's serialized simulation color profile.",
+                                                       G_TYPE_BYTES,
                                                        GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-set-simulation-profile
+   */
+  procedure = gimp_procedure_new (image_set_simulation_profile_invoker, TRUE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-set-simulation-profile");
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the image's simulation color profile",
+                                  "This procedure sets the image's simulation color profile, or unsets it if NULL is passed as 'color_profile'. This procedure does no color conversion.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Alex S.",
+                                         "Alex S.",
+                                         "2022");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boxed ("color-profile",
+                                                   "color profile",
+                                                   "The new serialized simulation color profile",
+                                                   G_TYPE_BYTES,
+                                                   GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-set-simulation-profile-from-file
+   */
+  procedure = gimp_procedure_new (image_set_simulation_profile_from_file_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-set-simulation-profile-from-file");
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the image's simulation color profile from an ICC file",
+                                  "This procedure sets the image's simulation color profile from a file containing an ICC profile, or unsets it if NULL is passed as 'file'. This procedure does no color conversion.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Alex S.",
+                                         "Alex S.",
+                                         "2022");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_object ("file",
+                                                    "file",
+                                                    "The file containing the new simulation color profile",
+                                                    G_TYPE_FILE,
+                                                    GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-get-simulation-intent
+   */
+  procedure = gimp_procedure_new (image_get_simulation_intent_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-get-simulation-intent");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the image's simulation rendering intent",
+                                  "This procedure returns the image's simulation rendering intent.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Alex S.",
+                                         "Alex S.",
+                                         "2022");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_enum ("intent",
+                                                      "intent",
+                                                      "The image's simulation rendering intent.",
+                                                      GIMP_TYPE_COLOR_RENDERING_INTENT,
+                                                      GIMP_COLOR_RENDERING_INTENT_PERCEPTUAL,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-set-simulation-intent
+   */
+  procedure = gimp_procedure_new (image_set_simulation_intent_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-set-simulation-intent");
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the image's simulation rendering intent",
+                                  "This procedure sets the image's simulation rendering intent.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Alex S.",
+                                         "Alex S.",
+                                         "2022");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_enum ("intent",
+                                                  "intent",
+                                                  "A GimpColorRenderingIntent",
+                                                  GIMP_TYPE_COLOR_RENDERING_INTENT,
+                                                  GIMP_COLOR_RENDERING_INTENT_PERCEPTUAL,
+                                                  GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-get-simulation-bpc
+   */
+  procedure = gimp_procedure_new (image_get_simulation_bpc_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-get-simulation-bpc");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the image has Black Point Compensation enabled for its simulation",
+                                  "This procedure returns whether the image has Black Point Compensation enabled for its simulation",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Alex S.",
+                                         "Alex S.",
+                                         "2022");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_boolean ("bpc",
+                                                         "bpc",
+                                                         "The Black Point Compensation status.",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-image-set-simulation-bpc
+   */
+  procedure = gimp_procedure_new (image_set_simulation_bpc_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-image-set-simulation-bpc");
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets whether the image has Black Point Compensation enabled for its simulation",
+                                  "This procedure whether the image has Black Point Compensation enabled for its simulation",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Alex S.",
+                                         "Alex S.",
+                                         "2022");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boolean ("bpc",
+                                                     "bpc",
+                                                     "The Black Point Compensation status.",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-image-convert-color-profile
    */
-  procedure = gimp_procedure_new (image_convert_color_profile_invoker);
+  procedure = gimp_procedure_new (image_convert_color_profile_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-convert-color-profile");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-convert-color-profile",
-                                     "Convert the image's layers to a color profile",
-                                     "This procedure converts from the image's color profile (or the default RGB or grayscale profile if none is set) to the given color profile. Only RGB and grayscale color profiles are accepted, according to the image's type.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2015",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Convert the image's layers to a color profile",
+                                  "This procedure converts from the image's color profile (or the default RGB or grayscale profile if none is set) to the given color profile. Only RGB and grayscale color profiles are accepted, according to the image's type.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2015");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("num-bytes",
-                                                      "num bytes",
-                                                      "Number of bytes in the color_profile array",
-                                                      0, G_MAXINT32, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int8_array ("color-profile",
-                                                           "color profile",
-                                                           "The serialized color profile",
-                                                           GIMP_PARAM_READWRITE));
+                               g_param_spec_boxed ("color-profile",
+                                                   "color profile",
+                                                   "The serialized color profile",
+                                                   G_TYPE_BYTES,
+                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("intent",
                                                   "intent",
@@ -507,30 +912,29 @@ register_image_color_profile_procs (GimpPDB *pdb)
   /*
    * gimp-image-convert-color-profile-from-file
    */
-  procedure = gimp_procedure_new (image_convert_color_profile_from_file_invoker);
+  procedure = gimp_procedure_new (image_convert_color_profile_from_file_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-convert-color-profile-from-file");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-convert-color-profile-from-file",
-                                     "Convert the image's layers to a color profile",
-                                     "This procedure converts from the image's color profile (or the default RGB or grayscale profile if none is set) to an ICC profile specified by 'uri'. Only RGB and grayscale color profiles are accepted, according to the image's type.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2015",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Convert the image's layers to a color profile",
+                                  "This procedure converts from the image's color profile (or the default RGB or grayscale profile if none is set) to an ICC profile specified by 'file'. Only RGB and grayscale color profiles are accepted, according to the image's type.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2015");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_string ("uri",
-                                                       "uri",
-                                                       "The URI of the file containing the new color profile",
-                                                       FALSE, FALSE, FALSE,
-                                                       NULL,
-                                                       GIMP_PARAM_READWRITE));
+                               g_param_spec_object ("file",
+                                                    "file",
+                                                    "The file containing the new color profile",
+                                                    G_TYPE_FILE,
+                                                    GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("intent",
                                                   "intent",

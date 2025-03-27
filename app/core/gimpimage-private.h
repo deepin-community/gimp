@@ -44,7 +44,7 @@ struct _GimpImagePrivate
   gint               height;                /*  height in pixels             */
   gdouble            xresolution;           /*  image x-res, in dpi          */
   gdouble            yresolution;           /*  image y-res, in dpi          */
-  GimpUnit           resolution_unit;       /*  resolution unit              */
+  GimpUnit          *resolution_unit;       /*  resolution unit              */
   gboolean           resolution_set;        /*  resolution explicitly set    */
   GimpImageBaseType  base_type;             /*  base gimp_image type         */
   GimpPrecision      precision;             /*  image's precision            */
@@ -56,20 +56,24 @@ struct _GimpImagePrivate
   gboolean           bounding_box_update_pending;
   GeglBuffer        *pickable_buffer;
 
-  guchar            *colormap;              /*  colormap (for indexed)       */
-  gint               n_colors;              /*  # of colors (for indexed)    */
   GimpPalette       *palette;               /*  palette of colormap          */
   const Babl        *babl_palette_rgb;      /*  palette's RGB Babl format    */
   const Babl        *babl_palette_rgba;     /*  palette's RGBA Babl format   */
 
-  gboolean           is_color_managed;      /*  is this image color managed  */
   GimpColorProfile  *color_profile;         /*  image's color profile        */
+  const Babl        *layer_space;           /*  image's Babl layer space     */
+  GimpColorProfile  *hidden_profile;        /*  hidden by "use sRGB"         */
+
+  /* image's simulation/soft-proofing settings */
+  GimpColorProfile         *simulation_profile;
+  GimpColorRenderingIntent  simulation_intent;
+  gboolean                  simulation_bpc;
+
   gboolean           converting;            /*  color model or profile in middle of conversion?  */
 
   /*  Cached color transforms: from layer to sRGB u8 and double, and back    */
   gboolean            color_transforms_created;
   GimpColorTransform *transform_to_srgb_u8;
-  GimpColorTransform *transform_from_srgb_u8;
   GimpColorTransform *transform_to_srgb_double;
   GimpColorTransform *transform_from_srgb_double;
 
@@ -111,6 +115,12 @@ struct _GimpImagePrivate
   GimpItemTree      *vectors;               /*  the tree of vectors          */
   GSList            *layer_stack;           /*  the layers in MRU order      */
 
+  GList             *hidden_items;          /*  internal process-only items  */
+
+  GList             *stored_layer_sets;
+  GList             *stored_channel_sets;
+  GList             *stored_vectors_sets;
+
   GQuark             layer_offset_x_handler;
   GQuark             layer_offset_y_handler;
   GQuark             layer_bounding_box_handler;
@@ -128,7 +138,7 @@ struct _GimpImagePrivate
 
   gboolean           quick_mask_state;      /*  TRUE if quick mask is on       */
   gboolean           quick_mask_inverted;   /*  TRUE if quick mask is inverted */
-  GimpRGB            quick_mask_color;      /*  rgba triplet of the color      */
+  GeglColor         *quick_mask_color;      /*  rgba triplet of the color      */
 
   /*  Undo apparatus  */
   GimpUndoStack     *undo_stack;            /*  stack for undo operations    */

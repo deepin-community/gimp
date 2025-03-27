@@ -24,6 +24,7 @@
 #include <gegl.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
 #include "libgimpconfig/gimpconfig.h"
 
@@ -199,18 +200,24 @@ gimp_operation_desaturate_process (GeglOperation       *operation,
 
     case GIMP_DESATURATE_LUMA:
     case GIMP_DESATURATE_LUMINANCE:
-      while (samples--)
-        {
-          gfloat value = GIMP_RGB_LUMINANCE (src[0], src[1], src[2]);
+      {
+        const Babl *space = gegl_operation_get_source_space (operation, "input");
+        double red_luminance, green_luminance, blue_luminance;
+        babl_space_get_rgb_luminance (space, &red_luminance, &green_luminance, &blue_luminance);
+        while (samples--)
+          {
+            gfloat value  = (src[0] * red_luminance)   +
+                            (src[1] * green_luminance) +
+                            (src[2] * blue_luminance);
+            dest[0] = value;
+            dest[1] = value;
+            dest[2] = value;
+            dest[3] = src[3];
 
-          dest[0] = value;
-          dest[1] = value;
-          dest[2] = value;
-          dest[3] = src[3];
-
-          src  += 4;
-          dest += 4;
-        }
+            src  += 4;
+            dest += 4;
+          }
+      }
       break;
 
     case GIMP_DESATURATE_AVERAGE:

@@ -31,34 +31,27 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_FRAME            (gimp_frame_get_type ())
-#define GIMP_FRAME(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_FRAME, GimpFrame))
-#define GIMP_FRAME_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_FRAME, GimpFrameClass))
-#define GIMP_IS_FRAME(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_FRAME))
-#define GIMP_IS_FRAME_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_FRAME))
-#define GIMP_FRAME_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_FRAME, GimpFrameClass))
-
-
-typedef struct _GimpFrameClass  GimpFrameClass;
-
-struct _GimpFrame
-{
-  GtkFrame       parent_instance;
-};
+#define GIMP_TYPE_FRAME (gimp_frame_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpFrame, gimp_frame, GIMP, FRAME, GtkFrame)
 
 struct _GimpFrameClass
 {
   GtkFrameClass  parent_class;
 
   /* Padding for future expansion */
+  void (* _gimp_reserved0) (void);
   void (* _gimp_reserved1) (void);
   void (* _gimp_reserved2) (void);
   void (* _gimp_reserved3) (void);
   void (* _gimp_reserved4) (void);
+  void (* _gimp_reserved5) (void);
+  void (* _gimp_reserved6) (void);
+  void (* _gimp_reserved7) (void);
+  void (* _gimp_reserved8) (void);
+  void (* _gimp_reserved9) (void);
 };
 
 
-GType       gimp_frame_get_type  (void) G_GNUC_CONST;
 GtkWidget * gimp_frame_new       (const gchar *label);
 
 

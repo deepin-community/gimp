@@ -62,9 +62,10 @@
 #include "display/gimpdisplayshell-transform.h"
 #include "display/gimpimagewindow.h"
 
-#include "tests.h"
+#include "gimpcoreapp.h"
 
 #include "gimp-app-test-utils.h"
+#include "tests.h"
 
 
 #define ADD_TEST(function) \
@@ -86,9 +87,9 @@ new_file_has_no_files (gconstpointer    data)
   Gimp      *gimp  = GIMP (data);
   GimpImage *image = gimp_test_utils_create_image_from_dialog (gimp);
 
-  g_assert (gimp_image_get_file (image) == NULL);
-  g_assert (gimp_image_get_imported_file (image) == NULL);
-  g_assert (gimp_image_get_exported_file (image) == NULL);
+  g_assert_true (gimp_image_get_file (image) == NULL);
+  g_assert_true (gimp_image_get_imported_file (image) == NULL);
+  g_assert_true (gimp_image_get_exported_file (image) == NULL);
 }
 
 /**
@@ -117,7 +118,7 @@ opened_xcf_file_files (gconstpointer data)
                            gimp_get_user_context (gimp),
                            NULL /*progress*/,
                            file,
-                           file,
+                           0, 0, /* vector width, height */
                            FALSE /*as_new*/,
                            NULL /*file_proc*/,
                            GIMP_RUN_NONINTERACTIVE,
@@ -125,9 +126,9 @@ opened_xcf_file_files (gconstpointer data)
                            NULL /*mime_type*/,
                            NULL /*error*/);
 
-  g_assert (g_file_equal (gimp_image_get_file (image), file));
-  g_assert (gimp_image_get_imported_file (image) == NULL);
-  g_assert (gimp_image_get_exported_file (image) == NULL);
+  g_assert_true (g_file_equal (gimp_image_get_file (image), file));
+  g_assert_true (gimp_image_get_imported_file (image) == NULL);
+  g_assert_true (gimp_image_get_exported_file (image) == NULL);
 
   g_object_unref (file);
 }
@@ -147,10 +148,10 @@ imported_file_files (gconstpointer data)
   gchar             *filename;
   GimpPDBStatusType  status;
 
-  filename = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_SRCDIR"),
-                               "desktop/64x64/gimp.png",
+  filename = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_BUILDDIR"),
+                               "gimp-data/images/logo/gimp64x64.png",
                                NULL);
-  g_assert (g_file_test (filename, G_FILE_TEST_EXISTS));
+  g_assert_true (g_file_test (filename, G_FILE_TEST_EXISTS));
   file = g_file_new_for_path (filename);
   g_free (filename);
 
@@ -158,7 +159,7 @@ imported_file_files (gconstpointer data)
                            gimp_get_user_context (gimp),
                            NULL /*progress*/,
                            file,
-                           file,
+                           0, 0, /* vector width, height */
                            FALSE /*as_new*/,
                            NULL /*file_proc*/,
                            GIMP_RUN_NONINTERACTIVE,
@@ -166,9 +167,9 @@ imported_file_files (gconstpointer data)
                            NULL /*mime_type*/,
                            NULL /*error*/);
 
-  g_assert (gimp_image_get_file (image) == NULL);
-  g_assert (g_file_equal (gimp_image_get_imported_file (image), file));
-  g_assert (gimp_image_get_exported_file (image) == NULL);
+  g_assert_true (gimp_image_get_file (image) == NULL);
+  g_assert_true (g_file_equal (gimp_image_get_imported_file (image), file));
+  g_assert_true (gimp_image_get_exported_file (image) == NULL);
 
   g_object_unref (file);
 }
@@ -192,8 +193,8 @@ saved_imported_file_files (gconstpointer data)
   GimpPDBStatusType    status;
   GimpPlugInProcedure *proc;
 
-  import_filename = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_SRCDIR"),
-                                      "desktop/64x64/gimp.png",
+  import_filename = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_BUILDDIR"),
+                                      "gimp-data/images/logo/gimp64x64.png",
                                       NULL);
   import_file = g_file_new_for_path (import_filename);
   g_free (import_filename);
@@ -207,7 +208,7 @@ saved_imported_file_files (gconstpointer data)
                            gimp_get_user_context (gimp),
                            NULL /*progress*/,
                            import_file,
-                           import_file,
+                           0, 0, /* vector width, height */
                            FALSE /*as_new*/,
                            NULL /*file_proc*/,
                            GIMP_RUN_NONINTERACTIVE,
@@ -234,9 +235,9 @@ saved_imported_file_files (gconstpointer data)
              NULL /*error*/);
 
   /* Assert */
-  g_assert (g_file_equal (gimp_image_get_file (image), save_file));
-  g_assert (gimp_image_get_imported_file (image) == NULL);
-  g_assert (gimp_image_get_exported_file (image) == NULL);
+  g_assert_true (g_file_equal (gimp_image_get_file (image), save_file));
+  g_assert_true (gimp_image_get_imported_file (image) == NULL);
+  g_assert_true (gimp_image_get_exported_file (image) == NULL);
 
   g_file_delete (save_file, NULL, NULL);
   g_object_unref (save_file);
@@ -277,9 +278,9 @@ exported_file_files (gconstpointer data)
              TRUE /*export_forward*/,
              NULL /*error*/);
 
-  g_assert (gimp_image_get_file (image) == NULL);
-  g_assert (gimp_image_get_imported_file (image) == NULL);
-  g_assert (g_file_equal (gimp_image_get_exported_file (image), save_file));
+  g_assert_true (gimp_image_get_file (image) == NULL);
+  g_assert_true (gimp_image_get_imported_file (image) == NULL);
+  g_assert_true (g_file_equal (gimp_image_get_exported_file (image), save_file));
 
   g_file_delete (save_file, NULL, NULL);
   g_object_unref (save_file);
@@ -305,8 +306,8 @@ clear_import_file_after_export (gconstpointer data)
   GimpPlugInProcedure *proc;
   GimpPDBStatusType    status;
 
-  filename = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_SRCDIR"),
-                               "desktop/64x64/gimp.png",
+  filename = g_build_filename (g_getenv ("GIMP_TESTING_ABS_TOP_BUILDDIR"),
+                               "gimp-data/images/logo/gimp64x64.png",
                                NULL);
   file = g_file_new_for_path (filename);
   g_free (filename);
@@ -315,7 +316,7 @@ clear_import_file_after_export (gconstpointer data)
                            gimp_get_user_context (gimp),
                            NULL /*progress*/,
                            file,
-                           file,
+                           0, 0, /* vector width, height */
                            FALSE /*as_new*/,
                            NULL /*file_proc*/,
                            GIMP_RUN_NONINTERACTIVE,
@@ -323,9 +324,9 @@ clear_import_file_after_export (gconstpointer data)
                            NULL /*mime_type*/,
                            NULL /*error*/);
 
-  g_assert (gimp_image_get_file (image) == NULL);
-  g_assert (g_file_equal (gimp_image_get_imported_file (image), file));
-  g_assert (gimp_image_get_exported_file (image) == NULL);
+  g_assert_true (gimp_image_get_file (image) == NULL);
+  g_assert_true (g_file_equal (gimp_image_get_imported_file (image), file));
+  g_assert_true (gimp_image_get_exported_file (image) == NULL);
 
   g_object_unref (file);
 
@@ -348,9 +349,9 @@ clear_import_file_after_export (gconstpointer data)
              TRUE /*export_forward*/,
              NULL /*error*/);
 
-  g_assert (gimp_image_get_file (image) == NULL);
-  g_assert (gimp_image_get_imported_file (image) == NULL);
-  g_assert (g_file_equal (gimp_image_get_exported_file (image), save_file));
+  g_assert_true (gimp_image_get_file (image) == NULL);
+  g_assert_true (gimp_image_get_imported_file (image) == NULL);
+  g_assert_true (g_file_equal (gimp_image_get_exported_file (image), save_file));
 
   g_file_delete (save_file, NULL, NULL);
   g_object_unref (save_file);
@@ -366,8 +367,6 @@ main(int    argc,
   gimp_test_bail_if_no_display ();
   gtk_test_init (&argc, &argv, NULL);
 
-  gimp_test_utils_set_gimp2_directory ("GIMP_TESTING_ABS_TOP_SRCDIR",
-                                       "app/tests/gimpdir");
   gimp_test_utils_setup_menus_path ();
 
   /* Start up GIMP */
@@ -382,14 +381,11 @@ main(int    argc,
   ADD_TEST (clear_import_file_after_export);
 
   /* Run the tests and return status */
-  result = g_test_run ();
+  g_application_run (gimp->app, 0, NULL);
+  result = gimp_core_app_get_exit_status (GIMP_CORE_APP (gimp->app));
 
-  /* Don't write files to the source dir */
-  gimp_test_utils_set_gimp2_directory ("GIMP_TESTING_ABS_TOP_BUILDDIR",
-                                       "app/tests/gimpdir-output");
-
-  /* Exit properly so we don't break script-fu plug-in wire */
-  gimp_exit (gimp, TRUE);
+  g_application_quit (G_APPLICATION (gimp->app));
+  g_clear_object (&gimp->app);
 
   return result;
 }

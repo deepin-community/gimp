@@ -25,6 +25,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #define GIMP_ENABLE_CONTROLLER_UNDER_CONSTRUCTION
@@ -41,7 +42,6 @@
 #include "gimpcontrollerlist.h"
 #include "gimpcontrollerinfo.h"
 #include "gimpcontrollerkeyboard.h"
-#include "gimpcontrollermouse.h"
 #include "gimpcontrollerwheel.h"
 #include "gimpcontrollers.h"
 #include "gimpdialogfactory.h"
@@ -88,9 +88,9 @@ static void gimp_controller_list_row_activated   (GtkTreeView        *tv,
                                                   GtkTreeViewColumn  *column,
                                                   GimpControllerList *list);
 
-static void gimp_controller_list_select_item     (GimpContainerView  *view,
-                                                  GimpViewable       *viewable,
-                                                  gpointer            insert_data,
+static gboolean gimp_controller_list_select_items(GimpContainerView  *view,
+                                                  GList              *viewables,
+                                                  GList              *paths,
                                                   GimpControllerList *list);
 static void gimp_controller_list_activate_item   (GimpContainerView  *view,
                                                   GimpViewable       *viewable,
@@ -238,7 +238,7 @@ gimp_controller_list_init (GimpControllerList *list)
   gtk_box_pack_start (GTK_BOX (hbox), vbox, FALSE, FALSE, 0);
   gtk_widget_show (vbox);
 
-  list->add_button = gtk_button_new ();
+  g_set_weak_pointer (&list->add_button, gtk_button_new ());
   gtk_box_pack_start (GTK_BOX (vbox), list->add_button, TRUE, FALSE, 0);
   gtk_widget_set_sensitive (list->add_button, FALSE);
   gtk_widget_show (list->add_button);
@@ -252,10 +252,7 @@ gimp_controller_list_init (GimpControllerList *list)
                     G_CALLBACK (gimp_controller_list_add_clicked),
                     list);
 
-  g_object_add_weak_pointer (G_OBJECT (list->add_button),
-                             (gpointer) &list->add_button);
-
-  list->remove_button = gtk_button_new ();
+  g_set_weak_pointer (&list->remove_button, gtk_button_new ());
   gtk_box_pack_start (GTK_BOX (vbox), list->remove_button, TRUE, FALSE, 0);
   gtk_widget_set_sensitive (list->remove_button, FALSE);
   gtk_widget_show (list->remove_button);
@@ -269,12 +266,7 @@ gimp_controller_list_init (GimpControllerList *list)
                     G_CALLBACK (gimp_controller_list_remove_clicked),
                     list);
 
-  g_object_add_weak_pointer (G_OBJECT (list->remove_button),
-                             (gpointer) &list->remove_button);
-
-  gtk_icon_size_lookup_for_settings (gtk_widget_get_settings (GTK_WIDGET (list)),
-                                     icon_size, &icon_width, &icon_height);
-
+  gtk_icon_size_lookup (icon_size, &icon_width, &icon_height);
   list->dest = gimp_container_tree_view_new (NULL, NULL, icon_height, 0);
   gimp_container_tree_view_set_main_column_title (GIMP_CONTAINER_TREE_VIEW (list->dest),
                                                   _("Active Controllers"));
@@ -283,8 +275,8 @@ gimp_controller_list_init (GimpControllerList *list)
   gtk_box_pack_start (GTK_BOX (list->hbox), list->dest, TRUE, TRUE, 0);
   gtk_widget_show (list->dest);
 
-  g_signal_connect_object (list->dest, "select-item",
-                           G_CALLBACK (gimp_controller_list_select_item),
+  g_signal_connect_object (list->dest, "select-items",
+                           G_CALLBACK (gimp_controller_list_select_items),
                            G_OBJECT (list), 0);
   g_signal_connect_object (list->dest, "activate-item",
                            G_CALLBACK (gimp_controller_list_activate_item),
@@ -452,15 +444,17 @@ gimp_controller_list_row_activated (GtkTreeView        *tv,
     gtk_button_clicked (GTK_BUTTON (list->add_button));
 }
 
-static void
-gimp_controller_list_select_item (GimpContainerView  *view,
-                                  GimpViewable       *viewable,
-                                  gpointer            insert_data,
-                                  GimpControllerList *list)
+static gboolean
+gimp_controller_list_select_items (GimpContainerView  *view,
+                                   GList              *viewables,
+                                   GList              *paths,
+                                   GimpControllerList *list)
 {
   gboolean selected;
 
-  list->dest_info = GIMP_CONTROLLER_INFO (viewable);
+  g_return_val_if_fail (g_list_length (viewables) < 2, FALSE);
+
+  list->dest_info = viewables ? GIMP_CONTROLLER_INFO (viewables->data) : NULL;
 
   selected = GIMP_IS_CONTROLLER_INFO (list->dest_info);
 
@@ -483,6 +477,8 @@ gimp_controller_list_select_item (GimpContainerView  *view,
   gtk_widget_set_sensitive (list->edit_button, selected);
   gtk_widget_set_sensitive (list->up_button,   selected);
   gtk_widget_set_sensitive (list->down_button, selected);
+
+  return TRUE;
 }
 
 static void
@@ -524,17 +520,6 @@ gimp_controller_list_add_clicked (GtkWidget          *button,
                               "your list of active controllers."));
       return;
     }
-  else if (list->src_gtype == GIMP_TYPE_CONTROLLER_MOUSE &&
-           gimp_controllers_get_mouse (list->gimp) != NULL)
-    {
-      gimp_message_literal (list->gimp,
-                            G_OBJECT (button), GIMP_MESSAGE_WARNING,
-                            _("There can only be one active mouse "
-                              "controller.\n\n"
-                              "You already have a mouse controller in "
-                              "your list of active controllers."));
-      return;
-    }
 
   info = gimp_controller_info_new (list->src_gtype);
   container = gimp_controllers_get_list (list->gimp);
@@ -566,7 +551,7 @@ gimp_controller_list_remove_clicked (GtkWidget          *button,
 
                                     NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
                                            RESPONSE_DISABLE,
@@ -644,7 +629,6 @@ gimp_controller_list_edit_clicked (GtkWidget          *button,
   gimp_dialog_factory_add_foreign (gimp_dialog_factory_get_singleton (),
                                    "gimp-controller-editor-dialog",
                                    dialog,
-                                   gtk_widget_get_screen (button),
                                    gimp_widget_get_monitor (button));
 
   g_signal_connect (dialog, "response",

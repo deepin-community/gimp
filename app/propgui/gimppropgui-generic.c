@@ -40,7 +40,6 @@
 #include "core/gimpcontext.h"
 
 #include "widgets/gimppropwidgets.h"
-#include "widgets/gimpspinscale.h"
 #include "widgets/gimpwidgets-utils.h"
 
 #include "gimppropgui.h"
@@ -345,6 +344,8 @@ _gimp_prop_gui_new_generic (GObject                  *config,
 
   g_object_set_data_full (G_OBJECT (main_vbox), "chains", chains,
                           (GDestroyNotify) g_list_free);
+
+  gtk_widget_show (main_vbox);
 
   return main_vbox;
 }

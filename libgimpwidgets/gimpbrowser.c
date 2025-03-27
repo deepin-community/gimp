@@ -50,6 +50,25 @@ enum
 };
 
 
+struct _GimpBrowser
+{
+  GtkPaned   parent_instance;
+
+  GtkWidget *left_vbox;
+
+  GtkWidget *search_entry;
+  guint      search_timeout_id;
+
+  GtkWidget *search_type_combo;
+  gint       search_type;
+
+  GtkWidget *count_label;
+
+  GtkWidget *right_vbox;
+  GtkWidget *right_widget;
+};
+
+
 static void      gimp_browser_dispose          (GObject               *object);
 
 static void      gimp_browser_combo_changed    (GtkComboBox           *combo,
@@ -63,7 +82,7 @@ static void      gimp_browser_entry_icon_press (GtkEntry              *entry,
 static gboolean  gimp_browser_search_timeout   (gpointer               data);
 
 
-G_DEFINE_TYPE (GimpBrowser, gimp_browser, GTK_TYPE_HPANED)
+G_DEFINE_TYPE (GimpBrowser, gimp_browser, GTK_TYPE_PANED)
 
 #define parent_class gimp_browser_parent_class
 
@@ -79,7 +98,7 @@ gimp_browser_class_init (GimpBrowserClass *klass)
     g_signal_new ("search",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_LAST,
-                  G_STRUCT_OFFSET (GimpBrowserClass, search),
+                  0,
                   NULL, NULL,
                   _gimp_widgets_marshal_VOID__STRING_INT,
                   G_TYPE_NONE, 2,
@@ -87,8 +106,6 @@ gimp_browser_class_init (GimpBrowserClass *klass)
                   G_TYPE_INT);
 
   object_class->dispose = gimp_browser_dispose;
-
-  klass->search         = NULL;
 }
 
 static void
@@ -99,10 +116,13 @@ gimp_browser_init (GimpBrowser *browser)
   GtkWidget *scrolled_window;
   GtkWidget *viewport;
 
+  gtk_orientable_set_orientation (GTK_ORIENTABLE (browser),
+                                  GTK_ORIENTATION_HORIZONTAL);
+
   browser->search_type = -1;
 
   browser->left_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
-  gtk_paned_pack1 (GTK_PANED (browser), browser->left_vbox, FALSE, TRUE);
+  gtk_paned_pack1 (GTK_PANED (browser), browser->left_vbox, TRUE, FALSE);
   gtk_widget_show (browser->left_vbox);
 
   /* search entry */
@@ -152,8 +172,8 @@ gimp_browser_init (GimpBrowser *browser)
   scrolled_window = gtk_scrolled_window_new (NULL, NULL);
   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled_window),
                                   GTK_POLICY_AUTOMATIC,
-                                  GTK_POLICY_ALWAYS);
-  gtk_paned_pack2 (GTK_PANED (browser), scrolled_window, TRUE, TRUE);
+                                  GTK_POLICY_AUTOMATIC);
+  gtk_paned_pack2 (GTK_PANED (browser), scrolled_window, TRUE, FALSE);
   gtk_widget_show (scrolled_window);
 
   viewport = gtk_viewport_new (NULL, NULL);
@@ -191,7 +211,7 @@ gimp_browser_dispose (GObject *object)
  *
  * Create a new #GimpBrowser widget.
  *
- * Return Value: a newly created #GimpBrowser.
+ * Returns: a newly created #GimpBrowser.
  *
  * Since: 2.4
  **/
@@ -202,7 +222,7 @@ gimp_browser_new (void)
 }
 
 /**
- * gimp_browser_add_search_types:
+ * gimp_browser_add_search_types: (skip)
  * @browser:          a #GimpBrowser widget
  * @first_type_label: the label of the first search type
  * @first_type_id:    an integer that identifies the first search type
@@ -232,7 +252,7 @@ gimp_browser_add_search_types (GimpBrowser *browser,
                                              args);
       va_end (args);
 
-      gtk_combo_box_set_focus_on_click (GTK_COMBO_BOX (combo), FALSE);
+      gtk_widget_set_focus_on_click (combo, FALSE);
 
       browser->search_type_combo = combo;
       browser->search_type       = first_type_id;
@@ -244,7 +264,7 @@ gimp_browser_add_search_types (GimpBrowser *browser,
       gimp_int_combo_box_connect (GIMP_INT_COMBO_BOX (combo),
                                   browser->search_type,
                                   G_CALLBACK (gimp_int_combo_box_get_active),
-                                  &browser->search_type);
+                                  &browser->search_type, NULL);
 
       g_signal_connect (combo, "changed",
                         G_CALLBACK (gimp_browser_combo_changed),
@@ -256,6 +276,57 @@ gimp_browser_add_search_types (GimpBrowser *browser,
                                  first_type_label, first_type_id,
                                  NULL);
     }
+}
+
+/**
+ * gimp_browser_get_left_vbox:
+ * @browser: a #GimpBrowser widget
+ *
+ * Returns: (transfer none) (type GtkBox): The left vbox.
+ *
+ * Since: 3.0
+ **/
+GtkWidget *
+gimp_browser_get_left_vbox (GimpBrowser *browser)
+{
+  g_return_val_if_fail (GIMP_IS_BROWSER (browser), NULL);
+
+  return browser->left_vbox;
+}
+
+/**
+ * gimp_browser_get_right_vbox:
+ * @browser: a #GimpBrowser widget
+ *
+ * Returns: (transfer none) (type GtkBox): The right vbox.
+ *
+ * Since: 3.0
+ **/
+GtkWidget *
+gimp_browser_get_right_vbox (GimpBrowser *browser)
+{
+  g_return_val_if_fail (GIMP_IS_BROWSER (browser), NULL);
+
+  return browser->right_vbox;
+}
+
+/**
+ * gimp_browser_set_search_summary:
+ * @browser: a #GimpBrowser widget
+ * @summary: a string describing the search result
+ *
+ * Sets the search summary text.
+ *
+ * Since: 3.0
+ **/
+void
+gimp_browser_set_search_summary (GimpBrowser *browser,
+                                 const gchar *summary)
+{
+  g_return_if_fail (GIMP_IS_BROWSER (browser));
+  g_return_if_fail (summary != NULL);
+
+  gtk_label_set_text (GTK_LABEL (browser->count_label), summary);
 }
 
 /**
@@ -378,19 +449,15 @@ gimp_browser_search_timeout (gpointer data)
   GimpBrowser *browser = GIMP_BROWSER (data);
   const gchar *search_string;
 
-  GDK_THREADS_ENTER();
-
   search_string = gtk_entry_get_text (GTK_ENTRY (browser->search_entry));
 
   if (! search_string)
     search_string = "";
 
-  g_signal_emit (browser, browser_signals[SEARCH], 0,
+  g_signal_emit (data, browser_signals[SEARCH], 0,
                  search_string, browser->search_type);
 
   browser->search_timeout_id = 0;
-
-  GDK_THREADS_LEAVE();
 
   return FALSE;
 }

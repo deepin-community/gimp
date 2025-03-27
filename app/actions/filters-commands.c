@@ -51,12 +51,6 @@ static gchar * filters_parse_operation (Gimp          *gimp,
                                         const gchar   *icon_name,
                                         GimpObject   **settings);
 
-static void    filters_run_procedure   (Gimp          *gimp,
-                                        GimpDisplay   *display,
-                                        GimpProcedure *procedure,
-                                        GimpRunMode    run_mode);
-
-
 /*  public functions  */
 
 void
@@ -65,11 +59,20 @@ filters_apply_cmd_callback (GimpAction *action,
                             gpointer    data)
 {
   GimpImage     *image;
-  GimpDrawable  *drawable;
+  GList         *drawables;
   gchar         *operation;
   GimpObject    *settings;
   GimpProcedure *procedure;
-  return_if_no_drawable (image, drawable, data);
+  GVariant      *variant;
+
+  return_if_no_drawables (image, drawables, data);
+
+  if (g_list_length (drawables) != 1)
+    {
+      /* We only support running filters on single drawable for now. */
+      g_list_free (drawables);
+      return;
+    }
 
   operation = filters_parse_operation (image->gimp,
                                        g_variant_get_string (value, NULL),
@@ -77,6 +80,7 @@ filters_apply_cmd_callback (GimpAction *action,
                                        &settings);
 
   procedure = gimp_gegl_procedure_new (image->gimp,
+                                       NULL,
                                        GIMP_RUN_NONINTERACTIVE, settings,
                                        operation,
                                        gimp_action_get_name (action),
@@ -91,11 +95,14 @@ filters_apply_cmd_callback (GimpAction *action,
     g_object_unref (settings);
 
   gimp_filter_history_add (image->gimp, procedure);
-  filters_history_cmd_callback (NULL,
-                                g_variant_new_uint64 (GPOINTER_TO_SIZE (procedure)),
-                                data);
 
+  variant = g_variant_new_uint64 (GPOINTER_TO_SIZE (procedure));
+  g_variant_take_ref (variant);
+  filters_history_cmd_callback (NULL, variant, data);
+
+  g_variant_unref (variant);
   g_object_unref (procedure);
+  g_list_free (drawables);
 }
 
 void
@@ -104,11 +111,21 @@ filters_apply_interactive_cmd_callback (GimpAction *action,
                                         gpointer    data)
 {
   GimpImage     *image;
-  GimpDrawable  *drawable;
+  GList         *drawables;
   GimpProcedure *procedure;
-  return_if_no_drawable (image, drawable, data);
+  GVariant      *variant;
+
+  return_if_no_drawables (image, drawables, data);
+
+  if (g_list_length (drawables) != 1)
+    {
+      /* We only support running filters on single drawable for now. */
+      g_list_free (drawables);
+      return;
+    }
 
   procedure = gimp_gegl_procedure_new (image->gimp,
+                                       NULL,
                                        GIMP_RUN_INTERACTIVE, NULL,
                                        g_variant_get_string (value, NULL),
                                        gimp_action_get_name (action),
@@ -118,11 +135,14 @@ filters_apply_interactive_cmd_callback (GimpAction *action,
                                        gimp_action_get_help_id (action));
 
   gimp_filter_history_add (image->gimp, procedure);
-  filters_history_cmd_callback (NULL,
-                                g_variant_new_uint64 (GPOINTER_TO_SIZE (procedure)),
-                                data);
 
+  variant = g_variant_new_uint64 (GPOINTER_TO_SIZE (procedure));
+  g_variant_take_ref (variant);
+  filters_history_cmd_callback (NULL, variant, data);
+
+  g_variant_unref (variant);
   g_object_unref (procedure);
+  g_list_free (drawables);
 }
 
 void
@@ -130,20 +150,20 @@ filters_repeat_cmd_callback (GimpAction *action,
                              GVariant   *value,
                              gpointer    data)
 {
-  GimpImage     *image;
-  GimpDrawable  *drawable;
+  Gimp          *gimp;
   GimpDisplay   *display;
   GimpProcedure *procedure;
   GimpRunMode    run_mode;
-  return_if_no_drawable (image, drawable, data);
+
+  return_if_no_gimp (gimp, data);
   return_if_no_display (display, data);
 
   run_mode = (GimpRunMode) g_variant_get_int32 (value);
 
-  procedure = gimp_filter_history_nth (image->gimp, 0);
+  procedure = gimp_filter_history_nth (gimp, 0);
 
   if (procedure)
-    filters_run_procedure (image->gimp, display, procedure, run_mode);
+    filters_run_procedure (gimp, display, procedure, run_mode);
 }
 
 void
@@ -216,7 +236,7 @@ filters_parse_operation (Gimp         *gimp,
   return g_strdup (operation_str);
 }
 
-static void
+void
 filters_run_procedure (Gimp          *gimp,
                        GimpDisplay   *display,
                        GimpProcedure *procedure,
@@ -257,7 +277,17 @@ filters_run_procedure (Gimp          *gimp,
                                                     display);
         }
 
-      if (success)
+      if (success &&
+          (! GIMP_IS_GEGL_PROCEDURE (procedure) ||
+           /* XXX GimpGeglProcedure made for filter-editing are
+            * short-lived and should not be added to history. I'm not
+            * sure it makes sense UX-wise anyway ("used" filters are for
+            * first calls, not edits).
+            * If ever we decide to change this UX logic, some code logic
+            * changes are needed too. Cf. crash report #12576 and my
+            * (Jehan's) technical comment in there..
+            */
+           ! gimp_gegl_procedure_is_editing_filter (GIMP_GEGL_PROCEDURE (procedure))))
         gimp_filter_history_add (gimp, procedure);
 
       gimp_value_array_unref (args);

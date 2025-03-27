@@ -19,11 +19,10 @@
 #define __SCRIPT_FU_EVAL_H__
 
 
-void  script_fu_eval_run (const gchar      *name,
-                          gint              nparams,
-                          const GimpParam  *params,
-                          gint             *nreturn_vals,
-                          GimpParam       **return_vals);
+GimpValueArray * script_fu_eval_run (GimpProcedure        *procedure,
+                                     GimpRunMode           run_mode,
+                                     const gchar          *code,
+                                     GimpProcedureConfig  *config);
 
 
 #endif /*  __SCRIPT_FU_EVAL_H__  */

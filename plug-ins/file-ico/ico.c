@@ -20,7 +20,10 @@
 
 #include "config.h"
 
+#include <stdlib.h>
 #include <string.h>
+
+#include <glib/gstdio.h>
 
 #include <libgimp/gimp.h>
 #include <libgimp/gimpui.h>
@@ -29,260 +32,668 @@
 
 #include "ico.h"
 #include "ico-load.h"
-#include "ico-save.h"
+#include "ico-export.h"
 
 #include "libgimp/stdplugins-intl.h"
 
-#define LOAD_PROC        "file-ico-load"
-#define LOAD_THUMB_PROC  "file-ico-load-thumb"
-#define SAVE_PROC        "file-ico-save"
+#define LOAD_PROC           "file-ico-load"
+#define LOAD_CUR_PROC       "file-cur-load"
+#define LOAD_ANI_PROC       "file-ani-load"
+#define LOAD_THUMB_PROC     "file-ico-load-thumb"
+#define LOAD_ANI_THUMB_PROC "file-ani-load-thumb"
+#define EXPORT_PROC         "file-ico-export"
+#define EXPORT_CUR_PROC     "file-cur-export"
+#define EXPORT_ANI_PROC     "file-ani-export"
 
 
-static void   query (void);
-static void   run   (const gchar      *name,
-                     gint              nparams,
-                     const GimpParam  *param,
-                     gint             *nreturn_vals,
-                     GimpParam       **return_vals);
+typedef struct _Ico      Ico;
+typedef struct _IcoClass IcoClass;
 
-
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _Ico
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
+  GimpPlugIn      parent_instance;
+};
+
+struct _IcoClass
+{
+  GimpPlugInClass parent_class;
 };
 
 
-MAIN ()
+#define ICO_TYPE  (ico_get_type ())
+#define ICO(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), ICO_TYPE, Ico))
+
+GType                   ico_get_type         (void) G_GNUC_CONST;
+
+static GList          * ico_query_procedures (GimpPlugIn            *plug_in);
+static GimpProcedure  * ico_create_procedure (GimpPlugIn            *plug_in,
+                                              const gchar           *name);
+
+static GimpValueArray * ico_load             (GimpProcedure         *procedure,
+                                              GimpRunMode            run_mode,
+                                              GFile                 *file,
+                                              GimpMetadata          *metadata,
+                                              GimpMetadataLoadFlags *flags,
+                                              GimpProcedureConfig   *config,
+                                              gpointer               run_data);
+static GimpValueArray * ani_load             (GimpProcedure         *procedure,
+                                              GimpRunMode            run_mode,
+                                              GFile                 *file,
+                                              GimpMetadata          *metadata,
+                                              GimpMetadataLoadFlags *flags,
+                                              GimpProcedureConfig   *config,
+                                              gpointer              run_data);
+static GimpValueArray * ico_load_thumb       (GimpProcedure        *procedure,
+                                              GFile                *file,
+                                              gint                  size,
+                                              GimpProcedureConfig  *config,
+                                              gpointer              run_data);
+static GimpValueArray * ani_load_thumb       (GimpProcedure        *procedure,
+                                              GFile                *file,
+                                              gint                  size,
+                                              GimpProcedureConfig  *config,
+                                              gpointer              run_data);
+static GimpValueArray * ico_export           (GimpProcedure        *procedure,
+                                              GimpRunMode           run_mode,
+                                              GimpImage            *image,
+                                              GFile                *file,
+                                              GimpExportOptions    *options,
+                                              GimpMetadata         *metadata,
+                                              GimpProcedureConfig  *config,
+                                              gpointer              run_data);
+static GimpValueArray * cur_export           (GimpProcedure        *procedure,
+                                              GimpRunMode           run_mode,
+                                              GimpImage            *image,
+                                              GFile                *file,
+                                              GimpExportOptions    *options,
+                                              GimpMetadata         *metadata,
+                                              GimpProcedureConfig  *config,
+                                              gpointer              run_data);
+static GimpValueArray * ani_export           (GimpProcedure        *procedure,
+                                              GimpRunMode           run_mode,
+                                              GimpImage            *image,
+                                              GFile                *file,
+                                              GimpExportOptions    *options,
+                                              GimpMetadata         *metadata,
+                                              GimpProcedureConfig  *config,
+                                              gpointer              run_data);
+
+
+G_DEFINE_TYPE (Ico, ico, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (ICO_TYPE)
+DEFINE_STD_SET_I18N
 
 
 static void
-query (void)
+ico_class_init (IcoClass *klass)
 {
-  static const GimpParamDef load_args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode",     "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_STRING,   "filename",     "The name of the file to load" },
-    { GIMP_PDB_STRING,   "raw-filename", "The name entered"             }
-  };
-  static const GimpParamDef load_return_vals[] =
-  {
-    { GIMP_PDB_IMAGE, "image", "Output image" },
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  static const GimpParamDef thumb_args[] =
-  {
-    { GIMP_PDB_STRING, "filename",     "The name of the file to load"  },
-    { GIMP_PDB_INT32,  "thumb-size",   "Preferred thumbnail size"      }
-  };
-  static const GimpParamDef thumb_return_vals[] =
-  {
-    { GIMP_PDB_IMAGE,  "image",        "Thumbnail image"               },
-    { GIMP_PDB_INT32,  "image-width",  "Width of full-sized image"     },
-    { GIMP_PDB_INT32,  "image-height", "Height of full-sized image"    }
-  };
-
-  static const GimpParamDef save_args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode",     "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",        "Input image" },
-    { GIMP_PDB_DRAWABLE, "drawable",     "Drawable to save" },
-    { GIMP_PDB_STRING,   "filename",     "The name of the file to save the image in" },
-    { GIMP_PDB_STRING,   "raw-filename", "The name entered" },
-  };
-
-  gimp_install_procedure (LOAD_PROC,
-                          "Loads files of Windows ICO file format",
-                          "Loads files of Windows ICO file format",
-                          "Christian Kreibich <christian@whoop.org>",
-                          "Christian Kreibich <christian@whoop.org>",
-                          "2002",
-                          N_("Microsoft Windows icon"),
-                          NULL,
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (load_args),
-                          G_N_ELEMENTS (load_return_vals),
-                          load_args, load_return_vals);
-
-  gimp_register_file_handler_mime (LOAD_PROC, "image/x-ico");
-  /* We do not set magics here, since that interferes with certain types
-     of TGA images. */
-  gimp_register_load_handler (LOAD_PROC,
-                              "ico",
-                              "");
-
-  gimp_install_procedure (LOAD_THUMB_PROC,
-                          "Loads a preview from an Windows ICO file",
-                          "",
-                          "Dom Lachowicz, Sven Neumann",
-                          "Sven Neumann <sven@gimp.org>",
-                          "2005",
-                          NULL,
-                          NULL,
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (thumb_args),
-                          G_N_ELEMENTS (thumb_return_vals),
-                          thumb_args, thumb_return_vals);
-
-  gimp_register_thumbnail_loader (LOAD_PROC, LOAD_THUMB_PROC);
-
-  gimp_install_procedure (SAVE_PROC,
-                          "Saves files in Windows ICO file format",
-                          "Saves files in Windows ICO file format",
-                          "Christian Kreibich <christian@whoop.org>",
-                          "Christian Kreibich <christian@whoop.org>",
-                          "2002",
-                          N_("Microsoft Windows icon"),
-                          "*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (save_args), 0,
-                          save_args, NULL);
-
-  gimp_register_file_handler_mime (SAVE_PROC, "image/x-ico");
-  gimp_register_save_handler (SAVE_PROC, "ico", "");
+  plug_in_class->query_procedures = ico_query_procedures;
+  plug_in_class->create_procedure = ico_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+ico_init (Ico *ico)
 {
-  static GimpParam   values[4];
-  GimpRunMode        run_mode;
-  GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
-  GError            *error  = NULL;
+}
 
-  INIT_I18N ();
+static GList *
+ico_query_procedures (GimpPlugIn *plug_in)
+{
+  GList *list = NULL;
+
+  list = g_list_append (list, g_strdup (LOAD_THUMB_PROC));
+  list = g_list_append (list, g_strdup (LOAD_ANI_THUMB_PROC));
+  list = g_list_append (list, g_strdup (LOAD_PROC));
+  list = g_list_append (list, g_strdup (LOAD_CUR_PROC));
+  list = g_list_append (list, g_strdup (LOAD_ANI_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_CUR_PROC));
+  list = g_list_append (list, g_strdup (EXPORT_ANI_PROC));
+
+  return list;
+}
+
+static GimpProcedure *
+ico_create_procedure (GimpPlugIn  *plug_in,
+                      const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, LOAD_PROC))
+    {
+      procedure = gimp_load_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            ico_load, NULL, NULL);
+
+      gimp_procedure_set_menu_label (procedure, _("Microsoft Windows icon"));
+      gimp_procedure_set_icon_name (procedure, GIMP_ICON_BRUSH);
+
+      gimp_procedure_set_documentation (procedure,
+                                        "Loads files of Windows ICO file format",
+                                        "Loads files of Windows ICO file format",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Christian Kreibich <christian@whoop.org>",
+                                      "Christian Kreibich <christian@whoop.org>",
+                                      "2002");
+
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "image/x-ico");
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "ico");
+      /* We do not set magics here, since that interferes with certain types
+         of TGA images. */
+
+      gimp_load_procedure_set_thumbnail_loader (GIMP_LOAD_PROCEDURE (procedure),
+                                                LOAD_THUMB_PROC);
+    }
+  else if (! strcmp (name, LOAD_CUR_PROC))
+    {
+      procedure = gimp_load_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            ico_load, NULL, NULL);
+
+      gimp_procedure_set_menu_label (procedure, _("Microsoft Windows cursor"));
+      gimp_procedure_set_icon_name (procedure, GIMP_ICON_BRUSH);
+
+      gimp_procedure_set_documentation (procedure,
+                                        "Loads files of Windows CUR file format",
+                                        "Loads files of Windows CUR file format",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Christian Kreibich <christian@whoop.org>, "
+                                      "Nikc M.",
+                                      "Christian Kreibich <christian@whoop.org>, "
+                                      "Nikc M.",
+                                      "2002-2022");
+
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "image/vnd.microsoft.icon");
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "cur");
+      /* We do not set magics here, since that interferes with certain types
+         of TGA images. */
+
+      gimp_load_procedure_set_thumbnail_loader (GIMP_LOAD_PROCEDURE (procedure),
+                                                LOAD_THUMB_PROC);
+    }
+  else if (! strcmp (name, LOAD_ANI_PROC))
+    {
+      procedure = gimp_load_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            ani_load, NULL, NULL);
+
+      gimp_procedure_set_menu_label (procedure, _("Microsoft Windows animated cursor"));
+      gimp_procedure_set_icon_name (procedure, GIMP_ICON_BRUSH);
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Loads files of Windows ANI file format"),
+                                        "Loads files of Windows ANI file format",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Christian Kreibich <christian@whoop.org>, "
+                                      "James Huang, Alex S.",
+                                      "Christian Kreibich <christian@whoop.org>, "
+                                      "James Huang, Alex S.",
+                                      "2007-2022");
+
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "application/x-navi-animation");
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "ani");
+      gimp_file_procedure_set_magics (GIMP_FILE_PROCEDURE (procedure),
+                                      "8,string,ACON");
+
+      gimp_load_procedure_set_thumbnail_loader (GIMP_LOAD_PROCEDURE (procedure),
+                                                LOAD_ANI_THUMB_PROC);
+    }
+  else if (! strcmp (name, LOAD_THUMB_PROC))
+    {
+      procedure = gimp_thumbnail_procedure_new (plug_in, name,
+                                                GIMP_PDB_PROC_TYPE_PLUGIN,
+                                                ico_load_thumb, NULL, NULL);
+
+      gimp_procedure_set_documentation (procedure,
+                                        "Loads a preview from a Windows ICO or CUR files",
+                                        "",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Dom Lachowicz, Sven Neumann",
+                                      "Sven Neumann <sven@gimp.org>",
+                                      "2005");
+    }
+  else if (! strcmp (name, LOAD_ANI_THUMB_PROC))
+    {
+      procedure = gimp_thumbnail_procedure_new (plug_in, name,
+                                                GIMP_PDB_PROC_TYPE_PLUGIN,
+                                                ani_load_thumb, NULL, NULL);
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Loads a preview from a Windows ANI files"),
+                                        "",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Dom Lachowicz, Sven Neumann, James Huang, "
+                                      "Alex S.",
+                                      "Dom Lachowicz, "
+                                      "Sven Neumann <sven@gimp.org>, "
+                                      "James Huang, Alex S.",
+                                      "2007-2022");
+    }
+  else if (! strcmp (name, EXPORT_PROC))
+    {
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, ico_export, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "*");
+
+      gimp_procedure_set_menu_label (procedure, _("Microsoft Windows icon"));
+      gimp_procedure_set_icon_name (procedure, GIMP_ICON_BRUSH);
+
+      gimp_procedure_set_documentation (procedure,
+                                        "Saves files in Windows ICO file format",
+                                        "Saves files in Windows ICO file format",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Christian Kreibich <christian@whoop.org>",
+                                      "Christian Kreibich <christian@whoop.org>",
+                                      "2002");
+
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           "Microsoft Windows icon");
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "image/x-ico");
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "ico");
+    }
+  else if (! strcmp (name, EXPORT_CUR_PROC))
+    {
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, cur_export, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "*");
+
+      gimp_procedure_set_menu_label (procedure, _("Microsoft Windows cursor"));
+      gimp_procedure_set_icon_name (procedure, GIMP_ICON_BRUSH);
+
+      gimp_procedure_set_documentation (procedure,
+                                        "Saves files in Windows CUR file format",
+                                        "Saves files in Windows CUR file format",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Christian Kreibich <christian@whoop.org>, "
+                                      "Nikc M.",
+                                      "Christian Kreibich <christian@whoop.org>, "
+                                      "Nikc M.",
+                                      "2002-2022");
+
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           "Microsoft Windows cursor");
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "image/vnd.microsoft.icon");
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "cur");
+
+      gimp_procedure_add_int32_array_argument (procedure, "hot-spot-x",
+                                               "Hot spot X",
+                                               "X coordinates of hot spot (one per layer)",
+                                               G_PARAM_READWRITE);
+      gimp_procedure_add_int32_array_argument (procedure, "hot-spot-y",
+                                               "Hot spot Y",
+                                               "Y coordinates of hot spot (one per layer)",
+                                               G_PARAM_READWRITE);
+    }
+  else if (! strcmp (name, EXPORT_ANI_PROC))
+    {
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, ani_export, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "*");
+
+      gimp_procedure_set_menu_label (procedure, _("Microsoft Windows animated cursor"));
+      gimp_procedure_set_icon_name (procedure, GIMP_ICON_BRUSH);
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Saves files in Windows ANI file format"),
+                                        _("Saves files in Windows ANI file format"),
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Christian Kreibich <christian@whoop.org>, "
+                                      "James Huang, Alex S.",
+                                      "Christian Kreibich <christian@whoop.org>, "
+                                      "James Huang, Alex S.",
+                                      "2007-2022");
+
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           "Microsoft Windows animated cursor");
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "application/x-navi-animation");
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "ani");
+
+      gimp_procedure_add_string_argument (procedure, "cursor-name",
+                                          "Cursor Name",
+                                          _("Cursor Name (Optional)"),
+                                          NULL,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_string_argument (procedure, "author-name",
+                                          "Cursor Author",
+                                          _("Cursor Author (Optional)"),
+                                          NULL,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "default-delay",
+                                       "Default delay",
+                                       "Default delay between frames "
+                                       "in jiffies (1/60 of a second)",
+                                       0, G_MAXINT, 8,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_int32_array_argument (procedure, "hot-spot-x",
+                                               "Hot spot X",
+                                               "X coordinates of hot spot (one per layer)",
+                                               G_PARAM_READWRITE);
+      gimp_procedure_add_int32_array_argument (procedure, "hot-spot-y",
+                                               "Hot spot Y",
+                                               "Y coordinates of hot spot (one per layer)",
+                                               G_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+ico_load (GimpProcedure         *procedure,
+          GimpRunMode            run_mode,
+          GFile                 *file,
+          GimpMetadata          *metadata,
+          GimpMetadataLoadFlags *flags,
+          GimpProcedureConfig   *config,
+          gpointer               run_data)
+{
+  GimpValueArray *return_vals;
+  GimpImage      *image;
+  GError         *error = NULL;
+
   gegl_init (NULL, NULL);
 
-  run_mode = param[0].data.d_int32;
+  image = ico_load_image (file, NULL, -1, &error);
 
-  *nreturn_vals = 1;
-  *return_vals  = values;
+  if (! image)
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_EXECUTION_ERROR,
+                                             error);
 
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
+  return_vals = gimp_procedure_new_return_values (procedure,
+                                                  GIMP_PDB_SUCCESS,
+                                                  NULL);
 
-  if (strcmp (name, LOAD_PROC) == 0)
-    {
-      switch (run_mode)
-        {
-        case GIMP_RUN_INTERACTIVE:
-          break;
+  GIMP_VALUES_SET_IMAGE (return_vals, 1, image);
 
-        case GIMP_RUN_NONINTERACTIVE:
-          if (nparams != 3)
-            status = GIMP_PDB_CALLING_ERROR;
-          break;
-
-        default:
-          break;
-        }
-
-      if (status == GIMP_PDB_SUCCESS)
-        {
-          gint32 image_ID;
-
-          image_ID = ico_load_image (param[1].data.d_string, &error);
-          if (image_ID != -1)
-            {
-              *nreturn_vals = 2;
-              values[1].type         = GIMP_PDB_IMAGE;
-              values[1].data.d_image = image_ID;
-            }
-          else
-            {
-              status = GIMP_PDB_EXECUTION_ERROR;
-            }
-        }
-    }
-  else if (strcmp (name, LOAD_THUMB_PROC) == 0)
-    {
-      if (nparams < 2)
-        {
-          status = GIMP_PDB_CALLING_ERROR;
-        }
-      else
-        {
-          const gchar *filename = param[0].data.d_string;
-          gint         width    = param[1].data.d_int32;
-          gint         height   = param[1].data.d_int32;
-          gint32       image_ID;
-
-          image_ID = ico_load_thumbnail_image (filename,
-                                               &width, &height, &error);
-
-          if (image_ID != -1)
-            {
-              *nreturn_vals = 4;
-
-              values[1].type         = GIMP_PDB_IMAGE;
-              values[1].data.d_image = image_ID;
-              values[2].type         = GIMP_PDB_INT32;
-              values[2].data.d_int32 = width;
-              values[3].type         = GIMP_PDB_INT32;
-              values[3].data.d_int32 = height;
-            }
-          else
-            {
-              status = GIMP_PDB_EXECUTION_ERROR;
-            }
-        }
-    }
-  else if (strcmp (name, SAVE_PROC) == 0)
-    {
-      gchar *file_name;
-      gint32 image_ID;
-
-      image_ID    = param[1].data.d_int32;
-      file_name   = param[3].data.d_string;
-
-      switch (run_mode)
-        {
-        case GIMP_RUN_INTERACTIVE:
-          break;
-
-        case GIMP_RUN_NONINTERACTIVE:
-          /*  Make sure all the arguments are there!  */
-          if (nparams < 5)
-            status = GIMP_PDB_CALLING_ERROR;
-          break;
-
-        case GIMP_RUN_WITH_LAST_VALS:
-          break;
-
-        default:
-          break;
-        }
-
-      if (status == GIMP_PDB_SUCCESS)
-        {
-          status = ico_save_image (file_name, image_ID, run_mode, &error);
-        }
-
-      if (export == GIMP_EXPORT_EXPORT)
-        gimp_image_delete (image_ID);
-    }
-  else
-    {
-      status = GIMP_PDB_CALLING_ERROR;
-    }
-
-  if (status != GIMP_PDB_SUCCESS && error)
-    {
-      *nreturn_vals = 2;
-      values[1].type          = GIMP_PDB_STRING;
-      values[1].data.d_string = error->message;
-    }
-
-  values[0].data.d_status = status;
+  return return_vals;
 }
 
+static GimpValueArray *
+ani_load (GimpProcedure         *procedure,
+          GimpRunMode            run_mode,
+          GFile                 *file,
+          GimpMetadata          *metadata,
+          GimpMetadataLoadFlags *flags,
+          GimpProcedureConfig   *config,
+          gpointer               run_data)
+{
+  GimpValueArray *return_vals;
+  GimpImage      *image;
+  GError         *error = NULL;
+
+  gegl_init (NULL, NULL);
+
+  image = ani_load_image (file, FALSE,
+                          NULL, NULL, &error);
+
+  if (! image)
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_EXECUTION_ERROR,
+                                             error);
+
+  return_vals = gimp_procedure_new_return_values (procedure,
+                                                  GIMP_PDB_SUCCESS,
+                                                  NULL);
+
+  GIMP_VALUES_SET_IMAGE (return_vals, 1, image);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+ico_load_thumb (GimpProcedure       *procedure,
+                GFile               *file,
+                gint                 size,
+                GimpProcedureConfig *config,
+                gpointer             run_data)
+{
+  GimpValueArray *return_vals;
+  gint            width;
+  gint            height;
+  GimpImage      *image;
+  GError         *error = NULL;
+
+  gegl_init (NULL, NULL);
+
+  width  = size;
+  height = size;
+
+  image = ico_load_thumbnail_image (file,
+                                    &width, &height, 0, &error);
+
+  if (! image)
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_EXECUTION_ERROR,
+                                             error);
+
+  return_vals = gimp_procedure_new_return_values (procedure,
+                                                  GIMP_PDB_SUCCESS,
+                                                  NULL);
+
+  GIMP_VALUES_SET_IMAGE (return_vals, 1, image);
+  GIMP_VALUES_SET_INT   (return_vals, 2, width);
+  GIMP_VALUES_SET_INT   (return_vals, 3, height);
+
+  gimp_value_array_truncate (return_vals, 4);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+ani_load_thumb (GimpProcedure        *procedure,
+                GFile                *file,
+                gint                  size,
+                GimpProcedureConfig  *config,
+                gpointer              run_data)
+{
+  GimpValueArray *return_vals;
+  gint            width;
+  gint            height;
+  GimpImage      *image;
+  GError         *error = NULL;
+
+  gegl_init (NULL, NULL);
+
+  width  = size;
+  height = size;
+
+  image = ani_load_image (file, TRUE,
+                          &width, &height, &error);
+
+  if (! image)
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_EXECUTION_ERROR,
+                                             error);
+
+  return_vals = gimp_procedure_new_return_values (procedure,
+                                                  GIMP_PDB_SUCCESS,
+                                                  NULL);
+
+  GIMP_VALUES_SET_IMAGE (return_vals, 1, image);
+  GIMP_VALUES_SET_INT   (return_vals, 2, width);
+  GIMP_VALUES_SET_INT   (return_vals, 3, height);
+
+  gimp_value_array_truncate (return_vals, 4);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+ico_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
+{
+  GimpPDBStatusType  status;
+  GError            *error = NULL;
+
+  gegl_init (NULL, NULL);
+
+  status = ico_export_image (file, image, procedure, config, run_mode, &error);
+
+  return gimp_procedure_new_return_values (procedure, status, error);
+}
+
+static GimpValueArray *
+cur_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
+{
+  GimpPDBStatusType  status;
+  GError            *error        = NULL;
+  GimpArray         *x_array      = NULL;
+  GimpArray         *y_array      = NULL;
+  const gint32      *hot_spot_x   = NULL;
+  const gint32      *hot_spot_y   = NULL;
+  gint32            *new_hot_spot_x   = NULL;
+  gint32            *new_hot_spot_y   = NULL;
+  gsize              n_hot_spot_x = 0;
+  gsize              n_hot_spot_y = 0;
+
+  gegl_init (NULL, NULL);
+
+  g_object_get (config,
+                "hot-spot-x", &x_array,
+                "hot-spot-y", &y_array,
+                NULL);
+
+  hot_spot_x = gimp_int32_array_get_values (x_array, &n_hot_spot_x);
+  hot_spot_y = gimp_int32_array_get_values (y_array, &n_hot_spot_y);
+
+  status = cur_export_image (file, image, procedure, config, run_mode,
+                             &n_hot_spot_x, hot_spot_x, &new_hot_spot_x,
+                             &n_hot_spot_y, hot_spot_y, &new_hot_spot_y,
+                             &error);
+
+  if (status == GIMP_PDB_SUCCESS)
+    {
+      gimp_int32_array_set_values (x_array, new_hot_spot_x, n_hot_spot_x, FALSE);
+      gimp_int32_array_set_values (y_array, new_hot_spot_y, n_hot_spot_y, FALSE);
+      g_object_set (config,
+                    "hot-spot-x", x_array,
+                    "hot-spot-y", y_array,
+                    NULL);
+      g_free (new_hot_spot_x);
+      g_free (new_hot_spot_y);
+    }
+
+  return gimp_procedure_new_return_values (procedure, status, error);
+}
+
+static GimpValueArray *
+ani_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
+{
+  GimpPDBStatusType  status;
+  GError            *error          = NULL;
+  gchar             *inam           = NULL;
+  gchar             *iart           = NULL;
+  gint               jif_rate       = 0;
+  GimpArray         *x_array        = NULL;
+  GimpArray         *y_array        = NULL;
+  const gint32      *hot_spot_x     = NULL;
+  const gint32      *hot_spot_y     = NULL;
+  gint32            *new_hot_spot_x = NULL;
+  gint32            *new_hot_spot_y = NULL;
+  gsize              n_hot_spot_x   = 0;
+  gsize              n_hot_spot_y   = 0;
+  AniFileHeader      header;
+  AniSaveInfo        ani_info;
+
+  gegl_init (NULL, NULL);
+
+  g_object_get (config,
+                "cursor-name",   &inam,
+                "author-name",   &iart,
+                "default-delay", &jif_rate,
+                "hot-spot-x",    &x_array,
+                "hot-spot-y",    &y_array,
+                NULL);
+
+  /* Jiffies (1/60th of a second) used if rate chunk not present. */
+  header.jif_rate = jif_rate;
+  ani_info.inam = inam;
+  ani_info.iart = iart;
+
+  hot_spot_x = gimp_int32_array_get_values (x_array, &n_hot_spot_x);
+  hot_spot_y = gimp_int32_array_get_values (y_array, &n_hot_spot_y);
+
+  status = ani_export_image (file, image, procedure, config, run_mode,
+                             &n_hot_spot_x, hot_spot_x, &new_hot_spot_x,
+                             &n_hot_spot_y, hot_spot_y, &new_hot_spot_y,
+                             &header, &ani_info, &error);
+
+  if (status == GIMP_PDB_SUCCESS)
+    {
+      gimp_int32_array_set_values (x_array, new_hot_spot_x, n_hot_spot_x, FALSE);
+      gimp_int32_array_set_values (y_array, new_hot_spot_y, n_hot_spot_y, FALSE);
+      g_object_set (config,
+                    "cursor-name",   NULL,
+                    "author-name",   NULL,
+                    "default-delay", header.jif_rate,
+                    "hot-spot-x",   x_array,
+                    "hot-spot-y",   y_array,
+                    NULL);
+      g_free (new_hot_spot_x);
+      g_free (new_hot_spot_y);
+
+      g_free (inam);
+      g_free (iart);
+      g_free (ani_info.inam);
+      g_free (ani_info.iart);
+      memset (&ani_info, 0, sizeof (AniSaveInfo));
+    }
+
+  return gimp_procedure_new_return_values (procedure, status, error);
+}
 
 gint
 ico_rowstride (gint width,

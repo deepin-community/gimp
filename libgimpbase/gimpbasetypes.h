@@ -24,7 +24,6 @@
 #include <libgimpmath/gimpmathtypes.h>
 
 #include <libgimpbase/gimpbaseenums.h>
-#include <libgimpbase/gimpparam.h>
 
 
 G_BEGIN_DECLS
@@ -45,17 +44,15 @@ G_BEGIN_DECLS
 #endif
 
 
-typedef struct _GimpParasite     GimpParasite;
-typedef struct _GimpDatafileData GimpDatafileData;
-typedef struct _GimpEnumDesc     GimpEnumDesc;
-typedef struct _GimpFlagsDesc    GimpFlagsDesc;
-typedef struct _GimpValueArray   GimpValueArray;
+typedef struct _GimpChoice        GimpChoice;
+typedef struct _GimpParasite      GimpParasite;
+typedef struct _GimpEnumDesc      GimpEnumDesc;
+typedef struct _GimpExportOptions GimpExportOptions;
+typedef struct _GimpFlagsDesc     GimpFlagsDesc;
+typedef struct _GimpUnit          GimpUnit;
+typedef struct _GimpValueArray    GimpValueArray;
 
-
-typedef void (* GimpDatafileLoaderFunc) (const GimpDatafileData *file_data,
-                                         gpointer                user_data);
-
-typedef struct _GimpMetadata GimpMetadata;
+typedef struct _GimpMetadata      GimpMetadata;
 
 
 /**

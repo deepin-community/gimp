@@ -30,7 +30,6 @@
 
 #include "widgets/gimplayermodebox.h"
 #include "widgets/gimppropwidgets.h"
-#include "widgets/gimpspinscale.h"
 #include "widgets/gimpviewablebox.h"
 #include "widgets/gimpwidgets-constructors.h"
 #include "widgets/gimpwidgets-utils.h"
@@ -74,6 +73,8 @@ static GtkWidget * jitter_options_gui          (GimpPaintOptions *paint_options,
                                                 GType             tool_type);
 static GtkWidget * smoothing_options_gui       (GimpPaintOptions *paint_options,
                                                 GType             tool_type);
+static GtkWidget * expand_options_gui          (GimpPaintOptions *paint_options,
+                                                GType             tool_type);
 
 static GtkWidget * gimp_paint_options_gui_scale_with_buttons
                                                (GObject      *config,
@@ -112,7 +113,6 @@ gimp_paint_options_gui (GimpToolOptions *tool_options)
   gimp_layer_mode_box_set_ellipsize (GIMP_LAYER_MODE_BOX (menu),
                                      PANGO_ELLIPSIZE_END);
   gtk_box_pack_start (GTK_BOX (vbox), menu, FALSE, FALSE, 0);
-  gtk_widget_show (menu);
 
   g_object_set_data (G_OBJECT (vbox),
                      "gimp-paint-options-gui-paint-mode-box", menu);
@@ -128,11 +128,10 @@ gimp_paint_options_gui (GimpToolOptions *tool_options)
     }
 
   /*  the opacity scale  */
-  scale = gimp_prop_spin_scale_new (config, "opacity", NULL,
-                                    0.01, 0.1, 0);
-  gimp_prop_widget_set_factor (scale, 100.0, 0.0, 0.0, 1);
+  scale = gimp_prop_spin_scale_new (config, "opacity", 0.01, 0.1, 0);
+  gimp_spin_scale_set_constrain_drag (GIMP_SPIN_SCALE (scale), TRUE);
+  gimp_prop_widget_set_factor (scale, 100.0, 1.0, 10.0, 1);
   gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   /*  temp debug foo, disabled in stable  */
   if (FALSE &&
@@ -143,7 +142,6 @@ gimp_paint_options_gui (GimpToolOptions *tool_options)
 
       button = gimp_prop_check_button_new (config, "use-applicator", NULL);
       gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
     }
 
   /*  the brush  */
@@ -160,7 +158,6 @@ gimp_paint_options_gui (GimpToolOptions *tool_options)
                                         "gimp-brush-editor",
                                         _("Edit this brush"));
       gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
 
       link_group = gtk_size_group_new (GTK_SIZE_GROUP_HORIZONTAL);
 
@@ -217,15 +214,6 @@ gimp_paint_options_gui (GimpToolOptions *tool_options)
 
       g_object_unref (link_group);
 
-      button = gimp_prop_dynamics_box_new (NULL, GIMP_CONTEXT (tool_options),
-                                           _("Dynamics"), 2,
-                                           "dynamics-view-type",
-                                           "dynamics-view-size",
-                                           "gimp-dynamics-editor",
-                                           _("Edit this dynamics"));
-      gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
-
       frame = dynamics_options_gui (options, tool_type);
       gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
       gtk_widget_show (frame);
@@ -252,7 +240,6 @@ gimp_paint_options_gui (GimpToolOptions *tool_options)
 
       button = gimp_prop_check_button_new (config, "brush-lock-to-view", NULL);
       gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
     }
 
   /*  the "incremental" toggle  */
@@ -268,7 +255,6 @@ gimp_paint_options_gui (GimpToolOptions *tool_options)
                                                 GIMP_PAINT_CONSTANT,
                                                 GIMP_PAINT_INCREMENTAL);
       gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
     }
 
   /* the "hard edge" toggle */
@@ -284,7 +270,22 @@ gimp_paint_options_gui (GimpToolOptions *tool_options)
 
       button = gimp_prop_check_button_new (config, "hard", NULL);
       gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
+    }
+
+  /* the "expand layers" options */
+  if (tool_type == GIMP_TYPE_PAINTBRUSH_TOOL ||
+      tool_type == GIMP_TYPE_PENCIL_TOOL     ||
+      tool_type == GIMP_TYPE_AIRBRUSH_TOOL   ||
+      tool_type == GIMP_TYPE_CLONE_TOOL      ||
+      tool_type == GIMP_TYPE_HEAL_TOOL       ||
+      tool_type == GIMP_TYPE_CONVOLVE_TOOL   ||
+      tool_type == GIMP_TYPE_SMUDGE_TOOL)
+    {
+      GtkWidget *frame;
+
+      frame = expand_options_gui (options, tool_type);
+      gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
+      gtk_widget_show (frame);
     }
 
   return vbox;
@@ -311,16 +312,24 @@ dynamics_options_gui (GimpPaintOptions *paint_options,
   GtkWidget *menu;
   GtkWidget *combo;
   GtkWidget *checkbox;
+  GtkWidget *button;
   GtkWidget *vbox;
   GtkWidget *inner_vbox;
   GtkWidget *hbox;
   GtkWidget *box;
 
-  frame = gimp_prop_expander_new (config, "dynamics-expanded", NULL);
 
   vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-  gtk_container_add (GTK_CONTAINER (frame), vbox);
-  gtk_widget_show (vbox);
+  frame = gimp_prop_expanding_frame_new (config, "dynamics-enabled",
+                                         NULL, vbox, NULL);
+  button = gimp_prop_dynamics_box_new (NULL,
+                                       GIMP_CONTEXT (config),
+                                       _("Dynamics"), 2,
+                                       "dynamics-view-type",
+                                       "dynamics-view-size",
+                                       "gimp-dynamics-editor",
+                                       _("Edit this dynamics"));
+  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
 
   inner_frame = gimp_frame_new (_("Fade Options"));
   gtk_box_pack_start (GTK_BOX (vbox), inner_frame, FALSE, FALSE, 0);
@@ -335,15 +344,13 @@ dynamics_options_gui (GimpPaintOptions *paint_options,
   gtk_box_pack_start (GTK_BOX (inner_vbox), hbox, FALSE, FALSE, 0);
   gtk_widget_show (hbox);
 
-  scale = gimp_prop_spin_scale_new (config, "fade-length", NULL,
+  scale = gimp_prop_spin_scale_new (config, "fade-length",
                                     1.0, 50.0, 0);
   gimp_spin_scale_set_scale_limits (GIMP_SPIN_SCALE (scale), 1.0, 1000.0);
   gtk_box_pack_start (GTK_BOX (hbox), scale, TRUE, TRUE, 0);
-  gtk_widget_show (scale);
 
   menu = gimp_prop_unit_combo_box_new (config, "fade-unit");
   gtk_box_pack_start (GTK_BOX (hbox), menu, FALSE, FALSE, 0);
-  gtk_widget_show (menu);
 
 #if 0
   /* FIXME pixel digits */
@@ -356,11 +363,9 @@ dynamics_options_gui (GimpPaintOptions *paint_options,
   gimp_int_combo_box_set_label (GIMP_INT_COMBO_BOX (combo), _("Repeat"));
   g_object_set (combo, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
   gtk_box_pack_start (GTK_BOX (inner_vbox), combo, TRUE, TRUE, 0);
-  gtk_widget_show (combo);
 
   checkbox = gimp_prop_check_button_new (config, "fade-reverse", NULL);
   gtk_box_pack_start (GTK_BOX (inner_vbox), checkbox, FALSE, FALSE, 0);
-  gtk_widget_show (checkbox);
 
   /* Color UI */
   if (g_type_is_a (tool_type, GIMP_TYPE_PAINTBRUSH_TOOL) ||
@@ -383,7 +388,6 @@ dynamics_options_gui (GimpPaintOptions *paint_options,
                                         "gimp-gradient-editor",
                                         _("Edit this gradient"));
       gtk_box_pack_start (GTK_BOX (inner_vbox), box, FALSE, FALSE, 0);
-      gtk_widget_show (box);
 
       /*  the blend color space  */
       combo = gimp_prop_enum_combo_box_new (config, "gradient-blend-color-space",
@@ -392,7 +396,6 @@ dynamics_options_gui (GimpPaintOptions *paint_options,
                                     _("Blend Color Space"));
       g_object_set (combo, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
       gtk_box_pack_start (GTK_BOX (inner_vbox), combo, TRUE, TRUE, 0);
-      gtk_widget_show (combo);
     }
 
   return frame;
@@ -406,7 +409,7 @@ jitter_options_gui (GimpPaintOptions *paint_options,
   GtkWidget *frame;
   GtkWidget *scale;
 
-  scale = gimp_prop_spin_scale_new (config, "jitter-amount", NULL,
+  scale = gimp_prop_spin_scale_new (config, "jitter-amount",
                                     0.01, 1.0, 2);
   gimp_spin_scale_set_scale_limits (GIMP_SPIN_SCALE (scale), 0.0, 5.0);
 
@@ -430,15 +433,13 @@ smoothing_options_gui (GimpPaintOptions *paint_options,
   frame = gimp_prop_expanding_frame_new (config, "use-smoothing", NULL,
                                          vbox, NULL);
 
-  scale = gimp_prop_spin_scale_new (config, "smoothing-quality", NULL,
+  scale = gimp_prop_spin_scale_new (config, "smoothing-quality",
                                     1, 10, 1);
   gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
-  scale = gimp_prop_spin_scale_new (config, "smoothing-factor", NULL,
+  scale = gimp_prop_spin_scale_new (config, "smoothing-factor",
                                     1, 10, 1);
   gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   return frame;
 }
@@ -503,6 +504,39 @@ gimp_paint_options_gui_reset_force (GtkWidget        *button,
 }
 
 static GtkWidget *
+expand_options_gui (GimpPaintOptions *paint_options,
+                    GType             tool_type)
+{
+  GObject   *config = G_OBJECT (paint_options);
+  GtkWidget *frame;
+  GtkWidget *scale;
+  GtkWidget *combo_box;
+  GtkWidget *vbox;
+
+  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+
+  scale = gimp_prop_spin_scale_new (config, "expand-amount",
+                                    1, 10, 2);
+  gimp_spin_scale_set_constrain_drag (GIMP_SPIN_SCALE (scale), TRUE);
+
+  gimp_spin_scale_set_scale_limits (GIMP_SPIN_SCALE (scale), 1.0, 1000.0);
+  gimp_spin_scale_set_gamma (GIMP_SPIN_SCALE (scale), 1.0);
+  gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
+
+  combo_box = gimp_prop_enum_combo_box_new (config, "expand-fill-type", 0, 0);
+  gtk_box_pack_start (GTK_BOX (vbox), combo_box, FALSE, FALSE, 0);
+
+  frame = gimp_prop_enum_radio_frame_new (config, "expand-mask-fill-type",
+                                          _("Fill Layer Mask With"), 0, 1);
+  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
+
+  frame = gimp_prop_expanding_frame_new (config, "expand-use", NULL,
+                                         vbox, NULL);
+
+  return frame;
+}
+
+static GtkWidget *
 gimp_paint_options_gui_scale_with_buttons (GObject      *config,
                                            gchar        *prop_name,
                                            gchar        *link_prop_name,
@@ -523,7 +557,7 @@ gimp_paint_options_gui_scale_with_buttons (GObject      *config,
 
   hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 0);
 
-  scale = gimp_prop_spin_scale_new (config, prop_name, NULL,
+  scale = gimp_prop_spin_scale_new (config, prop_name,
                                     step_increment, page_increment, digits);
   gimp_spin_scale_set_constrain_drag (GIMP_SPIN_SCALE (scale), TRUE);
 

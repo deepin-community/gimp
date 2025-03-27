@@ -26,6 +26,7 @@
 #include <gegl.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 #include "libgimpmath/gimpmath.h"
 
@@ -330,7 +331,7 @@ gimp_mandala_add_guide (GimpMandala         *mandala,
   gimp  = image->gimp;
 
   guide = gimp_guide_custom_new (orientation,
-                                 gimp->next_guide_ID++,
+                                 gimp->next_guide_id++,
                                  GIMP_GUIDE_STYLE_MANDALA);
 
   if (orientation == GIMP_ORIENTATION_HORIZONTAL)
@@ -470,7 +471,7 @@ gimp_mandala_update_strokes (GimpSymmetry *sym,
   g_list_free_full (sym->strokes, g_free);
   sym->strokes = NULL;
 
-  coords = g_memdup (sym->origin, sizeof (GimpCoords));
+  coords = g_memdup2 (sym->origin, sizeof (GimpCoords));
   sym->strokes = g_list_prepend (sym->strokes, coords);
 
   /* The angle of each slice, in radians. */
@@ -491,7 +492,7 @@ gimp_mandala_update_strokes (GimpSymmetry *sym,
     {
       gdouble new_x, new_y;
 
-      coords = g_memdup (sym->origin, sizeof (GimpCoords));
+      coords = g_memdup2 (sym->origin, sizeof (GimpCoords));
       gimp_matrix3_identity (&matrix);
       gimp_matrix3_translate (&matrix,
                               -center_x,

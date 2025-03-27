@@ -52,7 +52,7 @@ typedef enum
 {
   GIMP_CURSOR_MODE_TOOL_ICON,       /*< desc="Tool icon"                >*/
   GIMP_CURSOR_MODE_TOOL_CROSSHAIR,  /*< desc="Tool icon with crosshair" >*/
-  GIMP_CURSOR_MODE_CROSSHAIR        /*< desc="Crosshair only"           >*/
+  GIMP_CURSOR_MODE_CROSSHAIR,       /*< desc="Crosshair only"           >*/
 } GimpCursorMode;
 
 
@@ -101,8 +101,6 @@ GType gimp_icon_size_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_ICON_SIZE_AUTO,    /*< desc="Guess ideal size" > */
-  GIMP_ICON_SIZE_THEME,   /*< desc="Theme-set size"   > */
   GIMP_ICON_SIZE_SMALL,   /*< desc="Small size"       > */
   GIMP_ICON_SIZE_MEDIUM,  /*< desc="Medium size"      > */
   GIMP_ICON_SIZE_LARGE,   /*< desc="Large size"       > */
@@ -122,6 +120,15 @@ typedef enum
   GIMP_POSITION_RIGHT   /*< desc="Right" >*/
 } GimpPosition;
 
+#define GIMP_TYPE_DRAG_ZOOM_MODE (gimp_drag_zoom_mode_get_type ())
+
+GType gimp_drag_zoom_mode_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+  PROP_DRAG_ZOOM_MODE_DISTANCE,  /*< desc="By distance" >*/
+  PROP_DRAG_ZOOM_MODE_DURATION,  /*< desc="By duration" >*/
+} GimpDragZoomMode;
 
 #define GIMP_TYPE_SPACE_BAR_ACTION (gimp_space_bar_action_get_type ())
 
@@ -133,18 +140,6 @@ typedef enum
   GIMP_SPACE_BAR_ACTION_PAN,   /*< desc="Pan view"            >*/
   GIMP_SPACE_BAR_ACTION_MOVE   /*< desc="Switch to Move tool" >*/
 } GimpSpaceBarAction;
-
-
-#define GIMP_TYPE_TOOL_GROUP_MENU_MODE (gimp_tool_group_menu_mode_get_type ())
-
-GType gimp_tool_group_menu_mode_get_type (void) G_GNUC_CONST;
-
-typedef enum
-{
-  GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_CLICK,               /*< desc="Show on click"                   >*/
-  GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_HOVER,               /*< desc="Show on hover"                   >*/
-  GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_HOVER_SINGLE_COLUMN  /*< desc="Show on hover in single column"  >*/
-} GimpToolGroupMenuMode;
 
 
 #define GIMP_TYPE_WINDOW_HINT (gimp_window_hint_get_type ())
@@ -168,6 +163,20 @@ typedef enum
   GIMP_ZOOM_QUALITY_LOW,   /*< desc="Low"  >*/
   GIMP_ZOOM_QUALITY_HIGH   /*< desc="High" >*/
 } GimpZoomQuality;
+
+#define GIMP_TYPE_THEME_SCHEME (gimp_theme_scheme_get_type ())
+
+GType gimp_theme_scheme_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+  GIMP_THEME_LIGHT,  /*< desc="Light Colors" >*/
+  GIMP_THEME_GRAY,   /*< desc="Middle Gray"  >*/
+  GIMP_THEME_DARK,   /*< desc="Dark Colors"  >*/
+  /* TODO: it might be interesting eventually to add a GIMP_THEME_SYSTEM
+   * following up the system-wide color scheme preference. See #8675.
+   */
+} GimpThemeScheme;
 
 
 #endif /* __CONFIG_ENUMS_H__ */

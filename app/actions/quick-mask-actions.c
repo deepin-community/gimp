@@ -39,12 +39,8 @@
 
 static const GimpActionEntry quick_mask_actions[] =
 {
-  { "quick-mask-popup", NULL,
-    NC_("quick-mask-action", "Quick Mask Menu"), NULL, NULL, NULL,
-    GIMP_HELP_QUICK_MASK },
-
   { "quick-mask-configure", NULL,
-    NC_("quick-mask-action", "_Configure Color and Opacity..."), NULL, NULL,
+    NC_("quick-mask-action", "_Configure Color and Opacity..."), NULL, { NULL }, NULL,
     quick_mask_configure_cmd_callback,
     GIMP_HELP_QUICK_MASK_EDIT }
 };
@@ -52,7 +48,7 @@ static const GimpActionEntry quick_mask_actions[] =
 static const GimpToggleActionEntry quick_mask_toggle_actions[] =
 {
   { "quick-mask-toggle", GIMP_ICON_QUICK_MASK_ON,
-    NC_("quick-mask-action", "Toggle _Quick Mask"), "<shift>Q",
+    NC_("quick-mask-action", "Toggle _Quick Mask"), NULL, { "<shift>Q", NULL },
     NC_("quick-mask-action", "Toggle Quick Mask on/off"),
     quick_mask_toggle_cmd_callback,
     FALSE,
@@ -62,12 +58,12 @@ static const GimpToggleActionEntry quick_mask_toggle_actions[] =
 static const GimpRadioActionEntry quick_mask_invert_actions[] =
 {
   { "quick-mask-invert-on", NULL,
-    NC_("quick-mask-action", "Mask _Selected Areas"), NULL, NULL,
+    NC_("quick-mask-action", "Mask _Selected Areas"), NULL, { NULL }, NULL,
     TRUE,
     GIMP_HELP_QUICK_MASK_INVERT },
 
   { "quick-mask-invert-off", NULL,
-    NC_("quick-mask-action", "Mask _Unselected Areas"), NULL, NULL,
+    NC_("quick-mask-action", "Mask _Unselected Areas"), NULL, { NULL }, NULL,
     FALSE,
     GIMP_HELP_QUICK_MASK_INVERT }
 };
@@ -99,18 +95,18 @@ quick_mask_actions_update (GimpActionGroup *group,
   GimpImage *image               = action_data_get_image (data);
   gboolean   quick_mask_state    = FALSE;
   gboolean   quick_mask_inverted = FALSE;
-  GimpRGB    quick_mask_color;
+  GeglColor *quick_mask_color    = NULL;
 
   if (image)
     {
       quick_mask_state    = gimp_image_get_quick_mask_state (image);
       quick_mask_inverted = gimp_image_get_quick_mask_inverted (image);
 
-      gimp_image_get_quick_mask_color (image, &quick_mask_color);
+      quick_mask_color = gimp_image_get_quick_mask_color (image);
     }
 
 #define SET_SENSITIVE(action,sensitive) \
-        gimp_action_group_set_action_sensitive (group, action, (sensitive) != 0)
+        gimp_action_group_set_action_sensitive (group, action, (sensitive) != 0, NULL)
 #define SET_ACTIVE(action,active) \
         gimp_action_group_set_action_active (group, action, (active) != 0)
 #define SET_COLOR(action,color) \
@@ -129,8 +125,8 @@ quick_mask_actions_update (GimpActionGroup *group,
 
   SET_SENSITIVE ("quick-mask-configure", image);
 
-  if (image)
-    SET_COLOR ("quick-mask-configure", &quick_mask_color);
+  if (quick_mask_color)
+    SET_COLOR ("quick-mask-configure", quick_mask_color);
 
 #undef SET_SENSITIVE
 #undef SET_ACTIVE

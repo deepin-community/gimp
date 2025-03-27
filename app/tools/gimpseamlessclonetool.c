@@ -279,9 +279,15 @@ static void
 gimp_seamless_clone_tool_start (GimpSeamlessCloneTool *sc,
                                 GimpDisplay           *display)
 {
-  GimpTool     *tool     = GIMP_TOOL (sc);
-  GimpImage    *image    = gimp_display_get_image (display);
-  GimpDrawable *drawable = gimp_image_get_active_drawable (image);
+  GimpTool     *tool      = GIMP_TOOL (sc);
+  GimpImage    *image     = gimp_display_get_image (display);
+  GList        *drawables = gimp_image_get_selected_drawables (image);
+  GimpDrawable *drawable;
+
+  g_return_if_fail (g_list_length (drawables) == 1);
+
+  drawable = drawables->data;
+  g_list_free (drawables);
 
   /* First handle the paste - we need to make sure we have one in order
    * to do anything else.
@@ -373,7 +379,8 @@ gimp_seamless_clone_tool_commit (GimpSeamlessCloneTool *sc)
     {
       gimp_tool_control_push_preserve (tool->control, TRUE);
 
-      gimp_drawable_filter_commit (sc->filter, GIMP_PROGRESS (tool), FALSE);
+      gimp_drawable_filter_commit (sc->filter, FALSE,
+                                   GIMP_PROGRESS (tool), FALSE);
       g_clear_object (&sc->filter);
 
       gimp_tool_control_pop_preserve (tool->control);
@@ -522,7 +529,8 @@ gimp_seamless_clone_tool_key_press (GimpTool    *tool,
            *       rectangle each time (in the update function) or by
            *       invalidating and re-rendering all now (expensive and
            *       perhaps useless */
-          gimp_drawable_filter_commit (sct->filter, GIMP_PROGRESS (tool), FALSE);
+          gimp_drawable_filter_commit (sct->filter, FALSE,
+                                       GIMP_PROGRESS (tool), FALSE);
           g_clear_object (&sct->filter);
 
           gimp_tool_control_set_preserve (tool->control, FALSE);
@@ -686,20 +694,14 @@ gimp_seamless_clone_tool_create_render_node (GimpSeamlessCloneTool *sc)
                                  "operation", "svg:dst-over",
                                  NULL);
 
-  gegl_node_connect_to (input,   "output",
-                        op,      "input");
+  gegl_node_link_many (input, op, overlay, output, NULL);
 
-  gegl_node_connect_to (paste,   "output",
-                        op,      "aux");
+  gegl_node_connect (paste,   "output",
+                     op,      "aux");
 
-  gegl_node_connect_to (op,      "output",
-                        overlay, "input");
+  gegl_node_connect (input,   "output",
+                     overlay, "aux");
 
-  gegl_node_connect_to (input,   "output",
-                        overlay, "aux");
-
-  gegl_node_connect_to (overlay, "output",
-                        output,  "input");
 
   sc->render_node = node;
   sc->sc_node     = op;
@@ -718,7 +720,7 @@ gimp_seamless_clone_tool_render_node_update (GimpSeamlessCloneTool *sc)
   static gint rendered_yoff              = G_MAXINT;
 
   GimpSeamlessCloneOptions *options = GIMP_SEAMLESS_CLONE_TOOL_GET_OPTIONS (sc);
-  GimpDrawable *bg = GIMP_TOOL (sc)->drawable;
+  GimpDrawable *bg = GIMP_TOOL (sc)->drawables->data;
   gint          off_x, off_y;
 
   /* All properties stay the same. No need to update. */
@@ -775,7 +777,7 @@ gimp_seamless_clone_tool_filter_update (GimpSeamlessCloneTool *sc)
 {
   GimpTool         *tool  = GIMP_TOOL (sc);
   GimpDisplayShell *shell = gimp_display_get_shell (tool->display);
-  GimpItem         *item  = GIMP_ITEM (tool->drawable);
+  GimpItem         *item  = GIMP_ITEM (tool->drawables->data);
   gint              x, y;
   gint              w, h;
   gint              off_x, off_y;

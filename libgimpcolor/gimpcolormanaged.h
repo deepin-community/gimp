@@ -31,13 +31,8 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-#define GIMP_TYPE_COLOR_MANAGED               (gimp_color_managed_get_type ())
-#define GIMP_IS_COLOR_MANAGED(obj)            (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_COLOR_MANAGED))
-#define GIMP_COLOR_MANAGED(obj)               (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_COLOR_MANAGED, GimpColorManaged))
-#define GIMP_COLOR_MANAGED_GET_INTERFACE(obj) (G_TYPE_INSTANCE_GET_INTERFACE ((obj), GIMP_TYPE_COLOR_MANAGED, GimpColorManagedInterface))
-
-
-typedef struct _GimpColorManagedInterface GimpColorManagedInterface;
+#define GIMP_TYPE_COLOR_MANAGED (gimp_color_managed_get_type ())
+G_DECLARE_INTERFACE (GimpColorManaged, gimp_color_managed, GIMP, COLOR_MANAGED, GObject)
 
 /**
  * GimpColorManagedInterface:
@@ -48,33 +43,65 @@ typedef struct _GimpColorManagedInterface GimpColorManagedInterface;
  *                   has changed
  * @get_color_profile: Returns the #GimpColorProfile of the pixels managed
  *                     by the object
+ * @get_simulation_profile: Returns the simulation #GimpColorProfile of the
+ *                          pixels managed by the object
+ * @get_simulation_rendering_intent: Returns the simulation #GimpColorRenderingIntent
+ *                                   of the pixels managed by the object
+ * @get_simulation_bpc: Returns whether black point compensation is enabled for the
+ *                      simulation of the pixels managed by the object
  **/
 struct _GimpColorManagedInterface
 {
   GTypeInterface  base_iface;
 
-  /*  virtual functions  */
-  const guint8     * (* get_icc_profile)   (GimpColorManaged *managed,
-                                            gsize            *len);
+  /**
+   * GimpColorManagedInterface::get_icc_profile:
+   * @managed: an object the implements the #GimpColorManaged interface
+   * @len: (out): return location for the number of bytes in the profile data
+   *
+   * Returns: (array length=len): A blob of data that represents an ICC color
+   *                              profile.
+   *
+   * Since: 2.4
+   */
+  const guint8     * (* get_icc_profile)                     (GimpColorManaged *managed,
+                                                              gsize            *len);
 
   /*  signals  */
-  void               (* profile_changed)   (GimpColorManaged *managed);
+  void               (* profile_changed)                     (GimpColorManaged *managed);
+
+  void               (* simulation_profile_changed)          (GimpColorManaged *managed);
+
+  void               (* simulation_intent_changed)           (GimpColorManaged *managed);
+
+  void               (* simulation_bpc_changed)              (GimpColorManaged *managed);
 
   /*  virtual functions  */
-  GimpColorProfile * (* get_color_profile) (GimpColorManaged *managed);
+  GimpColorProfile * (* get_color_profile)               (GimpColorManaged *managed);
+  GimpColorProfile * (* get_simulation_profile)          (GimpColorManaged *managed);
+  GimpColorRenderingIntent
+                     (* get_simulation_intent)           (GimpColorManaged *managed);
+  gboolean           (* get_simulation_bpc)              (GimpColorManaged *managed);
 };
 
 
-GType              gimp_color_managed_get_type           (void) G_GNUC_CONST;
+const guint8     *       gimp_color_managed_get_icc_profile            (GimpColorManaged *managed,
+                                                                        gsize            *len);
+GimpColorProfile *       gimp_color_managed_get_color_profile          (GimpColorManaged *managed);
 
-GIMP_DEPRECATED_FOR (gimp_color_managed_get_type)
-GType              gimp_color_managed_interface_get_type (void) G_GNUC_CONST;
+GimpColorProfile *       gimp_color_managed_get_simulation_profile     (GimpColorManaged *managed);
 
-const guint8     * gimp_color_managed_get_icc_profile    (GimpColorManaged *managed,
-                                                          gsize            *len);
-GimpColorProfile * gimp_color_managed_get_color_profile  (GimpColorManaged *managed);
+GimpColorRenderingIntent gimp_color_managed_get_simulation_intent      (GimpColorManaged *managed);
 
-void               gimp_color_managed_profile_changed    (GimpColorManaged *managed);
+gboolean                 gimp_color_managed_get_simulation_bpc         (GimpColorManaged *managed);
+
+void                     gimp_color_managed_profile_changed            (GimpColorManaged *managed);
+
+void                     gimp_color_managed_simulation_profile_changed (GimpColorManaged *managed);
+
+void                     gimp_color_managed_simulation_intent_changed  (GimpColorManaged *managed);
+
+void                     gimp_color_managed_simulation_bpc_changed     (GimpColorManaged *managed);
 
 
 G_END_DECLS

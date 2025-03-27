@@ -49,28 +49,49 @@ enum
 {
   PROP_0,
   PROP_CHECK_SIZE,
-  PROP_CHECK_TYPE
+  PROP_CHECK_TYPE,
+  PROP_CHECK_CUSTOM_COLOR1,
+  PROP_CHECK_CUSTOM_COLOR2
 };
 
 
 #define DEFAULT_CHECK_SIZE  GIMP_CHECK_SIZE_MEDIUM_CHECKS
 #define DEFAULT_CHECK_TYPE  GIMP_CHECK_TYPE_GRAY_CHECKS
 
-#define CHECK_COLOR(area, row, col)        \
+#define CHECK_R(are, row, col)        \
   (((((area)->offset_y + (row)) & size) ^  \
-    (((area)->offset_x + (col)) & size)) ? dark : light)
+    (((area)->offset_x + (col)) & size)) ? rgb1[0] : rgb2[0])
+
+#define CHECK_G(area, row, col)        \
+  (((((area)->offset_y + (row)) & size) ^  \
+    (((area)->offset_x + (col)) & size)) ? rgb1[1] : rgb2[1])
+
+#define CHECK_B(area, row, col)        \
+  (((((area)->offset_y + (row)) & size) ^  \
+    (((area)->offset_x + (col)) & size)) ? rgb1[2] : rgb2[2])
 
 
-typedef struct _GimpPreviewAreaPrivate GimpPreviewAreaPrivate;
-
-struct _GimpPreviewAreaPrivate
+struct _GimpPreviewArea
 {
+  GtkDrawingArea      parent_instance;
+
+  GimpCheckSize       check_size;
+  GimpCheckType       check_type;
+  GeglColor          *check_custom_color1;
+  GeglColor          *check_custom_color2;
+  gint                width;
+  gint                height;
+  gint                rowstride;
+  gint                offset_x;
+  gint                offset_y;
+  gint                max_width;
+  gint                max_height;
+  guchar             *buf;
+  guchar             *colormap;
+
   GimpColorConfig    *config;
   GimpColorTransform *transform;
 };
-
-#define GET_PRIVATE(obj) \
-        ((GimpPreviewAreaPrivate *) gimp_preview_area_get_instance_private ((GimpPreviewArea *) (obj)))
 
 
 static void      gimp_preview_area_dispose           (GObject          *object);
@@ -86,8 +107,8 @@ static void      gimp_preview_area_get_property      (GObject          *object,
 
 static void      gimp_preview_area_size_allocate     (GtkWidget        *widget,
                                                       GtkAllocation    *allocation);
-static gboolean  gimp_preview_area_expose            (GtkWidget        *widget,
-                                                      GdkEventExpose   *event);
+static gboolean  gimp_preview_area_widget_draw       (GtkWidget        *widget,
+                                                      cairo_t          *cr);
 
 static void      gimp_preview_area_queue_draw        (GimpPreviewArea  *area,
                                                       gint              x,
@@ -100,8 +121,7 @@ static void      gimp_preview_area_create_transform  (GimpPreviewArea  *area);
 static void      gimp_preview_area_destroy_transform (GimpPreviewArea  *area);
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpPreviewArea, gimp_preview_area,
-                            GTK_TYPE_DRAWING_AREA)
+G_DEFINE_TYPE (GimpPreviewArea, gimp_preview_area, GTK_TYPE_DRAWING_AREA)
 
 #define parent_class gimp_preview_area_parent_class
 
@@ -111,6 +131,15 @@ gimp_preview_area_class_init (GimpPreviewAreaClass *klass)
 {
   GObjectClass   *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
+  GeglColor      *color1_default;
+  GeglColor      *color2_default;
+
+  gegl_init (NULL, NULL);
+
+  color1_default = gegl_color_new (NULL);
+  gegl_color_set_pixel (color1_default, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR1);
+  color2_default = gegl_color_new (NULL);
+  gegl_color_set_pixel (color2_default, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR2);
 
   object_class->dispose       = gimp_preview_area_dispose;
   object_class->finalize      = gimp_preview_area_finalize;
@@ -118,7 +147,7 @@ gimp_preview_area_class_init (GimpPreviewAreaClass *klass)
   object_class->get_property  = gimp_preview_area_get_property;
 
   widget_class->size_allocate = gimp_preview_area_size_allocate;
-  widget_class->expose_event  = gimp_preview_area_expose;
+  widget_class->draw          = gimp_preview_area_widget_draw;
 
   g_object_class_install_property (object_class, PROP_CHECK_SIZE,
                                    g_param_spec_enum ("check-size",
@@ -135,26 +164,40 @@ gimp_preview_area_class_init (GimpPreviewAreaClass *klass)
                                                       GIMP_TYPE_CHECK_TYPE,
                                                       DEFAULT_CHECK_TYPE,
                                                       GIMP_PARAM_READWRITE));
+
+  g_object_class_install_property (object_class, PROP_CHECK_CUSTOM_COLOR1,
+                                   gimp_param_spec_color ("check-custom-color1",
+                                                          _("Custom Checks Color 1"),
+                                                          "The first color of the checkerboard pattern indicating transparency",
+                                                          FALSE, color1_default,
+                                                          GIMP_PARAM_READWRITE));
+
+  g_object_class_install_property (object_class, PROP_CHECK_CUSTOM_COLOR2,
+                                   gimp_param_spec_color ("check-custom-color2",
+                                                          _("Custom Checks Color 2"),
+                                                          "The second color of the checkerboard pattern indicating transparency",
+                                                          FALSE, color2_default,
+                                                          GIMP_PARAM_READWRITE));
+
+  g_object_unref (color1_default);
+  g_object_unref (color2_default);
 }
 
 static void
 gimp_preview_area_init (GimpPreviewArea *area)
 {
-  area->check_size = DEFAULT_CHECK_SIZE;
-  area->check_type = DEFAULT_CHECK_TYPE;
-  area->buf        = NULL;
-  area->colormap   = NULL;
-  area->offset_x   = 0;
-  area->offset_y   = 0;
-  area->width      = 0;
-  area->height     = 0;
-  area->rowstride  = 0;
-  area->max_width  = -1;
-  area->max_height = -1;
+  area->check_size          = DEFAULT_CHECK_SIZE;
+  area->check_type          = DEFAULT_CHECK_TYPE;
+  area->check_custom_color1 = gegl_color_new (NULL);
+  gegl_color_set_pixel (area->check_custom_color1, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR1);
+  area->check_custom_color2 = gegl_color_new (NULL);
+  gegl_color_set_pixel (area->check_custom_color2, babl_format ("R'G'B'A double"), GIMP_CHECKS_CUSTOM_COLOR2);
+  area->max_width           = -1;
+  area->max_height          = -1;
 
   gimp_widget_track_monitor (GTK_WIDGET (area),
                              G_CALLBACK (gimp_preview_area_destroy_transform),
-                             NULL);
+                             NULL, NULL);
 }
 
 static void
@@ -174,6 +217,8 @@ gimp_preview_area_finalize (GObject *object)
 
   g_clear_pointer (&area->buf,      g_free);
   g_clear_pointer (&area->colormap, g_free);
+  g_clear_object (&area->check_custom_color1);
+  g_clear_object (&area->check_custom_color2);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -193,6 +238,14 @@ gimp_preview_area_set_property (GObject      *object,
       break;
     case PROP_CHECK_TYPE:
       area->check_type = g_value_get_enum (value);
+      break;
+    case PROP_CHECK_CUSTOM_COLOR1:
+      g_clear_object (&area->check_custom_color1);
+      area->check_custom_color1 = gegl_color_duplicate (g_value_get_object (value));
+      break;
+    case PROP_CHECK_CUSTOM_COLOR2:
+      g_clear_object (&area->check_custom_color2);
+      area->check_custom_color2 = gegl_color_duplicate (g_value_get_object (value));
       break;
 
     default:
@@ -216,6 +269,12 @@ gimp_preview_area_get_property (GObject    *object,
       break;
     case PROP_CHECK_TYPE:
       g_value_set_enum (value, area->check_type);
+      break;
+    case PROP_CHECK_CUSTOM_COLOR1:
+      g_value_set_object (value, area->check_custom_color1);
+      break;
+    case PROP_CHECK_CUSTOM_COLOR2:
+      g_value_set_object (value, area->check_custom_color2);
       break;
 
     default:
@@ -256,15 +315,13 @@ gimp_preview_area_size_allocate (GtkWidget     *widget,
 }
 
 static gboolean
-gimp_preview_area_expose (GtkWidget      *widget,
-                          GdkEventExpose *event)
+gimp_preview_area_widget_draw (GtkWidget *widget,
+                               cairo_t   *cr)
 {
-  GimpPreviewArea        *area = GIMP_PREVIEW_AREA (widget);
-  GimpPreviewAreaPrivate *priv = GET_PRIVATE (area);
-  GtkAllocation           allocation;
-  GdkPixbuf              *pixbuf;
-  GdkRectangle            rect;
-  cairo_t                *cr;
+  GimpPreviewArea *area = GIMP_PREVIEW_AREA (widget);
+  GtkAllocation    allocation;
+  GdkPixbuf       *pixbuf;
+  GdkRectangle     rect;
 
   if (! area->buf)
     return FALSE;
@@ -276,10 +333,10 @@ gimp_preview_area_expose (GtkWidget      *widget,
   rect.width  = area->width;
   rect.height = area->height;
 
-  if (! priv->transform)
+  if (! area->transform)
     gimp_preview_area_create_transform (area);
 
-  if (priv->transform)
+  if (area->transform)
     {
       const Babl *format    = babl_format ("R'G'B' u8");
       gint        rowstride = ((area->width * 3) + 3) & ~3;
@@ -290,7 +347,7 @@ gimp_preview_area_expose (GtkWidget      *widget,
 
       for (i = 0; i < area->height; i++)
         {
-          gimp_color_transform_process_pixels (priv->transform,
+          gimp_color_transform_process_pixels (area->transform,
                                                format, src,
                                                format, dest,
                                                area->width);
@@ -320,15 +377,9 @@ gimp_preview_area_expose (GtkWidget      *widget,
                                          NULL, NULL);
     }
 
-  cr = gdk_cairo_create (gtk_widget_get_window (widget));
-
-  gdk_cairo_region (cr, event->region);
-  cairo_clip (cr);
-
   gdk_cairo_set_source_pixbuf (cr, pixbuf, rect.x, rect.y);
   cairo_paint (cr);
 
-  cairo_destroy (cr);
   g_object_unref (pixbuf);
 
   return FALSE;
@@ -380,9 +431,7 @@ gimp_preview_area_image_type_bytes (GimpImageType type)
 static void
 gimp_preview_area_create_transform (GimpPreviewArea *area)
 {
-  GimpPreviewAreaPrivate *priv = GET_PRIVATE (area);
-
-  if (priv->config)
+  if (area->config)
     {
       static GimpColorProfile *profile = NULL;
 
@@ -391,23 +440,24 @@ gimp_preview_area_create_transform (GimpPreviewArea *area)
       if (G_UNLIKELY (! profile))
         profile = gimp_color_profile_new_rgb_srgb ();
 
-      priv->transform = gimp_widget_get_color_transform (GTK_WIDGET (area),
-                                                         priv->config,
+      area->transform = gimp_widget_get_color_transform (GTK_WIDGET (area),
+                                                         area->config,
                                                          profile,
                                                          format,
-                                                         format);
+                                                         format,
+                                                         NULL,
+                                                         GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
+                                                         FALSE);
     }
 }
 
 static void
 gimp_preview_area_destroy_transform (GimpPreviewArea *area)
 {
-  GimpPreviewAreaPrivate *priv = GET_PRIVATE (area);
-
-  if (priv->transform)
+  if (area->transform)
     {
-      g_object_unref (priv->transform);
-      priv->transform = NULL;
+      g_object_unref (area->transform);
+      area->transform = NULL;
     }
 
   gtk_widget_queue_draw (GTK_WIDGET (area));
@@ -419,7 +469,21 @@ gimp_preview_area_destroy_transform (GimpPreviewArea *area)
  *
  * Creates a new #GimpPreviewArea widget.
  *
- * Return value: a new #GimpPreviewArea widget.
+ * If the preview area is used to draw an image with transparency, you
+ * might want to default the checkboard size and colors to user-set
+ * Preferences. To do this, you may set the following properties on the
+ * newly created #GimpPreviewArea:
+ *
+ * |[<!-- language="C" -->
+ * g_object_set (area,
+ *               "check-size",          gimp_check_size (),
+ *               "check-type",          gimp_check_type (),
+ *               "check-custom-color1", gimp_check_custom_color1 (),
+ *               "check-custom-color2", gimp_check_custom_color2 (),
+ *               NULL);
+ * ]|
+ *
+ * Returns: a new #GimpPreviewArea widget.
  *
  * Since GIMP 2.2
  **/
@@ -437,7 +501,7 @@ gimp_preview_area_new (void)
  * @width:     buffer width
  * @height:    buffer height
  * @type:      the #GimpImageType of @buf
- * @buf:       a #guchar buffer that contains the preview pixel data.
+ * @buf: (array): a #guchar buffer that contains the preview pixel data.
  * @rowstride: rowstride of @buf
  *
  * Draws @buf on @area and queues a redraw on the given rectangle.
@@ -457,8 +521,10 @@ gimp_preview_area_draw (GimpPreviewArea *area,
   const guchar *src;
   guchar       *dest;
   guint         size;
-  guchar        light;
-  guchar        dark;
+  GeglColor    *color1;
+  GeglColor    *color2;
+  guchar        rgb1[3];
+  guchar        rgb2[3];
   gint          row;
   gint          col;
 
@@ -504,11 +570,17 @@ gimp_preview_area_draw (GimpPreviewArea *area,
   if (! area->buf)
     {
       area->rowstride = ((area->width * 3) + 3) & ~3;
-      area->buf = g_new (guchar, area->rowstride * area->height);
+      area->buf = g_new0 (guchar, area->rowstride * area->height);
     }
 
   size = 1 << (2 + area->check_size);
-  gimp_checks_get_shades (area->check_type, &light, &dark);
+  color1 = area->check_custom_color1;
+  color2 = area->check_custom_color2;
+  gimp_checks_get_colors (area->check_type, &color1, &color2);
+  gegl_color_get_pixel (color1, babl_format ("R'G'B' u8"), rgb1);
+  gegl_color_get_pixel (color2, babl_format ("R'G'B' u8"), rgb2);
+  g_object_unref (color1);
+  g_object_unref (color2);
 
   src  = buf;
   dest = area->buf + x * 3 + y * area->rowstride;
@@ -536,7 +608,9 @@ gimp_preview_area_draw (GimpPreviewArea *area,
               switch (s[3])
                 {
                 case 0:
-                  d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                  d[0] = CHECK_R (area, row, col);
+                  d[1] = CHECK_G (area, row, col);
+                  d[2] = CHECK_B (area, row, col);
                   break;
 
                 case 255:
@@ -547,12 +621,14 @@ gimp_preview_area_draw (GimpPreviewArea *area,
 
                 default:
                   {
-                    register guint alpha = s[3] + 1;
-                    register guint check = CHECK_COLOR (area, row, col);
+                    register guint alpha   = s[3] + 1;
+                    register guint check_r = CHECK_R (area, row, col);
+                    register guint check_g = CHECK_G (area, row, col);
+                    register guint check_b = CHECK_B (area, row, col);
 
-                    d[0] = ((check << 8) + (s[0] - check) * alpha) >> 8;
-                    d[1] = ((check << 8) + (s[1] - check) * alpha) >> 8;
-                    d[2] = ((check << 8) + (s[2] - check) * alpha) >> 8;
+                    d[0] = ((check_r << 8) + (s[0] - check_r) * alpha) >> 8;
+                    d[1] = ((check_g << 8) + (s[1] - check_g) * alpha) >> 8;
+                    d[2] = ((check_b << 8) + (s[2] - check_b) * alpha) >> 8;
                   }
                   break;
                 }
@@ -590,7 +666,9 @@ gimp_preview_area_draw (GimpPreviewArea *area,
               switch (s[1])
                 {
                 case 0:
-                  d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                  d[0] = CHECK_R (area, row, col);
+                  d[1] = CHECK_G (area, row, col);
+                  d[2] = CHECK_B (area, row, col);
                   break;
 
                 case 255:
@@ -599,11 +677,14 @@ gimp_preview_area_draw (GimpPreviewArea *area,
 
                 default:
                   {
-                    register guint alpha = s[1] + 1;
-                    register guint check = CHECK_COLOR (area, row, col);
+                    register guint alpha   = s[1] + 1;
+                    register guint check_r = CHECK_R (area, row, col);
+                    register guint check_g = CHECK_G (area, row, col);
+                    register guint check_b = CHECK_B (area, row, col);
 
-                    d[0] = d[1] = d[2] =
-                      ((check << 8) + (s[0] - check) * alpha) >> 8;
+                    d[0] = ((check_r << 8) + (s[0] - check_r) * alpha) >> 8;
+                    d[1] = ((check_g << 8) + (s[0] - check_g) * alpha) >> 8;
+                    d[2] = ((check_b << 8) + (s[0] - check_b) * alpha) >> 8;
                   }
                   break;
                 }
@@ -649,7 +730,9 @@ gimp_preview_area_draw (GimpPreviewArea *area,
               switch (s[1])
                 {
                 case 0:
-                  d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                  d[0] = CHECK_R (area, row, col);
+                  d[1] = CHECK_G (area, row, col);
+                  d[2] = CHECK_B (area, row, col);
                   break;
 
                 case 255:
@@ -660,12 +743,14 @@ gimp_preview_area_draw (GimpPreviewArea *area,
 
                 default:
                   {
-                    register guint alpha = s[3] + 1;
-                    register guint check = CHECK_COLOR (area, row, col);
+                    register guint alpha   = s[3] + 1;
+                    register guint check_r = CHECK_R (area, row, col);
+                    register guint check_g = CHECK_G (area, row, col);
+                    register guint check_b = CHECK_B (area, row, col);
 
-                    d[0] = ((check << 8) + (colormap[0] - check) * alpha) >> 8;
-                    d[1] = ((check << 8) + (colormap[1] - check) * alpha) >> 8;
-                    d[2] = ((check << 8) + (colormap[2] - check) * alpha) >> 8;
+                    d[0] = ((check_r << 8) + (colormap[0] - check_r) * alpha) >> 8;
+                    d[1] = ((check_g << 8) + (colormap[1] - check_g) * alpha) >> 8;
+                    d[2] = ((check_b << 8) + (colormap[2] - check_b) * alpha) >> 8;
                   }
                   break;
                 }
@@ -688,11 +773,11 @@ gimp_preview_area_draw (GimpPreviewArea *area,
  * @width:      buffer width
  * @height:     buffer height
  * @type:       the #GimpImageType of @buf1 and @buf2
- * @buf1:       a #guchar buffer that contains the pixel data for
- *              the lower layer
+ * @buf1: (array): a #guchar buffer that contains the pixel data for
+ *                 the lower layer
  * @rowstride1: rowstride of @buf1
- * @buf2:       a #guchar buffer that contains the pixel data for
- *              the upper layer
+ * @buf2: (array): a #guchar buffer that contains the pixel data for
+ *                 the upper layer
  * @rowstride2: rowstride of @buf2
  * @opacity:    The opacity of the first layer.
  *
@@ -718,8 +803,10 @@ gimp_preview_area_blend (GimpPreviewArea *area,
   const guchar *src2;
   guchar       *dest;
   guint         size;
-  guchar        light;
-  guchar        dark;
+  GeglColor    *color1;
+  GeglColor    *color2;
+  guchar        rgb1[3];
+  guchar        rgb2[3];
   gint          row;
   gint          col;
   gint          i;
@@ -786,11 +873,17 @@ gimp_preview_area_blend (GimpPreviewArea *area,
   if (! area->buf)
     {
       area->rowstride = ((area->width * 3) + 3) & ~3;
-      area->buf = g_new (guchar, area->rowstride * area->height);
+      area->buf = g_new0 (guchar, area->rowstride * area->height);
     }
 
   size = 1 << (2 + area->check_size);
-  gimp_checks_get_shades (area->check_type, &light, &dark);
+  color1 = area->check_custom_color1;
+  color2 = area->check_custom_color2;
+  gimp_checks_get_colors (area->check_type, &color1, &color2);
+  gegl_color_get_pixel (color1, babl_format ("R'G'B' u8"), rgb1);
+  gegl_color_get_pixel (color2, babl_format ("R'G'B' u8"), rgb2);
+  g_object_unref (color1);
+  g_object_unref (color2);
 
   src1 = buf1;
   src2 = buf2;
@@ -856,7 +949,9 @@ gimp_preview_area_blend (GimpPreviewArea *area,
               switch (inter[3])
                 {
                 case 0:
-                  d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                  d[0] = CHECK_R (area, row, col);
+                  d[1] = CHECK_G (area, row, col);
+                  d[2] = CHECK_B (area, row, col);
                   break;
 
                 case 255:
@@ -867,12 +962,14 @@ gimp_preview_area_blend (GimpPreviewArea *area,
 
                 default:
                   {
-                    register guint alpha = inter[3] + 1;
-                    register guint check = CHECK_COLOR (area, row, col);
+                    register guint alpha   = inter[3] + 1;
+                    register guint check_r = CHECK_R (area, row, col);
+                    register guint check_g = CHECK_G (area, row, col);
+                    register guint check_b = CHECK_B (area, row, col);
 
-                    d[0] = ((check << 8) + (inter[0] - check) * alpha) >> 8;
-                    d[1] = ((check << 8) + (inter[1] - check) * alpha) >> 8;
-                    d[2] = ((check << 8) + (inter[2] - check) * alpha) >> 8;
+                    d[0] = ((check_r << 8) + (inter[0] - check_r) * alpha) >> 8;
+                    d[1] = ((check_g << 8) + (inter[1] - check_g) * alpha) >> 8;
+                    d[2] = ((check_b << 8) + (inter[2] - check_b) * alpha) >> 8;
                   }
                   break;
                 }
@@ -936,7 +1033,9 @@ gimp_preview_area_blend (GimpPreviewArea *area,
               switch (inter[1])
                 {
                 case 0:
-                  d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                  d[0] = CHECK_R (area, row, col);
+                  d[1] = CHECK_G (area, row, col);
+                  d[2] = CHECK_B (area, row, col);
                   break;
 
                 case 255:
@@ -945,11 +1044,14 @@ gimp_preview_area_blend (GimpPreviewArea *area,
 
                 default:
                   {
-                    register guint alpha = inter[1] + 1;
-                    register guint check = CHECK_COLOR (area, row, col);
+                    register guint alpha   = inter[1] + 1;
+                    register guint check_r = CHECK_R (area, row, col);
+                    register guint check_g = CHECK_G (area, row, col);
+                    register guint check_b = CHECK_B (area, row, col);
 
-                    d[0] = d[1] = d[2] =
-                      ((check << 8) + (inter[0] - check) * alpha) >> 8;
+                    d[0] = ((check_r << 8) + (inter[0] - check_r) * alpha) >> 8;
+                    d[1] = ((check_g << 8) + (inter[0] - check_g) * alpha) >> 8;
+                    d[2] = ((check_b << 8) + (inter[0] - check_b) * alpha) >> 8;
                   }
                   break;
                 }
@@ -1029,7 +1131,9 @@ gimp_preview_area_blend (GimpPreviewArea *area,
               switch (inter[3])
                 {
                 case 0:
-                  d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                  d[0] = CHECK_R (area, row, col);
+                  d[1] = CHECK_G (area, row, col);
+                  d[2] = CHECK_B (area, row, col);
                   break;
 
                 case 255:
@@ -1040,12 +1144,14 @@ gimp_preview_area_blend (GimpPreviewArea *area,
 
                 default:
                   {
-                    register guint alpha = inter[3] + 1;
-                    register guint check = CHECK_COLOR (area, row, col);
+                    register guint alpha   = inter[3] + 1;
+                    register guint check_r = CHECK_R (area, row, col);
+                    register guint check_g = CHECK_G (area, row, col);
+                    register guint check_b = CHECK_B (area, row, col);
 
-                    d[0] = ((check << 8) + (inter[0] - check) * alpha) >> 8;
-                    d[1] = ((check << 8) + (inter[1] - check) * alpha) >> 8;
-                    d[2] = ((check << 8) + (inter[2] - check) * alpha) >> 8;
+                    d[0] = ((check_r << 8) + (inter[0] - check_r) * alpha) >> 8;
+                    d[1] = ((check_g << 8) + (inter[1] - check_g) * alpha) >> 8;
+                    d[2] = ((check_b << 8) + (inter[2] - check_b) * alpha) >> 8;
                   }
                   break;
                 }
@@ -1069,13 +1175,13 @@ gimp_preview_area_blend (GimpPreviewArea *area,
  * @width:          buffer width
  * @height:         buffer height
  * @type:           the #GimpImageType of @buf1 and @buf2
- * @buf1:           a #guchar buffer that contains the pixel data for
+ * @buf1: (array):  a #guchar buffer that contains the pixel data for
  *                  the lower layer
  * @rowstride1:     rowstride of @buf1
- * @buf2:           a #guchar buffer that contains the pixel data for
+ * @buf2: (array):  a #guchar buffer that contains the pixel data for
  *                  the upper layer
  * @rowstride2:     rowstride of @buf2
- * @mask:           a #guchar buffer representing the mask of the second
+ * @mask: (array):  a #guchar buffer representing the mask of the second
  *                  layer.
  * @rowstride_mask: rowstride for the mask.
  *
@@ -1103,8 +1209,10 @@ gimp_preview_area_mask (GimpPreviewArea *area,
   const guchar *src_mask;
   guchar       *dest;
   guint         size;
-  guchar        light;
-  guchar        dark;
+  GeglColor    *color1;
+  GeglColor    *color2;
+  guchar        rgb1[3];
+  guchar        rgb2[3];
   gint          row;
   gint          col;
   gint          i;
@@ -1159,11 +1267,17 @@ gimp_preview_area_mask (GimpPreviewArea *area,
   if (! area->buf)
     {
       area->rowstride = ((area->width * 3) + 3) & ~3;
-      area->buf = g_new (guchar, area->rowstride * area->height);
+      area->buf = g_new0 (guchar, area->rowstride * area->height);
     }
 
   size = 1 << (2 + area->check_size);
-  gimp_checks_get_shades (area->check_type, &light, &dark);
+  color1 = area->check_custom_color1;
+  color2 = area->check_custom_color2;
+  gimp_checks_get_colors (area->check_type, &color1, &color2);
+  gegl_color_get_pixel (color1, babl_format ("R'G'B' u8"), rgb1);
+  gegl_color_get_pixel (color2, babl_format ("R'G'B' u8"), rgb2);
+  g_object_unref (color1);
+  g_object_unref (color2);
 
   src1     = buf1;
   src2     = buf2;
@@ -1210,7 +1324,9 @@ gimp_preview_area_mask (GimpPreviewArea *area,
                   switch (s1[3])
                     {
                     case 0:
-                      d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                      d[0] = CHECK_R (area, row, col);
+                      d[1] = CHECK_G (area, row, col);
+                      d[2] = CHECK_B (area, row, col);
                       break;
 
                     case 255:
@@ -1221,12 +1337,14 @@ gimp_preview_area_mask (GimpPreviewArea *area,
 
                     default:
                       {
-                        register guint alpha = s1[3] + 1;
-                        register guint check = CHECK_COLOR (area, row, col);
+                        register guint alpha   = s1[3] + 1;
+                        register guint check_r = CHECK_R (area, row, col);
+                        register guint check_g = CHECK_G (area, row, col);
+                        register guint check_b = CHECK_B (area, row, col);
 
-                        d[0] = ((check << 8) + (s1[0] - check) * alpha) >> 8;
-                        d[1] = ((check << 8) + (s1[1] - check) * alpha) >> 8;
-                        d[2] = ((check << 8) + (s1[2] - check) * alpha) >> 8;
+                        d[0] = ((check_r << 8) + (s1[0] - check_r) * alpha) >> 8;
+                        d[1] = ((check_g << 8) + (s1[1] - check_g) * alpha) >> 8;
+                        d[2] = ((check_b << 8) + (s1[2] - check_b) * alpha) >> 8;
                       }
                       break;
                     }
@@ -1236,7 +1354,9 @@ gimp_preview_area_mask (GimpPreviewArea *area,
                   switch (s2[3])
                     {
                     case 0:
-                      d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                      d[0] = CHECK_R (area, row, col);
+                      d[1] = CHECK_G (area, row, col);
+                      d[2] = CHECK_B (area, row, col);
                       break;
 
                     case 255:
@@ -1247,12 +1367,14 @@ gimp_preview_area_mask (GimpPreviewArea *area,
 
                     default:
                       {
-                        register guint alpha = s2[3] + 1;
-                        register guint check = CHECK_COLOR (area, row, col);
+                        register guint alpha   = s2[3] + 1;
+                        register guint check_r = CHECK_R (area, row, col);
+                        register guint check_g = CHECK_G (area, row, col);
+                        register guint check_b = CHECK_B (area, row, col);
 
-                        d[0] = ((check << 8) + (s2[0] - check) * alpha) >> 8;
-                        d[1] = ((check << 8) + (s2[1] - check) * alpha) >> 8;
-                        d[2] = ((check << 8) + (s2[2] - check) * alpha) >> 8;
+                        d[0] = ((check_r << 8) + (s2[0] - check_r) * alpha) >> 8;
+                        d[1] = ((check_g << 8) + (s2[1] - check_g) * alpha) >> 8;
+                        d[2] = ((check_b << 8) + (s2[2] - check_b) * alpha) >> 8;
                       }
                       break;
                     }
@@ -1289,7 +1411,9 @@ gimp_preview_area_mask (GimpPreviewArea *area,
                     switch (inter[3])
                       {
                       case 0:
-                        d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                        d[0] = CHECK_R (area, row, col);
+                        d[1] = CHECK_G (area, row, col);
+                        d[2] = CHECK_B (area, row, col);
                         break;
 
                       case 255:
@@ -1300,15 +1424,17 @@ gimp_preview_area_mask (GimpPreviewArea *area,
 
                       default:
                         {
-                          register guint alpha = inter[3] + 1;
-                          register guint check = CHECK_COLOR (area, row, col);
+                          register guint alpha   = inter[3] + 1;
+                          register guint check_r = CHECK_R (area, row, col);
+                          register guint check_g = CHECK_G (area, row, col);
+                          register guint check_b = CHECK_B (area, row, col);
 
-                          d[0] = (((check << 8) +
-                                   (inter[0] - check) * alpha) >> 8);
-                          d[1] = (((check << 8) +
-                                   (inter[1] - check) * alpha) >> 8);
-                          d[2] = (((check << 8) +
-                                   (inter[2] - check) * alpha) >> 8);
+                          d[0] = (((check_r << 8) +
+                                   (inter[0] - check_r) * alpha) >> 8);
+                          d[1] = (((check_g << 8) +
+                                   (inter[1] - check_g) * alpha) >> 8);
+                          d[2] = (((check_b << 8) +
+                                   (inter[2] - check_b) * alpha) >> 8);
                         }
                         break;
                       }
@@ -1358,7 +1484,9 @@ gimp_preview_area_mask (GimpPreviewArea *area,
                   switch (s1[1])
                     {
                     case 0:
-                      d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                      d[0] = CHECK_R (area, row, col);
+                      d[1] = CHECK_G (area, row, col);
+                      d[2] = CHECK_B (area, row, col);
                       break;
 
                     case 255:
@@ -1367,11 +1495,14 @@ gimp_preview_area_mask (GimpPreviewArea *area,
 
                     default:
                       {
-                        register guint alpha = s1[1] + 1;
-                        register guint check = CHECK_COLOR (area, row, col);
+                        register guint alpha   = s1[1] + 1;
+                        register guint check_r = CHECK_R (area, row, col);
+                        register guint check_g = CHECK_G (area, row, col);
+                        register guint check_b = CHECK_B (area, row, col);
 
-                        d[0] = d[1] = d[2] =
-                          ((check << 8) + (s1[0] - check) * alpha) >> 8;
+                        d[0] = ((check_r << 8) + (s1[0] - check_r) * alpha) >> 8;
+                        d[1] = ((check_g << 8) + (s1[0] - check_g) * alpha) >> 8;
+                        d[2] = ((check_b << 8) + (s1[0] - check_b) * alpha) >> 8;
                       }
                       break;
                     }
@@ -1381,7 +1512,9 @@ gimp_preview_area_mask (GimpPreviewArea *area,
                   switch (s2[1])
                     {
                     case 0:
-                      d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                      d[0] = CHECK_R (area, row, col);
+                      d[1] = CHECK_G (area, row, col);
+                      d[2] = CHECK_B (area, row, col);
                       break;
 
                     case 255:
@@ -1390,11 +1523,14 @@ gimp_preview_area_mask (GimpPreviewArea *area,
 
                     default:
                       {
-                        register guint alpha = s2[1] + 1;
-                        register guint check = CHECK_COLOR (area, row, col);
+                        register guint alpha   = s2[1] + 1;
+                        register guint check_r = CHECK_R (area, row, col);
+                        register guint check_g = CHECK_G (area, row, col);
+                        register guint check_b = CHECK_B (area, row, col);
 
-                        d[0] = d[1] = d[2] =
-                          ((check << 8) + (s2[0] - check) * alpha) >> 8;
+                        d[0] = ((check_r << 8) + (s2[0] - check_r) * alpha) >> 8;
+                        d[1] = ((check_g << 8) + (s2[0] - check_g) * alpha) >> 8;
+                        d[2] = ((check_b << 8) + (s2[0] - check_b) * alpha) >> 8;
                       }
                       break;
                     }
@@ -1426,7 +1562,9 @@ gimp_preview_area_mask (GimpPreviewArea *area,
                     switch (inter[1])
                       {
                       case 0:
-                        d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                        d[0] = CHECK_R (area, row, col);
+                        d[1] = CHECK_G (area, row, col);
+                        d[2] = CHECK_B (area, row, col);
                         break;
 
                       case 255:
@@ -1435,11 +1573,14 @@ gimp_preview_area_mask (GimpPreviewArea *area,
 
                       default:
                         {
-                          register guint alpha = inter[1] + 1;
-                          register guint check = CHECK_COLOR (area, row, col);
+                          register guint alpha   = inter[1] + 1;
+                          register guint check_r = CHECK_R (area, row, col);
+                          register guint check_g = CHECK_G (area, row, col);
+                          register guint check_b = CHECK_B (area, row, col);
 
-                          d[0] = d[1] = d[2] =
-                            ((check << 8) + (inter[0] - check) * alpha) >> 8;
+                          d[0] = ((check_r << 8) + (inter[0] - check_r) * alpha) >> 8;
+                          d[1] = ((check_g << 8) + (inter[0] - check_g) * alpha) >> 8;
+                          d[2] = ((check_b << 8) + (inter[0] - check_b) * alpha) >> 8;
                         }
                         break;
                       }
@@ -1501,7 +1642,9 @@ gimp_preview_area_mask (GimpPreviewArea *area,
                   switch (s1[1])
                     {
                     case 0:
-                      d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                      d[0] = CHECK_R (area, row, col);
+                      d[1] = CHECK_G (area, row, col);
+                      d[2] = CHECK_B (area, row, col);
                       break;
 
                     case 255:
@@ -1512,12 +1655,14 @@ gimp_preview_area_mask (GimpPreviewArea *area,
 
                     default:
                       {
-                        register guint alpha = s1[1] + 1;
-                        register guint check = CHECK_COLOR (area, row, col);
+                        register guint alpha   = s1[1] + 1;
+                        register guint check_r = CHECK_R (area, row, col);
+                        register guint check_g = CHECK_G (area, row, col);
+                        register guint check_b = CHECK_B (area, row, col);
 
-                        d[0] = ((check << 8) + (cmap1[0] - check) * alpha) >> 8;
-                        d[1] = ((check << 8) + (cmap1[1] - check) * alpha) >> 8;
-                        d[2] = ((check << 8) + (cmap1[2] - check) * alpha) >> 8;
+                        d[0] = ((check_r << 8) + (cmap1[0] - check_r) * alpha) >> 8;
+                        d[1] = ((check_g << 8) + (cmap1[1] - check_g) * alpha) >> 8;
+                        d[2] = ((check_b << 8) + (cmap1[2] - check_b) * alpha) >> 8;
                       }
                       break;
                     }
@@ -1527,7 +1672,9 @@ gimp_preview_area_mask (GimpPreviewArea *area,
                   switch (s2[1])
                     {
                     case 0:
-                      d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                      d[0] = CHECK_R (area, row, col);
+                      d[1] = CHECK_G (area, row, col);
+                      d[2] = CHECK_B (area, row, col);
                       break;
 
                     case 255:
@@ -1538,12 +1685,14 @@ gimp_preview_area_mask (GimpPreviewArea *area,
 
                     default:
                       {
-                        register guint alpha = s2[1] + 1;
-                        register guint check = CHECK_COLOR (area, row, col);
+                        register guint alpha   = s2[1] + 1;
+                        register guint check_r = CHECK_R (area, row, col);
+                        register guint check_g = CHECK_G (area, row, col);
+                        register guint check_b = CHECK_B (area, row, col);
 
-                        d[0] = ((check << 8) + (cmap2[0] - check) * alpha) >> 8;
-                        d[1] = ((check << 8) + (cmap2[1] - check) * alpha) >> 8;
-                        d[2] = ((check << 8) + (cmap2[2] - check) * alpha) >> 8;
+                        d[0] = ((check_r << 8) + (cmap2[0] - check_r) * alpha) >> 8;
+                        d[1] = ((check_g << 8) + (cmap2[1] - check_g) * alpha) >> 8;
+                        d[2] = ((check_b << 8) + (cmap2[2] - check_b) * alpha) >> 8;
                       }
                       break;
                     }
@@ -1583,7 +1732,9 @@ gimp_preview_area_mask (GimpPreviewArea *area,
                     switch (inter[3])
                       {
                       case 0:
-                        d[0] = d[1] = d[2] = CHECK_COLOR (area, row, col);
+                        d[0] = CHECK_R (area, row, col);
+                        d[1] = CHECK_G (area, row, col);
+                        d[2] = CHECK_B (area, row, col);
                         break;
 
                       case 255:
@@ -1594,15 +1745,17 @@ gimp_preview_area_mask (GimpPreviewArea *area,
 
                       default:
                         {
-                          register guint alpha = inter[3] + 1;
-                          register guint check = CHECK_COLOR (area, row, col);
+                          register guint alpha   = inter[3] + 1;
+                          register guint check_r = CHECK_R (area, row, col);
+                          register guint check_g = CHECK_G (area, row, col);
+                          register guint check_b = CHECK_B (area, row, col);
 
                           d[0] =
-                            ((check << 8) + (inter[0] - check) * alpha) >> 8;
+                            ((check_r << 8) + (inter[0] - check_r) * alpha) >> 8;
                           d[1] =
-                            ((check << 8) + (inter[1] - check) * alpha) >> 8;
+                            ((check_g << 8) + (inter[1] - check_g) * alpha) >> 8;
                           d[2] =
-                            ((check << 8) + (inter[2] - check) * alpha) >> 8;
+                            ((check_b << 8) + (inter[2] - check_b) * alpha) >> 8;
                         }
                         break;
                       }
@@ -1686,7 +1839,7 @@ gimp_preview_area_fill (GimpPreviewArea *area,
   if (! area->buf)
     {
       area->rowstride = ((area->width * 3) + 3) & ~3;
-      area->buf = g_new (guchar, area->rowstride * area->height);
+      area->buf = g_new0 (guchar, area->rowstride * area->height);
     }
 
   dest = area->buf + x * 3 + y * area->rowstride;
@@ -1707,6 +1860,31 @@ gimp_preview_area_fill (GimpPreviewArea *area,
     }
 
   gimp_preview_area_queue_draw (area, x, y, width, height);
+}
+
+/**
+ * gimp_preview_area_reset:
+ * @area:   a #GimpPreviewArea widget.
+ *
+ * Reset any previous drawing done through [class@GimpUi.PreviewArea] functions.
+ *
+ * Since: 3.0
+ **/
+void
+gimp_preview_area_reset (GimpPreviewArea *area)
+{
+  GtkAllocation allocation;
+
+  if (area->buf)
+    {
+      g_free (area->buf);
+
+      area->buf       = NULL;
+      area->rowstride = 0;
+    }
+
+  gtk_widget_get_allocation (GTK_WIDGET (area), &allocation);
+  gimp_preview_area_queue_draw (area, 0, 0, allocation.width, allocation.height);
 }
 
 /**
@@ -1734,7 +1912,7 @@ gimp_preview_area_set_offsets (GimpPreviewArea *area,
 /**
  * gimp_preview_area_set_colormap:
  * @area:       a #GimpPreviewArea
- * @colormap:   a #guchar buffer that contains the colormap
+ * @colormap: (array): a #guchar buffer that contains the colormap
  * @num_colors: the number of colors in the colormap
  *
  * Sets the colormap for the #GimpPreviewArea widget. You need to
@@ -1781,33 +1959,48 @@ void
 gimp_preview_area_set_color_config (GimpPreviewArea *area,
                                     GimpColorConfig *config)
 {
-  GimpPreviewAreaPrivate *priv;
-
   g_return_if_fail (GIMP_IS_PREVIEW_AREA (area));
   g_return_if_fail (config == NULL || GIMP_IS_COLOR_CONFIG (config));
 
-  priv = GET_PRIVATE (area);
-
-  if (config != priv->config)
+  if (config != area->config)
     {
-      if (priv->config)
+      if (area->config)
         {
-          g_signal_handlers_disconnect_by_func (priv->config,
+          g_signal_handlers_disconnect_by_func (area->config,
                                                 gimp_preview_area_destroy_transform,
                                                 area);
 
           gimp_preview_area_destroy_transform (area);
         }
 
-      g_set_object (&priv->config, config);
+      g_set_object (&area->config, config);
 
-      if (priv->config)
+      if (area->config)
         {
-          g_signal_connect_swapped (priv->config, "notify",
+          g_signal_connect_swapped (area->config, "notify",
                                     G_CALLBACK (gimp_preview_area_destroy_transform),
                                     area);
         }
     }
+}
+
+/**
+ * gimp_preview_area_get_size:
+ * @area:   a #GimpPreviewArea widget.
+ * @width: (out): The preview areay width
+ * @height: (out): The preview areay height
+ *
+ * Gets the preview area size
+ */
+void
+gimp_preview_area_get_size (GimpPreviewArea *area,
+                            gint            *width,
+                            gint            *height)
+{
+  g_return_if_fail (GIMP_IS_PREVIEW_AREA (area));
+
+  if (width)  *width  = area->width;
+  if (height) *height = area->height;
 }
 
 /**
@@ -1923,7 +2116,7 @@ gimp_preview_area_menu_new (GimpPreviewArea *area,
 /**
  * gimp_preview_area_menu_popup:
  * @area:  a #GimpPreviewArea
- * @event: the button event that causes the menu to popup or %NULL
+ * @event: (nullable): the button event that causes the menu to popup or %NULL
  *
  * Creates a popup menu that allows one to configure the size and type of
  * the checkerboard pattern that the @area uses to visualize transparency.
@@ -1946,11 +2139,15 @@ gimp_preview_area_menu_popup (GimpPreviewArea *area,
                          gimp_preview_area_menu_new (area, "check-type"));
   gtk_menu_shell_append (GTK_MENU_SHELL (menu),
                          gimp_preview_area_menu_new (area, "check-size"));
+#if 0
+  /* gimp_preview_area_menu_new() currently only handles enum types, and
+   * in particular not color properties.
+   */
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu),
+                         gimp_preview_area_menu_new (area, "check-custom-color1"));
+  gtk_menu_shell_append (GTK_MENU_SHELL (menu),
+                         gimp_preview_area_menu_new (area, "check-custom-color2"));
+#endif
 
-  if (event)
-    gtk_menu_popup (GTK_MENU (menu),
-                    NULL, NULL, NULL, NULL, event->button, event->time);
-  else
-    gtk_menu_popup (GTK_MENU (menu),
-                    NULL, NULL, NULL, NULL, 0, gtk_get_current_event_time ());
+  gtk_menu_popup_at_pointer (GTK_MENU (menu), (GdkEvent *) event);
 }

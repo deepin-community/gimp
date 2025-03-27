@@ -33,16 +33,7 @@
 #include <glib.h>
 
 #ifdef G_OS_WIN32
-#define _WIN32_WINNT 0x0500
 #include <windows.h>
-#include <process.h>
-#endif
-
-#if defined(G_OS_UNIX) && defined(HAVE_EXECINFO_H)
-/* For get_backtrace() */
-#include <stdlib.h>
-#include <string.h>
-#include <execinfo.h>
 #endif
 
 #include <cairo.h>
@@ -56,17 +47,59 @@
 
 #include "core-types.h"
 
+#include "config/gimpxmlparser.h"
+
 #include "gimp.h"
 #include "gimp-utils.h"
 #include "gimpasync.h"
 #include "gimpcontext.h"
 #include "gimperror.h"
+#include "gimpimage.h"
 
 #include "gimp-intl.h"
 
 
 #define MAX_FUNC 100
 
+
+typedef struct
+{
+  GString  *text;
+  gint      level;
+
+  gboolean  numbered_list;
+  gint      list_num;
+  gboolean  unnumbered_list;
+
+  const gchar *lang;
+  GString     *original;
+  gint         foreign_level;
+
+  gchar      **introduction;
+  GList      **release_items;
+} ParseState;
+
+
+static gchar      * gimp_appstream_parse           (const gchar          *as_text,
+                                                    gchar               **introduction,
+                                                    GList               **release_items);
+static void         appstream_text_start_element   (GMarkupParseContext  *context,
+                                                    const gchar          *element_name,
+                                                    const gchar         **attribute_names,
+                                                    const gchar         **attribute_values,
+                                                    gpointer              user_data,
+                                                    GError              **error);
+static void         appstream_text_end_element     (GMarkupParseContext  *context,
+                                                    const gchar          *element_name,
+                                                    gpointer              user_data,
+                                                    GError              **error);
+static void         appstream_text_characters      (GMarkupParseContext  *context,
+                                                    const gchar          *text,
+                                                    gsize                 text_len,
+                                                    gpointer              user_data,
+                                                    GError              **error);
+static const gchar* gimp_extension_get_tag_lang    (const gchar         **attribute_names,
+                                                    const gchar         **attribute_values);
 
 gint
 gimp_get_pid (void)
@@ -160,7 +193,7 @@ gimp_get_default_language (const gchar *category)
   return lang;
 }
 
-GimpUnit
+GimpUnit *
 gimp_get_default_unit (void)
 {
 #if defined (HAVE__NL_MEASUREMENT_MEASUREMENT)
@@ -169,35 +202,35 @@ gimp_get_default_unit (void)
   switch (*((guchar *) measurement))
     {
     case 1: /* metric   */
-      return GIMP_UNIT_MM;
+      return gimp_unit_mm ();
 
     case 2: /* imperial */
-      return GIMP_UNIT_INCH;
+      return gimp_unit_inch ();
     }
 
 #elif defined (G_OS_WIN32)
   DWORD measurement;
   int   ret;
 
-  ret = GetLocaleInfo(LOCALE_USER_DEFAULT,
-                      LOCALE_IMEASURE | LOCALE_RETURN_NUMBER,
-                      (LPTSTR)&measurement,
-                      sizeof(measurement) / sizeof(TCHAR) );
+  ret = GetLocaleInfoW (LOCALE_USER_DEFAULT,
+                        LOCALE_IMEASURE | LOCALE_RETURN_NUMBER,
+                        (LPWSTR) &measurement,
+                        sizeof (measurement) / sizeof (wchar_t));
 
   if (ret != 0) /* GetLocaleInfo succeeded */
     {
     switch ((guint) measurement)
       {
       case 0: /* metric */
-        return GIMP_UNIT_MM;
+        return gimp_unit_mm ();
 
       case 1: /* imperial */
-        return GIMP_UNIT_INCH;
+        return gimp_unit_inch ();
       }
     }
 #endif
 
-  return GIMP_UNIT_MM;
+  return gimp_unit_mm ();
 }
 
 gchar **
@@ -494,7 +527,7 @@ gimp_enum_get_value_name (GType enum_type,
 gboolean
 gimp_get_fill_params (GimpContext   *context,
                       GimpFillType   fill_type,
-                      GimpRGB       *color,
+                      GeglColor    **color,
                       GimpPattern  **pattern,
                       GError       **error)
 
@@ -504,24 +537,34 @@ gimp_get_fill_params (GimpContext   *context,
   g_return_val_if_fail (pattern != NULL, FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
+  *color   = NULL;
   *pattern = NULL;
 
   switch (fill_type)
     {
     case GIMP_FILL_FOREGROUND:
-      gimp_context_get_foreground (context, color);
+      *color = gegl_color_duplicate (gimp_context_get_foreground (context));
       break;
 
     case GIMP_FILL_BACKGROUND:
-      gimp_context_get_background (context, color);
+      *color = gegl_color_duplicate (gimp_context_get_background (context));
+      break;
+
+    case GIMP_FILL_CIELAB_MIDDLE_GRAY:
+      {
+        const float cielab_pixel[3] = {50.f, 0.f, 0.f};
+
+        *color = gegl_color_new (NULL);
+        gegl_color_set_pixel (*color, babl_format ("CIE Lab float"), cielab_pixel);
+      }
       break;
 
     case GIMP_FILL_WHITE:
-      gimp_rgba_set (color, 1.0, 1.0, 1.0, GIMP_OPACITY_OPAQUE);
+      *color = gegl_color_new ("white");
       break;
 
     case GIMP_FILL_TRANSPARENT:
-      gimp_rgba_set (color, 0.0, 0.0, 0.0, GIMP_OPACITY_TRANSPARENT);
+      *color = gegl_color_new ("transparent");
       break;
 
     case GIMP_FILL_PATTERN:
@@ -533,9 +576,9 @@ gimp_get_fill_params (GimpContext   *context,
                                _("No patterns available for this operation."));
 
           /*  fall back to BG fill  */
-          gimp_context_get_background (context, color);
+          *color = gegl_color_duplicate (gimp_context_get_background (context));
 
-          return FALSE;
+          return TRUE;
         }
       break;
 
@@ -672,7 +715,7 @@ gimp_file_is_executable (GFile *file)
 
   if (info)
     {
-      GFileType    file_type = g_file_info_get_file_type (info);
+      GFileType    file_type = g_file_info_get_attribute_uint32 (info, G_FILE_ATTRIBUTE_STANDARD_TYPE);
       const gchar *filename  = g_file_info_get_name (info);
 
       if (file_type == G_FILE_TYPE_REGULAR &&
@@ -702,31 +745,54 @@ gimp_file_is_executable (GFile *file)
 gchar *
 gimp_file_get_extension (GFile *file)
 {
-  gchar *uri;
-  gint   uri_len;
-  gchar *ext = NULL;
-  gint   search_len;
+  GFileInfo *info;
+  gchar     *basename;
+  gint       basename_len;
+  gchar     *ext = NULL;
+  gint       search_len;
 
   g_return_val_if_fail (G_IS_FILE (file), NULL);
 
-  uri     = g_file_get_uri (file);
-  uri_len = strlen (uri);
+  /* Certain cloud providers return a blob name rather than the
+   * actual file with g_file_get_uri (). Since we don't check
+   * the magic numbers for remote files, we can't open it. The
+   * actual name is stored as "display-name" in all cases, so we
+   * use that instead. */
+  info = g_file_query_info (file,
+                            G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME,
+                            0, NULL, NULL);
 
-  if (g_str_has_suffix (uri, ".gz"))
-    search_len = uri_len - 3;
-  else if (g_str_has_suffix (uri, ".bz2"))
-    search_len = uri_len - 4;
-  else if (g_str_has_suffix (uri, ".xz"))
-    search_len = uri_len - 3;
+  if (info != NULL)
+    basename =
+      g_file_info_get_attribute_as_string (info,
+                                           G_FILE_ATTRIBUTE_STANDARD_DISPLAY_NAME);
   else
-    search_len = uri_len;
+    basename = g_file_get_basename (file);
 
-  ext = g_strrstr_len (uri, search_len, ".");
+  g_clear_object (&info);
+
+  /* When making a temporary file for saving/exporting, we may not
+   * have the display-name yet, so let's fallback to the URI */
+  if (! basename)
+    basename = g_file_get_uri (file);
+
+  basename_len = strlen (basename);
+
+  if (g_str_has_suffix (basename, ".gz"))
+    search_len = basename_len - 3;
+  else if (g_str_has_suffix (basename, ".bz2"))
+    search_len = basename_len - 4;
+  else if (g_str_has_suffix (basename, ".xz"))
+    search_len = basename_len - 3;
+  else
+    search_len = basename_len;
+
+  ext = g_strrstr_len (basename, search_len, ".");
 
   if (ext)
     ext = g_strdup (ext);
 
-  g_free (uri);
+  g_free (basename);
 
   return ext;
 }
@@ -771,6 +837,71 @@ gimp_file_with_new_extension (GFile *file,
   g_free (new_uri);
 
   return ret;
+}
+
+/**
+ * gimp_file_delete_recursive:
+ * @file: #GFile to delete from file system.
+ * @error:
+ *
+ * Delete @file. If file is a directory, it will delete its children as
+ * well recursively. It will not follow symlinks so you won't end up in
+ * infinite loops, not will you be at risk of deleting your whole file
+ * system (unless you pass the root of course!).
+ * Such function unfortunately does not exist in glib, which only allows
+ * to delete single files or empty directories by default.
+ *
+ * Returns: %TRUE if @file was successfully deleted and all its
+ * children, %FALSE otherwise with @error filled.
+ */
+gboolean
+gimp_file_delete_recursive (GFile   *file,
+                            GError **error)
+{
+  gboolean success = TRUE;
+
+  if (g_file_query_exists (file, NULL))
+    {
+      if (g_file_query_file_type (file, G_FILE_QUERY_INFO_NOFOLLOW_SYMLINKS,
+                                  NULL) == G_FILE_TYPE_DIRECTORY)
+        {
+          GFileEnumerator *enumerator;
+
+          enumerator = g_file_enumerate_children (file,
+                                                  G_FILE_ATTRIBUTE_STANDARD_NAME ","
+                                                  G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN ","
+                                                  G_FILE_ATTRIBUTE_TIME_MODIFIED,
+                                                  G_FILE_QUERY_INFO_NONE,
+                                                  NULL, NULL);
+          if (enumerator)
+            {
+              GFileInfo *info;
+
+              while ((info = g_file_enumerator_next_file (enumerator, NULL, NULL)))
+                {
+                  GFile *child;
+
+                  child = g_file_enumerator_get_child (enumerator, info);
+                  g_object_unref (info);
+
+                  if (! gimp_file_delete_recursive (child, error))
+                    success = FALSE;
+
+                  g_object_unref (child);
+                  if (! success)
+                    break;
+                }
+
+              g_object_unref (enumerator);
+            }
+        }
+
+      if (success)
+        /* Non-directory or empty directory. */
+        success = g_file_delete (file, NULL, error);
+    }
+
+  return success;
 }
 
 gchar *
@@ -859,6 +990,23 @@ gimp_ascii_strtod (const gchar  *nptr,
   return TRUE;
 }
 
+gchar *
+gimp_appstream_to_pango_markup (const gchar *as_text)
+{
+  return gimp_appstream_parse (as_text, NULL, NULL);
+}
+
+void
+gimp_appstream_to_pango_markups (const gchar  *as_text,
+                                 gchar       **introduction,
+                                 GList       **release_items)
+{
+  gchar * markup;
+
+  markup = gimp_appstream_parse (as_text, introduction, release_items);
+  g_free (markup);
+}
+
 gint
 gimp_g_list_compare (GList *list1,
                      GList *list2)
@@ -880,6 +1028,36 @@ gimp_g_list_compare (GList *list1,
     return +1;
 
   return 0;
+}
+
+GimpTRCType
+gimp_suggest_trc_for_component_type (GimpComponentType component_type,
+                                     GimpTRCType       old_trc)
+{
+  GimpTRCType new_trc = old_trc;
+
+  switch (component_type)
+    {
+    case GIMP_COMPONENT_TYPE_U8:
+      /* default to non-linear when converting 8 bit */
+      new_trc = GIMP_TRC_NON_LINEAR;
+      break;
+
+    case GIMP_COMPONENT_TYPE_U16:
+    case GIMP_COMPONENT_TYPE_U32:
+    default:
+      /* leave TRC alone by default when converting to 16/32 bit int */
+      break;
+
+    case GIMP_COMPONENT_TYPE_HALF:
+    case GIMP_COMPONENT_TYPE_FLOAT:
+    case GIMP_COMPONENT_TYPE_DOUBLE:
+      /* default to linear when converting to floating point */
+      new_trc = GIMP_TRC_LINEAR;
+      break;
+    }
+
+  return new_trc;
 }
 
 typedef struct
@@ -1049,7 +1227,7 @@ gimp_idle_run_async_full (gint             priority,
   return g_object_ref (data->async);
 }
 
-#if defined(G_OS_WIN32)
+#ifdef G_OS_WIN32
 
 gboolean
 gimp_win32_have_wintab (void)
@@ -1081,15 +1259,8 @@ gimp_win32_have_wintab (void)
 gboolean
 gimp_win32_have_windows_ink (void)
 {
-  wchar_t buf[100];
-  DWORD ret;
-
-  memset (buf, 0, sizeof (buf));
-  ret = GetEnvironmentVariableW (L"GDK_WIN32_FEATURES", buf, sizeof (buf) - 1);
-  if (ret > 0 && ret < 100)
-    return wcsstr (buf, L"winpointer") != NULL;
-
-  return FALSE;
+  /* Check for Windows 8 or later */
+  return g_win32_check_windows_version (6, 2, 0, G_WIN32_OS_ANY);
 }
 
 #endif
@@ -1133,11 +1304,296 @@ gimp_create_image_from_buffer (Gimp        *gimp,
                                            NULL /* same image */);
   gimp_image_add_layer (image, layer, NULL, -1, FALSE);
 
-  gimp_create_display (gimp, image, GIMP_UNIT_PIXEL, 1.0, NULL, 0);
+  gimp_create_display (gimp, image, gimp_unit_pixel (), 1.0, NULL);
 
   /* unref the image unconditionally, even when no display was created */
   g_object_add_weak_pointer (G_OBJECT (image), (gpointer) &image);
+
   g_object_unref (image);
 
+  if (image)
+    g_object_remove_weak_pointer (G_OBJECT (image), (gpointer) &image);
+
   return image;
+}
+
+gint
+gimp_view_size_get_larger (gint view_size)
+{
+  if (view_size < GIMP_VIEW_SIZE_TINY)
+    return GIMP_VIEW_SIZE_TINY;
+  if (view_size < GIMP_VIEW_SIZE_EXTRA_SMALL)
+    return GIMP_VIEW_SIZE_EXTRA_SMALL;
+  if (view_size < GIMP_VIEW_SIZE_SMALL)
+    return GIMP_VIEW_SIZE_SMALL;
+  if (view_size < GIMP_VIEW_SIZE_MEDIUM)
+    return GIMP_VIEW_SIZE_MEDIUM;
+  if (view_size < GIMP_VIEW_SIZE_LARGE)
+    return GIMP_VIEW_SIZE_LARGE;
+  if (view_size < GIMP_VIEW_SIZE_EXTRA_LARGE)
+    return GIMP_VIEW_SIZE_EXTRA_LARGE;
+  if (view_size < GIMP_VIEW_SIZE_HUGE)
+    return GIMP_VIEW_SIZE_HUGE;
+  if (view_size < GIMP_VIEW_SIZE_ENORMOUS)
+    return GIMP_VIEW_SIZE_ENORMOUS;
+  return GIMP_VIEW_SIZE_GIGANTIC;
+}
+
+gint
+gimp_view_size_get_smaller (gint view_size)
+{
+  if (view_size > GIMP_VIEW_SIZE_GIGANTIC)
+    return GIMP_VIEW_SIZE_GIGANTIC;
+  if (view_size > GIMP_VIEW_SIZE_ENORMOUS)
+    return GIMP_VIEW_SIZE_ENORMOUS;
+  if (view_size > GIMP_VIEW_SIZE_HUGE)
+    return GIMP_VIEW_SIZE_HUGE;
+  if (view_size > GIMP_VIEW_SIZE_EXTRA_LARGE)
+    return GIMP_VIEW_SIZE_EXTRA_LARGE;
+  if (view_size > GIMP_VIEW_SIZE_LARGE)
+    return GIMP_VIEW_SIZE_LARGE;
+  if (view_size > GIMP_VIEW_SIZE_MEDIUM)
+    return GIMP_VIEW_SIZE_MEDIUM;
+  if (view_size > GIMP_VIEW_SIZE_SMALL)
+    return GIMP_VIEW_SIZE_SMALL;
+  if (view_size > GIMP_VIEW_SIZE_EXTRA_SMALL)
+    return GIMP_VIEW_SIZE_EXTRA_SMALL;
+  return GIMP_VIEW_SIZE_TINY;
+}
+
+/* Private functions */
+
+
+static gchar *
+gimp_appstream_parse (const gchar  *as_text,
+                      gchar       **introduction,
+                      GList       **release_items)
+{
+  static const GMarkupParser appstream_text_parser =
+    {
+      appstream_text_start_element,
+      appstream_text_end_element,
+      appstream_text_characters,
+      NULL, /*  passthrough */
+      NULL  /*  error       */
+    };
+
+  GimpXmlParser *xml_parser;
+  gchar         *markup = NULL;
+  GError        *error  = NULL;
+  ParseState     state;
+
+  state.level           = 0;
+  state.foreign_level   = -1;
+  state.text            = g_string_new (NULL);
+  state.list_num        = 0;
+  state.numbered_list   = FALSE;
+  state.unnumbered_list = FALSE;
+  state.lang            = g_getenv ("LANGUAGE");
+  state.original        = NULL;
+  state.introduction    = introduction;
+  state.release_items   = release_items;
+
+  xml_parser  = gimp_xml_parser_new (&appstream_text_parser, &state);
+  if (as_text &&
+      ! gimp_xml_parser_parse_buffer (xml_parser, as_text, -1, &error))
+    {
+      g_printerr ("%s: %s\n", G_STRFUNC, error->message);
+      g_error_free (error);
+    }
+
+  /* Append possibly last original text without proper localization. */
+  if (state.original)
+    {
+      g_string_append (state.text, state.original->str);
+      g_string_free (state.original, TRUE);
+    }
+
+  if (release_items)
+    *release_items = g_list_reverse (*release_items);
+
+  markup = g_string_free (state.text, FALSE);
+  gimp_xml_parser_free (xml_parser);
+
+  return markup;
+}
+
+static void
+appstream_text_start_element (GMarkupParseContext  *context,
+                              const gchar          *element_name,
+                              const gchar         **attribute_names,
+                              const gchar         **attribute_values,
+                              gpointer              user_data,
+                              GError              **error)
+{
+  ParseState  *state  = user_data;
+  GString     *output = state->text;
+  const gchar *tag_lang;
+
+  state->level++;
+
+  if (state->foreign_level >= 0)
+    return;
+
+  tag_lang = gimp_extension_get_tag_lang (attribute_names, attribute_values);
+  if ((state->lang == NULL && tag_lang == NULL) ||
+      g_strcmp0 (tag_lang, state->lang) == 0)
+    {
+      /* Current tag is our current language. */
+      if (state->original)
+        g_string_free (state->original, TRUE);
+      state->original = NULL;
+
+      output = state->text;
+    }
+  else if (tag_lang == NULL)
+    {
+      /* Current tag is the original language (and we want a
+       * localization).
+       */
+      if (state->original)
+        {
+          g_string_append (state->text, state->original->str);
+          g_string_free (state->original, TRUE);
+        }
+      state->original = g_string_new (NULL);
+
+      output = state->original;
+    }
+  else
+    {
+      /* Current tag is an unrelated language */
+      state->foreign_level = state->level;
+      return;
+    }
+
+  if ((state->numbered_list || state->unnumbered_list) &&
+      (g_strcmp0 (element_name, "ul") == 0 ||
+       g_strcmp0 (element_name, "ol") == 0))
+    {
+      g_set_error (error, GIMP_ERROR, GIMP_FAILED,
+                   _("This parser does not support imbricated lists."));
+    }
+  else if (g_strcmp0 (element_name, "ul") == 0)
+    {
+      state->unnumbered_list = TRUE;
+      state->list_num        = 0;
+    }
+  else if (g_strcmp0 (element_name, "ol") == 0)
+    {
+      state->numbered_list = TRUE;
+      state->list_num      = 0;
+    }
+  else if (g_strcmp0 (element_name, "li") == 0)
+    {
+      state->list_num++;
+      if (state->numbered_list)
+        g_string_append_printf (output,
+                                "\n<span weight='ultrabold' >\xe2\x9d\xa8%d\xe2\x9d\xa9</span> ",
+                                state->list_num);
+      else if (state->unnumbered_list)
+        g_string_append (output, "\n<span weight='ultrabold' >\xe2\x80\xa2</span> ");
+      else
+        g_set_error (error, GIMP_ERROR, GIMP_FAILED,
+                     _("<li> must be inside <ol> or <ul> tags."));
+    }
+  else if (g_strcmp0 (element_name, "p") != 0)
+    {
+      g_set_error (error, GIMP_ERROR, GIMP_FAILED,
+                   _("Unknown tag <%s>."), element_name);
+    }
+}
+
+static void
+appstream_text_end_element (GMarkupParseContext  *context,
+                            const gchar          *element_name,
+                            gpointer              user_data,
+                            GError              **error)
+{
+  ParseState *state = user_data;
+
+  state->level--;
+
+  if (g_strcmp0 (element_name, "p") == 0)
+    {
+      if (state->foreign_level < 0)
+        {
+          if (state->introduction &&
+              *state->introduction == NULL)
+            *state->introduction = g_strdup (state->original ? state->original->str : state->text->str);
+
+          if (state->original)
+            g_string_append (state->original, "\n\n");
+          else
+            g_string_append (state->text, "\n\n");
+        }
+    }
+  else if (g_strcmp0 (element_name, "ul") == 0 ||
+           g_strcmp0 (element_name, "ol") == 0)
+    {
+      state->numbered_list   = FALSE;
+      state->unnumbered_list = FALSE;
+    }
+  else if (g_strcmp0 (element_name, "li") == 0)
+    {
+      if (state->original)
+        g_string_append (state->original, "\n");
+      else
+        g_string_append (state->text, "\n");
+    }
+
+  if (state->foreign_level > state->level)
+    state->foreign_level = -1;
+}
+
+static void
+appstream_text_characters (GMarkupParseContext  *context,
+                           const gchar          *text,
+                           gsize                 text_len,
+                           gpointer              user_data,
+                           GError              **error)
+{
+  ParseState *state = user_data;
+
+  if (state->foreign_level < 0 && text_len > 0)
+    {
+      if (state->list_num > 0 && state->release_items)
+        {
+          GList **items = state->release_items;
+
+          if (state->list_num == g_list_length (*(state->release_items)))
+            {
+              gchar *tmp = (*items)->data;
+
+              (*items)->data = g_strconcat (tmp, text, NULL);
+              g_free (tmp);
+            }
+          else
+            {
+              *items = g_list_prepend (*items, g_strdup (text));
+            }
+        }
+      if (state->original)
+        g_string_append (state->original, text);
+      else
+        g_string_append (state->text, text);
+    }
+}
+
+static const gchar *
+gimp_extension_get_tag_lang (const gchar **attribute_names,
+                             const gchar **attribute_values)
+{
+  while (*attribute_names)
+    {
+      if (! strcmp (*attribute_names, "xml:lang"))
+        {
+          return *attribute_values;
+        }
+
+      attribute_names++;
+      attribute_values++;
+    }
+
+  return NULL;
 }

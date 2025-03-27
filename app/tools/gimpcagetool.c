@@ -37,6 +37,8 @@
 #include "operations/gimpcageconfig.h"
 
 #include "core/gimp.h"
+#include "core/gimpcontainer.h"
+#include "core/gimpdrawable-filters.h"
 #include "core/gimpdrawablefilter.h"
 #include "core/gimperror.h"
 #include "core/gimpimage.h"
@@ -214,12 +216,26 @@ gimp_cage_tool_initialize (GimpTool     *tool,
                            GimpDisplay  *display,
                            GError      **error)
 {
-  GimpGuiConfig *config   = GIMP_GUI_CONFIG (display->gimp->config);
-  GimpImage     *image    = gimp_display_get_image (display);
-  GimpDrawable  *drawable = gimp_image_get_active_drawable (image);
+  GimpGuiConfig *config      = GIMP_GUI_CONFIG (display->gimp->config);
+  GimpImage     *image       = gimp_display_get_image (display);
+  GimpItem      *locked_item = NULL;
+  GList         *drawables   = gimp_image_get_selected_drawables (image);
+  GimpDrawable  *drawable;
 
-  if (! drawable)
-    return FALSE;
+  if (g_list_length (drawables) != 1)
+    {
+      if (g_list_length (drawables) > 1)
+        g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                                   _("Cannot modify multiple layers. Select only one layer."));
+      else
+        g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED, _("No selected drawables."));
+
+      g_list_free (drawables);
+      return FALSE;
+    }
+
+  drawable = drawables->data;
+  g_list_free (drawables);
 
   if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)))
     {
@@ -228,12 +244,12 @@ gimp_cage_tool_initialize (GimpTool     *tool,
       return FALSE;
     }
 
-  if (gimp_item_is_content_locked (GIMP_ITEM (drawable)))
+  if (gimp_item_is_content_locked (GIMP_ITEM (drawable), &locked_item))
     {
       g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
-                           _("The active layer's pixels are locked."));
+                           _("The selected item's pixels are locked."));
       if (error)
-        gimp_tools_blink_lock_box (display->gimp, GIMP_ITEM (drawable));
+        gimp_tools_blink_lock_box (display->gimp, locked_item);
       return FALSE;
     }
 
@@ -241,7 +257,7 @@ gimp_cage_tool_initialize (GimpTool     *tool,
       ! config->edit_non_visible)
     {
       g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
-                           _("The active layer is not visible."));
+                           _("The active item is not visible."));
       return FALSE;
     }
 
@@ -693,11 +709,17 @@ gimp_cage_tool_cursor_update (GimpTool         *tool,
     }
   else
     {
-      GimpImage    *image    = gimp_display_get_image (display);
-      GimpDrawable *drawable = gimp_image_get_active_drawable (image);
+      GimpImage    *image     = gimp_display_get_image (display);
+      GList        *drawables = gimp_image_get_selected_drawables (image);
+      GimpDrawable *drawable  = NULL;
 
-      if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)) ||
-          gimp_item_is_content_locked (GIMP_ITEM (drawable))    ||
+      if (g_list_length (drawables) == 1)
+        drawable = drawables->data;
+      g_list_free (drawables);
+
+      if (! drawable                                               ||
+          gimp_viewable_get_children (GIMP_VIEWABLE (drawable))    ||
+          gimp_item_is_content_locked (GIMP_ITEM (drawable), NULL) ||
           ! (gimp_item_is_visible (GIMP_ITEM (drawable)) ||
              config->edit_non_visible))
         {
@@ -927,10 +949,13 @@ gimp_cage_tool_start (GimpCageTool *ct,
 {
   GimpTool     *tool     = GIMP_TOOL (ct);
   GimpImage    *image    = gimp_display_get_image (display);
-  GimpDrawable *drawable = gimp_image_get_active_drawable (image);
+  GList        *drawables = gimp_image_get_selected_drawables (image);
 
-  tool->display  = display;
-  tool->drawable = drawable;
+  g_return_if_fail (g_list_length (drawables) == 1);
+
+  tool->display   = display;
+  g_list_free (tool->drawables);
+  tool->drawables = drawables;
 
   g_clear_object (&ct->config);
 
@@ -958,7 +983,7 @@ gimp_cage_tool_start (GimpCageTool *ct,
   /* Setting up cage offset to convert the cage point coords to
    * drawable coords
    */
-  gimp_item_get_offset (GIMP_ITEM (tool->drawable),
+  gimp_item_get_offset (GIMP_ITEM (tool->drawables->data),
                         &ct->offset_x, &ct->offset_y);
 
   gimp_draw_tool_start (GIMP_DRAW_TOOL (ct), display);
@@ -987,9 +1012,10 @@ gimp_cage_tool_halt (GimpCageTool *ct)
       gimp_image_flush (gimp_display_get_image (tool->display));
     }
 
-  tool->display  = NULL;
-  tool->drawable = NULL;
-  ct->tool_state = CAGE_STATE_INIT;
+  tool->display   = NULL;
+  g_list_free (tool->drawables);
+  tool->drawables = NULL;
+  ct->tool_state  = CAGE_STATE_INIT;
 
   g_object_set (gimp_tool_get_options (tool),
                 "cage-mode", GIMP_CAGE_MODE_CAGE_CHANGE,
@@ -1005,7 +1031,8 @@ gimp_cage_tool_commit (GimpCageTool *ct)
 
       gimp_tool_control_push_preserve (tool->control, TRUE);
 
-      gimp_drawable_filter_commit (ct->filter, GIMP_PROGRESS (tool), FALSE);
+      gimp_drawable_filter_commit (ct->filter, FALSE,
+                                   GIMP_PROGRESS (tool), FALSE);
       g_clear_object (&ct->filter);
 
       gimp_tool_control_pop_preserve (tool->control);
@@ -1163,8 +1190,7 @@ gimp_cage_tool_compute_coef (GimpCageTool *ct)
                                 "format",    format,
                                 NULL);
 
-  gegl_node_connect_to (input, "output",
-                        output, "input");
+  gegl_node_link (input, output);
 
   processor = gegl_node_new_processor (output, NULL);
 
@@ -1216,20 +1242,17 @@ gimp_cage_tool_create_render_node (GimpCageTool *ct)
                                 "operation", "gegl:map-absolute",
                                 NULL);
 
-  gegl_node_connect_to (input,         "output",
-                        ct->cage_node, "input");
+  gegl_node_link (input, ct->cage_node);
 
-  gegl_node_connect_to (ct->coef_node, "output",
-                        ct->cage_node, "aux");
+  gegl_node_connect (ct->coef_node, "output",
+                     ct->cage_node, "aux");
 
-  gegl_node_connect_to (input,  "output",
-                        render, "input");
+  gegl_node_link (input, render);
 
-  gegl_node_connect_to (ct->cage_node, "output",
-                        render,        "aux");
+  gegl_node_connect (ct->cage_node, "output",
+                     render,        "aux");
 
-  gegl_node_connect_to (render, "output",
-                        output, "input");
+  gegl_node_link (render, output);
 
   gimp_gegl_progress_connect (ct->cage_node, GIMP_PROGRESS (ct),
                               _("Cage Transform"));
@@ -1274,7 +1297,7 @@ gimp_cage_tool_create_filter (GimpCageTool *ct)
   if (! ct->render_node)
     gimp_cage_tool_create_render_node (ct);
 
-  ct->filter = gimp_drawable_filter_new (GIMP_TOOL (ct)->drawable,
+  ct->filter = gimp_drawable_filter_new (GIMP_TOOL (ct)->drawables->data,
                                          _("Cage transform"),
                                          ct->render_node,
                                          GIMP_ICON_TOOL_CAGE);
@@ -1297,5 +1320,23 @@ gimp_cage_tool_filter_flush (GimpDrawableFilter *filter,
 static void
 gimp_cage_tool_filter_update (GimpCageTool *ct)
 {
+  GimpContainer *filters;
+
+  /* Move this operation below any non-destructive filters that
+   * may be active, so that it's directly affect the raw pixels. */
+  filters =
+    gimp_drawable_get_filters (gimp_drawable_filter_get_drawable (ct->filter));
+
+  if (gimp_container_have (filters, GIMP_OBJECT (ct->filter)))
+  {
+    gint end_index = gimp_container_get_n_children (filters) - 1;
+    gint index     = gimp_container_get_child_index (filters,
+                                                     GIMP_OBJECT (ct->filter));
+
+    if (end_index > 0 && index != end_index)
+      gimp_container_reorder (filters, GIMP_OBJECT (ct->filter),
+                              end_index);
+  }
+
   gimp_drawable_filter_apply (ct->filter, NULL);
 }

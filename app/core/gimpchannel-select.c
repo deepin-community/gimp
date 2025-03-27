@@ -32,15 +32,19 @@
 #include "gegl/gimp-gegl-loops.h"
 #include "gegl/gimp-gegl-mask-combine.h"
 
+#include "gimp.h"
 #include "gimpchannel.h"
 #include "gimpchannel-select.h"
 #include "gimpchannel-combine.h"
+#include "gimpcontainer.h"
+#include "gimpimage.h"
+#include "gimpimage-new.h"
 #include "gimppickable.h"
 #include "gimppickable-contiguous-region.h"
 #include "gimpscanconvert.h"
 
+#include "vectors/gimppath.h"
 #include "vectors/gimpstroke.h"
-#include "vectors/gimpvectors.h"
 
 #include "gimp-intl.h"
 
@@ -275,24 +279,24 @@ gimp_channel_select_polygon (GimpChannel       *channel,
 }
 
 void
-gimp_channel_select_vectors (GimpChannel    *channel,
-                             const gchar    *undo_desc,
-                             GimpVectors    *vectors,
-                             GimpChannelOps  op,
-                             gboolean        antialias,
-                             gboolean        feather,
-                             gdouble         feather_radius_x,
-                             gdouble         feather_radius_y,
-                             gboolean        push_undo)
+gimp_channel_select_path (GimpChannel    *channel,
+                          const gchar    *undo_desc,
+                          GimpPath       *vectors,
+                          GimpChannelOps  op,
+                          gboolean        antialias,
+                          gboolean        feather,
+                          gdouble         feather_radius_x,
+                          gdouble         feather_radius_y,
+                          gboolean        push_undo)
 {
   const GimpBezierDesc *bezier;
 
   g_return_if_fail (GIMP_IS_CHANNEL (channel));
   g_return_if_fail (gimp_item_is_attached (GIMP_ITEM (channel)));
   g_return_if_fail (undo_desc != NULL);
-  g_return_if_fail (GIMP_IS_VECTORS (vectors));
+  g_return_if_fail (GIMP_IS_PATH (vectors));
 
-  bezier = gimp_vectors_get_bezier (vectors);
+  bezier = gimp_path_get_bezier (vectors);
 
   if (bezier && bezier->num_data > 4)
     {
@@ -393,6 +397,7 @@ gimp_channel_select_alpha (GimpChannel    *channel,
   GimpItem    *item;
   GimpChannel *add_on;
   gint         off_x, off_y;
+  const gchar *undo_desc = NULL;
 
   g_return_if_fail (GIMP_IS_CHANNEL (channel));
   g_return_if_fail (gimp_item_is_attached (GIMP_ITEM (channel)));
@@ -416,9 +421,25 @@ gimp_channel_select_alpha (GimpChannel    *channel,
       gimp_channel_all (add_on, FALSE);
     }
 
+  switch (op)
+    {
+    case GIMP_CHANNEL_OP_ADD:
+      undo_desc = C_("undo-type", "Add Alpha to Selection");
+      break;
+    case GIMP_CHANNEL_OP_SUBTRACT:
+      undo_desc = C_("undo-type", "Subtract Alpha from Selection");
+      break;
+    case GIMP_CHANNEL_OP_REPLACE:
+      undo_desc = C_("undo-type", "Alpha to Selection");
+      break;
+    case GIMP_CHANNEL_OP_INTERSECT:
+      undo_desc = C_("undo-type", "Intersect Alpha with Selection");
+      break;
+    }
+
   gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
 
-  gimp_channel_select_channel (channel, C_("undo-type", "Alpha to Selection"), add_on,
+  gimp_channel_select_channel (channel, undo_desc, add_on,
                                off_x, off_y,
                                op, feather,
                                feather_radius_x,
@@ -519,9 +540,9 @@ gimp_channel_select_fuzzy (GimpChannel         *channel,
 
 void
 gimp_channel_select_by_color (GimpChannel         *channel,
-                              GimpDrawable        *drawable,
+                              GList               *drawables,
                               gboolean             sample_merged,
-                              const GimpRGB       *color,
+                              GeglColor           *color,
                               gfloat               threshold,
                               gboolean             select_transparent,
                               GimpSelectCriterion  select_criterion,
@@ -533,18 +554,36 @@ gimp_channel_select_by_color (GimpChannel         *channel,
 {
   GimpPickable *pickable;
   GeglBuffer   *add_on;
-  gint          add_on_x = 0;
-  gint          add_on_y = 0;
+  GimpImage    *image;
+  GimpImage    *sel_image = NULL;
+  gint          add_on_x  = 0;
+  gint          add_on_y  = 0;
 
   g_return_if_fail (GIMP_IS_CHANNEL (channel));
   g_return_if_fail (gimp_item_is_attached (GIMP_ITEM (channel)));
-  g_return_if_fail (GIMP_IS_DRAWABLE (drawable));
+  g_return_if_fail (drawables != NULL);
   g_return_if_fail (color != NULL);
 
+  image = gimp_item_get_image (drawables->data);
   if (sample_merged)
-    pickable = GIMP_PICKABLE (gimp_item_get_image (GIMP_ITEM (drawable)));
+    {
+      pickable = GIMP_PICKABLE (image);
+    }
   else
-    pickable = GIMP_PICKABLE (drawable);
+    {
+      if (g_list_length (drawables) == 1)
+        {
+          pickable = GIMP_PICKABLE (drawables->data);
+        }
+      else
+        {
+          sel_image = gimp_image_new_from_drawables (image->gimp, drawables, FALSE, FALSE);
+          gimp_container_remove (image->gimp->images, GIMP_OBJECT (sel_image));
+
+          pickable = GIMP_PICKABLE (sel_image);
+          gimp_pickable_flush (pickable);
+        }
+    }
 
   add_on = gimp_pickable_contiguous_region_by_color (pickable,
                                                      antialias,
@@ -553,8 +592,8 @@ gimp_channel_select_by_color (GimpChannel         *channel,
                                                      select_criterion,
                                                      color);
 
-  if (! sample_merged)
-    gimp_item_get_offset (GIMP_ITEM (drawable), &add_on_x, &add_on_y);
+  if (! sample_merged && ! sel_image)
+    gimp_item_get_offset (GIMP_ITEM (drawables->data), &add_on_x, &add_on_y);
 
   gimp_channel_select_buffer (channel, C_("undo-type", "Select by Color"),
                               add_on, add_on_x, add_on_y,
@@ -562,7 +601,11 @@ gimp_channel_select_by_color (GimpChannel         *channel,
                               feather,
                               feather_radius_x,
                               feather_radius_y);
+
   g_object_unref (add_on);
+  if (sel_image)
+    g_object_unref (sel_image);
+
 }
 
 void

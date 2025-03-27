@@ -26,6 +26,7 @@
 #include <cairo.h>
 #include <gegl.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
+#include <pango/pango.h>
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
@@ -35,6 +36,7 @@
 
 #include "core/gimperror.h"
 
+#include "gimpfont.h"
 #include "gimptext.h"
 #include "gimptext-parasite.h"
 #include "gimptext-xlfd.h"
@@ -53,47 +55,136 @@ gimp_text_parasite_name (void)
 }
 
 GimpParasite *
-gimp_text_to_parasite (const GimpText *text)
+gimp_text_to_parasite (GimpText *text)
 {
-  GimpParasite *parasite;
-  gchar        *str;
-
   g_return_val_if_fail (GIMP_IS_TEXT (text), NULL);
 
-  str = gimp_config_serialize_to_string (GIMP_CONFIG (text), NULL);
-  g_return_val_if_fail (str != NULL, NULL);
-
-  parasite = gimp_parasite_new (gimp_text_parasite_name (),
-                                GIMP_PARASITE_PERSISTENT,
-                                strlen (str) + 1, str);
-  g_free (str);
-
-  return parasite;
+  return gimp_config_serialize_to_parasite (GIMP_CONFIG (text),
+                                            gimp_text_parasite_name (),
+                                            GIMP_PARASITE_PERSISTENT,
+                                            NULL);
 }
 
 GimpText *
 gimp_text_from_parasite (const GimpParasite  *parasite,
+                         Gimp                *gimp,
+                         gboolean            *before_xcf_v19,
                          GError             **error)
 {
-  GimpText    *text;
-  const gchar *str;
+  GimpText *text;
+  gchar    *parasite_data;
+  guint32   parasite_data_size;
 
   g_return_val_if_fail (parasite != NULL, NULL);
-  g_return_val_if_fail (strcmp (gimp_parasite_name (parasite),
+  g_return_val_if_fail (strcmp (gimp_parasite_get_name (parasite),
                                 gimp_text_parasite_name ()) == 0, NULL);
   g_return_val_if_fail (error == NULL || *error == NULL, NULL);
 
-  str = gimp_parasite_data (parasite);
+  text = g_object_new (GIMP_TYPE_TEXT, "gimp", gimp, NULL);
+  g_object_set (text, "font", gimp_font_get_standard(), NULL);
 
-  text = g_object_new (GIMP_TYPE_TEXT, NULL);
-
-  if (str != NULL)
+  parasite_data = (gchar *) gimp_parasite_get_data (parasite, &parasite_data_size);
+  if (parasite_data)
     {
-      gimp_config_deserialize_string (GIMP_CONFIG (text),
-                                      str,
-                                      gimp_parasite_data_size (parasite),
-                                      NULL,
-                                      error);
+      gboolean      has_markup   = g_str_has_prefix (parasite_data, "(markup ");
+      GimpParasite *new_parasite = NULL;
+      GString      *new_data;
+
+      *before_xcf_v19 = (strstr (parasite_data, "(font \"GimpFont\"") == NULL);
+      /* This is for backward compatibility with older xcf files.
+       * font used to be serialized as a string, but now it is serialized/deserialized as
+       * GimpFont, so the object Type name is inserted for the GimpFont deserialization function to be called.
+       * And more importantly, fonts in the markup are extracted into their own fields for deserialization.
+       */
+      if (*before_xcf_v19)
+        {
+          new_data = g_string_new (parasite_data);
+          g_string_replace (new_data, "\")\n(font", "\")\n(font \"GimpFont\"", 1);
+
+          if (has_markup)
+            {
+              char *markup_start = strstr (parasite_data, "\"<");
+              char *markup_end   = strstr (parasite_data, ">\")");
+
+              if (markup_start != NULL && markup_end != NULL)
+                {
+                  PangoAttrList *attr_list;
+                  gchar         *desc;
+                  guint          length;
+                  GSList        *list             = NULL;
+                  GSList        *fonts            = NULL;
+                  GString       *markup_fonts     = g_string_new (NULL);
+                  glong          markup_start_pos;
+                  glong          markup_end_pos;
+                  gchar         *markup_str;
+                  GString       *markup;
+
+                  markup_start_pos = (glong) (markup_start - parasite_data) + 1;
+                  markup_end_pos   = (glong) (markup_end - parasite_data) + 1;
+                  markup_str       = g_utf8_substring (parasite_data, markup_start_pos, markup_end_pos);
+                  markup           = g_string_new (markup_str);
+                  g_string_replace (markup, "\\\"", "\"", 0);
+                  pango_parse_markup (markup->str, -1, 0, &attr_list, NULL, NULL, NULL);
+
+                  list   = pango_attr_list_get_attributes (attr_list);
+                  length = g_slist_length (list);
+
+                  for (guint i = 0; i < length; ++i)
+                    {
+                      PangoAttrFontDesc *attr_font_desc = pango_attribute_as_font_desc ((PangoAttribute*)g_slist_nth_data (list, i));
+
+                      if (attr_font_desc != NULL)
+                        {
+                          desc = pango_font_description_to_string (attr_font_desc->desc);
+
+                          if (g_slist_find_custom (fonts, (gconstpointer) desc, (GCompareFunc) g_strcmp0) == NULL)
+                            {
+                              fonts = g_slist_prepend (fonts, (gpointer) desc);
+                              /*duplicate font name to making parsing easier when deserializing*/
+                              g_string_append_printf (markup_fonts,
+                                                      "\n\"%s\" \"%s\"",
+                                                      desc, desc);
+                            }
+                          else
+                            {
+                              g_free (desc);
+                            }
+                        }
+                    }
+                  g_slist_free_full (fonts, (GDestroyNotify) g_free);
+                  g_slist_free_full (list,  (GDestroyNotify) pango_attribute_destroy);
+                  pango_attr_list_unref (attr_list);
+
+                  g_string_insert (new_data, markup_end_pos + 1, markup_fonts->str);
+
+                  g_free (markup_str);
+                  g_string_free (markup_fonts, TRUE);
+                  g_string_free (markup, TRUE);
+                }
+              else
+                {
+                  /* We could not find the markup delimiters. */
+                  g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                                       _("Invalid markup format in text parasite"));
+                }
+            }
+
+          new_parasite = gimp_parasite_new (gimp_parasite_get_name  (parasite),
+                                            gimp_parasite_get_flags (parasite),
+                                            new_data->len+1,
+                                            new_data->str);
+          parasite = new_parasite;
+
+          g_string_free (new_data, TRUE);
+        }
+
+      if (error == NULL || *error == NULL)
+        gimp_config_deserialize_parasite (GIMP_CONFIG (text),
+                                          parasite,
+                                          NULL,
+                                          error);
+
+      gimp_parasite_free (new_parasite);
     }
   else
     {
@@ -130,25 +221,28 @@ enum
 };
 
 GimpText *
-gimp_text_from_gdyntext_parasite (const GimpParasite *parasite)
+gimp_text_from_gdyntext_parasite (Gimp               *gimp,
+                                  const GimpParasite *parasite)
 {
   GimpText               *retval = NULL;
   GimpTextJustification   justify;
-  const gchar            *str;
+  gchar                  *str;
   gchar                  *text = NULL;
   gchar                 **params;
+  guint32                 parasite_data_size;
   gboolean                antialias;
   gdouble                 spacing;
-  GimpRGB                 rgb;
+  GeglColor              *rgb  = gegl_color_new ("none");
   glong                   color;
   gint                    i;
 
   g_return_val_if_fail (parasite != NULL, NULL);
-  g_return_val_if_fail (strcmp (gimp_parasite_name (parasite),
+  g_return_val_if_fail (strcmp (gimp_parasite_get_name (parasite),
                                 gimp_text_gdyntext_parasite_name ()) == 0,
                         NULL);
 
-  str = gimp_parasite_data (parasite);
+  str = (gchar *) gimp_parasite_get_data (parasite, &parasite_data_size);
+  str = g_strndup (str, parasite_data_size);
   g_return_val_if_fail (str != NULL, NULL);
 
   if (! g_str_has_prefix (str, "GDT10{"))  /*  magic value  */
@@ -184,21 +278,25 @@ gimp_text_from_gdyntext_parasite (const GimpParasite *parasite)
   spacing = g_strtod (params[LINE_SPACING], NULL);
 
   color = strtol (params[COLOR], NULL, 16);
-  gimp_rgba_set_uchar (&rgb, color >> 16, color >> 8, color, 255);
+  gegl_color_set_rgba (rgb, (color >> 16) / 255.0f, (color >> 8) / 255.0f,
+                       color / 255.0f, 1.0);
 
   retval = g_object_new (GIMP_TYPE_TEXT,
+                         "gimp",         gimp,
                          "text",         text,
                          "antialias",    antialias,
                          "justify",      justify,
                          "line-spacing", spacing,
-                         "color",        &rgb,
+                         "color",        rgb,
                          NULL);
 
   gimp_text_set_font_from_xlfd (GIMP_TEXT (retval), params[XLFD]);
 
  cleanup:
+  g_free (str);
   g_free (text);
   g_strfreev (params);
+  g_object_unref (rgb);
 
   return retval;
 }

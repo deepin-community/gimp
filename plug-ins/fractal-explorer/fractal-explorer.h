@@ -7,7 +7,6 @@
  *********************************************************************/
 
 #define PREVIEW_SIZE 256
-#define SCALE_WIDTH  200
 #define ENTRY_WIDTH  60
 #define MAX_LOAD_LINE 256
 #define GR_WIDTH 325
@@ -49,28 +48,29 @@ enum
 
 typedef struct
 {
-  gint     fractaltype;
-  gdouble  xmin;
-  gdouble  xmax;
-  gdouble  ymin;
-  gdouble  ymax;
-  gdouble  iter;
-  gdouble  cx;
-  gdouble  cy;
-  gint     colormode;
-  gdouble  redstretch;
-  gdouble  greenstretch;
-  gdouble  bluestretch;
-  gint     redmode;
-  gint     greenmode;
-  gint     bluemode;
-  gboolean redinvert;
-  gboolean greeninvert;
-  gboolean blueinvert;
-  gboolean alwayspreview;
-  gint     ncolors;
-  gboolean gradinvert;
-  gboolean useloglog;
+  gint                 fractaltype;
+  gdouble              xmin;
+  gdouble              xmax;
+  gdouble              ymin;
+  gdouble              ymax;
+  gdouble              iter;
+  gdouble              cx;
+  gdouble              cy;
+  gint                 colormode;
+  gdouble              redstretch;
+  gdouble              greenstretch;
+  gdouble              bluestretch;
+  gint                 redmode;
+  gint                 greenmode;
+  gint                 bluemode;
+  gboolean             redinvert;
+  gboolean             greeninvert;
+  gboolean             blueinvert;
+  gboolean             alwayspreview;
+  gint                 ncolors;
+  gboolean             gradinvert;
+  gboolean             useloglog;
+  GimpProcedureConfig *config;
 } explorer_vals_t;
 
 typedef struct
@@ -95,39 +95,6 @@ typedef struct
   GtkWidget     *text;
   GtkAdjustment *data;
 } scaledata;
-
-typedef struct _DialogElements DialogElements;
-
-struct _DialogElements
-{
-  GtkWidget  *type[NUM_TYPES];
-  GtkObject  *xmin;
-  GtkObject  *xmax;
-  GtkObject  *ymin;
-  GtkObject  *ymax;
-  GtkObject  *iter;
-  GtkObject  *cx;
-  GtkObject  *cy;
-
-  GtkObject  *ncol;
-  GtkWidget  *useloglog;
-
-  GtkObject  *red;
-  GtkObject  *green;
-  GtkObject  *blue;
-
-  GtkWidget  *redmode[3];
-  GtkWidget  *redinvert;
-
-  GtkWidget  *greenmode[3];
-  GtkWidget  *greeninvert;
-
-  GtkWidget  *bluemode[3];
-  GtkWidget  *blueinvert;
-
-  GtkWidget  *colormode[2];
-};
-
 
 typedef struct DFigObj
 {
@@ -201,16 +168,16 @@ extern gchar       *fractalexplorer_path;
 extern explorer_interface_t wint;
 
 extern explorer_vals_t wvals;
-extern GimpDrawable   *drawable;
 
 
 /**********************************************************************
   Global functions
  *********************************************************************/
 
-void explorer_render_row (const guchar *src_row,
-                          guchar       *dest_row,
-                          gint          row,
-                          gint          row_width,
-                          gint          bpp);
+void explorer_render_row (const guchar        *src_row,
+                          guchar              *dest_row,
+                          gint                 row,
+                          gint                 row_width,
+                          gint                 bpp,
+                          GimpProcedureConfig *config);
 #endif

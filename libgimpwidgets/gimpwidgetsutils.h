@@ -30,35 +30,56 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-GtkWidget          * gimp_table_attach_aligned       (GtkTable          *table,
-                                                      gint               column,
-                                                      gint               row,
+gboolean             gimp_event_triggers_context_menu (const GdkEvent   *event,
+                                                       gboolean          on_release);
+
+GtkWidget          * gimp_grid_attach_aligned        (GtkGrid           *grid,
+                                                      gint               left,
+                                                      gint               top,
                                                       const gchar       *label_text,
-                                                      gfloat             xalign,
-                                                      gfloat             yalign,
+                                                      gfloat             label_xalign,
+                                                      gfloat             label_yalign,
                                                       GtkWidget         *widget,
-                                                      gint               colspan,
-                                                      gboolean           left_align);
+                                                      gint               widget_columns);
 
 void                 gimp_label_set_attributes       (GtkLabel          *label,
                                                       ...);
 
-gint                 gimp_widget_get_monitor         (GtkWidget         *widget);
-gint                 gimp_get_monitor_at_pointer     (GdkScreen        **screen);
+GdkMonitor         * gimp_widget_get_monitor         (GtkWidget         *widget);
+GdkMonitor         * gimp_get_monitor_at_pointer     (void);
 
 void                 gimp_widget_track_monitor       (GtkWidget         *widget,
                                                       GCallback          monitor_changed_callback,
-                                                      gpointer           user_data);
+                                                      gpointer           user_data,
+                                                      GDestroyNotify     user_data_destroy);
 
-GimpColorProfile   * gimp_screen_get_color_profile   (GdkScreen         *screen,
-                                                      gint               monitor);
+GimpColorProfile   * gimp_monitor_get_color_profile  (GdkMonitor        *monitor);
 GimpColorProfile   * gimp_widget_get_color_profile   (GtkWidget         *widget);
 
 GimpColorTransform * gimp_widget_get_color_transform (GtkWidget         *widget,
                                                       GimpColorConfig   *config,
                                                       GimpColorProfile  *src_profile,
                                                       const Babl        *src_format,
-                                                      const Babl        *dest_format);
+                                                      const Babl        *dest_format,
+                                                      GimpColorProfile  *softproof_profile,
+                                                      GimpColorRenderingIntent proof_intent,
+                                                      gboolean           proof_bpc);
+const Babl         * gimp_widget_get_render_space    (GtkWidget       *widget,
+                                                      GimpColorConfig *config);
+
+void                 gimp_widget_set_native_handle   (GtkWidget        *widget,
+                                                      GBytes          **handle);
+void                 gimp_widget_free_native_handle  (GtkWidget        *widget,
+                                                      GBytes          **window_handle);
+
+gboolean             gimp_widget_animation_enabled   (void);
+
+/* Internal use */
+
+G_GNUC_INTERNAL void _gimp_widget_get_profiles       (GtkWidget         *widget,
+                                                      GimpColorConfig   *config,
+                                                      GimpColorProfile **proof_profile,
+                                                      GimpColorProfile **dest_profile);
 
 
 G_END_DECLS

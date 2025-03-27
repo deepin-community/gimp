@@ -45,319 +45,416 @@
 #include "libgimp/stdplugins-intl.h"
 
 
+#define PLUG_IN_PROC   "plug-in-sel2path"
 #define PLUG_IN_BINARY "selection-to-path"
 #define PLUG_IN_ROLE   "gimp-selection-to-path"
 
 #define RESPONSE_RESET 1
 #define MID_POINT      127
 
-/***** Magic numbers *****/
 
-/* Variables set in dialog box */
+typedef struct _Sel2path      Sel2path;
+typedef struct _Sel2pathClass Sel2pathClass;
 
-static void      query  (void);
-static void      run    (const gchar      *name,
-                         gint              nparams,
-                         const GimpParam  *param,
-                         gint             *nreturn_vals,
-                         GimpParam       **return_vals);
-
-static gint      sel2path_dialog         (SELVALS   *sels);
-static void      sel2path_response       (GtkWidget *widget,
-                                          gint       response_id,
-                                          gpointer   data);
-static void      dialog_print_selVals    (SELVALS   *sels);
-static gboolean  sel2path                (gint32     image_ID);
-
-
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _Sel2path
 {
-  NULL,    /* init_proc */
-  NULL,    /* quit_proc */
-  query,   /* query_proc */
-  run,     /* run_proc */
+  GimpPlugIn parent_instance;
 };
+
+struct _Sel2pathClass
+{
+  GimpPlugInClass parent_class;
+};
+
+
+#define SEL2PATH_TYPE  (sel2path_get_type ())
+#define SEL2PATH (obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SEL2PATH_TYPE, Sel2path))
+
+GType                   sel2path_get_type         (void) G_GNUC_CONST;
+
+static GList          * sel2path_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * sel2path_create_procedure (GimpPlugIn           *plug_in,
+                                                   const gchar          *name);
+
+static GimpValueArray * sel2path_run              (GimpProcedure        *procedure,
+                                                   GimpRunMode           run_mode,
+                                                   GimpImage            *image,
+                                                   GimpDrawable        **drawables,
+                                                   GimpProcedureConfig  *config,
+                                                   gpointer              run_data);
+
+static gint             sel2path_dialog           (GimpProcedure        *procedure,
+                                                   GimpProcedureConfig  *config);
+static gboolean         sel2path                  (GimpImage            *image);
+
+
+G_DEFINE_TYPE (Sel2path, sel2path, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (SEL2PATH_TYPE)
+DEFINE_STD_SET_I18N
+
 
 static gint         sel_x1, sel_y1, sel_x2, sel_y2;
 static gint         has_sel, sel_width, sel_height;
-static SELVALS      selVals;
 static GeglSampler *sel_sampler;
-static gboolean     retVal = TRUE;  /* Toggle if cancel button clicked */
 
-MAIN ()
 
 static void
-query (void)
+sel2path_class_init (Sel2pathClass *klass)
 {
-  static const GimpParamDef args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode", "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",    "Input image" },
-    { GIMP_PDB_DRAWABLE, "drawable", "Input drawable (unused)" },
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  static const GimpParamDef advanced_args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode",                    "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",                       "Input image" },
-    { GIMP_PDB_DRAWABLE, "drawable",                    "Input drawable (unused)" },
-    { GIMP_PDB_FLOAT,    "align-threshold",             "align_threshold"},
-    { GIMP_PDB_FLOAT,    "corner-always-threshold",     "corner_always_threshold"},
-    { GIMP_PDB_INT8,     "corner-surround",             "corner_surround"},
-    { GIMP_PDB_FLOAT,    "corner-threshold",            "corner_threshold"},
-    { GIMP_PDB_FLOAT,    "error-threshold",             "error_threshold"},
-    { GIMP_PDB_INT8,     "filter-alternative-surround", "filter_alternative_surround"},
-    { GIMP_PDB_FLOAT,    "filter-epsilon",              "filter_epsilon"},
-    { GIMP_PDB_INT8,     "filter-iteration-count",      "filter_iteration_count"},
-    { GIMP_PDB_FLOAT,    "filter-percent",              "filter_percent"},
-    { GIMP_PDB_INT8,     "filter-secondary-surround",   "filter_secondary_surround"},
-    { GIMP_PDB_INT8,     "filter-surround",             "filter_surround"},
-    { GIMP_PDB_INT8,     "keep-knees",                  "{1-Yes, 0-No}"},
-    { GIMP_PDB_FLOAT,    "line-reversion-threshold",    "line_reversion_threshold"},
-    { GIMP_PDB_FLOAT,    "line-threshold",              "line_threshold"},
-    { GIMP_PDB_FLOAT,    "reparameterize-improvement",  "reparameterize_improvement"},
-    { GIMP_PDB_FLOAT,    "reparameterize-threshold",    "reparameterize_threshold"},
-    { GIMP_PDB_FLOAT,    "subdivide-search",            "subdivide_search"},
-    { GIMP_PDB_INT8,     "subdivide-surround",          "subdivide_surround"},
-    { GIMP_PDB_FLOAT,    "subdivide-threshold",         "subdivide_threshold"},
-    { GIMP_PDB_INT8,     "tangent-surround",            "tangent_surround"},
-  };
-
-  gimp_install_procedure ("plug-in-sel2path",
-                          "Converts a selection to a path",
-                          "Converts a selection to a path",
-                          "Andy Thomas",
-                          "Andy Thomas",
-                          "1999",
-                          NULL,
-                          "RGB*, INDEXED*, GRAY*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args), 0,
-                          args, NULL);
-
-  gimp_install_procedure ("plug-in-sel2path-advanced",
-                          "Converts a selection to a path (with advanced user menu)",
-                          "Converts a selection to a path (with advanced user menu)",
-                          "Andy Thomas",
-                          "Andy Thomas",
-                          "1999",
-                          NULL,
-                          "RGB*, INDEXED*, GRAY*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (advanced_args), 0,
-                          advanced_args, NULL);
+  plug_in_class->query_procedures = sel2path_query_procedures;
+  plug_in_class->create_procedure = sel2path_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+sel2path_init (Sel2path *sel2path)
 {
-  static GimpParam   values[1];
-  gint32             image_ID;
-  GimpRunMode        run_mode;
-  GimpPDBStatusType  status    = GIMP_PDB_SUCCESS;
-  gboolean           no_dialog;
+}
 
-  INIT_I18N ();
+static GList *
+sel2path_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (PLUG_IN_PROC));
+}
+
+static GimpProcedure *
+sel2path_create_procedure (GimpPlugIn  *plug_in,
+                           const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, PLUG_IN_PROC))
+    {
+      procedure = gimp_image_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            sel2path_run, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "*");
+      gimp_procedure_set_sensitivity_mask (procedure,
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLE  |
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLES |
+                                           GIMP_PROCEDURE_SENSITIVE_NO_DRAWABLES);
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Converts a selection to a path"),
+                                        _("Converts a selection to a path"),
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Andy Thomas",
+                                      "Andy Thomas",
+                                      "1999");
+
+      gimp_procedure_add_double_argument (procedure, "align-threshold",
+                                          _("_Align Threshold"),
+                                          _("If two endpoints are closer than this, "
+                                            "they are made to be equal."),
+                                          0.2, 2.0, 0.5,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "corner-always-threshold",
+                                          _("Corner Al_ways Threshold"),
+                                          _("If the angle defined by a point and its predecessors "
+                                            "and successors is smaller than this, it's a corner, "
+                                            "even if it's within 'corner_surround' pixels of a "
+                                            "point with a smaller angle."),
+                                          30, 180, 60.0,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "corner-surround",
+                                       _("Corner _Surround"),
+                                       _("Number of points to consider when determining if a "
+                                         "point is a corner or not."),
+                                       3, 8, 4,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "corner-threshold",
+                                          _("Cor_ner Threshold"),
+                                          _("If a point, its predecessors, and its successors "
+                                            "define an angle smaller than this, it's a corner."),
+                                          0, 180, 100.0,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "error-threshold",
+                                          _("Error Thres_hold"),
+                                          _("Amount of error at which a fitted spline is "
+                                            "unacceptable. If any pixel is further away "
+                                            "than this from the fitted curve, we try again."),
+                                          0.2, 10, 0.4,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "filter-alternative-surround",
+                                       _("_Filter Alternative Surround"),
+                                       _("A second number of adjacent points to consider "
+                                         "when filtering."),
+                                       1, 10, 1,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "filter-epsilon",
+                                          _("Filter E_psilon"),
+                                          _("If the angles between the vectors produced by "
+                                            "filter_surround and filter_alternative_surround "
+                                            "points differ by more than this, use the one from "
+                                            "filter_alternative_surround."),
+                                          5, 40, 10.0,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "filter-iteration-count",
+                                       _("Filter Iteration Co_unt"),
+                                       _("Number of times to smooth original data points.  "
+                                         "Increasing this number dramatically --- to 50 or "
+                                         "so --- can produce vastly better results. But if "
+                                         "any points that 'should' be corners aren't found, "
+                                         "the curve goes to hell around that point."),
+                                       4, 70, 4,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "filter-percent",
+                                          _("Filt_er Percent"),
+                                          _("To produce the new point, use the old point plus "
+                                            "this times the neighbors."),
+                                          0, 1, 0.33,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "filter-secondary-surround",
+                                       _("Filter Secondar_y Surround"),
+                                       _("Number of adjacent points to consider if "
+                                         "'filter_surround' points defines a straight line."),
+                                       3, 10, 3,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "filter-surround",
+                                       _("Filter Surroun_d"),
+                                       _("Number of adjacent points to consider when filtering."),
+                                       2, 10, 2,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_boolean_argument (procedure, "keep-knees",
+                                           _("_Keep Knees"),
+                                           _("Says whether or not to remove 'knee' "
+                                             "points after finding the outline."),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "line-reversion-threshold",
+                                          _("_Line Reversion Threshold"),
+                                          _("If a spline is closer to a straight line than this, "
+                                            "it remains a straight line, even if it would otherwise "
+                                            "be changed back to a curve. This is weighted by the "
+                                            "square of the curve length, to make shorter curves "
+                                            "more likely to be reverted."),
+                                          0.01, 0.2, 0.01,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "line-threshold",
+                                          _("L_ine Threshold"),
+                                          _("How many pixels (on the average) a spline can "
+                                            "diverge from the line determined by its endpoints "
+                                            "before it is changed to a straight line."),
+                                          0.2, 4, 0.5,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "reparametrize-improvement",
+                                          _("Reparametri_ze Improvement"),
+                                          _("If reparameterization doesn't improve the fit by this "
+                                            "much percent, stop doing it. ""Amount of error at which "
+                                            "it is pointless to reparameterize."),
+                                          0, 1, 0.01,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "reparametrize-threshold",
+                                          _("Repara_metrize Threshold"),
+                                          _("Amount of error at which it is pointless to reparameterize.  "
+                                            "This happens, for example, when we are trying to fit the "
+                                            "outline of the outside of an 'O' with a single spline. "
+                                            "The initial fit is not good enough for the Newton-Raphson "
+                                            "iteration to improve it.  It may be that it would be better "
+                                            "to detect the cases where we didn't find any corners."),
+                                          1, 50, 1.0,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "subdivide-search",
+                                          _("Subdi_vide Search"),
+                                          _("Percentage of the curve away from the worst point "
+                                           "to look for a better place to subdivide."),
+                                          0.05, 1, 0.1,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "subdivide-surround",
+                                       _("Su_bdivide Surround"),
+                                       _("Number of points to consider when deciding whether "
+                                         "a given point is a better place to subdivide."),
+                                       2, 10, 4,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_double_argument (procedure, "subdivide-threshold",
+                                          _("Subdivide Th_reshold"),
+                                          _("How many pixels a point can diverge from a straight "
+                                            "line and still be considered a better place to "
+                                            "subdivide."),
+                                          0.01, 1, 0.03,
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "tangent-surround",
+                                       _("_Tangent Surround"),
+                                       _("Number of points to look at on either side of a "
+                                         "point when computing the approximation to the "
+                                         "tangent at that point."),
+                                       2, 10, 3,
+                                       G_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+sel2path_run (GimpProcedure        *procedure,
+              GimpRunMode           run_mode,
+              GimpImage            *image,
+              GimpDrawable        **drawables,
+              GimpProcedureConfig  *config,
+              gpointer              run_data)
+{
   gegl_init (NULL, NULL);
 
-  run_mode = param[0].data.d_int32;
-
-  no_dialog = (strcmp (name, "plug-in-sel2path") == 0);
-
-  *nreturn_vals = 1;
-  *return_vals = values;
-
-  values[0].type = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
-
-  image_ID = param[1].data.d_image;
-  if (image_ID < 0)
-    {
-      g_warning ("plug-in-sel2path needs a valid image ID");
-      return;
-    }
-
-  if (gimp_selection_is_empty (image_ID))
+  if (gimp_selection_is_empty (image))
     {
       g_message (_("No selection to convert"));
-      return;
+
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_EXECUTION_ERROR,
+                                               NULL);
     }
 
-  fit_set_default_params (&selVals);
+  if (run_mode == GIMP_RUN_INTERACTIVE &&
+      ! sel2path_dialog (procedure, config))
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_CANCEL,
+                                             NULL);
 
-  if (!no_dialog)
-    {
-      switch (run_mode)
-        {
-        case GIMP_RUN_INTERACTIVE:
-          if (gimp_get_data_size ("plug-in-sel2path-advanced") > 0)
-            {
-              gimp_get_data ("plug-in-sel2path-advanced", &selVals);
-            }
+  fit_set_params (config);
 
-          if (!sel2path_dialog (&selVals))
-            return;
+  if (! sel2path (image))
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_EXECUTION_ERROR,
+                                             NULL);
 
-          /* Get the current settings */
-          fit_set_params (&selVals);
-          break;
-
-        case GIMP_RUN_NONINTERACTIVE:
-          if (nparams != 23)
-            status = GIMP_PDB_CALLING_ERROR;
-
-          if (status == GIMP_PDB_SUCCESS)
-            {
-              selVals.align_threshold             =  param[3].data.d_float;
-              selVals.corner_always_threshold     =  param[4].data.d_float;
-              selVals.corner_surround             =  param[5].data.d_int8;
-              selVals.corner_threshold            =  param[6].data.d_float;
-              selVals.error_threshold             =  param[7].data.d_float;
-              selVals.filter_alternative_surround =  param[8].data.d_int8;
-              selVals.filter_epsilon              =  param[9].data.d_float;
-              selVals.filter_iteration_count      = param[10].data.d_int8;
-              selVals.filter_percent              = param[11].data.d_float;
-              selVals.filter_secondary_surround   = param[12].data.d_int8;
-              selVals.filter_surround             = param[13].data.d_int8;
-              selVals.keep_knees                  = param[14].data.d_int8;
-              selVals.line_reversion_threshold    = param[15].data.d_float;
-              selVals.line_threshold              = param[16].data.d_float;
-              selVals.reparameterize_improvement  = param[17].data.d_float;
-              selVals.reparameterize_threshold    = param[18].data.d_float;
-              selVals.subdivide_search            = param[19].data.d_float;
-              selVals.subdivide_surround          = param[20].data.d_int8;
-              selVals.subdivide_threshold         = param[21].data.d_float;
-              selVals.tangent_surround            = param[22].data.d_int8;
-              fit_set_params (&selVals);
-            }
-          break;
-
-        case GIMP_RUN_WITH_LAST_VALS:
-          if(gimp_get_data_size ("plug-in-sel2path-advanced") > 0)
-            {
-              gimp_get_data ("plug-in-sel2path-advanced", &selVals);
-
-              /* Set up the last values */
-              fit_set_params (&selVals);
-            }
-          break;
-
-        default:
-          break;
-        }
-    }
-
-  sel2path (image_ID);
-  values[0].data.d_status = status;
-
-  if (status == GIMP_PDB_SUCCESS)
-    {
-      dialog_print_selVals(&selVals);
-      if (run_mode == GIMP_RUN_INTERACTIVE && !no_dialog)
-        gimp_set_data ("plug-in-sel2path-advanced", &selVals, sizeof(SELVALS));
-    }
-}
-
-static void
-dialog_print_selVals (SELVALS *sels)
-{
-#if 0
-  printf ("selVals.align_threshold %g\n",             selVals.align_threshold);
-  printf ("selVals.corner_always_threshol %g\n",      selVals.corner_always_threshold);
-  printf ("selVals.corner_surround %g\n",             selVals.corner_surround);
-  printf ("selVals.corner_threshold %g\n",            selVals.corner_threshold);
-  printf ("selVals.error_threshold %g\n",             selVals.error_threshold);
-  printf ("selVals.filter_alternative_surround %g\n", selVals.filter_alternative_surround);
-  printf ("selVals.filter_epsilon %g\n",              selVals.filter_epsilon);
-  printf ("selVals.filter_iteration_count %g\n",      selVals.filter_iteration_count);
-  printf ("selVals.filter_percent %g\n",              selVals.filter_percent);
-  printf ("selVals.filter_secondary_surround %g\n",   selVals.filter_secondary_surround);
-  printf ("selVals.filter_surround %g\n",             selVals.filter_surround);
-  printf ("selVals.keep_knees %d\n",                  selVals.keep_knees);
-  printf ("selVals.line_reversion_threshold %g\n",    selVals.line_reversion_threshold);
-  printf ("selVals.line_threshold %g\n",              selVals.line_threshold);
-  printf ("selVals.reparameterize_improvement %g\n",  selVals.reparameterize_improvement);
-  printf ("selVals.reparameterize_threshold %g\n",    selVals.reparameterize_threshold);
-  printf ("selVals.subdivide_search %g\n"             selVals.subdivide_search);
-  printf ("selVals.subdivide_surround %g\n",          selVals.subdivide_surround);
-  printf ("selVals.subdivide_threshold %g\n",         selVals.subdivide_threshold);
-  printf ("selVals.tangent_surround %g\n",            selVals.tangent_surround);
-#endif /* 0 */
+  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }
 
 /* Build the dialog up. This was the hard part! */
 static gint
-sel2path_dialog (SELVALS *sels)
+sel2path_dialog (GimpProcedure       *procedure,
+                 GimpProcedureConfig *config)
 {
-  GtkWidget *dlg;
-  GtkWidget *table;
+  GtkWidget *dialog;
+  GtkWidget *vbox;
+  GtkWidget *scrolled_win;
+  gboolean   run;
 
-  retVal = FALSE;
+  gimp_ui_init (PLUG_IN_BINARY);
 
-  gimp_ui_init (PLUG_IN_BINARY, FALSE);
+  dialog = gimp_procedure_dialog_new (procedure,
+                                      GIMP_PROCEDURE_CONFIG (config),
+                                      _("Selection to Path Advanced Settings"));
 
-  dlg = gimp_dialog_new (_("Selection to Path Advanced Settings"),
-                         PLUG_IN_ROLE,
-                         NULL, 0,
-                         gimp_standard_help_func, "plug-in-sel2path-advanced",
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+                                            RESPONSE_RESET,
+                                            GTK_RESPONSE_OK,
+                                            GTK_RESPONSE_CANCEL,
+                                            -1);
 
-                         _("_Reset"), RESPONSE_RESET,
-                         _("_Cancel"), GTK_RESPONSE_CANCEL,
-                         _("_OK"),     GTK_RESPONSE_OK,
+  gimp_window_set_transient (GTK_WINDOW (dialog));
 
-                         NULL);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "align-threshold", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "corner-always-threshold", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "corner-surround", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "corner-threshold", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "error-threshold", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "filter-alternative-surround", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "filter-epsilon", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "filter-iteration-count", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "filter-percent", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "filter-secondary-surround", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "filter-surround", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "line-reversion-threshold", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "line-threshold", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "reparametrize-improvement", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "reparametrize-threshold", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "subdivide-search", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "subdivide-surround", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "subdivide-threshold", 1.0);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "tangent-surround", 1.0);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dlg),
-                                           RESPONSE_RESET,
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
+  vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "selection-to-path-box",
+                                         "align-threshold",
+                                         "corner-always-threshold",
+                                         "corner-surround",
+                                         "corner-threshold",
+                                         "error-threshold",
+                                         "filter-alternative-surround",
+                                         "filter-epsilon",
+                                         "filter-iteration-count",
+                                         "filter-percent",
+                                         "filter-secondary-surround",
+                                         "filter-surround",
+                                         "keep-knees",
+                                         "line-reversion-threshold",
+                                         "line-threshold",
+                                         "reparametrize-improvement",
+                                         "reparametrize-threshold",
+                                         "subdivide-search",
+                                         "subdivide-surround",
+                                         "subdivide-threshold",
+                                         "tangent-surround",
+                                          NULL);
+  gtk_box_set_spacing (GTK_BOX (vbox), 12);
 
-  gimp_window_set_transient (GTK_WINDOW (dlg));
+  scrolled_win = gimp_procedure_dialog_fill_scrolled_window (GIMP_PROCEDURE_DIALOG (dialog),
+                                                             "scrollwin",
+                                                             "selection-to-path-box");
+  gtk_widget_set_size_request (scrolled_win, 400, 400);
+  gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (scrolled_win),
+                                       GTK_SHADOW_NONE);
+  gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled_win),
+                                  GTK_POLICY_NEVER,
+                                  GTK_POLICY_ALWAYS);
+  gtk_scrolled_window_set_overlay_scrolling (GTK_SCROLLED_WINDOW (scrolled_win),
+                                             FALSE);
 
-  g_signal_connect (dlg, "response",
-                    G_CALLBACK (sel2path_response),
-                    NULL);
-  g_signal_connect (dlg, "destroy",
-                    G_CALLBACK (gtk_main_quit),
-                    NULL);
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
+                              "scrollwin",
+                              NULL);
 
-  table = dialog_create_selection_area (sels);
-  gtk_container_set_border_width (GTK_CONTAINER (table), 12);
-  gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dlg))),
-                      table, TRUE, TRUE, 0);
-  gtk_widget_show (table);
+  gtk_widget_show (dialog);
 
-  gtk_widget_show (dlg);
+  run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
-  gtk_main ();
+  gtk_widget_destroy (dialog);
 
-  return retVal;
-}
-
-static void
-sel2path_response (GtkWidget *widget,
-                   gint       response_id,
-                   gpointer   data)
-{
-  switch (response_id)
-    {
-    case RESPONSE_RESET:
-      reset_adv_dialog ();
-      fit_set_params (&selVals);
-      break;
-
-    case GTK_RESPONSE_OK:
-      retVal = TRUE;
-
-    default:
-      gtk_widget_destroy (widget);
-      break;
-    }
+  return run;
 }
 
 guchar
@@ -410,13 +507,13 @@ sel_valid_pixel (gint row,
 
 
 static void
-do_points (spline_list_array_type in_splines,
-           gint32                 image_ID)
+do_points (spline_list_array_type  in_splines,
+           GimpImage              *image)
 {
-  gint32   vectors;
-  gint32   stroke;
-  gint     i, j;
-  gboolean have_points = FALSE;
+  GimpPath    *path;
+  gint32       stroke;
+  gint         i, j;
+  gboolean     have_points = FALSE;
   spline_list_type spline_list;
 
   /* check if there really is something to do... */
@@ -430,10 +527,10 @@ do_points (spline_list_array_type in_splines,
       break;
     }
 
-  if (!have_points)
+  if (! have_points)
     return;
 
-  vectors = gimp_vectors_new (image_ID, _("Selection"));
+  path = gimp_path_new (image, _("Selection"));
 
   for (j = 0; j < SPLINE_LIST_ARRAY_LENGTH (in_splines); j++)
     {
@@ -450,53 +547,53 @@ do_points (spline_list_array_type in_splines,
        * to have the result of least surprise for "Text along Path".
        */
       seg = SPLINE_LIST_ELT (spline_list, SPLINE_LIST_LENGTH (spline_list) - 1);
-      stroke = gimp_vectors_bezier_stroke_new_moveto (vectors,
-                                                      END_POINT (seg).x,
-                                                      END_POINT (seg).y);
+      stroke = gimp_path_bezier_stroke_new_moveto (path,
+                                                   END_POINT (seg).x,
+                                                   END_POINT (seg).y);
 
       for (i = SPLINE_LIST_LENGTH (spline_list); i > 0; i--)
         {
           seg = SPLINE_LIST_ELT (spline_list, i-1);
 
           if (SPLINE_DEGREE (seg) == LINEAR)
-            gimp_vectors_bezier_stroke_lineto (vectors, stroke,
+            gimp_path_bezier_stroke_lineto (path, stroke,
                                                START_POINT (seg).x,
                                                START_POINT (seg).y);
           else if (SPLINE_DEGREE (seg) == CUBIC)
-            gimp_vectors_bezier_stroke_cubicto (vectors, stroke,
-                                                CONTROL2 (seg).x,
-                                                CONTROL2 (seg).y,
-                                                CONTROL1 (seg).x,
-                                                CONTROL1 (seg).y,
-                                                START_POINT (seg).x,
-                                                START_POINT (seg).y);
+            gimp_path_bezier_stroke_cubicto (path, stroke,
+                                             CONTROL2 (seg).x,
+                                             CONTROL2 (seg).y,
+                                             CONTROL1 (seg).x,
+                                             CONTROL1 (seg).y,
+                                             START_POINT (seg).x,
+                                             START_POINT (seg).y);
           else
             g_warning ("print_spline: strange degree (%d)",
                        SPLINE_DEGREE (seg));
         }
 
-      gimp_vectors_stroke_close (vectors, stroke);
+      gimp_path_stroke_close (path, stroke);
 
       /* transform to GIMPs coordinate system, taking the selections
        * bounding box into account  */
-      gimp_vectors_stroke_scale (vectors, stroke, 1.0, -1.0);
-      gimp_vectors_stroke_translate (vectors, stroke,
-                                     sel_x1, sel_y1 + sel_height + 1);
+      gimp_path_stroke_scale (path, stroke, 1.0, -1.0);
+      gimp_path_stroke_translate (path, stroke,
+                                  sel_x1, sel_y1 + sel_height + 1);
     }
 
-  gimp_image_insert_vectors (image_ID, vectors, -1, -1);
+  gimp_image_insert_path (image, path, NULL, -1);
 }
 
 
 static gboolean
-sel2path (gint32 image_ID)
+sel2path (GimpImage *image)
 {
-  gint32                   selection_ID;
+  GimpSelection           *selection;
   GeglBuffer              *sel_buffer;
   pixel_outline_list_type  olt;
   spline_list_array_type   splines;
 
-  gimp_selection_bounds (image_ID, &has_sel,
+  gimp_selection_bounds (image, &has_sel,
                          &sel_x1, &sel_y1, &sel_x2, &sel_y2);
 
   sel_width  = sel_x2 - sel_x1;
@@ -504,12 +601,12 @@ sel2path (gint32 image_ID)
 
   /* Now get the selection channel */
 
-  selection_ID = gimp_image_get_selection (image_ID);
+  selection = gimp_image_get_selection (image);
 
-  if (selection_ID < 0)
+  if (! selection)
     return FALSE;
 
-  sel_buffer  = gimp_drawable_get_buffer (selection_ID);
+  sel_buffer  = gimp_drawable_get_buffer (GIMP_DRAWABLE (selection));
   sel_sampler = gegl_buffer_sampler_new (sel_buffer,
                                          babl_format ("Y u8"),
                                          GEGL_SAMPLER_NEAREST);
@@ -518,7 +615,7 @@ sel2path (gint32 image_ID)
 
   splines = fitted_splines (olt);
 
-  do_points (splines, image_ID);
+  do_points (splines, image);
 
   g_object_unref (sel_sampler);
   g_object_unref (sel_buffer);

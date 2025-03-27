@@ -46,7 +46,20 @@ gimp_param_spec_boolean_desc (GParamSpec *pspec)
 }
 
 static gchar *
-gimp_param_spec_int32_desc (GParamSpec *pspec)
+gimp_param_spec_unit_desc (GParamSpec *pspec)
+{
+  GObject *default_value;
+
+  default_value = gimp_param_spec_object_get_default (pspec);
+
+  return g_strdup_printf ("<i>(default %s%s%s)</i>",
+                          gimp_unit_get_abbreviation (GIMP_UNIT (default_value)),
+                          gimp_param_spec_unit_pixel_allowed (pspec) ? ", pixel allowed": "",
+                          gimp_param_spec_unit_percent_allowed (pspec) ? ", percent allowed": "");
+}
+
+static gchar *
+gimp_param_spec_int_desc (GParamSpec *pspec)
 {
   GParamSpecInt *ispec = G_PARAM_SPEC_INT (pspec);
   const gchar   *blurb = gimp_param_spec_get_blurb (pspec);
@@ -160,7 +173,7 @@ gimp_param_spec_enum_desc (GParamSpec *pspec)
  * parameter types used in the PDB and should not be used for anything
  * else.
  *
- * Return value: A newly allocated string describing the parameter.
+ * Returns: A newly allocated string describing the parameter.
  */
 gchar *
 gimp_param_spec_get_desc (GParamSpec *pspec)
@@ -169,10 +182,11 @@ gimp_param_spec_get_desc (GParamSpec *pspec)
 
   if (GIMP_IS_PARAM_SPEC_UNIT (pspec))
     {
+      return gimp_param_spec_unit_desc (pspec);
     }
-  else if (GIMP_IS_PARAM_SPEC_INT32 (pspec))
+  else if (G_IS_PARAM_SPEC_INT (pspec))
     {
-      return gimp_param_spec_int32_desc (pspec);
+      return gimp_param_spec_int_desc (pspec);
     }
   else
     {

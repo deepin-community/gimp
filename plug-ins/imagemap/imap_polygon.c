@@ -29,13 +29,13 @@
 #include "libgimp/gimpui.h"
 
 #include "imap_commands.h"
+#include "imap_icons.h"
 #include "imap_main.h"
 #include "imap_misc.h"
 #include "imap_menu.h"
 #include "imap_object_popup.h"
 #include "imap_polygon.h"
-#include "imap_stock.h"
-#include "imap_table.h"
+#include "imap_ui_grid.h"
 
 #include "libgimp/stdplugins-intl.h"
 
@@ -65,8 +65,10 @@ static void polygon_write_cern(Object_t* obj, gpointer param,
                                OutputFunc_t output);
 static void polygon_write_ncsa(Object_t* obj, gpointer param,
                                OutputFunc_t output);
-static void polygon_do_popup(Object_t *obj, GdkEventButton *event);
-static const gchar* polygon_get_stock_icon_name(void);
+static void polygon_do_popup  (Object_t       *obj,
+                               GdkEventButton *event,
+                               gpointer        data);
+static const gchar* polygon_get_icon_name(void);
 
 static ObjectClass_t polygon_class = {
    N_("_Polygon"),
@@ -93,7 +95,7 @@ static ObjectClass_t polygon_class = {
    polygon_write_cern,
    polygon_write_ncsa,
    polygon_do_popup,
-   polygon_get_stock_icon_name
+   polygon_get_icon_name
 };
 
 Object_t*
@@ -441,7 +443,7 @@ static gpointer
 polygon_create_info_widget(GtkWidget *frame)
 {
    PolygonProperties_t *props = g_new(PolygonProperties_t, 1);
-   GtkWidget *hbox, *swin, *table, *label;
+   GtkWidget *hbox, *swin, *grid, *label;
    GtkWidget *view;
    gint max_width = get_image_width();
    gint max_height = get_image_height();
@@ -463,7 +465,6 @@ polygon_create_info_widget(GtkWidget *frame)
 
    props->store = gtk_list_store_new (1, G_TYPE_POINTER);
    view = gtk_tree_view_new_with_model (GTK_TREE_MODEL (props->store));
-   gtk_tree_view_set_rules_hint(GTK_TREE_VIEW(view), TRUE);
    g_object_unref (props->store);
    gtk_widget_show (view);
 
@@ -487,50 +488,50 @@ polygon_create_info_widget(GtkWidget *frame)
 
    gtk_container_add (GTK_CONTAINER (swin), view);
 
-   table = gtk_table_new(6, 3, FALSE);
-   gtk_table_set_row_spacings(GTK_TABLE(table), 6);
-   gtk_table_set_col_spacings(GTK_TABLE(table), 6);
-   gtk_box_pack_start(GTK_BOX(hbox), table, FALSE, FALSE, FALSE);
-   gtk_widget_show(table);
+   grid = gtk_grid_new ();
+   gtk_grid_set_row_spacing (GTK_GRID (grid), 6);
+   gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+   gtk_box_pack_start (GTK_BOX(hbox), grid, FALSE, FALSE, FALSE);
+   gtk_widget_show (grid);
 
-   label = create_label_in_table(table, 0, 0, "_x:");
-   props->x = create_spin_button_in_table(table, label, 0, 1, 1, 0,
+   label = create_label_in_grid (grid, 0, 0, "_x:");
+   props->x = create_spin_button_in_grid (grid, label, 0, 1, 1, 0,
                                           max_width - 1);
    g_signal_connect(props->x, "changed",
                     G_CALLBACK(x_changed_cb), (gpointer) props);
    gtk_widget_set_size_request(props->x, 64, -1);
-   create_label_in_table(table, 0, 2, _("pixels"));
+   create_label_in_grid (grid, 0, 2, _("pixels"));
 
-   label = create_label_in_table(table, 1, 0, "_y:");
-   props->y = create_spin_button_in_table(table, label, 1, 1, 1, 0,
+   label = create_label_in_grid (grid, 1, 0, "_y:");
+   props->y = create_spin_button_in_grid (grid, label, 1, 1, 1, 0,
                                           max_height - 1);
    g_signal_connect(props->y, "changed",
                     G_CALLBACK(y_changed_cb), (gpointer) props);
    gtk_widget_set_size_request(props->y, 64, -1);
-   create_label_in_table(table, 1, 2, _("pixels"));
+   create_label_in_grid (grid, 1, 2, _("pixels"));
 
    props->update = gtk_button_new_with_mnemonic(_("_Update"));
    g_signal_connect(props->update, "clicked",
                     G_CALLBACK(update_button_clicked), props);
-   gtk_table_attach_defaults(GTK_TABLE(table), props->update, 1, 2, 2, 3);
+   gtk_grid_attach (GTK_GRID (grid), props->update, 1, 2, 1, 1);
    gtk_widget_show(props->update);
 
    props->insert = gtk_button_new_with_mnemonic(_("_Insert"));
    g_signal_connect(props->insert, "clicked",
                     G_CALLBACK(insert_button_clicked), props);
-   gtk_table_attach_defaults(GTK_TABLE(table), props->insert, 1, 2, 3, 4);
+   gtk_grid_attach (GTK_GRID (grid), props->insert, 1, 3, 1, 1);
    gtk_widget_show(props->insert);
 
    props->append = gtk_button_new_with_mnemonic(_("A_ppend"));
    g_signal_connect(props->append, "clicked",
                     G_CALLBACK(append_button_clicked), props);
-   gtk_table_attach_defaults(GTK_TABLE(table), props->append, 1, 2, 4, 5);
+   gtk_grid_attach (GTK_GRID (grid), props->append, 1, 4, 1, 1);
    gtk_widget_show(props->append);
 
    props->remove = gtk_button_new_with_mnemonic(_("_Remove"));
    g_signal_connect(props->remove, "clicked",
                     G_CALLBACK(remove_button_clicked), props);
-   gtk_table_attach_defaults(GTK_TABLE(table), props->remove, 1, 2, 5, 6);
+   gtk_grid_attach (GTK_GRID (grid), props->remove, 1, 5, 1, 1);
    gtk_widget_show(props->remove);
 
    props->timeout = 0;
@@ -657,7 +658,9 @@ static gint _insert_x;
 static gint _insert_y;
 
 void
-polygon_insert_point(void)
+polygon_insert_point (GSimpleAction *action,
+                      GVariant      *new_state,
+                      gpointer       user_data)
 {
   Command_t *command = insert_point_command_new (_current_obj, _insert_x,
                                                  _insert_y, _insert_edge);
@@ -665,7 +668,9 @@ polygon_insert_point(void)
 }
 
 void
-polygon_delete_point(void)
+polygon_delete_point (GSimpleAction *action,
+                      GVariant      *new_state,
+                      gpointer       user_data)
 {
   Command_t *command = delete_point_command_new(_current_obj, _sash_point);
   command_execute (command);
@@ -709,31 +714,41 @@ polygon_near_edge(Object_t *obj, gint x, gint y)
 }
 
 static void
-polygon_handle_popup (GdkEventButton *event, gboolean near_sash,
-                      gboolean near_edge)
+polygon_handle_popup (GdkEventButton *event,
+                      GimpImap       *imap,
+                      gboolean        near_sash,
+                      gboolean        near_edge)
 {
-  GtkWidget *popup = menu_get_widget ("/PolygonPopupMenu");
-  GtkWidget *delete = menu_get_widget ("/PolygonPopupMenu/DeletePoint");
-  GtkWidget *insert = menu_get_widget ("/PolygonPopupMenu/InsertPoint");
+  GtkWidget  *menu;
+  GMenuModel *model;
+  GAction    *action;
 
-  gtk_widget_set_sensitive (delete, near_sash);
-  gtk_widget_set_sensitive (insert, near_edge);
+  model = G_MENU_MODEL (gtk_builder_get_object (imap->builder, "imap-polygon-popup"));
+  menu = gtk_menu_new_from_model (model);
 
-  gtk_menu_popup(GTK_MENU(popup), NULL, NULL, NULL, NULL,
-                 event->button, event->time);
+  action = g_action_map_lookup_action (G_ACTION_MAP (imap->app), "insert-point");
+  g_simple_action_set_enabled (G_SIMPLE_ACTION (action), near_edge);
+  action = g_action_map_lookup_action (G_ACTION_MAP (imap->app), "delete-point");
+  g_simple_action_set_enabled (G_SIMPLE_ACTION (action), near_sash);
+
+  gtk_menu_attach_to_widget (GTK_MENU (menu), GTK_WIDGET (imap->dlg), NULL);
+  gtk_menu_popup_at_pointer (GTK_MENU (menu), (GdkEvent *) event);
 }
 
 static void
-polygon_do_popup(Object_t *obj, GdkEventButton *event)
+polygon_do_popup (Object_t       *obj,
+                  GdkEventButton *event,
+                  gpointer        data)
 {
-  gint x = get_real_coord ((gint) event->x);
-  gint y = get_real_coord ((gint) event->y);
+  gint       x   = get_real_coord ((gint) event->x);
+  gint       y   = get_real_coord ((gint) event->y);
+  GimpImap *imap = GIMP_IMAP (data);
 
   _current_obj = obj;
 
   if (polygon_near_sash (obj, x, y))
     {
-      polygon_handle_popup (event, TRUE, FALSE);
+      polygon_handle_popup (event, imap, TRUE, FALSE);
     }
   else
     {
@@ -741,20 +756,21 @@ polygon_do_popup(Object_t *obj, GdkEventButton *event)
       if (_insert_edge)
         {
           _insert_x = x;
-           _insert_y = y;
+          _insert_y = y;
 
-           polygon_handle_popup (event, FALSE, TRUE);
+          polygon_handle_popup (event,imap, FALSE, TRUE);
         }
-      else {
-        object_do_popup (obj, event);
-      }
+      else
+        {
+          object_do_popup (obj, event, imap);
+        }
     }
 }
 
 static const gchar*
-polygon_get_stock_icon_name(void)
+polygon_get_icon_name(void)
 {
-   return IMAP_STOCK_POLYGON;
+   return IMAP_POLYGON;
 }
 
 static GList *_prev_link;

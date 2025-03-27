@@ -22,86 +22,108 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
 /**
  * SECTION: gimpfontselect
  * @title: gimpfontselect
- * @short_description: Functions providing a font selection dialog.
+ * @short_description: Methods of a font chooser dialog.
  *
- * Functions providing a font selection dialog.
+ * A font chooser dialog shows installed fonts.
+ * The dialog is non-modal with its owning dialog,
+ * which is usually a plugin procedure's dialog.
+ * When a user selects a font,
+ * the dialog calls back but the dialog remains open.
+ * The chosen font is only a choice for the owning widget
+ * and does not select the font for the context.
+ * The user can close but not cancel the dialog.
+ * The owning dialog can close the font chooser dialog
+ * when the user closes or cancels the owning dialog.
  **/
 
 
 /**
  * gimp_fonts_popup:
- * @font_callback: The callback PDB proc to call when font selection is made.
+ * @font_callback: The callback PDB proc to call when user chooses a font.
  * @popup_title: Title of the font selection dialog.
- * @initial_font: The name of the font to set as the first selected.
+ * @initial_font: (nullable): The name of the initial font choice.
+ * @parent_window: (nullable): An optional parent window handle for the popup to be set transient to.
  *
- * Invokes the Gimp font selection.
+ * Invokes the Gimp font selection dialog.
  *
- * This procedure opens the font selection dialog.
+ * Opens a dialog letting a user choose a font.
  *
  * Returns: TRUE on success.
  **/
 gboolean
 gimp_fonts_popup (const gchar *font_callback,
                   const gchar *popup_title,
-                  const gchar *initial_font)
+                  GimpFont    *initial_font,
+                  GBytes      *parent_window)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-fonts-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, font_callback,
-                                    GIMP_PDB_STRING, popup_title,
-                                    GIMP_PDB_STRING, initial_font,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, font_callback,
+                                          G_TYPE_STRING, popup_title,
+                                          GIMP_TYPE_FONT, initial_font,
+                                          G_TYPE_BYTES, parent_window,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-fonts-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_fonts_close_popup:
- * @font_callback: The name of the callback registered for this pop-up.
+ * @font_callback: The name of the callback registered in the PDB for this dialog.
  *
  * Close the font selection dialog.
  *
- * This procedure closes an opened font selection dialog.
+ * Closes an open font selection dialog.
  *
  * Returns: TRUE on success.
  **/
 gboolean
 gimp_fonts_close_popup (const gchar *font_callback)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-fonts-close-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, font_callback,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, font_callback,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-fonts-close-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_fonts_set_popup:
- * @font_callback: The name of the callback registered for this pop-up.
- * @font_name: The name of the font to set as selected.
+ * @font_callback: The name of the callback registered in the PDB for the dialog.
+ * @font: The font to set as selected.
  *
  * Sets the current font in a font selection dialog.
  *
@@ -111,21 +133,25 @@ gimp_fonts_close_popup (const gchar *font_callback)
  **/
 gboolean
 gimp_fonts_set_popup (const gchar *font_callback,
-                      const gchar *font_name)
+                      GimpFont    *font)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-fonts-set-popup",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, font_callback,
-                                    GIMP_PDB_STRING, font_name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, font_callback,
+                                          GIMP_TYPE_FONT, font,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-fonts-set-popup",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

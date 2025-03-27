@@ -75,6 +75,8 @@ struct _GimpContainerClass
   gboolean     (* get_unique_names)   (GimpContainer           *container);
   GimpObject * (* get_child_by_name)  (GimpContainer           *container,
                                        const gchar             *name);
+  GList    * (* get_children_by_name) (GimpContainer           *container,
+                                       const gchar             *name);
   GimpObject * (* get_child_by_index) (GimpContainer           *container,
                                        gint                     index);
   gint         (* get_child_index)    (GimpContainer           *container,
@@ -117,6 +119,8 @@ GimpObject * gimp_container_search             (GimpContainer           *contain
 
 gboolean     gimp_container_get_unique_names   (GimpContainer           *container);
 
+GList    * gimp_container_get_children_by_name (GimpContainer           *container,
+                                                const gchar             *name);
 GimpObject * gimp_container_get_child_by_name  (GimpContainer           *container,
                                                 const gchar             *name);
 GimpObject * gimp_container_get_child_by_index (GimpContainer           *container,
@@ -129,8 +133,7 @@ gint         gimp_container_get_child_index    (GimpContainer           *contain
 GimpObject * gimp_container_get_neighbor_of    (GimpContainer           *container,
                                                 GimpObject              *object);
 
-gchar     ** gimp_container_get_name_array     (GimpContainer           *container,
-                                                gint                    *length);
+gchar     ** gimp_container_get_name_array     (GimpContainer           *container);
 
 GQuark       gimp_container_add_handler        (GimpContainer           *container,
                                                 const gchar             *signame,

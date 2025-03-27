@@ -50,7 +50,7 @@ struct _GimpTool
   GimpToolControl *control;
 
   GimpDisplay     *display;     /*  pointer to currently active display    */
-  GimpDrawable    *drawable;    /*  pointer to the tool's current drawable */
+  GList           *drawables;   /*  list of the tool's current drawables   */
 
   /*  private state of gimp_tool_set_focus_display() and
    *  gimp_tool_set_[active_]modifier_state()
@@ -81,6 +81,7 @@ struct _GimpTool
   GimpCanvasItem  *progress;
   GimpDisplay     *progress_display;
   GtkWidget       *progress_grab_widget;
+  gboolean         progress_cancelable;
 };
 
 struct _GimpToolClass

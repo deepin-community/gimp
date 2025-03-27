@@ -50,11 +50,11 @@ typedef struct _IcoFileHeader
 typedef struct _IcoFileEntry
 {
   guint8        width;      /* Width of icon in pixels */
-  guint8        height;    /* Height of icon in pixels */
+  guint8        height;     /* Height of icon in pixels */
   guint8        num_colors; /* Number of colors of paletted image */
   guint8        reserved;   /* Must be 0 */
-  guint16       planes;     /* Must be 1 */
-  guint16       bpp;        /* 1, 4, 8, 24 or 32 bits per pixel */
+  guint16       planes;     /* Must be 1 for ICO, x position of hot spot for CUR */
+  guint16       bpp;        /* 1, 4, 8, 24 or 32 bits per pixel for ICO, y position of hot spot for CUR */
   guint32       size;       /* Size of icon (including data header) */
   guint32       offset;     /* Absolute offset of data in a file */
  } IcoFileEntry;
@@ -80,6 +80,7 @@ typedef struct _IcoLoadInfo
     guint    width;
     guint    height;
     gint     bpp;
+    gint     planes;
     gint     offset;
     gint     size;
 } IcoLoadInfo;
@@ -89,10 +90,29 @@ typedef struct _IcoSaveInfo
     gint        *depths;
     gint        *default_depths;
     gboolean    *compress;
-    gint        *layers;
+    GList       *layers;
     gint         num_icons;
+    gboolean     is_cursor;
+    gint        *hot_spot_x;
+    gint        *hot_spot_y;
 } IcoSaveInfo;
 
+typedef struct _AniFileHeader
+{
+    guint32 bSizeOf;     /* Number of bytes in AniFileHeader (36 bytes) */
+    guint32 frames;      /* Number of unique icons in this cursor */
+    guint32 steps;       /* Number of Blits before the animation cycles */
+    guint32 x, y;        /* Reserved, must be zero. */
+    guint32 bpp, planes; /* Reserved, must be zero. */
+    guint32 jif_rate;    /* Default Jiffies (1/60th of a second) if rate chunk's not present. */
+    guint32 flags;       /* Animation Flag */
+} AniFileHeader;
+
+typedef struct _AniSaveInfo
+{
+    gchar *inam;   /* Cursor name metadata */
+    gchar *iart;   /* Author name metadata */
+} AniSaveInfo;
 
 /* Miscellaneous helper functions below: */
 

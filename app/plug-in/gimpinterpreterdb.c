@@ -163,8 +163,8 @@ gimp_interpreter_db_load (GimpInterpreterDB *db,
           while ((info = g_file_enumerator_next_file (enumerator,
                                                       NULL, NULL)))
             {
-              if (! g_file_info_get_is_hidden (info) &&
-                  g_file_info_get_file_type (info) == G_FILE_TYPE_REGULAR)
+              if (! g_file_info_get_attribute_boolean (info, G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN) &&
+                  g_file_info_get_attribute_uint32 (info, G_FILE_ATTRIBUTE_STANDARD_TYPE) == G_FILE_TYPE_REGULAR)
                 {
                   GFile *file = g_file_enumerator_get_child (enumerator, info);
 
@@ -511,8 +511,8 @@ gimp_interpreter_db_add_magic (GimpInterpreterDB  *db,
       interp_magic = g_slice_new (GimpInterpreterMagic);
 
       interp_magic->offset  = offset;
-      interp_magic->magic   = g_memdup (magic, size);
-      interp_magic->mask    = g_memdup (mask, size);
+      interp_magic->magic   = g_memdup2 (magic, size);
+      interp_magic->mask    = g_memdup2 (mask, size);
       interp_magic->size    = size;
       interp_magic->program = g_strdup (program);
 
@@ -853,7 +853,7 @@ collect_extensions (const gchar *ext,
  * gimp_interpreter_db_get_extensions:
  * @db:
  *
- * Return value: a newly allocated string with all registered file
+ * Returns: a newly allocated string with all registered file
  *               extensions separated by %G_SEARCHPATH_SEPARATOR;
  *               or %NULL if no extensions are registered
  **/

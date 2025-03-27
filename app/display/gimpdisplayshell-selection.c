@@ -43,10 +43,10 @@ struct _Selection
 {
   GimpDisplayShell *shell;            /*  shell that owns the selection     */
 
-  GimpSegment      *segs_in;          /*  gdk segments of area boundary     */
+  GimpSegment      *segs_in;          /*  segments of area boundary         */
   gint              n_segs_in;        /*  number of segments in segs_in     */
 
-  GimpSegment      *segs_out;         /*  gdk segments of area boundary     */
+  GimpSegment      *segs_out;         /*  segments of area boundary         */
   gint              n_segs_out;       /*  number of segments in segs_out    */
 
   guint             index;            /*  index of current stipple pattern  */
@@ -452,14 +452,20 @@ selection_timeout (Selection *selection)
 
   if ((time - selection->shell->selection_update) / 1000 > config->marching_ants_speed)
     {
-      GdkWindow *window;
+      GdkWindow             *window;
+      cairo_rectangle_int_t  rect;
+      cairo_region_t        *region;
 
       window = gtk_widget_get_window (GTK_WIDGET (selection->shell));
 
-      gtk_widget_queue_draw_area (GTK_WIDGET (selection->shell),
-                                  0, 0,
-                                  gdk_window_get_width (window),
-                                  gdk_window_get_height (window));
+      rect.x      = 0;
+      rect.y      = 0;
+      rect.width  = gdk_window_get_width  (window);
+      rect.height = gdk_window_get_height (window);
+
+      region = cairo_region_create_rectangle (&rect);
+      gtk_widget_queue_draw_region (GTK_WIDGET (selection->shell), region);
+      cairo_region_destroy (region);
     }
 
   return G_SOURCE_CONTINUE;

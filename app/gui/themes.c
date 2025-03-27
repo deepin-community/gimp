@@ -20,9 +20,6 @@
 #include <stdlib.h>
 
 #include <gegl.h>
-#ifdef GDK_DISABLE_DEPRECATED
-#undef GDK_DISABLE_DEPRECATED
-#endif
 #include <gtk/gtk.h>
 
 #include "libgimpbase/gimpbase.h"
@@ -34,6 +31,11 @@
 
 #include "core/gimp.h"
 
+#include "display/gimpimagewindow.h"
+
+#include "widgets/gimpwidgets-utils.h"
+
+#include "icon-themes.h"
 #include "themes.h"
 
 #include "gimp-intl.h"
@@ -41,9 +43,6 @@
 
 /*  local function prototypes  */
 
-static void   themes_write_style         (GimpGuiConfig          *config,
-                                          GOutputStream          *output,
-                                          GError                **error);
 static void   themes_apply_theme         (Gimp                   *gimp,
                                           GimpGuiConfig          *config);
 static void   themes_list_themes_foreach (gpointer                key,
@@ -54,23 +53,15 @@ static gint   themes_name_compare        (const void             *p1,
 static void   themes_theme_change_notify (GimpGuiConfig          *config,
                                           GParamSpec             *pspec,
                                           Gimp                   *gimp);
+static void   themes_theme_paths_notify  (GimpExtensionManager   *manager,
+                                          GParamSpec             *pspec,
+                                          Gimp                   *gimp);
 
-static void   themes_fix_pixbuf_style    (void);
-static void   themes_draw_pixbuf_layout  (GtkStyle               *style,
-                                          GdkWindow              *window,
-                                          GtkStateType            state_type,
-                                          gboolean                use_text,
-                                          GdkRectangle           *area,
-                                          GtkWidget              *widget,
-                                          const gchar            *detail,
-                                          gint                    x,
-                                          gint                    y,
-                                          PangoLayout            *layout);
 
 /*  private variables  */
 
-static GHashTable    *themes_hash        = NULL;
-static GtkStyleClass *pixbuf_style_class = NULL;
+static GHashTable       *themes_hash           = NULL;
+static GtkStyleProvider *themes_style_provider = NULL;
 
 
 /*  public functions  */
@@ -79,87 +70,53 @@ void
 themes_init (Gimp *gimp)
 {
   GimpGuiConfig *config;
-  gchar         *themerc;
 
   g_return_if_fail (GIMP_IS_GIMP (gimp));
 
   config = GIMP_GUI_CONFIG (gimp->config);
 
-  themes_hash = g_hash_table_new_full (g_str_hash,
-                                       g_str_equal,
-                                       g_free,
-                                       g_object_unref);
+  /* Check for theme extensions. */
+  themes_theme_paths_notify (gimp->extension_manager, NULL, gimp);
+  g_signal_connect (gimp->extension_manager, "notify::theme-paths",
+                    G_CALLBACK (themes_theme_paths_notify),
+                    gimp);
 
-  if (config->theme_path)
-    {
-      GList *path;
-      GList *list;
+  themes_style_provider = GTK_STYLE_PROVIDER (gtk_css_provider_new ());
 
-      path = gimp_config_path_expand_to_files (config->theme_path, NULL);
-
-      for (list = path; list; list = g_list_next (list))
-        {
-          GFile           *dir = list->data;
-          GFileEnumerator *enumerator;
-
-          enumerator =
-            g_file_enumerate_children (dir,
-                                       G_FILE_ATTRIBUTE_STANDARD_NAME ","
-                                       G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN ","
-                                       G_FILE_ATTRIBUTE_STANDARD_TYPE,
-                                       G_FILE_QUERY_INFO_NONE,
-                                       NULL, NULL);
-
-          if (enumerator)
-            {
-              GFileInfo *info;
-
-              while ((info = g_file_enumerator_next_file (enumerator,
-                                                          NULL, NULL)))
-                {
-                  if (! g_file_info_get_is_hidden (info) &&
-                      g_file_info_get_file_type (info) == G_FILE_TYPE_DIRECTORY)
-                    {
-                      GFile       *file;
-                      const gchar *name;
-                      gchar       *basename;
-
-                      file = g_file_enumerator_get_child (enumerator, info);
-                      name = gimp_file_get_utf8_name (file);
-
-                      basename = g_path_get_basename (name);
-
-                      if (gimp->be_verbose)
-                        g_print ("Adding theme '%s' (%s)\n",
-                                 basename, name);
-
-                      g_hash_table_insert (themes_hash, basename, file);
-                    }
-
-                  g_object_unref (info);
-                }
-
-              g_object_unref (enumerator);
-            }
-        }
-
-      g_list_free_full (path, (GDestroyNotify) g_object_unref);
-    }
-
-  themes_apply_theme (gimp, config);
-
-  themerc = gimp_personal_rc_file ("themerc");
-  gtk_rc_parse (themerc);
-  g_free (themerc);
-
-  themes_fix_pixbuf_style ();
+  /*  Use GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1 so theme files
+   *  override default styles provided by widgets themselves.
+   */
+  gtk_style_context_add_provider_for_screen (gdk_screen_get_default (),
+                                             themes_style_provider,
+                                             GTK_STYLE_PROVIDER_PRIORITY_APPLICATION + 1);
 
   g_signal_connect (config, "notify::theme",
                     G_CALLBACK (themes_theme_change_notify),
                     gimp);
-  g_signal_connect (config, "notify::compact-sliders",
+  g_signal_connect_after (config, "notify::icon-theme",
+                          G_CALLBACK (themes_theme_change_notify),
+                          gimp);
+  g_signal_connect (config, "notify::theme-color-scheme",
                     G_CALLBACK (themes_theme_change_notify),
                     gimp);
+  g_signal_connect (config, "notify::prefer-symbolic-icons",
+                    G_CALLBACK (themes_theme_change_notify),
+                    gimp);
+  g_signal_connect (config, "notify::override-theme-icon-size",
+                    G_CALLBACK (themes_theme_change_notify),
+                    gimp);
+  g_signal_connect (config, "notify::custom-icon-size",
+                    G_CALLBACK (themes_theme_change_notify),
+                    gimp);
+  g_signal_connect (config, "notify::font-relative-size",
+                    G_CALLBACK (themes_theme_change_notify),
+                    gimp);
+
+  themes_theme_change_notify (config, NULL, gimp);
+
+#ifdef G_OS_WIN32
+  themes_set_title_bar (gimp);
+#endif
 }
 
 void
@@ -177,7 +134,7 @@ themes_exit (Gimp *gimp)
       themes_hash = NULL;
     }
 
-  g_clear_pointer (&pixbuf_style_class, g_type_class_unref);
+  g_clear_object (&themes_style_provider);
 }
 
 gchar **
@@ -278,41 +235,24 @@ themes_get_theme_file (Gimp        *gimp,
 /*  private functions  */
 
 static void
-themes_write_style (GimpGuiConfig  *config,
-                    GOutputStream  *output,
-                    GError        **error)
-{
-  if (! *error)
-    {
-      g_output_stream_printf (
-        output, NULL, NULL, error,
-        "style \"gimp-spin-scale-style\"\n"
-        "{\n"
-        "  GimpSpinScale::compact = %d\n"
-        "}\n"
-        "\n"
-        "class \"GimpSpinScale\" style \"gimp-spin-scale-style\"\n"
-        "\n",
-        config->compact_sliders);
-    }
-}
-
-static void
 themes_apply_theme (Gimp          *gimp,
                     GimpGuiConfig *config)
 {
-  GFile         *themerc;
+  GFile         *theme_css;
   GOutputStream *output;
   GError        *error = NULL;
+  gboolean       prefer_dark_theme;
 
   g_return_if_fail (GIMP_IS_GIMP (gimp));
+  g_return_if_fail (GIMP_IS_GUI_CONFIG (config));
 
-  themerc = gimp_directory_file ("themerc", NULL);
+  prefer_dark_theme = (config->theme_scheme != GIMP_THEME_LIGHT);
+  theme_css = gimp_directory_file ("theme.css", NULL);
 
   if (gimp->be_verbose)
-    g_print ("Writing '%s'\n", gimp_file_get_utf8_name (themerc));
+    g_print ("Writing '%s'\n", gimp_file_get_utf8_name (theme_css));
 
-  output = G_OUTPUT_STREAM (g_file_replace (themerc,
+  output = G_OUTPUT_STREAM (g_file_replace (theme_css,
                                             NULL, FALSE, G_FILE_CREATE_NONE,
                                             NULL, &error));
   if (! output)
@@ -322,67 +262,156 @@ themes_apply_theme (Gimp          *gimp,
     }
   else
     {
-      GFile  *theme_dir   = themes_get_theme_dir (gimp, config->theme);
-      GFile  *gtkrc_user;
-      GSList *gtkrc_files = NULL;
+      GFile  *theme_dir = themes_get_theme_dir (gimp, config->theme);
+      GFile  *css_user;
+      GSList *css_files = NULL;
       GSList *iter;
 
       if (theme_dir)
         {
-          gtkrc_files = g_slist_prepend (
-            gtkrc_files,
-            g_file_get_child (theme_dir, "gtkrc"));
+          GFile *file = NULL;
+          GFile *fallback;
+          GFile *light;
+          GFile *gray;
+          GFile *dark;
+
+          fallback = g_file_get_child (theme_dir, "gimp.css");
+          if (! g_file_query_exists (fallback, NULL))
+            g_clear_object (&fallback);
+
+          light = g_file_get_child (theme_dir, "gimp-light.css");
+          if (! g_file_query_exists (light, NULL))
+            g_clear_object (&light);
+
+          gray  = g_file_get_child (theme_dir, "gimp-gray.css");
+          if (! g_file_query_exists (gray, NULL))
+            g_clear_object (&gray);
+
+          dark  = g_file_get_child (theme_dir, "gimp-dark.css");
+          if (! g_file_query_exists (dark, NULL))
+            g_clear_object (&dark);
+
+          switch (config->theme_scheme)
+            {
+            case GIMP_THEME_LIGHT:
+              if (light != NULL)
+                file = g_object_ref (light);
+              else if (fallback != NULL)
+                file = g_object_ref (fallback);
+              else if (gray != NULL)
+                file = g_object_ref (gray);
+              else if (dark != NULL)
+                file = g_object_ref (dark);
+              break;
+            case GIMP_THEME_GRAY:
+              if (gray != NULL)
+                file = g_object_ref (gray);
+              else if (fallback != NULL)
+                file = g_object_ref (fallback);
+              else if (dark != NULL)
+                file = g_object_ref (dark);
+              else if (light != NULL)
+                file = g_object_ref (light);
+              break;
+            case GIMP_THEME_DARK:
+              if (dark != NULL)
+                file = g_object_ref (dark);
+              else if (fallback != NULL)
+                file = g_object_ref (fallback);
+              else if (gray != NULL)
+                file = g_object_ref (gray);
+              else if (light != NULL)
+                file = g_object_ref (light);
+              break;
+            }
+
+          if (file != NULL)
+            {
+              prefer_dark_theme = (file == dark || file == gray);
+              css_files = g_slist_prepend (css_files, file);
+            }
+          else
+            {
+              gimp_message (gimp, NULL, GIMP_MESSAGE_ERROR,
+                            _("Invalid theme: directory '%s' contains neither "
+                              "gimp-dark.css, gimp-gray.css, gimp-light.css nor gimp.css."),
+                            gimp_file_get_utf8_name (theme_dir));
+            }
+
+          g_clear_object (&fallback);
+          g_clear_object (&light);
+          g_clear_object (&gray);
+          g_clear_object (&dark);
         }
       else
         {
-          /*  get the hardcoded default theme gtkrc  */
-          gtkrc_files = g_slist_prepend (
-            gtkrc_files,
-            g_file_new_for_path (gimp_gtkrc ()));
+          gchar *tmp;
+
+          tmp = g_build_filename (gimp_data_directory (),
+                                  "themes", "Default", "gimp.css",
+                                  NULL);
+          css_files = g_slist_prepend (css_files, g_file_new_for_path (tmp));
+          g_free (tmp);
+
+          switch (config->theme_scheme)
+            {
+            case GIMP_THEME_LIGHT:
+              tmp = g_build_filename (gimp_data_directory (),
+                                      "themes", "Default", "gimp-light.css",
+                                      NULL);
+              break;
+            case GIMP_THEME_GRAY:
+              tmp = g_build_filename (gimp_data_directory (),
+                                      "themes", "Default", "gimp-gray.css",
+                                      NULL);
+              break;
+            case GIMP_THEME_DARK:
+              tmp = g_build_filename (gimp_data_directory (),
+                                      "themes", "Default", "gimp-dark.css",
+                                      NULL);
+              break;
+            }
+
+          css_files = g_slist_prepend (css_files, g_file_new_for_path (tmp));
+          g_free (tmp);
         }
 
-      gtkrc_files = g_slist_prepend (
-        gtkrc_files,
-        gimp_sysconf_directory_file ("gtkrc", NULL));
+      css_files = g_slist_prepend (
+        css_files, gimp_sysconf_directory_file ("gimp.css", NULL));
 
-      gtkrc_user  = gimp_directory_file ("gtkrc", NULL);
-      gtkrc_files = g_slist_prepend (
-        gtkrc_files,
-        gtkrc_user);
+      css_user  = gimp_directory_file ("gimp.css", NULL);
+      css_files = g_slist_prepend (
+        css_files, css_user);
 
-      gtkrc_files = g_slist_reverse (gtkrc_files);
+      css_files = g_slist_reverse (css_files);
 
       g_output_stream_printf (
         output, NULL, NULL, &error,
-        "# GIMP themerc\n"
-        "#\n"
-        "# This file is written on GIMP startup and on every theme change.\n"
-        "# It is NOT supposed to be edited manually. Edit your personal\n"
-        "# gtkrc file instead (%s).\n"
+        "/* GIMP theme.css\n"
+        " *\n"
+        " * This file is written on GIMP startup and on every theme change.\n"
+        " * It is NOT supposed to be edited manually. Edit your personal\n"
+        " * gimp.css file instead (%s).\n"
+        " */\n"
         "\n",
-        gimp_file_get_utf8_name (gtkrc_user));
+        gimp_file_get_utf8_name (css_user));
 
-      themes_write_style (config, output, &error);
-
-      for (iter = gtkrc_files; ! error && iter; iter = g_slist_next (iter))
+      for (iter = css_files; ! error && iter; iter = g_slist_next (iter))
         {
           GFile *file = iter->data;
 
           if (g_file_query_exists (file, NULL))
             {
               gchar *path;
-              gchar *esc_path;
 
-              path     = g_file_get_path (file);
-              esc_path = g_strescape (path, NULL);
-              g_free (path);
+              path = g_file_get_uri (file);
 
               g_output_stream_printf (
                 output, NULL, NULL, &error,
-                "include \"%s\"\n",
-                esc_path);
+                "@import url(\"%s\");\n",
+                path);
 
-              g_free (esc_path);
+              g_free (path);
             }
         }
 
@@ -391,7 +420,109 @@ themes_apply_theme (Gimp          *gimp,
           g_output_stream_printf (
             output, NULL, NULL, &error,
             "\n"
-            "# end of themerc\n");
+            "* { -gtk-icon-style: %s; }\n"
+            "\n"
+            "%s",
+            icon_themes_current_prefer_symbolic (gimp) ? "symbolic" : "regular",
+            prefer_dark_theme ? "/* prefer-dark-theme */\n" : "");
+
+        }
+
+      if (! error && config->override_icon_size)
+        {
+          const gchar *tool_icon_size   = "large-toolbar";
+          const gchar *tab_icon_size    = "small-toolbar";
+          const gchar *button_icon_size = "small-toolbar";
+          gint         pal_padding      = 4;
+          gint         tab_padding      = 1;
+          gint         sep_padding      = 1;
+
+          switch (config->custom_icon_size)
+            {
+            case GIMP_ICON_SIZE_SMALL:
+              tool_icon_size   = "small-toolbar";
+              tab_icon_size    = "small-toolbar";
+              button_icon_size = "small-toolbar";
+              pal_padding      = 1;
+              tab_padding      = 0;
+              sep_padding      = 1;
+              break;
+            case GIMP_ICON_SIZE_MEDIUM:
+              tool_icon_size   = "large-toolbar";
+              tab_icon_size    = "small-toolbar";
+              button_icon_size = "small-toolbar";
+              pal_padding      = 4;
+              tab_padding      = 1;
+              sep_padding      = 1;
+              break;
+            case GIMP_ICON_SIZE_LARGE:
+              tool_icon_size   = "dnd";
+              tab_icon_size    = "large-toolbar";
+              button_icon_size = "large-toolbar";
+              pal_padding      = 5;
+              tab_padding      = 5;
+              sep_padding      = 2;
+              break;
+            case GIMP_ICON_SIZE_HUGE:
+              tool_icon_size   = "dialog";
+              tab_icon_size    = "dnd";
+              button_icon_size = "dnd";
+              pal_padding      = 5;
+              tab_padding      = 8;
+              sep_padding      = 4;
+              break;
+            }
+
+          g_output_stream_printf (
+            output, NULL, NULL, &error,
+            "\n"
+            "* { -GimpToolPalette-tool-icon-size: %s; }"
+            "\n"
+            "* { -GimpDock-tool-icon-size: %s; }"
+            "\n"
+            "* { -GimpDockbook-tab-icon-size: %s; }"
+            "\n"
+            "* { -GimpColorNotebook-tab-icon-size: %s; }"
+            "\n"
+            "* { -GimpPrefsBox-tab-icon-size: %s; }"
+            "\n"
+            "* { -GimpEditor-button-icon-size: %s; }"
+            "\n"
+            "* { -GimpDisplayShell-button-icon-size: %s; }"
+            "\n"
+            "* { -GimpFgBgEditor-tool-icon-size: %s; }"
+            "\n"
+            "toolpalette button { padding: %dpx; }"
+            "\n"
+            "button, tab { padding: %dpx; }"
+            "\n"
+            "paned separator { padding: %dpx; }",
+            tool_icon_size, tool_icon_size, tab_icon_size, tab_icon_size,
+            tab_icon_size, button_icon_size, button_icon_size, tool_icon_size,
+            pal_padding, tab_padding, sep_padding);
+        }
+
+      if (! error && config->font_relative_size != 1.0)
+        {
+          /* Intermediate buffer for locale-independent float to string
+           * conversion. See issue #11048.
+           */
+          gchar font_size_string[G_ASCII_DTOSTR_BUF_SIZE];
+
+          g_output_stream_printf (output, NULL, NULL, &error,
+                                  "\n"
+                                  "* { font-size: %srem; }",
+                                  g_ascii_dtostr (font_size_string,
+                                                  G_ASCII_DTOSTR_BUF_SIZE,
+                                                  config->font_relative_size));
+        }
+
+      if (! error)
+        {
+          g_output_stream_printf (
+            output, NULL, NULL, &error,
+            "\n\n"
+            "/* end of theme.css */\n");
         }
 
       if (error)
@@ -400,7 +531,7 @@ themes_apply_theme (Gimp          *gimp,
 
           gimp_message (gimp, NULL, GIMP_MESSAGE_ERROR,
                         _("Error writing '%s': %s"),
-                        gimp_file_get_utf8_name (themerc), error->message);
+                        gimp_file_get_utf8_name (theme_css), error->message);
           g_clear_error (&error);
 
           /* Cancel the overwrite initiated by g_file_replace(). */
@@ -412,15 +543,15 @@ themes_apply_theme (Gimp          *gimp,
         {
           gimp_message (gimp, NULL, GIMP_MESSAGE_ERROR,
                         _("Error closing '%s': %s"),
-                        gimp_file_get_utf8_name (themerc), error->message);
+                        gimp_file_get_utf8_name (theme_css), error->message);
           g_clear_error (&error);
         }
 
-      g_slist_free_full (gtkrc_files, g_object_unref);
+      g_slist_free_full (css_files, g_object_unref);
       g_object_unref (output);
     }
 
-  g_object_unref (themerc);
+  g_object_unref (theme_css);
 }
 
 static void
@@ -447,89 +578,132 @@ themes_theme_change_notify (GimpGuiConfig *config,
                             GParamSpec    *pspec,
                             Gimp          *gimp)
 {
+  GFile  *theme_css;
+  GError *error = NULL;
+
+  g_object_set (gtk_settings_get_for_screen (gdk_screen_get_default ()),
+                "gtk-application-prefer-dark-theme", config->theme_scheme != GIMP_THEME_LIGHT,
+                NULL);
+
   themes_apply_theme (gimp, config);
 
-  gtk_rc_reparse_all ();
+  theme_css = gimp_directory_file ("theme.css", NULL);
 
-  themes_fix_pixbuf_style ();
+  if (gimp->be_verbose)
+    g_print ("Parsing '%s'\n",
+             gimp_file_get_utf8_name (theme_css));
+
+  if (! gtk_css_provider_load_from_file (GTK_CSS_PROVIDER (themes_style_provider),
+                                         theme_css, &error))
+    {
+      g_printerr ("%s: error parsing %s: %s\n", G_STRFUNC,
+                  gimp_file_get_utf8_name (theme_css), error->message);
+      g_clear_error (&error);
+    }
+
+  g_object_unref (theme_css);
+
+  gtk_style_context_reset_widgets (gdk_screen_get_default ());
+
+#ifdef G_OS_WIN32
+  themes_set_title_bar (gimp);
+#endif
 }
 
 static void
-themes_fix_pixbuf_style (void)
+themes_theme_paths_notify (GimpExtensionManager *manager,
+                           GParamSpec           *pspec,
+                           Gimp                 *gimp)
 {
-  /* This is a "quick'n dirty" trick to get appropriate colors for
-   * themes in GTK+2, and in particular dark themes which would display
-   * insensitive items with a barely readable layout.
-   *
-   * This piece of code partly duplicates code from GTK+2 (slightly
-   * modified to get readable insensitive items) and will likely have to
-   * be removed for GIMP 3.
-   *
-   * See https://bugzilla.gnome.org/show_bug.cgi?id=770424
-   */
+  GimpGuiConfig *config;
 
-  if (! pixbuf_style_class)
-    {
-      GType type = g_type_from_name ("PixbufStyle");
+  g_return_if_fail (GIMP_IS_GIMP (gimp));
 
-      if (type)
-        {
-          pixbuf_style_class = g_type_class_ref (type);
-
-          if (pixbuf_style_class)
-            pixbuf_style_class->draw_layout = themes_draw_pixbuf_layout;
-        }
-    }
-}
-
-static void
-themes_draw_pixbuf_layout (GtkStyle      *style,
-                           GdkWindow     *window,
-                           GtkStateType   state_type,
-                           gboolean       use_text,
-                           GdkRectangle  *area,
-                           GtkWidget     *widget,
-                           const gchar   *detail,
-                           gint           x,
-                           gint           y,
-                           PangoLayout   *layout)
-{
-  GdkGC *gc;
-
-  gc = use_text ? style->text_gc[state_type] : style->fg_gc[state_type];
-
-  if (area)
-    gdk_gc_set_clip_rectangle (gc, area);
-
-  if (state_type == GTK_STATE_INSENSITIVE)
-    {
-      GdkGC       *copy = gdk_gc_new (window);
-      GdkGCValues  orig;
-      GdkColor     fore;
-      guint16      r, g, b;
-
-      gdk_gc_copy (copy, gc);
-      gdk_gc_get_values (gc, &orig);
-
-      r = 0x40 + (((orig.foreground.pixel >> 16) & 0xff) >> 1);
-      g = 0x40 + (((orig.foreground.pixel >>  8) & 0xff) >> 1);
-      b = 0x40 + (((orig.foreground.pixel >>  0) & 0xff) >> 1);
-
-      fore.pixel = (r << 16) | (g << 8) | b;
-      fore.red   = r * 257;
-      fore.green = g * 257;
-      fore.blue  = b * 257;
-
-      gdk_gc_set_foreground (copy, &fore);
-      gdk_draw_layout (window, copy, x, y, layout);
-
-      g_object_unref (copy);
-    }
+  if (themes_hash)
+    g_hash_table_remove_all (themes_hash);
   else
+    themes_hash = g_hash_table_new_full (g_str_hash,
+                                         g_str_equal,
+                                         g_free,
+                                         g_object_unref);
+
+  config = GIMP_GUI_CONFIG (gimp->config);
+  if (config->theme_path)
     {
-      gdk_draw_layout (window, gc, x, y, layout);
+      GList *path;
+      GList *list;
+
+      g_object_get (gimp->extension_manager,
+                    "theme-paths", &path,
+                    NULL);
+      path = g_list_copy_deep (path, (GCopyFunc) g_object_ref, NULL);
+      path = g_list_concat (path, gimp_config_path_expand_to_files (config->theme_path, NULL));
+
+      for (list = path; list; list = g_list_next (list))
+        {
+          GFile           *dir = list->data;
+          GFileEnumerator *enumerator;
+
+          enumerator =
+            g_file_enumerate_children (dir,
+                                       G_FILE_ATTRIBUTE_STANDARD_NAME ","
+                                       G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN ","
+                                       G_FILE_ATTRIBUTE_STANDARD_TYPE,
+                                       G_FILE_QUERY_INFO_NONE,
+                                       NULL, NULL);
+
+          if (enumerator)
+            {
+              GFileInfo *info;
+
+              while ((info = g_file_enumerator_next_file (enumerator,
+                                                          NULL, NULL)))
+                {
+                  if (! g_file_info_get_attribute_boolean (info, G_FILE_ATTRIBUTE_STANDARD_IS_HIDDEN) &&
+                      g_file_info_get_attribute_uint32 (info, G_FILE_ATTRIBUTE_STANDARD_TYPE) == G_FILE_TYPE_DIRECTORY)
+                    {
+                      GFile       *file;
+                      const gchar *name;
+                      gchar       *basename;
+
+                      file = g_file_enumerator_get_child (enumerator, info);
+                      name = gimp_file_get_utf8_name (file);
+
+                      basename = g_path_get_basename (name);
+
+                      if (gimp->be_verbose)
+                        g_print ("Adding theme '%s' (%s)\n",
+                                 basename, name);
+
+                      g_hash_table_insert (themes_hash, basename, file);
+                    }
+
+                  g_object_unref (info);
+                }
+
+              g_object_unref (enumerator);
+            }
+        }
+
+      g_list_free_full (path, (GDestroyNotify) g_object_unref);
+    }
+}
+
+#ifdef G_OS_WIN32
+void
+themes_set_title_bar (Gimp *gimp)
+{
+  GList *windows = gimp_get_image_windows (gimp);
+  GList *iter;
+
+  for (iter = windows; iter; iter = g_list_next (iter))
+    {
+      GtkWidget *window = GTK_WIDGET (windows->data);
+
+      gimp_window_set_title_bar_theme (gimp, window);
     }
 
-  if (area)
-    gdk_gc_set_clip_rectangle (gc, NULL);
+  if (windows)
+    g_list_free (windows);
 }
+#endif

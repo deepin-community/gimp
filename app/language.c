@@ -21,6 +21,9 @@
 
 #include "config.h"
 
+#ifdef HAVE__NL_IDENTIFICATION_LANGUAGE
+#include <langinfo.h>
+#endif
 #include <locale.h>
 
 #include <glib.h>
@@ -29,18 +32,50 @@
 #include <windows.h>
 #include <winnls.h>
 #endif
+#ifdef PLATFORM_OSX
+#include <Foundation/NSLocale.h>
+#endif
 
 #include "language.h"
 
+#include "gimp-intl.h"
 
-void
-language_init (const gchar *language)
+
+static gchar * language_get_system_lang_id (void);
+
+
+const gchar *
+language_init (const gchar  *language,
+               const gchar **system_lang_l10n)
 {
+  static gchar *actual_language = NULL;
+  static gchar *system_langstr  = NULL;
+
+  if (actual_language != NULL)
+    {
+      /* Already initialized. */
+
+      g_return_val_if_fail (system_langstr != NULL, actual_language);
+
+      if (system_lang_l10n)
+        *system_lang_l10n = system_langstr;
+
+      return actual_language;
+    }
+
+  /* This must be localized with the system language itself, before we
+   * apply any other language.
+   */
+  system_langstr = _("System Language");
+  if (system_lang_l10n)
+    *system_lang_l10n = system_langstr;
+
+
 #ifdef G_OS_WIN32
-  if (! language                       &&
-      g_getenv ("LANG")        == NULL &&
-      g_getenv ("LC_MESSAGES") == NULL &&
-      g_getenv ("LC_ALL")      == NULL &&
+  if ((! language || strlen (language) == 0) &&
+      g_getenv ("LANG")        == NULL       &&
+      g_getenv ("LC_MESSAGES") == NULL       &&
+      g_getenv ("LC_ALL")      == NULL       &&
       g_getenv ("LANGUAGE")    == NULL)
     {
       /* FIXME: This is a hack. gettext doesn't pick the right language
@@ -731,9 +766,107 @@ language_init (const gchar *language)
   /*  We already set the locale according to the environment, so just
    *  return early if no language is set in gimprc.
    */
-  if (! language)
-    return;
+  if (! language || strlen (language) == 0)
+    {
+      actual_language = language_get_system_lang_id ();
+    }
+  else
+    {
+      g_setenv ("LANGUAGE", language, TRUE);
+#ifdef G_OS_WIN32
+      /* Adding this fixed broken localization (for some languages) on
+       * Windows. See MR !1551.
+       * But it turned out it broke localization of plug-ins on Linux
+       * outputting a "Locale not supported by C library" error. Looks
+       * like LANG needs to be fully qualified (region and encoding).
+       */
+      g_setenv ("LANG", language, TRUE);
+#endif
+      setlocale (LC_ALL, ".UTF-8");
 
-  g_setenv ("LANGUAGE", language, TRUE);
-  setlocale (LC_ALL, "");
+      actual_language = g_strdup (language);
+    }
+
+  return actual_language;
+}
+
+static gchar *
+language_get_system_lang_id (void)
+{
+  /* Using system language. It doesn't matter too much that the string
+   * format is different when using system or preference-set language,
+   * because this string is only used for comparison. As long as 2
+   * similar run have the same settings, the strings will be
+   * identical.
+   */
+
+#if defined G_OS_WIN32
+  return g_strdup_printf ("LANGID-%d", GetUserDefaultUILanguage());
+#elif defined PLATFORM_OSX
+  NSString *langs;
+
+  /* In macOS, the user sets a list of prefered languages and the
+   * software respects this preference order. I.e. that just storing the
+   * top-prefered lang would not be enough. What if GIMP didn't have
+   * translations for it, then it would fallback to the second lang. If
+   * this second lang changed, GIMP localization would change but we
+   * would not be aware of it. Instead, let's use the whole list as our
+   * language identifier. If this list changes in any way, we consider
+   * the lang may have potentially changed.
+   */
+  langs = [[NSLocale preferredLanguages] componentsJoinedByString:@","];
+
+  return g_strdup_printf ("%s", [langs UTF8String]);
+#else
+  const gchar *syslang = NULL;
+  const gchar *language;
+
+  /* nl_langinfo() does not take LANGUAGE into account, only the `LC_*`
+   * variables apparently. Even though the GUI is correctly translated
+   * to LANGUAGE, syslang can end wrong. See #12722.
+   *
+   * This is why I return the concatenation of LANGUAGE (even though
+   * this variable may contain bogus data and therefore not reflect the
+   * real GUI language either) and the locale language.
+   *
+   * Since the returned string is mostly used to detect if we should
+   * trigger a re-query of all plug-ins (after a localization change),
+   * it is considered an opaque value.
+   * It may trigger unneeded force-query, but only if people play with
+   * environment variables and set different bogus language codes all
+   * the time. At least it wouldn't block force-query for real cases.
+   */
+  language = g_getenv ("LANGUAGE");
+
+#if defined HAVE__NL_IDENTIFICATION_LANGUAGE
+  syslang = nl_langinfo (_NL_IDENTIFICATION_LANGUAGE);
+#endif
+
+  if (syslang == NULL || strlen (syslang) == 0)
+    /* This should return an opaque string which represents the whole
+     * locale configuration on this system.
+     */
+    syslang = setlocale (LC_ALL, NULL);
+
+  /* I don't think we'd ever get here but just in case, as a last
+   * resort, if none of the previous methods returned a valid result,
+   * let's just check environment variables ourselves.
+   * This is the proper order of priority.
+   */
+  if (syslang == NULL || strlen (syslang) == 0)
+    syslang = g_getenv ("LC_ALL");
+  if (syslang == NULL || strlen (syslang) == 0)
+    syslang = g_getenv ("LC_MESSAGES");
+  if (syslang == NULL || strlen (syslang) == 0)
+    syslang = g_getenv ("LANG");
+
+  if (syslang && strlen (syslang) > 0 && language && strlen (language) > 0)
+    return g_strjoin ("-", language, syslang, NULL);
+  else if (syslang && strlen (syslang) > 0)
+    return g_strdup (syslang);
+  else if (language && strlen (language) > 0)
+    return g_strdup (language);
+  else
+    return NULL;
+#endif
 }

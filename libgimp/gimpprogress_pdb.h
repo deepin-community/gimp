@@ -33,12 +33,12 @@ G_BEGIN_DECLS
 
 
 G_GNUC_INTERNAL gboolean _gimp_progress_init             (const gchar *message,
-                                                          gint32       gdisplay_ID);
+                                                          GimpDisplay *gdisplay);
 G_GNUC_INTERNAL gboolean _gimp_progress_update           (gdouble      percentage);
 gboolean                 gimp_progress_pulse             (void);
 gboolean                 gimp_progress_set_text          (const gchar *message);
 gboolean                 gimp_progress_end               (void);
-gint                     gimp_progress_get_window_handle (void);
+GBytes*                  gimp_progress_get_window_handle (void);
 G_GNUC_INTERNAL gboolean _gimp_progress_install          (const gchar *progress_callback);
 G_GNUC_INTERNAL gboolean _gimp_progress_uninstall        (const gchar *progress_callback);
 gboolean                 gimp_progress_cancel            (const gchar *progress_callback);

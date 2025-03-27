@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <gegl.h>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -29,6 +31,7 @@
 
 #include "pdb-types.h"
 
+#include "core/gimpgrouplayer.h"
 #include "core/gimpimage.h"
 #include "core/gimpitem.h"
 #include "core/gimplayermask.h"
@@ -36,7 +39,7 @@
 #include "core/gimpparamspecs.h"
 #include "core/gimpselection.h"
 #include "text/gimptextlayer.h"
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "gimppdb.h"
 #include "gimppdb-utils.h"
@@ -48,24 +51,289 @@
 
 
 static GimpValueArray *
-item_is_valid_invoker (GimpProcedure         *procedure,
-                       Gimp                  *gimp,
-                       GimpContext           *context,
-                       GimpProgress          *progress,
-                       const GimpValueArray  *args,
-                       GError               **error)
+item_id_is_valid_invoker (GimpProcedure         *procedure,
+                          Gimp                  *gimp,
+                          GimpContext           *context,
+                          GimpProgress          *progress,
+                          const GimpValueArray  *args,
+                          GError               **error)
 {
+  gboolean success = TRUE;
   GimpValueArray *return_vals;
-  GimpItem *item;
+  gint item_id;
   gboolean valid = FALSE;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item_id = g_value_get_int (gimp_value_array_index (args, 0));
 
-  valid = (GIMP_IS_ITEM (item) &&
-           ! gimp_item_is_removed (GIMP_ITEM (item)));
+  if (success)
+    {
+      GimpItem *item = gimp_item_get_by_id (gimp, item_id);
 
-  return_vals = gimp_procedure_get_return_values (procedure, TRUE, NULL);
-  g_value_set_boolean (gimp_value_array_index (return_vals, 1), valid);
+      valid = (GIMP_IS_ITEM (item) &&
+               ! gimp_item_is_removed (GIMP_ITEM (item)));
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_boolean (gimp_value_array_index (return_vals, 1), valid);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+item_id_is_drawable_invoker (GimpProcedure         *procedure,
+                             Gimp                  *gimp,
+                             GimpContext           *context,
+                             GimpProgress          *progress,
+                             const GimpValueArray  *args,
+                             GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  gint item_id;
+  gboolean drawable = FALSE;
+
+  item_id = g_value_get_int (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+      drawable = (GIMP_IS_DRAWABLE (item) &&
+                  ! gimp_item_is_removed (item));
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_boolean (gimp_value_array_index (return_vals, 1), drawable);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+item_id_is_layer_invoker (GimpProcedure         *procedure,
+                          Gimp                  *gimp,
+                          GimpContext           *context,
+                          GimpProgress          *progress,
+                          const GimpValueArray  *args,
+                          GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  gint item_id;
+  gboolean layer = FALSE;
+
+  item_id = g_value_get_int (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+      layer = (GIMP_IS_LAYER (item) &&
+               ! gimp_item_is_removed (item));
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_boolean (gimp_value_array_index (return_vals, 1), layer);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+item_id_is_text_layer_invoker (GimpProcedure         *procedure,
+                               Gimp                  *gimp,
+                               GimpContext           *context,
+                               GimpProgress          *progress,
+                               const GimpValueArray  *args,
+                               GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  gint item_id;
+  gboolean text_layer = FALSE;
+
+  item_id = g_value_get_int (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+      text_layer = (GIMP_IS_LAYER (item) &&
+                    ! gimp_item_is_removed (item) &&
+                    gimp_item_is_text_layer (item));
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_boolean (gimp_value_array_index (return_vals, 1), text_layer);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+item_id_is_group_layer_invoker (GimpProcedure         *procedure,
+                                Gimp                  *gimp,
+                                GimpContext           *context,
+                                GimpProgress          *progress,
+                                const GimpValueArray  *args,
+                                GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  gint item_id;
+  gboolean group_layer = FALSE;
+
+  item_id = g_value_get_int (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+      group_layer = (GIMP_IS_GROUP_LAYER (item) && ! gimp_item_is_removed (item));
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_boolean (gimp_value_array_index (return_vals, 1), group_layer);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+item_id_is_channel_invoker (GimpProcedure         *procedure,
+                            Gimp                  *gimp,
+                            GimpContext           *context,
+                            GimpProgress          *progress,
+                            const GimpValueArray  *args,
+                            GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  gint item_id;
+  gboolean channel = FALSE;
+
+  item_id = g_value_get_int (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+      channel = (GIMP_IS_CHANNEL (item) &&
+                 ! gimp_item_is_removed (item));
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_boolean (gimp_value_array_index (return_vals, 1), channel);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+item_id_is_layer_mask_invoker (GimpProcedure         *procedure,
+                               Gimp                  *gimp,
+                               GimpContext           *context,
+                               GimpProgress          *progress,
+                               const GimpValueArray  *args,
+                               GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  gint item_id;
+  gboolean layer_mask = FALSE;
+
+  item_id = g_value_get_int (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+      layer_mask = (GIMP_IS_LAYER_MASK (item) &&
+                    ! gimp_item_is_removed (item));
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_boolean (gimp_value_array_index (return_vals, 1), layer_mask);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+item_id_is_path_invoker (GimpProcedure         *procedure,
+                         Gimp                  *gimp,
+                         GimpContext           *context,
+                         GimpProgress          *progress,
+                         const GimpValueArray  *args,
+                         GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  gint item_id;
+  gboolean path = FALSE;
+
+  item_id = g_value_get_int (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+      path = (GIMP_IS_PATH (item) &&
+              ! gimp_item_is_removed (item));
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_boolean (gimp_value_array_index (return_vals, 1), path);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+item_id_is_selection_invoker (GimpProcedure         *procedure,
+                              Gimp                  *gimp,
+                              GimpContext           *context,
+                              GimpProgress          *progress,
+                              const GimpValueArray  *args,
+                              GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  gint item_id;
+  gboolean selection = FALSE;
+
+  item_id = g_value_get_int (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      GimpItem *item = gimp_item_get_by_id (gimp, item_id);
+
+      selection = (GIMP_IS_SELECTION (item) &&
+                   ! gimp_item_is_removed (item));
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_boolean (gimp_value_array_index (return_vals, 1), selection);
 
   return return_vals;
 }
@@ -83,7 +351,7 @@ item_get_image_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   GimpImage *image = NULL;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -94,7 +362,7 @@ item_get_image_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_image (gimp_value_array_index (return_vals, 1), image);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), image);
 
   return return_vals;
 }
@@ -110,7 +378,7 @@ item_delete_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpItem *item;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -128,209 +396,6 @@ item_delete_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-item_is_drawable_invoker (GimpProcedure         *procedure,
-                          Gimp                  *gimp,
-                          GimpContext           *context,
-                          GimpProgress          *progress,
-                          const GimpValueArray  *args,
-                          GError               **error)
-{
-  gboolean success = TRUE;
-  GimpValueArray *return_vals;
-  GimpItem *item;
-  gboolean drawable = FALSE;
-
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
-
-  if (success)
-    {
-      drawable = GIMP_IS_DRAWABLE (item);
-    }
-
-  return_vals = gimp_procedure_get_return_values (procedure, success,
-                                                  error ? *error : NULL);
-
-  if (success)
-    g_value_set_boolean (gimp_value_array_index (return_vals, 1), drawable);
-
-  return return_vals;
-}
-
-static GimpValueArray *
-item_is_layer_invoker (GimpProcedure         *procedure,
-                       Gimp                  *gimp,
-                       GimpContext           *context,
-                       GimpProgress          *progress,
-                       const GimpValueArray  *args,
-                       GError               **error)
-{
-  gboolean success = TRUE;
-  GimpValueArray *return_vals;
-  GimpItem *item;
-  gboolean layer = FALSE;
-
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
-
-  if (success)
-    {
-      layer = GIMP_IS_LAYER (item);
-    }
-
-  return_vals = gimp_procedure_get_return_values (procedure, success,
-                                                  error ? *error : NULL);
-
-  if (success)
-    g_value_set_boolean (gimp_value_array_index (return_vals, 1), layer);
-
-  return return_vals;
-}
-
-static GimpValueArray *
-item_is_text_layer_invoker (GimpProcedure         *procedure,
-                            Gimp                  *gimp,
-                            GimpContext           *context,
-                            GimpProgress          *progress,
-                            const GimpValueArray  *args,
-                            GError               **error)
-{
-  gboolean success = TRUE;
-  GimpValueArray *return_vals;
-  GimpItem *item;
-  gboolean text_layer = FALSE;
-
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
-
-  if (success)
-    {
-      text_layer = gimp_item_is_text_layer (item);
-    }
-
-  return_vals = gimp_procedure_get_return_values (procedure, success,
-                                                  error ? *error : NULL);
-
-  if (success)
-    g_value_set_boolean (gimp_value_array_index (return_vals, 1), text_layer);
-
-  return return_vals;
-}
-
-static GimpValueArray *
-item_is_channel_invoker (GimpProcedure         *procedure,
-                         Gimp                  *gimp,
-                         GimpContext           *context,
-                         GimpProgress          *progress,
-                         const GimpValueArray  *args,
-                         GError               **error)
-{
-  gboolean success = TRUE;
-  GimpValueArray *return_vals;
-  GimpItem *item;
-  gboolean channel = FALSE;
-
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
-
-  if (success)
-    {
-      channel = GIMP_IS_CHANNEL (item);
-    }
-
-  return_vals = gimp_procedure_get_return_values (procedure, success,
-                                                  error ? *error : NULL);
-
-  if (success)
-    g_value_set_boolean (gimp_value_array_index (return_vals, 1), channel);
-
-  return return_vals;
-}
-
-static GimpValueArray *
-item_is_layer_mask_invoker (GimpProcedure         *procedure,
-                            Gimp                  *gimp,
-                            GimpContext           *context,
-                            GimpProgress          *progress,
-                            const GimpValueArray  *args,
-                            GError               **error)
-{
-  gboolean success = TRUE;
-  GimpValueArray *return_vals;
-  GimpItem *item;
-  gboolean layer_mask = FALSE;
-
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
-
-  if (success)
-    {
-      layer_mask = GIMP_IS_LAYER_MASK (item);
-    }
-
-  return_vals = gimp_procedure_get_return_values (procedure, success,
-                                                  error ? *error : NULL);
-
-  if (success)
-    g_value_set_boolean (gimp_value_array_index (return_vals, 1), layer_mask);
-
-  return return_vals;
-}
-
-static GimpValueArray *
-item_is_selection_invoker (GimpProcedure         *procedure,
-                           Gimp                  *gimp,
-                           GimpContext           *context,
-                           GimpProgress          *progress,
-                           const GimpValueArray  *args,
-                           GError               **error)
-{
-  gboolean success = TRUE;
-  GimpValueArray *return_vals;
-  GimpItem *item;
-  gboolean selection = FALSE;
-
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
-
-  if (success)
-    {
-      selection = GIMP_IS_SELECTION (item);
-    }
-
-  return_vals = gimp_procedure_get_return_values (procedure, success,
-                                                  error ? *error : NULL);
-
-  if (success)
-    g_value_set_boolean (gimp_value_array_index (return_vals, 1), selection);
-
-  return return_vals;
-}
-
-static GimpValueArray *
-item_is_vectors_invoker (GimpProcedure         *procedure,
-                         Gimp                  *gimp,
-                         GimpContext           *context,
-                         GimpProgress          *progress,
-                         const GimpValueArray  *args,
-                         GError               **error)
-{
-  gboolean success = TRUE;
-  GimpValueArray *return_vals;
-  GimpItem *item;
-  gboolean vectors = FALSE;
-
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
-
-  if (success)
-    {
-      vectors = GIMP_IS_VECTORS (item);
-    }
-
-  return_vals = gimp_procedure_get_return_values (procedure, success,
-                                                  error ? *error : NULL);
-
-  if (success)
-    g_value_set_boolean (gimp_value_array_index (return_vals, 1), vectors);
-
-  return return_vals;
-}
-
-static GimpValueArray *
 item_is_group_invoker (GimpProcedure         *procedure,
                        Gimp                  *gimp,
                        GimpContext           *context,
@@ -343,7 +408,7 @@ item_is_group_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   gboolean group = FALSE;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -372,7 +437,7 @@ item_get_parent_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   GimpItem *parent = NULL;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -383,7 +448,7 @@ item_get_parent_invoker (GimpProcedure         *procedure,
                                                   error ? *error : NULL);
 
   if (success)
-    gimp_value_set_item (gimp_value_array_index (return_vals, 1), parent);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), parent);
 
   return return_vals;
 }
@@ -399,47 +464,39 @@ item_get_children_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpItem *item;
-  gint32 num_children = 0;
-  gint32 *child_ids = NULL;
+  GimpItem **children = NULL;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      GimpContainer *children = gimp_viewable_get_children (GIMP_VIEWABLE (item));
+      GimpContainer *container = gimp_viewable_get_children (GIMP_VIEWABLE (item));
 
-      if (children)
+      if (container)
         {
-          num_children = gimp_container_get_n_children (children);
+          gsize  num_children = gimp_container_get_n_children (container);
+          GList *list;
+          gint   i;
 
-          if (num_children)
+          children = g_new0 (GimpItem *, num_children + 1);
+
+          for (list = GIMP_LIST (container)->queue->head, i = 0;
+               list; list = g_list_next (list), i++)
             {
-              GList *list;
-              gint   i;
-
-              child_ids = g_new (gint32, num_children);
-
-              for (list = GIMP_LIST (children)->queue->head, i = 0;
-                   list;
-                   list = g_list_next (list), i++)
-                {
-                  child_ids[i] = gimp_item_get_ID (GIMP_ITEM (list->data));
-                }
+              children[i] = list->data;
             }
         }
       else
-        success = FALSE;
-
+        {
+          success = FALSE;
+        }
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    {
-      g_value_set_int (gimp_value_array_index (return_vals, 1), num_children);
-      gimp_value_take_int32array (gimp_value_array_index (return_vals, 2), child_ids, num_children);
-    }
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), children);
 
   return return_vals;
 }
@@ -457,7 +514,7 @@ item_get_expanded_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   gboolean expanded = FALSE;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -485,7 +542,7 @@ item_set_expanded_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   gboolean expanded;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
   expanded = g_value_get_boolean (gimp_value_array_index (args, 1));
 
   if (success)
@@ -510,7 +567,7 @@ item_get_name_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   gchar *name = NULL;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -538,7 +595,7 @@ item_set_name_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   const gchar *name;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
   name = g_value_get_string (gimp_value_array_index (args, 1));
 
   if (success)
@@ -563,7 +620,7 @@ item_get_visible_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   gboolean visible = FALSE;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -591,65 +648,12 @@ item_set_visible_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   gboolean visible;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
   visible = g_value_get_boolean (gimp_value_array_index (args, 1));
 
   if (success)
     {
       gimp_item_set_visible (GIMP_ITEM (item), visible, TRUE);
-    }
-
-  return gimp_procedure_get_return_values (procedure, success,
-                                           error ? *error : NULL);
-}
-
-static GimpValueArray *
-item_get_linked_invoker (GimpProcedure         *procedure,
-                         Gimp                  *gimp,
-                         GimpContext           *context,
-                         GimpProgress          *progress,
-                         const GimpValueArray  *args,
-                         GError               **error)
-{
-  gboolean success = TRUE;
-  GimpValueArray *return_vals;
-  GimpItem *item;
-  gboolean linked = FALSE;
-
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
-
-  if (success)
-    {
-      linked = gimp_item_get_linked (GIMP_ITEM (item));
-    }
-
-  return_vals = gimp_procedure_get_return_values (procedure, success,
-                                                  error ? *error : NULL);
-
-  if (success)
-    g_value_set_boolean (gimp_value_array_index (return_vals, 1), linked);
-
-  return return_vals;
-}
-
-static GimpValueArray *
-item_set_linked_invoker (GimpProcedure         *procedure,
-                         Gimp                  *gimp,
-                         GimpContext           *context,
-                         GimpProgress          *progress,
-                         const GimpValueArray  *args,
-                         GError               **error)
-{
-  gboolean success = TRUE;
-  GimpItem *item;
-  gboolean linked;
-
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
-  linked = g_value_get_boolean (gimp_value_array_index (args, 1));
-
-  if (success)
-    {
-      gimp_item_set_linked (GIMP_ITEM (item), linked, TRUE);
     }
 
   return gimp_procedure_get_return_values (procedure, success,
@@ -669,7 +673,7 @@ item_get_lock_content_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   gboolean lock_content = FALSE;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -697,7 +701,7 @@ item_set_lock_content_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   gboolean lock_content;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
   lock_content = g_value_get_boolean (gimp_value_array_index (args, 1));
 
   if (success)
@@ -725,7 +729,7 @@ item_get_lock_position_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   gboolean lock_position = FALSE;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -753,13 +757,69 @@ item_set_lock_position_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   gboolean lock_position;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
   lock_position = g_value_get_boolean (gimp_value_array_index (args, 1));
 
   if (success)
     {
       if (gimp_item_can_lock_position (GIMP_ITEM (item)))
         gimp_item_set_lock_position (GIMP_ITEM (item), lock_position, TRUE);
+      else
+        success = FALSE;
+    }
+
+  return gimp_procedure_get_return_values (procedure, success,
+                                           error ? *error : NULL);
+}
+
+static GimpValueArray *
+item_get_lock_visibility_invoker (GimpProcedure         *procedure,
+                                  Gimp                  *gimp,
+                                  GimpContext           *context,
+                                  GimpProgress          *progress,
+                                  const GimpValueArray  *args,
+                                  GError               **error)
+{
+  gboolean success = TRUE;
+  GimpValueArray *return_vals;
+  GimpItem *item;
+  gboolean lock_visibility = FALSE;
+
+  item = g_value_get_object (gimp_value_array_index (args, 0));
+
+  if (success)
+    {
+      lock_visibility = gimp_item_get_lock_visibility (GIMP_ITEM (item));
+    }
+
+  return_vals = gimp_procedure_get_return_values (procedure, success,
+                                                  error ? *error : NULL);
+
+  if (success)
+    g_value_set_boolean (gimp_value_array_index (return_vals, 1), lock_visibility);
+
+  return return_vals;
+}
+
+static GimpValueArray *
+item_set_lock_visibility_invoker (GimpProcedure         *procedure,
+                                  Gimp                  *gimp,
+                                  GimpContext           *context,
+                                  GimpProgress          *progress,
+                                  const GimpValueArray  *args,
+                                  GError               **error)
+{
+  gboolean success = TRUE;
+  GimpItem *item;
+  gboolean lock_visibility;
+
+  item = g_value_get_object (gimp_value_array_index (args, 0));
+  lock_visibility = g_value_get_boolean (gimp_value_array_index (args, 1));
+
+  if (success)
+    {
+      if (gimp_item_can_lock_visibility (GIMP_ITEM (item)))
+        gimp_item_set_lock_visibility (GIMP_ITEM (item), lock_visibility, TRUE);
       else
         success = FALSE;
     }
@@ -779,9 +839,9 @@ item_get_color_tag_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpItem *item;
-  gint32 color_tag = 0;
+  gint color_tag = 0;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -807,9 +867,9 @@ item_set_color_tag_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpItem *item;
-  gint32 color_tag;
+  gint color_tag;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
   color_tag = g_value_get_enum (gimp_value_array_index (args, 1));
 
   if (success)
@@ -832,9 +892,9 @@ item_get_tattoo_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpItem *item;
-  gint32 tattoo = 0;
+  guint tattoo = 0;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
@@ -860,9 +920,9 @@ item_set_tattoo_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpItem *item;
-  gint32 tattoo;
+  guint tattoo;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
   tattoo = g_value_get_uint (gimp_value_array_index (args, 1));
 
   if (success)
@@ -886,7 +946,7 @@ item_attach_parasite_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   const GimpParasite *parasite;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
   parasite = g_value_get_boxed (gimp_value_array_index (args, 1));
 
   if (success)
@@ -913,7 +973,7 @@ item_detach_parasite_invoker (GimpProcedure         *procedure,
   GimpItem *item;
   const gchar *name;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
   name = g_value_get_string (gimp_value_array_index (args, 1));
 
   if (success)
@@ -939,7 +999,7 @@ item_get_parasite_invoker (GimpProcedure         *procedure,
   const gchar *name;
   GimpParasite *parasite = NULL;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
   name = g_value_get_string (gimp_value_array_index (args, 1));
 
   if (success)
@@ -970,24 +1030,20 @@ item_get_parasite_list_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpItem *item;
-  gint32 num_parasites = 0;
   gchar **parasites = NULL;
 
-  item = gimp_value_get_item (gimp_value_array_index (args, 0), gimp);
+  item = g_value_get_object (gimp_value_array_index (args, 0));
 
   if (success)
     {
-      parasites = gimp_item_parasite_list (item, &num_parasites);
+      parasites = gimp_item_parasite_list (item);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    {
-      g_value_set_int (gimp_value_array_index (return_vals, 1), num_parasites);
-      gimp_value_take_stringarray (gimp_value_array_index (return_vals, 2), parasites, num_parasites);
-    }
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), parasites);
 
   return return_vals;
 }
@@ -998,25 +1054,27 @@ register_item_procs (GimpPDB *pdb)
   GimpProcedure *procedure;
 
   /*
-   * gimp-item-is-valid
+   * gimp-item-id-is-valid
    */
-  procedure = gimp_procedure_new (item_is_valid_invoker);
+  procedure = gimp_procedure_new (item_id_is_valid_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-item-is-valid");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-is-valid",
-                                     "Returns TRUE if the item is valid.",
-                                     "This procedure checks if the given item ID is valid and refers to an existing item.",
-                                     "Sven Neumann <sven@gimp.org>",
-                                     "Sven Neumann",
-                                     "2007",
-                                     NULL);
+                               "gimp-item-id-is-valid");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns %TRUE if the item ID is valid.",
+                                  "This procedure checks if the given item ID is valid and refers to an existing item.\n"
+                                  "\n"
+                                  "*Note*: in most use cases, you should not use this function. If you got a [class@Gimp.Item] from the API, you should trust it is valid. This function is mostly for internal usage.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Sven Neumann <sven@gimp.org>",
+                                         "Sven Neumann",
+                                         "2007");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item to check",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE | GIMP_PARAM_NO_VALIDATE));
+                               g_param_spec_int ("item-id",
+                                                 "item id",
+                                                 "The item ID to check",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("valid",
                                                          "valid",
@@ -1027,106 +1085,72 @@ register_item_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-item-get-image
+   * gimp-item-id-is-drawable
    */
-  procedure = gimp_procedure_new (item_get_image_invoker);
+  procedure = gimp_procedure_new (item_id_is_drawable_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-item-get-image");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-image",
-                                     "Returns the item's image.",
-                                     "This procedure returns the item's image.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-item-id-is-drawable");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the item ID is a drawable.",
+                                  "This procedure returns %TRUE if the specified item ID is a drawable.\n"
+                                  "\n"
+                                  "*Note*: in most use cases, you should not use this function. See [func@Gimp.Item.id_is_layer] for a discussion on alternatives.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_image_id ("image",
-                                                             "image",
-                                                             "The item's image",
-                                                             pdb->gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-item-delete
-   */
-  procedure = gimp_procedure_new (item_delete_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-item-delete");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-delete",
-                                     "Delete a item.",
-                                     "This procedure deletes the specified item. This must not be done if the image containing this item was already deleted or if the item was already removed from the image. The only case in which this procedure is useful is if you want to get rid of a item which has not yet been added to an image.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item to delete",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-item-is-drawable
-   */
-  procedure = gimp_procedure_new (item_is_drawable_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-item-is-drawable");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-is-drawable",
-                                     "Returns whether the item is a drawable.",
-                                     "This procedure returns TRUE if the specified item is a drawable.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("item-id",
+                                                 "item id",
+                                                 "The item ID",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("drawable",
                                                          "drawable",
-                                                         "TRUE if the item is a drawable, FALSE otherwise",
+                                                         "TRUE if the item ID is a drawable, FALSE otherwise",
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-item-is-layer
+   * gimp-item-id-is-layer
    */
-  procedure = gimp_procedure_new (item_is_layer_invoker);
+  procedure = gimp_procedure_new (item_id_is_layer_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-item-is-layer");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-is-layer",
-                                     "Returns whether the item is a layer.",
-                                     "This procedure returns TRUE if the specified item is a layer.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-item-id-is-layer");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the item ID is a layer.",
+                                  "This procedure returns %TRUE if the specified item ID is a layer.\n"
+                                  "\n"
+                                  "*Note*: in most use cases, you should not use this function. If the goal is to verify the accurate type for a [class@Gimp.Item], you should either use [method@Gimp.Item.is_layer] or the specific type-checking methods for the used language.\n"
+                                  "\n"
+                                  "For instance, in C:\n"
+                                  "\n"
+                                  "```C\n"
+                                  "if (GIMP_IS_LAYER (item))\n"
+                                  "  do_something ();\n"
+                                  "```\n"
+                                  "\n"
+                                  "Or in the Python binding, you could run:\n"
+                                  "\n"
+                                  "```py3\n"
+                                  "if isinstance(item, Gimp.Layer):\n"
+                                  "  do_something()\n"
+                                  "```",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("item-id",
+                                                 "item id",
+                                                 "The item ID",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("layer",
                                                          "layer",
@@ -1137,25 +1161,27 @@ register_item_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-item-is-text-layer
+   * gimp-item-id-is-text-layer
    */
-  procedure = gimp_procedure_new (item_is_text_layer_invoker);
+  procedure = gimp_procedure_new (item_id_is_text_layer_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-item-is-text-layer");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-is-text-layer",
-                                     "Returns whether the item is a text layer.",
-                                     "This procedure returns TRUE if the specified item is a text layer.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2010",
-                                     NULL);
+                               "gimp-item-id-is-text-layer");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the item ID is a text layer.",
+                                  "This procedure returns %TRUE if the specified item ID is a text layer.\n"
+                                  "\n"
+                                  "*Note*: in most use cases, you should not use this function. See [func@Gimp.Item.id_is_layer] for a discussion on alternatives.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2010");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("item-id",
+                                                 "item id",
+                                                 "The item ID",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("text-layer",
                                                          "text layer",
@@ -1166,141 +1192,232 @@ register_item_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-item-is-channel
+   * gimp-item-id-is-group-layer
    */
-  procedure = gimp_procedure_new (item_is_channel_invoker);
+  procedure = gimp_procedure_new (item_id_is_group_layer_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-item-is-channel");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-is-channel",
-                                     "Returns whether the item is a channel.",
-                                     "This procedure returns TRUE if the specified item is a channel.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-item-id-is-group-layer");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the item ID is a group layer.",
+                                  "This procedure returns %TRUE if the specified item ID is a group layer.\n"
+                                  "\n"
+                                  "*Note*: in most use cases, you should not use this function. See [func@Gimp.Item.id_is_layer] for a discussion on alternatives.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2024");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("item-id",
+                                                 "item id",
+                                                 "The item ID",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_boolean ("group-layer",
+                                                         "group layer",
+                                                         "TRUE if the item is a group layer, FALSE otherwise.",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-item-id-is-channel
+   */
+  procedure = gimp_procedure_new (item_id_is_channel_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-item-id-is-channel");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the item ID is a channel.",
+                                  "This procedure returns %TRUE if the specified item ID is a channel.\n"
+                                  "\n"
+                                  "*Note*: in most use cases, you should not use this function. See [func@Gimp.Item.id_is_layer] for a discussion on alternatives.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("item-id",
+                                                 "item id",
+                                                 "The item ID",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("channel",
                                                          "channel",
-                                                         "TRUE if the item is a channel, FALSE otherwise",
+                                                         "TRUE if the item ID is a channel, FALSE otherwise",
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-item-is-layer-mask
+   * gimp-item-id-is-layer-mask
    */
-  procedure = gimp_procedure_new (item_is_layer_mask_invoker);
+  procedure = gimp_procedure_new (item_id_is_layer_mask_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-item-is-layer-mask");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-is-layer-mask",
-                                     "Returns whether the item is a layer mask.",
-                                     "This procedure returns TRUE if the specified item is a layer mask.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-item-id-is-layer-mask");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the item ID is a layer mask.",
+                                  "This procedure returns %TRUE if the specified item ID is a layer mask.\n"
+                                  "\n"
+                                  "*Note*: in most use cases, you should not use this function. See [func@Gimp.Item.id_is_layer] for a discussion on alternatives.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("item-id",
+                                                 "item id",
+                                                 "The item",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("layer-mask",
                                                          "layer mask",
-                                                         "TRUE if the item is a layer mask, FALSE otherwise",
+                                                         "TRUE if the item ID is a layer mask, FALSE otherwise",
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-item-is-selection
+   * gimp-item-id-is-path
    */
-  procedure = gimp_procedure_new (item_is_selection_invoker);
+  procedure = gimp_procedure_new (item_id_is_path_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-item-is-selection");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-is-selection",
-                                     "Returns whether the item is a selection.",
-                                     "This procedure returns TRUE if the specified item is a selection.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-item-id-is-path");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the item ID is a path.",
+                                  "This procedure returns %TRUE if the specified item ID is a path.\n"
+                                  "\n"
+                                  "*Note*: in most use cases, you should not use this function. See [func@Gimp.Item.id_is_layer] for a discussion on alternatives.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("item-id",
+                                                 "item id",
+                                                 "The item ID",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_boolean ("path",
+                                                         "path",
+                                                         "TRUE if the item ID is a path, FALSE otherwise",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-item-id-is-selection
+   */
+  procedure = gimp_procedure_new (item_id_is_selection_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-item-id-is-selection");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the item ID is a selection.",
+                                  "This procedure returns %TRUE if the specified item ID is a selection.\n"
+                                  "\n"
+                                  "*Note*: in most use cases, you should not use this function. See [func@Gimp.Item.id_is_layer] for a discussion on alternatives.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("item-id",
+                                                 "item id",
+                                                 "The item ID",
+                                                 G_MININT32, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("selection",
                                                          "selection",
-                                                         "TRUE if the item is a selection, FALSE otherwise",
+                                                         "TRUE if the item ID is a selection, FALSE otherwise",
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
-   * gimp-item-is-vectors
+   * gimp-item-get-image
    */
-  procedure = gimp_procedure_new (item_is_vectors_invoker);
+  procedure = gimp_procedure_new (item_get_image_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-item-is-vectors");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-is-vectors",
-                                     "Returns whether the item is a vectors.",
-                                     "This procedure returns TRUE if the specified item is a vectors.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+                               "gimp-item-get-image");
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the item's image.",
+                                  "This procedure returns the item's image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   g_param_spec_boolean ("vectors",
-                                                         "vectors",
-                                                         "TRUE if the item is a vectors, FALSE otherwise",
-                                                         FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_image ("image",
+                                                          "image",
+                                                          "The item's image",
+                                                          FALSE,
+                                                          GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-item-delete
+   */
+  procedure = gimp_procedure_new (item_delete_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-item-delete");
+  gimp_procedure_set_static_help (procedure,
+                                  "Delete a item.",
+                                  "This procedure deletes the specified item. This must not be done if the image containing this item was already deleted or if the item was already removed from the image. The only case in which this procedure is useful is if you want to get rid of a item which has not yet been added to an image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item to delete",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-item-is-group
    */
-  procedure = gimp_procedure_new (item_is_group_invoker);
+  procedure = gimp_procedure_new (item_is_group_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-is-group");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-is-group",
-                                     "Returns whether the item is a group item.",
-                                     "This procedure returns TRUE if the specified item is a group item which can have children.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2010",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the item is a group item.",
+                                  "This procedure returns %TRUE if the specified item is a group item which can have children.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2010");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("group",
                                                          "group",
@@ -1313,86 +1430,81 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-get-parent
    */
-  procedure = gimp_procedure_new (item_get_parent_invoker);
+  procedure = gimp_procedure_new (item_get_parent_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-get-parent");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-parent",
-                                     "Returns the item's parent item.",
-                                     "This procedure returns the item's parent item, if any.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2010",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the item's parent item.",
+                                  "This procedure returns the item's parent item, if any.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2010");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_item_id ("parent",
-                                                            "parent",
-                                                            "The item's parent item",
-                                                            pdb->gimp, FALSE,
-                                                            GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_item ("parent",
+                                                         "parent",
+                                                         "The item's parent item",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-item-get-children
    */
-  procedure = gimp_procedure_new (item_get_children_invoker);
+  procedure = gimp_procedure_new (item_get_children_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-get-children");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-children",
-                                     "Returns the item's list of children.",
-                                     "This procedure returns the list of items which are children of the specified item. The order is topmost to bottommost.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2010",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns the item's list of children.",
+                                  "This procedure returns the list of items which are children of the specified item. The order is topmost to bottommost.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2010");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-children",
-                                                          "num children",
-                                                          "The item's number of children",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32_array ("child-ids",
-                                                                "child ids",
-                                                                "The item's list of children",
-                                                                GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_core_object_array ("children",
+                                                                      "children",
+                                                                      "The item's list of children",
+                                                                      GIMP_TYPE_ITEM,
+                                                                      GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-item-get-expanded
    */
-  procedure = gimp_procedure_new (item_get_expanded_invoker);
+  procedure = gimp_procedure_new (item_get_expanded_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-get-expanded");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-expanded",
-                                     "Returns whether the item is expanded.",
-                                     "This procedure returns TRUE if the specified item is expanded.",
-                                     "Ell",
-                                     "Ell",
-                                     "2017",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Returns whether the item is expanded.",
+                                  "This procedure returns %TRUE if the specified item is expanded.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Ell",
+                                         "Ell",
+                                         "2017");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("expanded",
                                                          "expanded",
@@ -1405,23 +1517,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-set-expanded
    */
-  procedure = gimp_procedure_new (item_set_expanded_invoker);
+  procedure = gimp_procedure_new (item_set_expanded_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-set-expanded");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-set-expanded",
-                                     "Sets the expanded state of the item.",
-                                     "This procedure expands or collapses the item.",
-                                     "Ell",
-                                     "Ell",
-                                     "2017",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Sets the expanded state of the item.",
+                                  "This procedure expands or collapses the item.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Ell",
+                                         "Ell",
+                                         "2017");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_boolean ("expanded",
                                                      "expanded",
@@ -1434,23 +1546,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-get-name
    */
-  procedure = gimp_procedure_new (item_get_name_invoker);
+  procedure = gimp_procedure_new (item_get_name_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-get-name");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-name",
-                                     "Get the name of the specified item.",
-                                     "This procedure returns the specified item's name.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the name of the specified item.",
+                                  "This procedure returns the specified item's name.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    gimp_param_spec_string ("name",
                                                            "name",
@@ -1464,23 +1576,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-set-name
    */
-  procedure = gimp_procedure_new (item_set_name_invoker);
+  procedure = gimp_procedure_new (item_set_name_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-set-name");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-set-name",
-                                     "Set the name of the specified item.",
-                                     "This procedure sets the specified item's name.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the name of the specified item.",
+                                  "This procedure sets the specified item's name.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("name",
                                                        "name",
@@ -1494,23 +1606,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-get-visible
    */
-  procedure = gimp_procedure_new (item_get_visible_invoker);
+  procedure = gimp_procedure_new (item_get_visible_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-get-visible");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-visible",
-                                     "Get the visibility of the specified item.",
-                                     "This procedure returns the specified item's visibility.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the visibility of the specified item.",
+                                  "This procedure returns the specified item's visibility.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("visible",
                                                          "visible",
@@ -1523,23 +1635,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-set-visible
    */
-  procedure = gimp_procedure_new (item_set_visible_invoker);
+  procedure = gimp_procedure_new (item_set_visible_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-set-visible");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-set-visible",
-                                     "Set the visibility of the specified item.",
-                                     "This procedure sets the specified item's visibility.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the visibility of the specified item.",
+                                  "This procedure sets the specified item's visibility.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_boolean ("visible",
                                                      "visible",
@@ -1550,83 +1662,25 @@ register_item_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-item-get-linked
-   */
-  procedure = gimp_procedure_new (item_get_linked_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-item-get-linked");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-linked",
-                                     "Get the linked state of the specified item.",
-                                     "This procedure returns the specified item's linked state.",
-                                     "Wolfgang Hofer",
-                                     "Wolfgang Hofer",
-                                     "1998",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   g_param_spec_boolean ("linked",
-                                                         "linked",
-                                                         "The item linked state (for moves)",
-                                                         FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
-   * gimp-item-set-linked
-   */
-  procedure = gimp_procedure_new (item_set_linked_invoker);
-  gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-item-set-linked");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-set-linked",
-                                     "Set the linked state of the specified item.",
-                                     "This procedure sets the specified item's linked state.",
-                                     "Wolfgang Hofer",
-                                     "Wolfgang Hofer",
-                                     "1998",
-                                     NULL);
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               g_param_spec_boolean ("linked",
-                                                     "linked",
-                                                     "The new item linked state",
-                                                     FALSE,
-                                                     GIMP_PARAM_READWRITE));
-  gimp_pdb_register_procedure (pdb, procedure);
-  g_object_unref (procedure);
-
-  /*
    * gimp-item-get-lock-content
    */
-  procedure = gimp_procedure_new (item_get_lock_content_invoker);
+  procedure = gimp_procedure_new (item_get_lock_content_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-get-lock-content");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-lock-content",
-                                     "Get the 'lock content' state of the specified item.",
-                                     "This procedure returns the specified item's lock content state.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2009",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the 'lock content' state of the specified item.",
+                                  "This procedure returns the specified item's lock content state.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2009");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("lock-content",
                                                          "lock content",
@@ -1639,23 +1693,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-set-lock-content
    */
-  procedure = gimp_procedure_new (item_set_lock_content_invoker);
+  procedure = gimp_procedure_new (item_set_lock_content_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-set-lock-content");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-set-lock-content",
-                                     "Set the 'lock content' state of the specified item.",
-                                     "This procedure sets the specified item's lock content state.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2009",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the 'lock content' state of the specified item.",
+                                  "This procedure sets the specified item's lock content state.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2009");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_boolean ("lock-content",
                                                      "lock content",
@@ -1668,23 +1722,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-get-lock-position
    */
-  procedure = gimp_procedure_new (item_get_lock_position_invoker);
+  procedure = gimp_procedure_new (item_get_lock_position_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-get-lock-position");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-lock-position",
-                                     "Get the 'lock position' state of the specified item.",
-                                     "This procedure returns the specified item's lock position state.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2012",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the 'lock position' state of the specified item.",
+                                  "This procedure returns the specified item's lock position state.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2012");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_boolean ("lock-position",
                                                          "lock position",
@@ -1697,23 +1751,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-set-lock-position
    */
-  procedure = gimp_procedure_new (item_set_lock_position_invoker);
+  procedure = gimp_procedure_new (item_set_lock_position_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-set-lock-position");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-set-lock-position",
-                                     "Set the 'lock position' state of the specified item.",
-                                     "This procedure sets the specified item's lock position state.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2009",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the 'lock position' state of the specified item.",
+                                  "This procedure sets the specified item's lock position state.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2009");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_boolean ("lock-position",
                                                      "lock position",
@@ -1724,25 +1778,83 @@ register_item_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
+   * gimp-item-get-lock-visibility
+   */
+  procedure = gimp_procedure_new (item_get_lock_visibility_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-item-get-lock-visibility");
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the 'lock visibility' state of the specified item.",
+                                  "This procedure returns the specified item's lock visibility state.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2021");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_return_value (procedure,
+                                   g_param_spec_boolean ("lock-visibility",
+                                                         "lock visibility",
+                                                         "Whether the item's visibility is locked",
+                                                         FALSE,
+                                                         GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
+   * gimp-item-set-lock-visibility
+   */
+  procedure = gimp_procedure_new (item_set_lock_visibility_invoker, FALSE);
+  gimp_object_set_static_name (GIMP_OBJECT (procedure),
+                               "gimp-item-set-lock-visibility");
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the 'lock visibility' state of the specified item.",
+                                  "This procedure sets the specified item's lock visibility state.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jehan",
+                                         "Jehan",
+                                         "2021");
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_boolean ("lock-visibility",
+                                                     "lock visibility",
+                                                     "The new item 'lock visibility' state",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_pdb_register_procedure (pdb, procedure);
+  g_object_unref (procedure);
+
+  /*
    * gimp-item-get-color-tag
    */
-  procedure = gimp_procedure_new (item_get_color_tag_invoker);
+  procedure = gimp_procedure_new (item_get_color_tag_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-get-color-tag");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-color-tag",
-                                     "Get the color tag of the specified item.",
-                                     "This procedure returns the specified item's color tag.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2016",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the color tag of the specified item.",
+                                  "This procedure returns the specified item's color tag.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2016");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_enum ("color-tag",
                                                       "color tag",
@@ -1756,23 +1868,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-set-color-tag
    */
-  procedure = gimp_procedure_new (item_set_color_tag_invoker);
+  procedure = gimp_procedure_new (item_set_color_tag_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-set-color-tag");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-set-color-tag",
-                                     "Set the color tag of the specified item.",
-                                     "This procedure sets the specified item's color tag.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2016",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the color tag of the specified item.",
+                                  "This procedure sets the specified item's color tag.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2016");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_enum ("color-tag",
                                                   "color tag",
@@ -1786,23 +1898,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-get-tattoo
    */
-  procedure = gimp_procedure_new (item_get_tattoo_invoker);
+  procedure = gimp_procedure_new (item_get_tattoo_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-get-tattoo");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-tattoo",
-                                     "Get the tattoo of the specified item.",
-                                     "This procedure returns the specified item's tattoo. A tattoo is a unique and permanent identifier attached to a item that can be used to uniquely identify a item within an image even between sessions.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get the tattoo of the specified item.",
+                                  "This procedure returns the specified item's tattoo. A tattoo is a unique and permanent identifier attached to a item that can be used to uniquely identify a item within an image even between sessions.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_uint ("tattoo",
                                                       "tattoo",
@@ -1815,23 +1927,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-set-tattoo
    */
-  procedure = gimp_procedure_new (item_set_tattoo_invoker);
+  procedure = gimp_procedure_new (item_set_tattoo_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-set-tattoo");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-set-tattoo",
-                                     "Set the tattoo of the specified item.",
-                                     "This procedure sets the specified item's tattoo. A tattoo is a unique and permanent identifier attached to a item that can be used to uniquely identify a item within an image even between sessions.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Set the tattoo of the specified item.",
+                                  "This procedure sets the specified item's tattoo. A tattoo is a unique and permanent identifier attached to a item that can be used to uniquely identify a item within an image even between sessions.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_uint ("tattoo",
                                                   "tattoo",
@@ -1844,23 +1956,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-attach-parasite
    */
-  procedure = gimp_procedure_new (item_attach_parasite_invoker);
+  procedure = gimp_procedure_new (item_attach_parasite_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-attach-parasite");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-attach-parasite",
-                                     "Add a parasite to an item.",
-                                     "This procedure attaches a parasite to an item. It has no return values.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Add a parasite to an item.",
+                                  "This procedure attaches a parasite to an item. It has no return values.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_parasite ("parasite",
                                                          "parasite",
@@ -1872,23 +1984,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-detach-parasite
    */
-  procedure = gimp_procedure_new (item_detach_parasite_invoker);
+  procedure = gimp_procedure_new (item_detach_parasite_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-detach-parasite");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-detach-parasite",
-                                     "Removes a parasite from an item.",
-                                     "This procedure detaches a parasite from an item. It has no return values.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Removes a parasite from an item.",
+                                  "This procedure detaches a parasite from an item. It has no return values.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("name",
                                                        "name",
@@ -1902,23 +2014,23 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-get-parasite
    */
-  procedure = gimp_procedure_new (item_get_parasite_invoker);
+  procedure = gimp_procedure_new (item_get_parasite_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-get-parasite");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-parasite",
-                                     "Look up a parasite in an item",
-                                     "Finds and returns the parasite that is attached to an item.",
-                                     "Jay Cox",
-                                     "Jay Cox",
-                                     "1998",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Look up a parasite in an item",
+                                  "Finds and returns the parasite that is attached to an item.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Jay Cox",
+                                         "Jay Cox",
+                                         "1998");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("name",
                                                        "name",
@@ -1937,34 +2049,29 @@ register_item_procs (GimpPDB *pdb)
   /*
    * gimp-item-get-parasite-list
    */
-  procedure = gimp_procedure_new (item_get_parasite_list_invoker);
+  procedure = gimp_procedure_new (item_get_parasite_list_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-item-get-parasite-list");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-item-get-parasite-list",
-                                     "List all parasites.",
-                                     "Returns a list of all parasites currently attached the an item.",
-                                     "Marc Lehmann",
-                                     "Marc Lehmann",
-                                     "1999",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "List all parasites.",
+                                  "Returns a list of all parasites currently attached the an item.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Marc Lehmann",
+                                         "Marc Lehmann",
+                                         "1999");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_item_id ("item",
-                                                        "item",
-                                                        "The item",
-                                                        pdb->gimp, FALSE,
-                                                        GIMP_PARAM_READWRITE));
+                               gimp_param_spec_item ("item",
+                                                     "item",
+                                                     "The item",
+                                                     FALSE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-parasites",
-                                                          "num parasites",
-                                                          "The number of attached parasites",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_string_array ("parasites",
-                                                                 "parasites",
-                                                                 "The names of currently attached parasites",
-                                                                 GIMP_PARAM_READWRITE));
+                                   g_param_spec_boxed ("parasites",
+                                                       "parasites",
+                                                       "The names of currently attached parasites",
+                                                       G_TYPE_STRV,
+                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 }

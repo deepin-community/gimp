@@ -30,7 +30,6 @@
 #include "config/gimpcoreconfig.h"
 
 #include "core/gimp.h"
-#include "core/gimpcontext.h"
 #include "core/gimptoolinfo.h"
 
 #include "paint/gimppaintoptions.h"
@@ -50,9 +49,6 @@ struct _GimpToolOptionsManager
 
   GimpToolInfo        *active_tool;
 };
-
-
-static GQuark manager_quark = 0;
 
 
 /*  local function prototypes  */
@@ -79,6 +75,9 @@ static void   tool_options_manager_tool_changed  (GimpContext            *user_c
                                                   GimpToolOptionsManager *manager);
 
 
+static GQuark manager_quark = 0;
+
+
 /*  public functions  */
 
 void
@@ -86,7 +85,6 @@ gimp_tool_options_manager_init (Gimp *gimp)
 {
   GimpToolOptionsManager *manager;
   GimpContext            *user_context;
-  GimpCoreConfig         *config;
   GList                  *list;
 
   g_return_if_fail (GIMP_IS_GIMP (gimp));
@@ -94,9 +92,9 @@ gimp_tool_options_manager_init (Gimp *gimp)
 
   manager_quark = g_quark_from_static_string ("gimp-tool-options-manager");
 
-  config = gimp->config;
-
   manager = g_slice_new0 (GimpToolOptionsManager);
+
+  g_object_set_qdata (G_OBJECT (gimp), manager_quark, manager);
 
   manager->gimp = gimp;
 
@@ -106,9 +104,7 @@ gimp_tool_options_manager_init (Gimp *gimp)
                   "name", "tool-options-manager-global-paint-options",
                   NULL);
 
-  manager->global_props = tool_options_manager_get_global_props (config);
-
-  g_object_set_qdata (G_OBJECT (gimp), manager_quark, manager);
+  manager->global_props = tool_options_manager_get_global_props (gimp->config);
 
   user_context = gimp_get_user_context (gimp);
 
@@ -168,6 +164,9 @@ gimp_tool_options_manager_init (Gimp *gimp)
                     G_CALLBACK (tool_options_manager_global_notify),
                     manager);
   g_signal_connect (gimp->config, "notify::global-font",
+                    G_CALLBACK (tool_options_manager_global_notify),
+                    manager);
+  g_signal_connect (gimp->config, "notify::global-expand",
                     G_CALLBACK (tool_options_manager_global_notify),
                     manager);
 
@@ -254,6 +253,8 @@ tool_options_manager_get_global_props (GimpCoreConfig *config)
     global_props |= GIMP_CONTEXT_PROP_MASK_GRADIENT;
   if (config->global_font)
     global_props |= GIMP_CONTEXT_PROP_MASK_FONT;
+  if (config->global_expand)
+    global_props |= GIMP_CONTEXT_PROP_MASK_EXPAND;
 
   return global_props;
 }
@@ -358,6 +359,12 @@ tool_options_manager_paint_options_notify (GimpPaintOptions *src,
       prop_mask |= GIMP_CONTEXT_PROP_MASK_GRADIENT;
     }
 
+  if ((active || config->global_expand) &&
+      tool_info->context_props & GIMP_CONTEXT_PROP_MASK_EXPAND)
+    {
+      prop_mask |= GIMP_CONTEXT_PROP_MASK_EXPAND;
+    }
+
   if (gimp_paint_options_is_prop (pspec->name, prop_mask))
     {
       GValue value = G_VALUE_INIT;
@@ -407,7 +414,7 @@ tool_options_manager_tool_changed (GimpContext            *user_context,
   /*  FIXME: gimp_busy HACK
    *  the tool manager will stop the emission, so simply return
    */
-  if (user_context->gimp->busy)
+  if (manager->gimp->busy)
     return;
 
   if (manager->active_tool)

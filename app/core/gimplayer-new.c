@@ -86,7 +86,7 @@ gimp_layer_new (GimpImage     *image,
  * possibility of transforming the contents to meet the requirements
  * of the target image type
  *
- * Return value: The new layer.
+ * Returns: The new layer.
  **/
 GimpLayer *
 gimp_layer_new_from_buffer (GimpBuffer    *buffer,
@@ -119,7 +119,7 @@ gimp_layer_new_from_buffer (GimpBuffer    *buffer,
  * possibility of transforming the contents to meet the requirements
  * of the target image type
  *
- * Return value: The new layer.
+ * Returns: The new layer.
  **/
 GimpLayer *
 gimp_layer_new_from_gegl_buffer (GeglBuffer       *buffer,
@@ -170,7 +170,7 @@ gimp_layer_new_from_gegl_buffer (GeglBuffer       *buffer,
  * possibility of transforming the contents to meet the requirements
  * of the target image type
  *
- * Return value: The new layer.
+ * Returns: The new layer.
  **/
 GimpLayer *
 gimp_layer_new_from_pixbuf (GdkPixbuf     *pixbuf,
@@ -225,22 +225,18 @@ gimp_layer_new_convert_buffer (GimpLayer         *layer,
                                GError           **error)
 {
   GimpDrawable     *drawable    = GIMP_DRAWABLE (layer);
-  GimpImage        *image       = gimp_item_get_image (GIMP_ITEM (layer));
   GeglBuffer       *dest_buffer = gimp_drawable_get_buffer (drawable);
   GimpColorProfile *dest_profile;
-
-  if (! gimp_image_get_is_color_managed (image))
-    {
-      gimp_gegl_buffer_copy (src_buffer, NULL, GEGL_ABYSS_NONE,
-                             dest_buffer, NULL);
-      return;
-    }
 
   if (! src_profile)
     {
       const Babl *src_format = gegl_buffer_get_format (src_buffer);
 
       src_profile = gimp_babl_format_get_color_profile (src_format);
+    }
+  else
+    {
+      g_object_ref (src_profile);
     }
 
   dest_profile =
@@ -250,4 +246,6 @@ gimp_layer_new_convert_buffer (GimpLayer         *layer,
                                    dest_buffer, NULL, dest_profile,
                                    GIMP_COLOR_RENDERING_INTENT_PERCEPTUAL,
                                    TRUE, NULL);
+
+  g_object_unref (src_profile);
 }

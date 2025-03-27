@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -48,62 +50,106 @@
 gboolean
 gimp_fonts_refresh (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-fonts-refresh",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-fonts-refresh",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
+ * _gimp_fonts_get_custom_configs:
+ * @sysconfig: (out) (transfer full): sysconfig path.
+ * @renaming_config: (out) (transfer full): fonts renaming config.
+ * @dirs: (out) (array zero-terminated=1) (transfer full): custom fonts directories.
+ *
+ * Retrieve custom configs.
+ *
+ * This procedure returns custom FontConfig configs along with the
+ * fonts renaming config.
+ *
+ * Returns: (transfer full): config path.
+ *          The returned value must be freed with g_free().
+ *
+ * Since: 3.0
+ **/
+gchar *
+_gimp_fonts_get_custom_configs (gchar  **sysconfig,
+                                gchar  **renaming_config,
+                                gchar ***dirs)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gchar *config = NULL;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-fonts-get-custom-configs",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    {
+      config = GIMP_VALUES_DUP_STRING (return_vals, 1);
+      *sysconfig = GIMP_VALUES_DUP_STRING (return_vals, 2);
+      *renaming_config = GIMP_VALUES_DUP_STRING (return_vals, 3);
+      *dirs = GIMP_VALUES_DUP_STRV (return_vals, 4);
+    }
+
+  gimp_value_array_unref (return_vals);
+
+  return config;
+}
+
+/**
  * gimp_fonts_get_list:
- * @filter: An optional regular expression used to filter the list.
- * @num_fonts: The number of available fonts.
+ * @filter: (nullable): An optional regular expression used to filter the list.
  *
  * Retrieve the list of loaded fonts.
  *
  * This procedure returns a list of the fonts that are currently
  * available.
+ * Each font returned can be used as input to
+ * [func@Gimp.context_set_font].
  *
- * Returns: The list of font names. The returned value must be freed
- * with g_strfreev().
+ * Returns: (element-type GimpFont) (array zero-terminated=1) (transfer container):
+ *          The list of fonts.
+ *          The returned value must be freed with g_free().
  **/
-gchar **
-gimp_fonts_get_list (const gchar *filter,
-                     gint        *num_fonts)
+GimpFont **
+gimp_fonts_get_list (const gchar *filter)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar **font_list = NULL;
-  gint i;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpFont **font_list = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-fonts-get-list",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, filter,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, filter,
+                                          G_TYPE_NONE);
 
-  *num_fonts = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-fonts-get-list",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_fonts = return_vals[1].data.d_int32;
-      if (*num_fonts > 0)
-        {
-          font_list = g_new0 (gchar *, *num_fonts + 1);
-          for (i = 0; i < *num_fonts; i++)
-            font_list[i] = g_strdup (return_vals[2].data.d_stringarray[i]);
-        }
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    font_list = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return font_list;
 }

@@ -125,7 +125,14 @@ gimp_wire_read (GIOChannel *channel,
             }
           while (G_UNLIKELY (status == G_IO_STATUS_AGAIN));
 
-          if (G_UNLIKELY (status != G_IO_STATUS_NORMAL))
+          if (G_UNLIKELY (bytes == 0 && status == G_IO_STATUS_EOF))
+            {
+              g_warning ("%s: gimp_wire_read(): unexpected EOF",
+                         g_get_prgname ());
+              wire_error_val = TRUE;
+              return FALSE;
+            }
+          else if (G_UNLIKELY (status != G_IO_STATUS_NORMAL))
             {
               if (error)
                 {
@@ -139,14 +146,6 @@ gimp_wire_read (GIOChannel *channel,
                              g_get_prgname ());
                 }
 
-              wire_error_val = TRUE;
-              return FALSE;
-            }
-
-          if (G_UNLIKELY (bytes == 0))
-            {
-              g_warning ("%s: gimp_wire_read(): unexpected EOF",
-                         g_get_prgname ());
               wire_error_val = TRUE;
               return FALSE;
             }
@@ -481,15 +480,57 @@ _gimp_wire_read_string (GIOChannel  *channel,
 }
 
 gboolean
-_gimp_wire_read_color (GIOChannel *channel,
-                       GimpRGB    *data,
-                       gint        count,
-                       gpointer    user_data)
+_gimp_wire_read_gegl_color (GIOChannel  *channel,
+                            GBytes     **pixel_data,
+                            GBytes     **icc_data,
+                            gchar      **encoding,
+                            gint         count,
+                            gpointer     user_data)
 {
+  gint i;
+
   g_return_val_if_fail (count >= 0, FALSE);
 
-  return _gimp_wire_read_double (channel,
-                                 (gdouble *) data, 4 * count, user_data);
+  for (i = 0; i < count; i++)
+    {
+      guint32 size;
+      guint8  pixel[40];
+      guint32 icc_length;
+
+      if (! _gimp_wire_read_int32 (channel,
+                                   &size, 1,
+                                   user_data)                              ||
+          size > 40                                                        ||
+          ! _gimp_wire_read_int8 (channel, pixel, size, user_data)         ||
+          ! _gimp_wire_read_string (channel, &(encoding[i]), 1, user_data) ||
+          ! _gimp_wire_read_int32 (channel, &icc_length, 1, user_data))
+        {
+          g_clear_pointer (&(encoding[i]), g_free);
+          return FALSE;
+        }
+      pixel_data[i] = (size > 0 ? g_bytes_new (pixel, size) : NULL);
+
+      /* Read space (profile data). */
+
+      icc_data[i] = NULL;
+      if (icc_length > 0)
+        {
+          guint8 *icc;
+
+          icc = g_new0 (guint8, icc_length);
+
+          if (! _gimp_wire_read_int8 (channel, icc, icc_length, user_data))
+            {
+              g_clear_pointer (&(encoding[i]), g_free);
+              g_clear_pointer (&icc, g_free);
+              return FALSE;
+            }
+
+          icc_data[i] = g_bytes_new_take (icc, icc_length);
+        }
+    }
+
+  return TRUE;
 }
 
 gboolean
@@ -662,15 +703,44 @@ _gimp_wire_write_string (GIOChannel  *channel,
 }
 
 gboolean
-_gimp_wire_write_color (GIOChannel    *channel,
-                        const GimpRGB *data,
-                        gint           count,
-                        gpointer       user_data)
+_gimp_wire_write_gegl_color (GIOChannel  *channel,
+                             GBytes     **pixel_data,
+                             GBytes     **icc_data,
+                             gchar      **encoding,
+                             gint         count,
+                             gpointer     user_data)
 {
+  gint i;
+
   g_return_val_if_fail (count >= 0, FALSE);
 
-  return _gimp_wire_write_double (channel,
-                                  (gdouble *) data, 4 * count, user_data);
+  for (i = 0; i < count; i++)
+    {
+      const guint8 *pixel      = NULL;
+      gsize         bpp        = 0;
+      const guint8 *icc        = NULL;
+      gsize         icc_length = 0;
+
+      if (pixel_data[i])
+        pixel = g_bytes_get_data (pixel_data[i], &bpp);
+      if (icc_data[i])
+        icc = g_bytes_get_data (icc_data[i], &icc_length);
+
+      if (! _gimp_wire_write_int32 (channel, (const guint32 *) &bpp, 1, user_data))
+        return FALSE;
+
+      if (bpp > 0 && ! _gimp_wire_write_int8 (channel, pixel, bpp, user_data))
+        return FALSE;
+
+      if (! _gimp_wire_write_string (channel, &(encoding[i]), 1, user_data) ||
+          ! _gimp_wire_write_int32 (channel, (const guint32 *) &icc_length, 1, user_data))
+        return FALSE;
+
+      if (icc_length > 0 && ! _gimp_wire_write_int8 (channel, icc, icc_length, user_data))
+        return FALSE;
+    }
+
+  return TRUE;
 }
 
 static guint

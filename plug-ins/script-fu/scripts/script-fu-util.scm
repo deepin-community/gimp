@@ -20,10 +20,10 @@
 ;
 (define (script-fu-util-image-resize-from-layer image layer)
   (let* (
-        (width (car (gimp-drawable-width layer)))
-        (height (car (gimp-drawable-height layer)))
-        (posx (- (car (gimp-drawable-offsets layer))))
-        (posy (- (cadr (gimp-drawable-offsets layer))))
+        (width (car (gimp-drawable-get-width layer)))
+        (height (car (gimp-drawable-get-height layer)))
+        (posx (- (car (gimp-drawable-get-offsets layer))))
+        (posy (- (cadr (gimp-drawable-get-offsets layer))))
         )
 
     (gimp-image-resize image width height posx posy)
@@ -44,6 +44,8 @@
   )
 )
 
+
+
 ; Allow command line usage of GIMP such as:
 ;
 ;     gimp -i -b '(with-files "*.png" <body>)'
@@ -61,14 +63,24 @@
 ; start directory:
 ;
 ;    gimp -i -b '(with-files "*.png" (gimp-drawable-invert layer FALSE) \
-;                 (gimp-file-save 1 image layer filename filename ))'
+;                 (gimp-file-save 1 image layer filename))'
 ;
 ; To do the same thing, but saving them as jpeg instead:
 ;
 ;    gimp -i -b '(with-files "*.png" (gimp-drawable-invert layer FALSE) \
 ;                 (gimp-file-save 1 image layer \
-;                  (string-append basename ".jpg") \
 ;                  (string-append basename ".jpg") ))'
+
+; butlast is needed below.
+; Not in R5RS but in simply-scheme and chicken dialects.
+; aka drop-right.
+; Returns new list with right element deleted.
+(define (butlast x)
+  (if (= (length x) 1)
+    '()
+    (reverse (cdr (reverse x)))
+  )
+)
 
 (define-macro (with-files pattern . body)
   (let ((loop (gensym))
@@ -79,9 +91,8 @@
          (unless (null? ,filenames)
            (let* ((filename (car ,filenames))
                   (image (catch #f (car (gimp-file-load RUN-NONINTERACTIVE
-                                                        filename
-                                                        filename ))))
-                  (layer (if image (car (gimp-image-get-active-layer image)) #f))
+                                                        filename))))
+                  (layer (if image (vector-ref (gimp-image-get-selected-layers image) 0) #f))
                   (basename (unbreakupstr (butlast (strbreakup filename ".")) ".")))
              (when image
                ,@body

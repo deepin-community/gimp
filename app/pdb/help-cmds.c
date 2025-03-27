@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <gegl.h>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -78,17 +80,17 @@ register_help_procs (GimpPDB *pdb)
   /*
    * gimp-help
    */
-  procedure = gimp_procedure_new (help_invoker);
+  procedure = gimp_procedure_new (help_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-help");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-help",
-                                     "Load a help page.",
-                                     "This procedure loads the specified help page into the helpbrowser or what ever is configured as help viewer. The help page is identified by its domain and ID: if help_domain is NULL, we use the help_domain which was registered using the 'gimp-plugin-help-register' procedure. If help_domain is NULL and no help domain was registered, the help domain of the main GIMP installation is used.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2000",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Load a help page.",
+                                  "This procedure loads the specified help page into the helpbrowser or what ever is configured as help viewer. The help page is identified by its domain and ID: if help_domain is NULL, we use the help_domain which was registered using the 'gimp-plugin-help-register' procedure. If help_domain is NULL and no help domain was registered, the help domain of the main GIMP installation is used.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2000");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("help-domain",
                                                        "help domain",

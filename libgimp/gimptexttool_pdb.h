@@ -32,58 +32,22 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-gint32   gimp_text_fontname             (gint32        image_ID,
-                                         gint32        drawable_ID,
-                                         gdouble       x,
-                                         gdouble       y,
-                                         const gchar  *text,
-                                         gint          border,
-                                         gboolean      antialias,
-                                         gdouble       size,
-                                         GimpSizeType  size_type,
-                                         const gchar  *fontname);
-gboolean gimp_text_get_extents_fontname (const gchar  *text,
-                                         gdouble       size,
-                                         GimpSizeType  size_type,
-                                         const gchar  *fontname,
-                                         gint         *width,
-                                         gint         *height,
-                                         gint         *ascent,
-                                         gint         *descent);
-GIMP_DEPRECATED_FOR(gimp_text_fontname)
-gint32   gimp_text                      (gint32        image_ID,
-                                         gint32        drawable_ID,
-                                         gdouble       x,
-                                         gdouble       y,
-                                         const gchar  *text,
-                                         gint          border,
-                                         gboolean      antialias,
-                                         gdouble       size,
-                                         GimpSizeType  size_type,
-                                         const gchar  *foundry,
-                                         const gchar  *family,
-                                         const gchar  *weight,
-                                         const gchar  *slant,
-                                         const gchar  *set_width,
-                                         const gchar  *spacing,
-                                         const gchar  *registry,
-                                         const gchar  *encoding);
-GIMP_DEPRECATED_FOR(gimp_text_get_extents_fontname)
-gboolean gimp_text_get_extents          (const gchar  *text,
-                                         gdouble       size,
-                                         GimpSizeType  size_type,
-                                         const gchar  *foundry,
-                                         const gchar  *family,
-                                         const gchar  *weight,
-                                         const gchar  *slant,
-                                         const gchar  *set_width,
-                                         const gchar  *spacing,
-                                         const gchar  *registry,
-                                         const gchar  *encoding,
-                                         gint         *width,
-                                         gint         *height,
-                                         gint         *ascent,
-                                         gint         *descent);
+GimpLayer* gimp_text_font             (GimpImage    *image,
+                                       GimpDrawable *drawable,
+                                       gdouble       x,
+                                       gdouble       y,
+                                       const gchar  *text,
+                                       gint          border,
+                                       gboolean      antialias,
+                                       gdouble       size,
+                                       GimpFont     *font);
+gboolean   gimp_text_get_extents_font (const gchar  *text,
+                                       gdouble       size,
+                                       GimpFont     *font,
+                                       gint         *width,
+                                       gint         *height,
+                                       gint         *ascent,
+                                       gint         *descent);
 
 
 G_END_DECLS

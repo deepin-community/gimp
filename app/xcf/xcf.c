@@ -31,6 +31,7 @@
 
 #include "core/gimp.h"
 #include "core/gimpimage.h"
+#include "core/gimpdrawable.h"
 #include "core/gimpparamspecs.h"
 #include "core/gimpprogress.h"
 
@@ -80,7 +81,17 @@ static GimpXcfLoaderFunc * const xcf_loaders[] =
   xcf_load_image,   /* version 10 */
   xcf_load_image,   /* version 11 */
   xcf_load_image,   /* version 12 */
-  xcf_load_image    /* version 13 */
+  xcf_load_image,   /* version 13 */
+  xcf_load_image,   /* version 14 */
+  xcf_load_image,   /* version 15 */
+  xcf_load_image,   /* version 16 */
+  xcf_load_image,   /* version 17 */
+  xcf_load_image,   /* version 18 */
+  xcf_load_image,   /* version 19 */
+  xcf_load_image,   /* version 20 */
+  xcf_load_image,   /* version 21 */
+  xcf_load_image,   /* version 22 */
+  xcf_load_image,   /* version 23 */
 };
 
 
@@ -104,139 +115,114 @@ xcf_init (Gimp *gimp)
 
   /*  gimp-xcf-save  */
   file = g_file_new_for_path ("gimp-xcf-save");
-  procedure = gimp_plug_in_procedure_new (GIMP_PLUGIN, file);
+  procedure = gimp_plug_in_procedure_new (GIMP_PDB_PROC_TYPE_PLUGIN, file);
   g_object_unref (file);
 
-  procedure->proc_type    = GIMP_INTERNAL;
+  procedure->proc_type    = GIMP_PDB_PROC_TYPE_INTERNAL;
   procedure->marshal_func = xcf_save_invoker;
 
   proc = GIMP_PLUG_IN_PROCEDURE (procedure);
-  proc->menu_label = g_strdup (N_("GIMP XCF image"));
+  proc->menu_label = g_strdup (_("GIMP XCF image"));
   gimp_plug_in_procedure_set_icon (proc, GIMP_ICON_TYPE_ICON_NAME,
                                    (const guint8 *) "gimp-wilber",
-                                   strlen ("gimp-wilber") + 1);
+                                   strlen ("gimp-wilber") + 1,
+                                   NULL);
   gimp_plug_in_procedure_set_image_types (proc, "RGB*, GRAY*, INDEXED*");
   gimp_plug_in_procedure_set_file_proc (proc, "xcf", "", NULL);
   gimp_plug_in_procedure_set_mime_types (proc, "image/x-xcf");
-  gimp_plug_in_procedure_set_handles_uri (proc);
+  gimp_plug_in_procedure_set_handles_remote (proc);
 
   gimp_object_set_static_name (GIMP_OBJECT (procedure), "gimp-xcf-save");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-xcf-save",
-                                     "Saves file in the .xcf file format",
-                                     "The XCF file format has been designed "
-                                     "specifically for loading and saving "
-                                     "tiled and layered images in GIMP. "
-                                     "This procedure will save the specified "
-                                     "image in the xcf file format.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Saves file in the .xcf file format",
+                                  "The XCF file format has been designed "
+                                  "specifically for loading and saving "
+                                  "tiled and layered images in GIMP. "
+                                  "This procedure will save the specified "
+                                  "image in the xcf file format.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
 
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("dummy-param",
-                                                      "Dummy Param",
-                                                      "Dummy parameter",
-                                                      G_MININT32, G_MAXINT32, 0,
+                               gimp_param_spec_enum ("run-mode",
+                                                     "Dummy Param",
+                                                     "Dummy parameter",
+                                                     GIMP_TYPE_RUN_MODE,
+                                                     GIMP_RUN_INTERACTIVE,
+                                                     GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               gimp_param_spec_image ("image",
+                                                      "Image",
+                                                      "Input image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "Image",
-                                                         "Input image",
-                                                         gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_drawable_id ("drawable",
-                                                            "Drawable",
-                                                            "Active drawable of input image",
-                                                            gimp, TRUE,
-                                                            GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_string ("filename",
-                                                       "Filename",
-                                                       "The name of the file "
-                                                       "to save the image in, "
-                                                       "in URI format and "
-                                                       "UTF-8 encoding",
-                                                       TRUE, FALSE, TRUE,
-                                                       NULL,
-                                                       GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_string ("raw-filename",
-                                                       "Raw filename",
-                                                       "The basename of the "
-                                                       "file, in UTF-8",
-                                                       FALSE, FALSE, TRUE,
-                                                       NULL,
-                                                       GIMP_PARAM_READWRITE));
+                               g_param_spec_object ("file",
+                                                    "File",
+                                                    "The file "
+                                                    "to save the image in",
+                                                    G_TYPE_FILE,
+                                                    GIMP_PARAM_READWRITE));
   gimp_plug_in_manager_add_procedure (gimp->plug_in_manager, proc);
   g_object_unref (procedure);
 
   /*  gimp-xcf-load  */
   file = g_file_new_for_path ("gimp-xcf-load");
-  procedure = gimp_plug_in_procedure_new (GIMP_PLUGIN, file);
+  procedure = gimp_plug_in_procedure_new (GIMP_PDB_PROC_TYPE_PLUGIN, file);
   g_object_unref (file);
 
-  procedure->proc_type    = GIMP_INTERNAL;
+  procedure->proc_type    = GIMP_PDB_PROC_TYPE_INTERNAL;
   procedure->marshal_func = xcf_load_invoker;
 
   proc = GIMP_PLUG_IN_PROCEDURE (procedure);
-  proc->menu_label = g_strdup (N_("GIMP XCF image"));
+  proc->menu_label = g_strdup (_("GIMP XCF image"));
   gimp_plug_in_procedure_set_icon (proc, GIMP_ICON_TYPE_ICON_NAME,
                                    (const guint8 *) "gimp-wilber",
-                                   strlen ("gimp-wilber") + 1);
+                                   strlen ("gimp-wilber") + 1,
+                                   NULL);
   gimp_plug_in_procedure_set_image_types (proc, NULL);
   gimp_plug_in_procedure_set_file_proc (proc, "xcf", "",
                                         "0,string,gimp\\040xcf\\040");
   gimp_plug_in_procedure_set_mime_types (proc, "image/x-xcf");
-  gimp_plug_in_procedure_set_handles_uri (proc);
+  gimp_plug_in_procedure_set_handles_remote (proc);
 
   gimp_object_set_static_name (GIMP_OBJECT (procedure), "gimp-xcf-load");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-xcf-load",
-                                     "Loads file saved in the .xcf file format",
-                                     "The XCF file format has been designed "
-                                     "specifically for loading and saving "
-                                     "tiled and layered images in GIMP. "
-                                     "This procedure will load the specified "
-                                     "file.",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "Spencer Kimball & Peter Mattis",
-                                     "1995-1996",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Loads file saved in the .xcf file format",
+                                  "The XCF file format has been designed "
+                                  "specifically for loading and saving "
+                                  "tiled and layered images in GIMP. "
+                                  "This procedure will load the specified "
+                                  "file.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Spencer Kimball & Peter Mattis",
+                                         "Spencer Kimball & Peter Mattis",
+                                         "1995-1996");
 
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("dummy-param",
-                                                      "Dummy Param",
-                                                      "Dummy parameter",
-                                                      G_MININT32, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                               gimp_param_spec_enum ("run-mode",
+                                                     "Dummy Param",
+                                                     "Dummy parameter",
+                                                     GIMP_TYPE_RUN_MODE,
+                                                     GIMP_RUN_INTERACTIVE,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_string ("filename",
-                                                       "Filename",
-                                                       "The name of the file "
-                                                       "to load, in the "
-                                                       "on-disk character "
-                                                       "set and encoding",
-                                                       TRUE, FALSE, TRUE,
-                                                       NULL,
-                                                       GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_string ("raw-filename",
-                                                       "Raw filename",
-                                                       "The basename of the "
-                                                       "file, in UTF-8",
-                                                       FALSE, FALSE, TRUE,
-                                                       NULL,
-                                                       GIMP_PARAM_READWRITE));
+                               g_param_spec_object ("file",
+                                                    "File",
+                                                    "The file to load",
+                                                    G_TYPE_FILE,
+                                                  GIMP_PARAM_READWRITE));
 
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_image_id ("image",
-                                                             "Image",
-                                                             "Output image",
-                                                             gimp, FALSE,
-                                                             GIMP_PARAM_READWRITE));
+                                   gimp_param_spec_image ("image",
+                                                          "Image",
+                                                          "Output image",
+                                                          FALSE,
+                                                          GIMP_PARAM_READWRITE));
   gimp_plug_in_manager_add_procedure (gimp->plug_in_manager, proc);
   g_object_unref (procedure);
 }
@@ -428,15 +414,13 @@ xcf_load_invoker (GimpProcedure         *procedure,
 {
   GimpValueArray *return_vals;
   GimpImage      *image = NULL;
-  const gchar    *uri;
   GFile          *file;
   GInputStream   *input;
   GError         *my_error = NULL;
 
   gimp_set_busy (gimp);
 
-  uri  = g_value_get_string (gimp_value_array_index (args, 1));
-  file = g_file_new_for_uri (uri);
+  file = g_value_get_object (gimp_value_array_index (args, 1));
 
   input = G_INPUT_STREAM (g_file_read (file, NULL, &my_error));
 
@@ -453,13 +437,11 @@ xcf_load_invoker (GimpProcedure         *procedure,
                                   gimp_file_get_utf8_name (file));
     }
 
-  g_object_unref (file);
-
   return_vals = gimp_procedure_get_return_values (procedure, image != NULL,
                                                   error ? *error : NULL);
 
   if (image)
-    gimp_value_set_image (gimp_value_array_index (return_vals, 1), image);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), image);
 
   gimp_unset_busy (gimp);
 
@@ -476,7 +458,6 @@ xcf_save_invoker (GimpProcedure         *procedure,
 {
   GimpValueArray *return_vals;
   GimpImage      *image;
-  const gchar    *uri;
   GFile          *file;
   GOutputStream  *output;
   gboolean        success  = FALSE;
@@ -484,9 +465,8 @@ xcf_save_invoker (GimpProcedure         *procedure,
 
   gimp_set_busy (gimp);
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 1), gimp);
-  uri   = g_value_get_string (gimp_value_array_index (args, 3));
-  file  = g_file_new_for_uri (uri);
+  image = g_value_get_object (gimp_value_array_index (args, 1));
+  file  = g_value_get_object (gimp_value_array_index (args, 2));
 
   output = G_OUTPUT_STREAM (g_file_replace (file,
                                             NULL, FALSE, G_FILE_CREATE_NONE,
@@ -504,8 +484,6 @@ xcf_save_invoker (GimpProcedure         *procedure,
                                   _("Error creating '%s': "),
                                   gimp_file_get_utf8_name (file));
     }
-
-  g_object_unref (file);
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);

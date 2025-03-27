@@ -50,13 +50,10 @@ _("Timestamp of the last update check.")
 "Defines the color management behavior."
 
 #define COLOR_PROFILE_POLICY_BLURB \
-_("How to handle embedded color profiles when opening a file.")
+_("What to do when opening a file with an embedded ICC color profile.")
 
 #define COLOR_PROFILE_PATH_BLURB \
 _("Sets the default folder path for all color profile file dialogs.")
-
-#define COMPACT_SLIDERS_BLURB \
-_("Use compact style for sliders.")
 
 #define CURSOR_MODE_BLURB \
 _("Sets the type of mouse pointers to use.")
@@ -79,6 +76,9 @@ _("Context-dependent mouse pointers are helpful.  They are enabled by " \
 #define DEFAULT_TOOL_PRESET_BLURB \
 "Specify a default tool preset.  The tool preset is searched for in the " \
 "specified tool prests path."
+
+#define CUSTOM_TITLE_BAR_BLURB \
+_("Merge menu and title bar (client-side decoration)")
 
 #define DEFAULT_SHOW_ALL_BLURB \
 _("Show full image content by default.")
@@ -123,6 +123,12 @@ _("Snap to the canvas edges by default in new image windows.")
 
 #define SNAP_TO_PATH_BLURB \
 _("Snap to the active path by default in new image windows.")
+
+#define SNAP_TO_BBOX_BLURB \
+_("Snap to the layers bounding boxes by default in new image windows.")
+
+#define SNAP_TO_EQUIDISTANCE_BLURB \
+_("Snap to the equidistance between three bounding boxes by default in new image windows.")
 
 #define DEFAULT_THRESHOLD_BLURB \
 _("Tools such as fuzzy-select and bucket fill find regions based on a " \
@@ -175,6 +181,9 @@ _("When enabled, the selected pattern will be used for all tools.")
 #define GLOBAL_PALETTE_BLURB \
 "When enabled, the selected palette will be used for all tools."
 
+#define GLOBAL_EXPAND_BLURB \
+_("When enabled, the selected auto expand layer settings will be used for all tools.")
+
 #define GRADIENT_PATH_BLURB \
 "Sets the gradient search path."
 
@@ -226,6 +235,12 @@ _("Export file type used by default.")
 #define EXPORT_COLOR_PROFILE_BLURB \
 _("Export the image's color profile by default.")
 
+#define EXPORT_COMMENT_BLURB \
+_("Export the image's comment by default.")
+
+#define EXPORT_THUMBNAIL_BLURB \
+_("Export the image's thumbnail by default")
+
 /* Translators: tooltip for configuration option (checkbox).
  * It determines how file export plug-ins handle Exif by default.
  */
@@ -254,6 +269,14 @@ _("Sets the preferred pen and touch input API.")
 _("When enabled, this will ensure that the full image is visible after a " \
   "file is opened, otherwise it will be displayed with a scale of 1:1.")
 
+#define DRAG_ZOOM_MODE_BLURB \
+_("Whether to zoom based on distance moved or time spent moving, when " \
+  "zooming via dragging the mouse.")
+
+#define DRAG_ZOOM_SPEED_BLURB \
+_("Adjusts the rate at which dragging the mouse will zoom the canvas, " \
+  "in percentage.")
+
 #define INTERPOLATION_TYPE_BLURB \
 _("Sets the level of interpolation used for scaling and other " \
   "transformations.")
@@ -266,6 +289,9 @@ _("Specifies the language to use for the user interface.")
 
 #define LAST_KNOWN_RELEASE_BLURB \
 _("The last known release version of GIMP as queried from official website.")
+
+#define CONFIG_VERSION_BLURB \
+_("The version of GIMP config files.")
 
 #define LAST_OPENED_SIZE_BLURB \
 _("How many recently opened image filenames to keep on the File menu.")
@@ -283,6 +309,9 @@ _("Speed of marching ants in the selection outline.  This value is in " \
 #define MAX_NEW_IMAGE_SIZE_BLURB  \
 _("GIMP will warn the user if an attempt is made to create an image that " \
   "would take more memory than the size specified here.")
+
+#define METADATA_ROTATION_POLICY_BLURB \
+_("How to handle \"Orientation\" metadata when opening a file.")
 
 #define MODULE_PATH_BLURB \
 "Sets the module search path."
@@ -305,7 +334,7 @@ _("When enabled, non-visible layers can be edited as normal.")
 
 #define MOVE_TOOL_CHANGES_ACTIVE_BLURB \
 _("If enabled, the move tool sets the edited layer or path as active.  " \
-  "This used to be the default behaviour in older versions.")
+  "This used to be the default behavior in older versions.")
 
 #define MYPAINT_BRUSH_PATH_BLURB \
 "Sets the brush search path."
@@ -408,8 +437,10 @@ _("When enabled, dialogs will show a help button that gives access to " \
   "be reached by pressing F1.")
 
 #define SHOW_PAINT_TOOL_CURSOR_BLURB \
-_("When enabled, the mouse pointer will be shown over the image while " \
-  "using a paint tool.")
+_("When enabled, the pointer will be shown over the image while " \
+  "using a paint tool. "                                          \
+  "If both the brush outline and pointer are disabled, the "      \
+  "position will be indicated as unobtrusively as possibly.")
 
 #define SHOW_MENUBAR_BLURB \
 _("When enabled, the menubar is visible by default. This can also be " \
@@ -478,6 +509,9 @@ _("Enable the MyPaint Brush tool.")
 #define PLAYGROUND_SEAMLESS_CLONE_TOOL_BLURB \
 _("Enable the Seamless Clone tool.")
 
+#define PLAYGROUND_PAINT_SELECT_TOOL_BLURB \
+_("Enable the Paint Select tool.")
+
 #define SPACE_BAR_ACTION_BLURB \
 _("What to do when the space bar is pressed in the image window.")
 
@@ -492,9 +526,6 @@ _("Sets the swap file location. GIMP uses a tile based memory allocation " \
   "Also, things can get horribly slow if the swap file is created on " \
   "a folder that is mounted over NFS.  For these reasons, it may be " \
   "desirable to put your swap file in \"/tmp\".")
-
-#define TEAROFF_MENUS_BLURB \
-_("When enabled, menus can be torn off.")
 
 #define CAN_CHANGE_ACCELS_BLURB \
 _("When enabled, you can change keyboard shortcuts for menu items " \
@@ -515,17 +546,29 @@ _("Sets the folder for temporary storage. Files will appear here " \
 #define THEME_BLURB \
 _("The name of the theme to use.")
 
+#define THEME_SCHEME_BLURB \
+_("Chooses the color scheme variant of the theme.")
+
 #define THEME_PATH_BLURB \
 "Sets the theme search path."
 
 #define ICON_THEME_BLURB \
-"The name of the icon theme to use."
+_("The name of the icon theme to use.")
+
+#define OVERRIDE_THEME_ICON_SIZE_BLURB \
+_("Override theme-set icon sizes.")
 
 #define ICON_SIZE_BLURB \
-"The size of the icons to use."
+_("The size of the icons to use.")
+
+#define PREFER_SYMBOLIC_ICONS_BLURB \
+_("When enabled, symbolic icons will be preferred if available.")
 
 #define ICON_THEME_PATH_BLURB \
 "Sets the icon theme search path."
+
+#define FONT_SIZE_BLURB \
+_("Tweak font size of the graphical interface.")
 
 #define IMAGE_CONVERT_PROFILE_INTENT_BLURB \
 _("Sets the default rendering intent for the 'Convert to Color Profile' dialog.")
@@ -569,6 +612,9 @@ _("Sets the default set of layers to resize for the 'Canvas Size' dialog.")
 
 #define IMAGE_RESIZE_RESIZE_TEXT_LAYERS_BLURB \
 _("Sets the default 'Resize text layers' state for the 'Canvas Size' dialog.")
+
+# define ITEMS_SELECT_METHOD_BLURB \
+_("Sets how items are searched and selected from a textual pattern.")
 
 #define LAYER_NEW_NAME_BLURB \
 _("Sets the default layer name for the 'New Layer' dialog.")
@@ -622,7 +668,7 @@ _("Sets the default path name for the 'New Path' dialog.")
 _("Sets the default folder path for the 'Export Path' dialog.")
 
 #define VECTORS_EXPORT_ACTIVE_ONLY_BLURB \
-_("Sets the default 'Export the active path' state for the 'Export Path' dialog.")
+_("Sets the default 'Export the selected paths' state for the 'Export Path' dialog.")
 
 #define VECTORS_IMPORT_PATH_BLURB \
 _("Sets the default folder path for the 'Import Path' dialog.")
@@ -685,9 +731,6 @@ _("Show the current foreground and background colors in the toolbox.")
 #define TOOLBOX_FOO_AREA_BLURB \
 _("Show the currently selected brush, pattern and gradient in the toolbox.")
 
-#define TOOLBOX_GROUP_MENU_MODE_BLURB \
-_("Menu mode of grouped tools.")
-
 #define TOOLBOX_GROUPS_BLURB \
 _("Use a single toolbox button for grouped tools.")
 
@@ -696,6 +739,14 @@ _("Show the currently active image in the toolbox.")
 
 #define TOOLBOX_WILBER_BLURB \
 _("Show the GIMP mascot at the top of the toolbox.")
+
+#define TRANSPARENCY_CUSTOM_COLOR1_BLURB \
+_("The first color to use in the transparency checkerboard, " \
+  "when Transparency Type is set to Custom colors.")
+
+#define TRANSPARENCY_CUSTOM_COLOR2_BLURB \
+_("The second color to use in the transparency checkerboard, " \
+  "when Transparency Type is set to Custom colors.")
 
 #define TRANSPARENCY_TYPE_BLURB \
 _("Sets the manner in which transparency is displayed in images.")
@@ -734,7 +785,7 @@ _("When enabled, uses OpenCL for some operations.")
 "'user-manual-online' is enabled."
 
 #define ZOOM_QUALITY_BLURB \
-"There's a tradeoff between speed and quality of the zoomed-out display."
+_("There's a tradeoff between speed and quality of the zoomed-out display.")
 
 #define DEFAULT_USE_EVENT_HISTORY_BLURB \
 "Bugs in event history buffer are frequent so in case of cursor " \

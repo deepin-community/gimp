@@ -33,7 +33,6 @@
 #include "gimptextbuffer.h"
 #include "gimptextbuffer-serialize.h"
 #include "gimptexttag.h"
-#include "gimpwidgets-utils.h"
 
 #include "gimp-intl.h"
 
@@ -80,10 +79,9 @@ gimp_text_buffer_class_init (GimpTextBufferClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpTextBufferClass, color_applied),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__BOXED,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
-                  GIMP_TYPE_RGB);
+                  GEGL_TYPE_COLOR);
 }
 
 static void
@@ -934,9 +932,9 @@ gimp_text_buffer_set_font (GimpTextBuffer    *buffer,
 }
 
 GtkTextTag *
-gimp_text_buffer_get_iter_color (GimpTextBuffer    *buffer,
-                                 const GtkTextIter *iter,
-                                 GimpRGB           *color)
+gimp_text_buffer_get_iter_color (GimpTextBuffer     *buffer,
+                                 const GtkTextIter  *iter,
+                                 GeglColor         **color)
 {
   GList *list;
 
@@ -958,45 +956,34 @@ gimp_text_buffer_get_iter_color (GimpTextBuffer    *buffer,
 
 GtkTextTag *
 gimp_text_buffer_get_color_tag (GimpTextBuffer *buffer,
-                                const GimpRGB  *color)
+                                GeglColor      *color)
 {
   GList      *list;
   GtkTextTag *tag;
   gchar       name[256];
-  GdkColor    gdk_color;
-  guchar      r, g, b;
-
-  gimp_rgb_get_uchar (color, &r, &g, &b);
+  gdouble     rgba[4];
 
   for (list = buffer->color_tags; list; list = g_list_next (list))
     {
-      GimpRGB tag_color;
-      guchar  tag_r, tag_g, tag_b;
+      GeglColor *tag_color;
 
       tag = list->data;
 
       gimp_text_tag_get_fg_color (tag, &tag_color);
 
-      gimp_rgb_get_uchar (&tag_color, &tag_r, &tag_g, &tag_b);
-
       /* Do not compare the alpha channel, since it's unused */
-      if (tag_r == r &&
-          tag_g == g &&
-          tag_b == b)
-        {
-          return tag;
-        }
+      if (gimp_color_is_perceptually_identical (color, tag_color))
+        return tag;
     }
 
+  gegl_color_get_pixel (color, babl_format ("R'G'B'A double"), rgba);
   g_snprintf (name, sizeof (name), "color-#%02x%02x%02x",
-              r, g, b);
-
-  gimp_rgb_get_gdk_color (color, &gdk_color);
+              (guint) (rgba[0] * 255), (guint) (rgba[1] * 255), (guint) (rgba[2] * 255));
 
   tag = gtk_text_buffer_create_tag (GTK_TEXT_BUFFER (buffer),
                                     name,
-                                    "foreground-gdk", &gdk_color,
-                                    "foreground-set", TRUE,
+                                    "foreground-rgba", (GdkRGBA *) rgba,
+                                    "foreground-set",  TRUE,
                                     NULL);
 
   buffer->color_tags = g_list_prepend (buffer->color_tags, tag);
@@ -1008,7 +995,7 @@ void
 gimp_text_buffer_set_color (GimpTextBuffer    *buffer,
                             const GtkTextIter *start,
                             const GtkTextIter *end,
-                            const GimpRGB     *color)
+                            GeglColor         *color)
 {
   GList *list;
 
@@ -1042,45 +1029,35 @@ gimp_text_buffer_set_color (GimpTextBuffer    *buffer,
 
 GtkTextTag *
 gimp_text_buffer_get_preedit_color_tag (GimpTextBuffer *buffer,
-                                        const GimpRGB  *color)
+                                        GeglColor      *color)
 {
   GList      *list;
   GtkTextTag *tag;
   gchar       name[256];
-  GdkColor    gdk_color;
-  guchar      r, g, b;
-
-  gimp_rgb_get_uchar (color, &r, &g, &b);
+  gdouble     rgba[4];
 
   for (list = buffer->preedit_color_tags; list; list = g_list_next (list))
     {
-      GimpRGB tag_color;
-      guchar  tag_r, tag_g, tag_b;
+      GeglColor *tag_color;
 
       tag = list->data;
 
       gimp_text_tag_get_fg_color (tag, &tag_color);
 
-      gimp_rgb_get_uchar (&tag_color, &tag_r, &tag_g, &tag_b);
-
       /* Do not compare the alpha channel, since it's unused */
-      if (tag_r == r &&
-          tag_g == g &&
-          tag_b == b)
-        {
-          return tag;
-        }
+      if (gimp_color_is_perceptually_identical (color, tag_color))
+        return tag;
     }
 
+  /* We save the color as unbounded sRGB. Is it right? TODO */
+  gegl_color_get_pixel (color, babl_format ("R'G'B'A double"), rgba);
   g_snprintf (name, sizeof (name), "preedit-color-#%02x%02x%02x",
-              r, g, b);
-
-  gimp_rgb_get_gdk_color (color, &gdk_color);
+              (guint) (rgba[0] * 255), (guint) (rgba[1] * 255), (guint) (rgba[2] * 255));
 
   tag = gtk_text_buffer_create_tag (GTK_TEXT_BUFFER (buffer),
                                     name,
-                                    "foreground-gdk", &gdk_color,
-                                    "foreground-set", TRUE,
+                                    "foreground-rgba", (GdkRGBA *) rgba,
+                                    "foreground-set",  TRUE,
                                     NULL);
 
   buffer->preedit_color_tags = g_list_prepend (buffer->preedit_color_tags, tag);
@@ -1092,7 +1069,7 @@ void
 gimp_text_buffer_set_preedit_color (GimpTextBuffer    *buffer,
                                     const GtkTextIter *start,
                                     const GtkTextIter *end,
-                                    const GimpRGB     *color)
+                                    GeglColor         *color)
 {
   GList *list;
 
@@ -1124,45 +1101,34 @@ gimp_text_buffer_set_preedit_color (GimpTextBuffer    *buffer,
 
 GtkTextTag *
 gimp_text_buffer_get_preedit_bg_color_tag (GimpTextBuffer *buffer,
-                                           const GimpRGB  *color)
+                                           GeglColor      *color)
 {
   GList      *list;
   GtkTextTag *tag;
   gchar       name[256];
-  GdkColor    gdk_color;
-  guchar      r, g, b;
-
-  gimp_rgb_get_uchar (color, &r, &g, &b);
+  gdouble     rgba[4];
 
   for (list = buffer->preedit_bg_color_tags; list; list = g_list_next (list))
     {
-      GimpRGB tag_color;
-      guchar  tag_r, tag_g, tag_b;
+      GeglColor *tag_color;
 
       tag = list->data;
 
       gimp_text_tag_get_bg_color (tag, &tag_color);
 
-      gimp_rgb_get_uchar (&tag_color, &tag_r, &tag_g, &tag_b);
-
       /* Do not compare the alpha channel, since it's unused */
-      if (tag_r == r &&
-          tag_g == g &&
-          tag_b == b)
-        {
-          return tag;
-        }
+      if (gimp_color_is_perceptually_identical (color, tag_color))
+        return tag;
     }
 
+  gegl_color_get_pixel (color, babl_format ("R'G'B'A double"), rgba);
   g_snprintf (name, sizeof (name), "bg-color-#%02x%02x%02x",
-              r, g, b);
-
-  gimp_rgb_get_gdk_color (color, &gdk_color);
+              (guint) (rgba[0] * 255), (guint) (rgba[1] * 255), (guint) (rgba[2] * 255));
 
   tag = gtk_text_buffer_create_tag (GTK_TEXT_BUFFER (buffer),
                                     name,
-                                    "background-gdk", &gdk_color,
-                                    "background-set", TRUE,
+                                    "background-rgba", (GdkRGBA *) rgba,
+                                    "background-set",  TRUE,
                                     NULL);
 
   buffer->preedit_bg_color_tags = g_list_prepend (buffer->preedit_bg_color_tags, tag);
@@ -1174,7 +1140,7 @@ void
 gimp_text_buffer_set_preedit_bg_color (GimpTextBuffer    *buffer,
                                        const GtkTextIter *start,
                                        const GtkTextIter *end,
-                                       const GimpRGB     *color)
+                                       GeglColor         *color)
 {
   GList *list;
 
@@ -1294,13 +1260,13 @@ gimp_text_buffer_tag_to_name (GimpTextBuffer  *buffer,
 
       if (value)
         {
-          GimpRGB color;
-          guchar  r, g, b;
+          GeglColor *color;
+          guchar     rgb[3];
 
           gimp_text_tag_get_fg_color (tag, &color);
-          gimp_rgb_get_uchar (&color, &r, &g, &b);
-
-          *value = g_strdup_printf ("#%02x%02x%02x", r, g, b);
+          gegl_color_get_pixel (color, babl_format ("R'G'B' u8"), rgb);
+          *value = g_strdup_printf ("#%02x%02x%02x", rgb[0], rgb[1], rgb[2]);
+          g_object_unref (color);
         }
 
       return "span";
@@ -1315,13 +1281,13 @@ gimp_text_buffer_tag_to_name (GimpTextBuffer  *buffer,
 
       if (value)
         {
-          GimpRGB color;
-          guchar  r, g, b;
+          GeglColor *color;
+          guchar     rgb[3];
 
           gimp_text_tag_get_fg_color (tag, &color);
-          gimp_rgb_get_uchar (&color, &r, &g, &b);
-
-          *value = g_strdup_printf ("#%02x%02x%02x", r, g, b);
+          gegl_color_get_pixel (color, babl_format ("R'G'B' u8"), rgb);
+          *value = g_strdup_printf ("#%02x%02x%02x", rgb[0], rgb[1], rgb[2]);
+          g_object_unref (color);
         }
 
       return "span";
@@ -1333,13 +1299,13 @@ gimp_text_buffer_tag_to_name (GimpTextBuffer  *buffer,
 
       if (value)
         {
-          GimpRGB color;
-          guchar  r, g, b;
+          GeglColor *color;
+          guchar     rgb[3];
 
           gimp_text_tag_get_bg_color (tag, &color);
-          gimp_rgb_get_uchar (&color, &r, &g, &b);
-
-          *value = g_strdup_printf ("#%02x%02x%02x", r, g, b);
+          gegl_color_get_pixel (color, babl_format ("R'G'B' u8"), rgb);
+          *value = g_strdup_printf ("#%02x%02x%02x", rgb[0], rgb[1], rgb[2]);
+          g_object_unref (color);
         }
 
       return "span";
@@ -1405,14 +1371,23 @@ gimp_text_buffer_name_to_tag (GimpTextBuffer *buffer,
         }
       else if (! strcmp (attribute, GIMP_TEXT_ATTR_NAME_COLOR))
         {
-          GimpRGB color;
-          guint   r, g, b;
+          GtkTextTag *tag;
+          GeglColor  *color;
+          guint       r, g, b;
+          guchar      rgb[3];
 
           sscanf (value, "#%02x%02x%02x", &r, &g, &b);
+          rgb[0] = r;
+          rgb[1] = g;
+          rgb[2] = b;
 
-          gimp_rgb_set_uchar (&color, r, g, b);
+          color = gegl_color_new (NULL);
+          gegl_color_set_pixel (color, babl_format ("R'G'B' u8"), rgb);
 
-          return gimp_text_buffer_get_color_tag (buffer, &color);
+          tag = gimp_text_buffer_get_color_tag (buffer, color);
+          g_object_unref (color);
+
+          return tag;
         }
     }
 
@@ -1457,7 +1432,7 @@ gimp_text_buffer_insert (GimpTextBuffer *buffer,
   GList       *insert_tags;
   GList       *remove_tags;
   GSList      *tags_off = NULL;
-  GimpRGB      color;
+  GeglColor   *color;
 
   g_return_if_fail (GIMP_IS_TEXT_BUFFER (buffer));
 
@@ -1528,7 +1503,8 @@ gimp_text_buffer_insert (GimpTextBuffer *buffer,
 
   if (gimp_text_buffer_get_iter_color (buffer, &start, &color))
     {
-      g_signal_emit (buffer, buffer_signals[COLOR_APPLIED], 0, &color);
+      g_signal_emit (buffer, buffer_signals[COLOR_APPLIED], 0, color);
+      g_object_unref (color);
     }
 
   gtk_text_buffer_end_user_action (GTK_TEXT_BUFFER (buffer));

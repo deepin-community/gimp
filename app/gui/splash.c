@@ -21,13 +21,25 @@
 
 #include <gegl.h>
 #include <gtk/gtk.h>
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/gdkwayland.h>
+#endif
+
+#ifdef G_OS_WIN32
+#include <windef.h>
+#include <winbase.h>
+#include <windows.h>
+#endif
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 #include "libgimpcolor/gimpcolor.h"
+#include "libgimpcolor/gimpcolor-private.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "gui-types.h"
+
+#include "core/gimp.h"
 
 #include "widgets/gimpwidgets-utils.h"
 
@@ -35,11 +47,6 @@
 
 #include "gimp-intl.h"
 
-#ifdef G_OS_WIN32
-#include <windef.h>
-#include <winbase.h>
-#include <windows.h>
-#endif
 
 #define MEASURE_UPPER "1235678901234567890"
 #define MEASURE_LOWER "12356789012345678901234567890"
@@ -52,7 +59,7 @@ typedef struct
   gint            width;
   gint            height;
   GtkWidget      *progress;
-  GdkColor        color;
+  GdkRGBA         color;
   PangoLayout    *upper;
   gint            upper_x;
   gint            upper_y;
@@ -76,31 +83,27 @@ static void        splash_position_layouts     (GimpSplash     *splash,
                                                 const gchar    *text1,
                                                 const gchar    *text2,
                                                 GdkRectangle   *area);
-static gboolean    splash_area_expose          (GtkWidget      *widget,
-                                                GdkEventExpose *event,
+static gboolean    splash_area_draw            (GtkWidget      *widget,
+                                                cairo_t        *cr,
                                                 GimpSplash     *splash);
 static void        splash_rectangle_union      (GdkRectangle   *dest,
                                                 PangoRectangle *pango_rect,
                                                 gint            offset_x,
                                                 gint            offset_y);
-static gboolean    splash_average_text_area    (GimpSplash     *splash,
+static void        splash_average_text_area    (GimpSplash     *splash,
                                                 GdkPixbuf      *pixbuf,
-                                                GdkColor       *color);
+                                                GdkRGBA        *rgba);
 
 static GdkPixbufAnimation *
-                   splash_image_load           (gint            max_width,
-                                                gint            max_height,
-                                                gboolean        be_verbose);
-static GdkPixbufAnimation *
-                   splash_image_load_from_path (const gchar    *filename,
+                   splash_image_load           (Gimp           *gimp,
                                                 gint            max_width,
                                                 gint            max_height,
                                                 gboolean        be_verbose);
 static GdkPixbufAnimation *
-                   splash_image_load_from_file (GFile    *file,
-                                                gint      max_width,
-                                                gint      max_height,
-                                                gboolean  be_verbose);
+                   splash_image_load_from_file (GFile          *file,
+                                                gint            max_width,
+                                                gint            max_height,
+                                                gboolean        be_verbose);
 static GdkPixbufAnimation *
                    splash_image_pick_from_dirs (GList          *dirs,
                                                 gint            max_width,
@@ -113,14 +116,16 @@ static void        splash_timer_elapsed        (void);
 /*  public functions  */
 
 void
-splash_create (gboolean   be_verbose,
-               GdkScreen *screen,
-               gint       monitor)
+splash_create (Gimp         *gimp,
+               gboolean      be_verbose,
+               GdkMonitor   *monitor,
+               GimpApp      *app)
 {
   GtkWidget          *frame;
   GtkWidget          *vbox;
   GdkPixbufAnimation *pixbuf;
   PangoRectangle      ink;
+  GdkRectangle        workarea;
   gint                max_width;
   gint                max_height;
 #ifdef G_OS_WIN32
@@ -130,11 +135,40 @@ splash_create (gboolean   be_verbose,
 #endif
 
   g_return_if_fail (splash == NULL);
-  g_return_if_fail (GDK_IS_SCREEN (screen));
+  g_return_if_fail (GDK_IS_MONITOR (monitor));
+  g_return_if_fail (GIMP_IS_APP (app) || app == NULL);
 
-  max_width  = gdk_screen_get_width (screen) / 2;
-  max_height = gdk_screen_get_height (screen) / 2;
-  pixbuf = splash_image_load (max_width, max_height, be_verbose);
+  gdk_monitor_get_workarea (monitor, &workarea);
+
+#ifdef GDK_WINDOWING_WAYLAND
+  if (GDK_IS_WAYLAND_DISPLAY (gdk_display_get_default ()))
+    {
+      /* This is completely extra ugly. Basically we cannot rely on
+       * gdk_monitor_get_workarea() on Wayland because the application
+       * cannot get trustworthy values. Indeed it is supposed to return
+       * a value in "application pixels" not "device pixels", in other
+       * words already inverse-scaled value. It turns out that on
+       * Wayland, under some conditions (but maybe not even all the
+       * time? I'm still unclear if there are conditions where returned
+       * value is properly scaled), it returns the device dimensions.
+       * E.g. on high-density display x2, making a splash for half the
+       * value, we ended up actually with the size of the whole display.
+       * This is why I special-case Wayland with a max of a third of the
+       * work area so that it would end up 2/3 maximum (at least not
+       * filling the screen!).
+       * This is ugly but for now I don't see the right solution. FIXME!
+       * See #5322.
+       */
+      max_width  = workarea.width  / 3;
+      max_height = workarea.height / 3;
+    }
+  else
+#endif
+    {
+      max_width  = workarea.width  / 2;
+      max_height = workarea.height / 2;
+    }
+  pixbuf = splash_image_load (gimp, max_width, max_height, be_verbose);
 
   if (! pixbuf)
     return;
@@ -142,14 +176,14 @@ splash_create (gboolean   be_verbose,
   splash = g_slice_new0 (GimpSplash);
 
   splash->window =
-    g_object_new (GTK_TYPE_WINDOW,
+    g_object_new (GTK_TYPE_APPLICATION_WINDOW,
                   "type",            GTK_WINDOW_TOPLEVEL,
                   "type-hint",       GDK_WINDOW_TYPE_HINT_SPLASHSCREEN,
                   "title",           _("GIMP Startup"),
                   "role",            "gimp-startup",
-                  "screen",          screen,
                   "window-position", GTK_WIN_POS_CENTER,
                   "resizable",       FALSE,
+                  "application",     GTK_APPLICATION (app),
                   NULL);
 
   /* Don't remove this call, it's necessary to remove decorations on Windows
@@ -163,9 +197,9 @@ splash_create (gboolean   be_verbose,
                             GINT_TO_POINTER (0));
 
   splash->width  = MIN (gdk_pixbuf_animation_get_width (pixbuf),
-                        gdk_screen_get_width (screen));
+                        workarea.width);
   splash->height = MIN (gdk_pixbuf_animation_get_height (pixbuf),
-                        gdk_screen_get_height (screen));
+                        workarea.height);
 
   frame = gtk_frame_new (NULL);
   gtk_frame_set_shadow_type (GTK_FRAME (frame), GTK_SHADOW_OUT);
@@ -218,8 +252,8 @@ splash_create (gboolean   be_verbose,
 
   g_object_unref (pixbuf);
 
-  g_signal_connect_after (splash->area, "expose-event",
-                          G_CALLBACK (splash_area_expose),
+  g_signal_connect_after (splash->area, "draw",
+                          G_CALLBACK (splash_area_draw),
                           splash);
 
   /*  add a progress bar  */
@@ -321,24 +355,17 @@ splash_update (const gchar *text1,
 /*  private functions  */
 
 static gboolean
-splash_area_expose (GtkWidget      *widget,
-                    GdkEventExpose *event,
-                    GimpSplash     *splash)
+splash_area_draw (GtkWidget  *widget,
+                  cairo_t    *cr,
+                  GimpSplash *splash)
 {
-  cairo_t *cr = gdk_cairo_create (event->window);
-
-  gdk_cairo_region (cr, event->region);
-  cairo_clip (cr);
-
-  gdk_cairo_set_source_color (cr, &splash->color);
+  gdk_cairo_set_source_rgba (cr, &splash->color);
 
   cairo_move_to (cr, splash->upper_x, splash->upper_y);
   pango_cairo_show_layout (cr, splash->upper);
 
   cairo_move_to (cr, splash->lower_x, splash->lower_y);
   pango_cairo_show_layout (cr, splash->lower);
-
-  cairo_destroy (cr);
 
   return FALSE;
 }
@@ -350,13 +377,13 @@ splash_position_layouts (GimpSplash   *splash,
                          const gchar  *text2,
                          GdkRectangle *area)
 {
-  PangoRectangle  upper_ink;
-  PangoRectangle  lower_ink;
+  PangoRectangle  upper_ink, upper_logical;
+  PangoRectangle  lower_ink, lower_logical;
   gint            text_height = 0;
 
   if (text1)
     {
-      pango_layout_get_pixel_extents (splash->upper, &upper_ink, NULL);
+      pango_layout_get_pixel_extents (splash->upper, &upper_ink, &upper_logical);
 
       if (area)
         splash_rectangle_union (area, &upper_ink,
@@ -364,7 +391,7 @@ splash_position_layouts (GimpSplash   *splash,
 
       pango_layout_set_text (splash->upper, text1, -1);
       pango_layout_get_pixel_extents (splash->upper,
-                                      &upper_ink, NULL);
+                                      &upper_ink, &upper_logical);
 
       splash->upper_x = (splash->width - upper_ink.width) / 2;
       text_height += upper_ink.height;
@@ -372,7 +399,7 @@ splash_position_layouts (GimpSplash   *splash,
 
   if (text2)
     {
-      pango_layout_get_pixel_extents (splash->lower, &lower_ink, NULL);
+      pango_layout_get_pixel_extents (splash->lower, &lower_ink, &lower_logical);
 
       if (area)
         splash_rectangle_union (area, &lower_ink,
@@ -380,7 +407,7 @@ splash_position_layouts (GimpSplash   *splash,
 
       pango_layout_set_text (splash->lower, text2, -1);
       pango_layout_get_pixel_extents (splash->lower,
-                                      &lower_ink, NULL);
+                                      &lower_ink, &lower_logical);
 
       splash->lower_x = (splash->width - lower_ink.width) / 2;
       text_height += lower_ink.height;
@@ -403,7 +430,7 @@ splash_position_layouts (GimpSplash   *splash,
     {
       splash->upper_y = MIN (splash->height - text_height,
                              splash->height * 13 / 16 -
-                             upper_ink.height / 2);
+                             upper_logical.height / 2);
 
       if (area)
         splash_rectangle_union (area, &upper_ink,
@@ -413,7 +440,7 @@ splash_position_layouts (GimpSplash   *splash,
   if (text2)
     {
       splash->lower_y = ((splash->height + splash->upper_y) / 2 -
-                         lower_ink.height / 2);
+                         lower_logical.height / 2);
 
       if (area)
         splash_rectangle_union (area, &lower_ink,
@@ -443,10 +470,10 @@ splash_rectangle_union (GdkRectangle   *dest,
 /* This function chooses a gray value for the text color, based on
  * the average luminance of the text area of the splash image.
  */
-static gboolean
+static void
 splash_average_text_area (GimpSplash *splash,
                           GdkPixbuf  *pixbuf,
-                          GdkColor   *color)
+                          GdkRGBA    *color)
 {
   const guchar *pixels;
   gint          rowstride;
@@ -456,8 +483,8 @@ splash_average_text_area (GimpSplash *splash,
   GdkRectangle  image     = { 0, 0, 0, 0 };
   GdkRectangle  area      = { 0, 0, 0, 0 };
 
-  g_return_val_if_fail (GDK_IS_PIXBUF (pixbuf), FALSE);
-  g_return_val_if_fail (gdk_pixbuf_get_bits_per_sample (pixbuf) == 8, FALSE);
+  g_return_if_fail (GDK_IS_PIXBUF (pixbuf));
+  g_return_if_fail (gdk_pixbuf_get_bits_per_sample (pixbuf) == 8);
 
   image.width  = gdk_pixbuf_get_width (pixbuf);
   image.height = gdk_pixbuf_get_height (pixbuf);
@@ -501,35 +528,41 @@ splash_average_text_area (GimpSplash *splash,
 
     }
 
-  color->red = color->green = color->blue = (luminance << 8 | luminance);
-
-  return gdk_colormap_alloc_color (gtk_widget_get_colormap (splash->area),
-                                   color, FALSE, TRUE);
+  color->red = color->green = color->blue = luminance / 255.0;
+  color->alpha = 1.0;
 }
 
 static GdkPixbufAnimation *
-splash_image_load (gint      max_width,
+splash_image_load (Gimp     *gimp,
+                   gint      max_width,
                    gint      max_height,
                    gboolean  be_verbose)
 {
   GdkPixbufAnimation *animation = NULL;
-  gchar              *filename;
   GFile              *file;
   GList              *list;
 
-  /* File "gimp-splash.png" in personal configuration directory. */
-  filename = gimp_personal_rc_file ("gimp-splash.png");
-  animation = splash_image_load_from_path (filename,
+  /* Random image in splash extensions. */
+  g_object_get (gimp->extension_manager,
+                "splash-paths", &list,
+                NULL);
+  animation = splash_image_pick_from_dirs (list,
                                            max_width, max_height,
                                            be_verbose);
-  g_free (filename);
+  if (animation)
+    return animation;
+
+  /* File "gimp-splash.png" in personal configuration directory. */
+  file = gimp_directory_file ("gimp-splash.png", NULL);
+  animation = splash_image_load_from_file (file,
+                                           max_width, max_height,
+                                           be_verbose);
+  g_object_unref (file);
   if (animation)
     return animation;
 
   /* Random image under splashes/ directory in personal config dir. */
-  filename = gimp_personal_rc_file ("splashes");
-  file = g_file_new_for_path (filename);
-  g_free (filename);
+  file = gimp_directory_file ("splashes", NULL);
   list = NULL;
   list = g_list_prepend (list, file);
   animation = splash_image_pick_from_dirs (list,
@@ -540,43 +573,22 @@ splash_image_load (gint      max_width,
     return animation;
 
   /* Release splash image. */
-  filename = g_build_filename (gimp_data_directory (),
-                               "images", "gimp-splash.png", NULL);
-  animation = splash_image_load_from_path (filename,
+  file = gimp_data_directory_file ("images", "gimp-splash.png", NULL);
+  animation = splash_image_load_from_file (file,
                                            max_width, max_height,
                                            be_verbose);
-  g_free (filename);
+  g_object_unref (file);
   if (animation)
     return animation;
 
   /* Random release image in installed splashes/ directory. */
-  filename = g_build_filename (gimp_data_directory (), "splashes", NULL);
-  file = g_file_new_for_path (filename);
-  g_free (filename);
+  file = gimp_data_directory_file ("splashes", NULL);
   list = NULL;
   list = g_list_prepend (list, file);
   animation = splash_image_pick_from_dirs (list,
                                            max_width, max_height,
                                            be_verbose);
   g_list_free_full (list, g_object_unref);
-
-  return animation;
-}
-
-static GdkPixbufAnimation *
-splash_image_load_from_path (const gchar *filename,
-                             gint         max_width,
-                             gint         max_height,
-                             gboolean     be_verbose)
-{
-  GdkPixbufAnimation *animation;
-  GFile              *file;
-
-  file = g_file_new_for_path (filename);
-  animation = splash_image_load_from_file (file,
-                                           max_width, max_height,
-                                           be_verbose);
-  g_object_unref (file);
 
   return animation;
 }
@@ -593,15 +605,7 @@ splash_image_load_from_file (GFile    *file,
   gboolean            is_svg = FALSE;
 
   if (be_verbose)
-    {
-      gchar *path;
-
-      path = g_file_get_path (file);
-
-      g_printerr ("Trying splash '%s' ... ", path);
-
-      g_free (path);
-    }
+    g_printerr ("Trying splash '%s' ... ", g_file_peek_path (file));
 
   info = g_file_query_info (file,
                             G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE,
@@ -610,7 +614,7 @@ splash_image_load_from_file (GFile    *file,
     {
       const gchar *content_type;
 
-      content_type = g_file_info_get_content_type (info);
+      content_type = g_file_info_get_attribute_string (info, G_FILE_ATTRIBUTE_STANDARD_CONTENT_TYPE);
       if (content_type)
         {
           gchar *mime_type;

@@ -22,10 +22,14 @@
 
 #include <string.h>
 
+#include <gegl.h>
+#include <gio/gio.h>
 #include <glib-object.h>
+#include <gobject/gvaluecollector.h>
 
 #include "gimpbasetypes.h"
 
+#include "gimpparamspecs.h"
 #include "gimpvaluearray.h"
 
 
@@ -74,6 +78,12 @@ G_DEFINE_BOXED_TYPE (GimpValueArray, gimp_value_array,
  *
  * Return a pointer to the value at @index contained in @value_array.
  *
+ * *Note*: in binding languages, some custom types fail to be correctly passed
+ * through. For these types, you should use specific functions.
+ * For instance, in the Python binding, a [type@ColorArray] `GValue`
+ * won't be usable with this function. You should use instead
+ * [method@ValueArray.get_color_array].
+ *
  * Returns: (transfer none): pointer to a value at @index in @value_array
  *
  * Since: 2.10
@@ -86,6 +96,86 @@ gimp_value_array_index (const GimpValueArray *value_array,
   g_return_val_if_fail (index < value_array->n_values, NULL);
 
   return value_array->values + index;
+}
+
+/**
+ * gimp_value_array_get_color_array:
+ * @value_array: #GimpValueArray to get a value from
+ * @index: index of the value of interest
+ *
+ * Return a pointer to the value at @index contained in @value_array. This value
+ * is supposed to be a [type@ColorArray].
+ *
+ * *Note*: most of the time, you should use the generic [method@Gimp.ValueArray.index]
+ * to retrieve a value, then the relevant `g_value_get_*()` function.
+ * This alternative function is mostly there for bindings because
+ * GObject-Introspection is [not able yet to process correctly known
+ * boxed array types](https://gitlab.gnome.org/GNOME/gobject-introspection/-/issues/492).
+ *
+ * There are no reasons to use this function in C code.
+ *
+ * Returns: (transfer none) (array zero-terminated=1): the [type@ColorArray] stored at @index in @value_array.
+ *
+ * Since: 3.0
+ */
+/* XXX See: https://gitlab.gnome.org/GNOME/gimp/-/issues/10885#note_2030308
+ * This explains why we created a specific function for GimpColorArray, instead
+ * of using the generic gimp_value_array_index().
+ */
+GeglColor **
+gimp_value_array_get_color_array (const GimpValueArray *value_array,
+                                  gint                  index)
+{
+  GValue         *value;
+  GimpColorArray  colors;
+
+  g_return_val_if_fail (value_array != NULL, NULL);
+  g_return_val_if_fail (index < value_array->n_values, NULL);
+
+  value = value_array->values + index;
+  g_return_val_if_fail (GIMP_VALUE_HOLDS_COLOR_ARRAY (value), NULL);
+
+  colors = g_value_get_boxed (value);
+
+  return colors;
+}
+
+/**
+ * gimp_value_array_get_core_object_array:
+ * @value_array: #GimpValueArray to get a value from
+ * @index: index of the value of interest
+ *
+ * Return a pointer to the value at @index contained in @value_array. This value
+ * is supposed to be a [type@CoreObjectArray].
+ *
+ * *Note*: most of the time, you should use the generic [method@Gimp.ValueArray.index]
+ * to retrieve a value, then the relevant `g_value_get_*()` function.
+ * This alternative function is mostly there for bindings because
+ * GObject-Introspection is [not able yet to process correctly known
+ * boxed array types](https://gitlab.gnome.org/GNOME/gobject-introspection/-/issues/492).
+ *
+ * There are no reasons to use this function in C code.
+ *
+ * Returns: (transfer none) (array zero-terminated=1): the [type@CoreObjectArray] stored at @index in @value_array.
+ *
+ * Since: 3.0
+ */
+GObject **
+gimp_value_array_get_core_object_array (const GimpValueArray *value_array,
+                                        gint                  index)
+{
+  GValue   *value;
+  GObject **objects;
+
+  g_return_val_if_fail (value_array != NULL, NULL);
+  g_return_val_if_fail (index < value_array->n_values, NULL);
+
+  value = value_array->values + index;
+  g_return_val_if_fail (GIMP_VALUE_HOLDS_CORE_OBJECT_ARRAY (value), NULL);
+
+  objects = g_value_get_boxed (value);
+
+  return objects;
 }
 
 static inline void
@@ -136,14 +226,168 @@ value_array_shrink (GimpValueArray *value_array)
 GimpValueArray *
 gimp_value_array_new (gint n_prealloced)
 {
-  GimpValueArray *value_array = g_slice_new (GimpValueArray);
+  GimpValueArray *value_array = g_slice_new0 (GimpValueArray);
 
-  value_array->n_values = 0;
-  value_array->n_prealloced = 0;
-  value_array->values = NULL;
   value_array_grow (value_array, n_prealloced, TRUE);
   value_array->n_values = 0;
   value_array->ref_count = 1;
+
+  return value_array;
+}
+
+/**
+ * gimp_value_array_new_from_types: (skip)
+ * @error_msg:  return location for an error message.
+ * @first_type: first type in the array, or #G_TYPE_NONE.
+ * @...:        the remaining types in the array, terminated by #G_TYPE_NONE
+ *
+ * Allocate and initialize a new #GimpValueArray, and fill it with
+ * values that are given as a list of (#GType, value) pairs,
+ * terminated by #G_TYPE_NONE.
+ *
+ * Returns: (nullable): a newly allocated #GimpValueArray, or %NULL if
+ *          an error happened.
+ *
+ * Since: 3.0
+ */
+GimpValueArray *
+gimp_value_array_new_from_types (gchar **error_msg,
+                                 GType   first_type,
+                                 ...)
+{
+  GimpValueArray *value_array;
+  va_list         va_args;
+
+  g_return_val_if_fail (error_msg == NULL || *error_msg == NULL, NULL);
+
+  va_start (va_args, first_type);
+
+  value_array = gimp_value_array_new_from_types_valist (error_msg,
+                                                        first_type,
+                                                        va_args);
+
+  va_end (va_args);
+
+  return value_array;
+}
+
+/**
+ * gimp_value_array_new_from_types_valist: (skip)
+ * @error_msg:  return location for an error message.
+ * @first_type: first type in the array, or #G_TYPE_NONE.
+ * @va_args:    a va_list of GTypes and values, terminated by #G_TYPE_NONE
+ *
+ * Allocate and initialize a new #GimpValueArray, and fill it with
+ * @va_args given in the order as passed to
+ * gimp_value_array_new_from_types().
+ *
+ * Returns: (nullable): a newly allocated #GimpValueArray, or %NULL if
+ *          an error happened.
+ *
+ * Since: 3.0
+ */
+GimpValueArray *
+gimp_value_array_new_from_types_valist (gchar   **error_msg,
+                                        GType     first_type,
+                                        va_list   va_args)
+{
+  GimpValueArray *value_array;
+  GType           type;
+
+  g_return_val_if_fail (error_msg == NULL || *error_msg == NULL, NULL);
+
+  type = first_type;
+
+  value_array = gimp_value_array_new (type == G_TYPE_NONE ? 0 : 1);
+
+  while (type != G_TYPE_NONE)
+    {
+      GValue value     = G_VALUE_INIT;
+      gchar  *my_error = NULL;
+
+      g_value_init (&value, type);
+
+      G_VALUE_COLLECT (&value, va_args, G_VALUE_NOCOPY_CONTENTS, &my_error);
+
+      if (my_error)
+        {
+          if (error_msg)
+            {
+              *error_msg = my_error;
+            }
+          else
+            {
+              g_printerr ("%s: %s", G_STRFUNC, my_error);
+              g_free (my_error);
+            }
+
+          gimp_value_array_unref (value_array);
+
+          va_end (va_args);
+
+          return NULL;
+        }
+
+      gimp_value_array_append (value_array, &value);
+      g_value_unset (&value);
+
+      type = va_arg (va_args, GType);
+    }
+
+  va_end (va_args);
+
+  return value_array;
+}
+
+/**
+ * gimp_value_array_copy:
+ * @value_array: #GimpValueArray to copy
+ *
+ * Return an exact copy of a #GimpValueArray by duplicating all its values.
+ *
+ * Returns: a newly allocated #GimpValueArray.
+ *
+ * Since: 3.0
+ */
+GimpValueArray *
+gimp_value_array_copy (const GimpValueArray *value_array)
+{
+  g_return_val_if_fail (value_array != NULL, NULL);
+
+  return gimp_value_array_new_from_values (value_array->values,
+                                           value_array->n_values);
+}
+
+/**
+ * gimp_value_array_new_from_values:
+ * @values: (array length=n_values): The #GValue elements
+ * @n_values: the number of value elements
+ *
+ * Allocate and initialize a new #GimpValueArray, and fill it with
+ * the given #GValues.  When no #GValues are given, returns empty #GimpValueArray.
+ *
+ * Returns: a newly allocated #GimpValueArray.
+ *
+ * Since: 3.0
+ */
+GimpValueArray *
+gimp_value_array_new_from_values (const GValue *values,
+                                  gint          n_values)
+{
+  GimpValueArray *value_array;
+  gint i;
+
+  /* n_values is zero if and only if values is NULL. */
+  g_return_val_if_fail ((n_values == 0  && values == NULL) ||
+                        (n_values > 0 && values != NULL),
+                        NULL);
+
+  value_array = gimp_value_array_new (n_values);
+
+  for (i = 0; i < n_values; i++)
+    {
+      gimp_value_array_insert (value_array, i, &values[i]);
+    }
 
   return value_array;
 }
@@ -154,7 +398,7 @@ gimp_value_array_new (gint n_prealloced)
  *
  * Adds a reference to a #GimpValueArray.
  *
- * Return value: the same @value_array
+ * Returns: the same @value_array
  *
  * Since: 2.10
  */
@@ -345,6 +589,26 @@ gimp_value_array_truncate (GimpValueArray *value_array,
 /*
  * GIMP_TYPE_PARAM_VALUE_ARRAY
  */
+
+#define GIMP_PARAM_SPEC_VALUE_ARRAY(pspec)    (G_TYPE_CHECK_INSTANCE_CAST ((pspec), GIMP_TYPE_PARAM_VALUE_ARRAY, GimpParamSpecValueArray))
+
+typedef struct _GimpParamSpecValueArray GimpParamSpecValueArray;
+
+/**
+ * GimpParamSpecValueArray:
+ * @parent_instance:  private #GParamSpec portion
+ * @element_spec:     the #GParamSpec of the array elements
+ * @fixed_n_elements: default length of the array
+ *
+ * A #GParamSpec derived structure that contains the meta data for
+ * value array properties.
+ **/
+struct _GimpParamSpecValueArray
+{
+  GParamSpec  parent_instance;
+  GParamSpec *element_spec;
+  gint        fixed_n_elements;
+};
 
 static void       gimp_param_value_array_class_init  (GParamSpecClass *klass);
 static void       gimp_param_value_array_init        (GParamSpec      *pspec);
@@ -539,7 +803,7 @@ gimp_param_value_array_values_cmp (GParamSpec   *pspec,
     }
   else /* length1 == length2 */
     {
-      guint i;
+      gint i;
 
       for (i = 0; i < length1; i++)
         {
@@ -562,6 +826,24 @@ gimp_param_value_array_values_cmp (GParamSpec   *pspec,
     }
 }
 
+/**
+ * gimp_param_spec_value_array:
+ * @name:         Canonical name of the property specified.
+ * @nick:         Nick name of the property specified.
+ * @blurb:        Description of the property specified.
+ * @element_spec: (nullable): #GParamSpec the contained array's elements
+ *                have comply to, or %NULL.
+ * @flags:        Flags for the property specified.
+ *
+ * Creates a new #GimpParamSpecValueArray specifying a
+ * [type@GObject.ValueArray] property.
+ *
+ * See g_param_spec_internal() for details on property names.
+ *
+ * Returns: (transfer full): The newly created #GimpParamSpecValueArray.
+ *
+ * Since: 3.0
+ **/
 GParamSpec *
 gimp_param_spec_value_array (const gchar *name,
                              const gchar *nick,
@@ -586,4 +868,20 @@ gimp_param_spec_value_array (const gchar *name,
     }
 
   return G_PARAM_SPEC (aspec);
+}
+
+/**
+ * gimp_param_spec_value_array_get_element_spec:
+ * @pspec: a #GParamSpec to hold a #GimpParamSpecValueArray value.
+ *
+ * Returns: (transfer none): param spec for elements of the value array.
+ *
+ * Since: 3.0
+ **/
+GParamSpec *
+gimp_param_spec_value_array_get_element_spec (GParamSpec *pspec)
+{
+  g_return_val_if_fail (GIMP_IS_PARAM_SPEC_VALUE_ARRAY (pspec), NULL);
+
+  return GIMP_PARAM_SPEC_VALUE_ARRAY (pspec)->element_spec;
 }

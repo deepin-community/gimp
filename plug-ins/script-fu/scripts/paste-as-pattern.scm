@@ -19,42 +19,41 @@
 
 
 (define (script-fu-paste-as-pattern name filename)
-  (let* ((pattern-image (car (gimp-edit-paste-as-new-image)))
-         (pattern-draw 0)
+  (script-fu-use-v3)
+  (let* ((pattern-image (gimp-edit-paste-as-new-image))
          (path 0))
 
-    (if (= TRUE (car (gimp-image-is-valid pattern-image)))
+    (if (gimp-image-id-is-valid pattern-image)
       (begin
-        (set! pattern-draw (car (gimp-image-get-active-drawable pattern-image)))
         (set! path (string-append gimp-directory
                              "/patterns/"
                              filename
                              (number->string pattern-image)
                              ".pat"))
-       
-        (file-pat-save RUN-NONINTERACTIVE
-                       pattern-image pattern-draw path path
+
+        (file-pat-export RUN-NONINTERACTIVE
+                       pattern-image
+                       path
+                       -1  ; NULL ExportOptions
                        name)
-       
+
         (gimp-image-delete pattern-image)
-       
+
         (gimp-patterns-refresh)
-        (gimp-context-set-pattern name)
+        (gimp-context-set-pattern (gimp-pattern-get-by-name name))
       )
       (gimp-message _"There is no image data in the clipboard to paste.")
     )
   )
 )
 
-(script-fu-register "script-fu-paste-as-pattern"
-  _"New _Pattern..."
+(script-fu-register-procedure "script-fu-paste-as-pattern"
+  _"Paste as New _Pattern..."
   _"Paste the clipboard contents into a new pattern"
   "Michael Natterer <mitch@gimp.org>"
-  "Michael Natterer"
   "2005-09-25"
-  ""
-  SF-STRING _"_Pattern name" "My Pattern"
-  SF-STRING _"_File name"    "mypattern"
+  SF-STRING _"_Pattern name" _"My Pattern"
+  SF-STRING _"_File name"    _"mypattern"
 )
 
 (script-fu-menu-register "script-fu-paste-as-pattern"

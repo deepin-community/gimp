@@ -20,6 +20,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 #include "libgimpconfig/gimpconfig.h"
 
@@ -463,9 +464,8 @@ gimp_tool_preset_deserialize_property (GimpConfig *config,
                                       GIMP_CONTEXT_PROP_MASK_PALETTE  |
                                       GIMP_CONTEXT_PROP_MASK_FONT);
 
-        if (! GIMP_CONFIG_GET_INTERFACE (options)->deserialize (GIMP_CONFIG (options),
-                                                                scanner, 1,
-                                                                NULL))
+        if (! GIMP_CONFIG_GET_IFACE (options)->deserialize (GIMP_CONFIG (options),
+                                                            scanner, 1, NULL))
           {
             *expected = G_TOKEN_NONE;
             g_object_unref (options);

@@ -30,8 +30,6 @@
 
 #include "core-types.h"
 
-#include "core/gimpmarshal.h"
-
 #include "gimptoolitem.h"
 
 
@@ -87,8 +85,7 @@ gimp_tool_item_class_init (GimpToolItemClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpToolItemClass, visible_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   gimp_tool_item_signals[SHOWN_CHANGED] =
@@ -96,8 +93,7 @@ gimp_tool_item_class_init (GimpToolItemClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpToolItemClass, shown_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->get_property = gimp_tool_item_get_property;

@@ -46,6 +46,14 @@ enum
 };
 
 
+struct _GimpEnumStore
+{
+  GimpIntStore parent_instance;
+
+  GEnumClass  *enum_class;
+};
+
+
 static void   gimp_enum_store_finalize     (GObject      *object);
 static void   gimp_enum_store_set_property (GObject      *object,
                                             guint         property_id,
@@ -101,8 +109,7 @@ gimp_enum_store_finalize (GObject *object)
 {
   GimpEnumStore *store = GIMP_ENUM_STORE (object);
 
-  if (store->enum_class)
-    g_type_class_unref (store->enum_class);
+  g_clear_pointer (&store->enum_class, g_type_class_unref);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -121,6 +128,7 @@ gimp_enum_store_set_property (GObject      *object,
       g_return_if_fail (store->enum_class == NULL);
       store->enum_class = g_type_class_ref (g_value_get_gtype (value));
       break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -142,6 +150,7 @@ gimp_enum_store_get_property (GObject    *object,
                                  G_TYPE_FROM_CLASS (store->enum_class) :
                                  G_TYPE_NONE));
       break;
+
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -152,13 +161,14 @@ static void
 gimp_enum_store_add_value (GtkListStore *store,
                            GEnumValue   *value)
 {
-  GtkTreeIter  iter = { 0, };
-  const gchar *desc;
-  const gchar *abbrev;
-  gchar       *stripped;
+  GimpEnumStore *enum_store = GIMP_ENUM_STORE (store);
+  GtkTreeIter    iter = { 0, };
+  const gchar   *desc;
+  const gchar   *abbrev;
+  gchar         *stripped;
 
-  desc   = gimp_enum_value_get_desc   (GIMP_ENUM_STORE (store)->enum_class, value);
-  abbrev = gimp_enum_value_get_abbrev (GIMP_ENUM_STORE (store)->enum_class, value);
+  desc   = gimp_enum_value_get_desc   (enum_store->enum_class, value);
+  abbrev = gimp_enum_value_get_abbrev (enum_store->enum_class, value);
 
   /* no mnemonics in combo boxes */
   stripped = gimp_strip_uline (desc);
@@ -182,7 +192,7 @@ gimp_enum_store_add_value (GtkListStore *store,
  * it with enum values. The enum needs to be registered to the type
  * system and should have translatable value names.
  *
- * Return value: a new #GimpEnumStore.
+ * Returns: a new #GimpEnumStore.
  *
  * Since: 2.4
  **/
@@ -215,7 +225,7 @@ gimp_enum_store_new (GType enum_type)
  * to limit the enum values to a certain range. Values smaller than
  * @minimum or larger than @maximum are not added to the store.
  *
- * Return value: a new #GimpEnumStore.
+ * Returns: a new #GimpEnumStore.
  *
  * Since: 2.4
  **/
@@ -224,8 +234,9 @@ gimp_enum_store_new_with_range (GType  enum_type,
                                 gint   minimum,
                                 gint   maximum)
 {
-  GtkListStore *store;
-  GEnumValue   *value;
+  GimpEnumStore *enum_store;
+  GtkListStore  *store;
+  GEnumValue    *value;
 
   g_return_val_if_fail (G_TYPE_IS_ENUM (enum_type), NULL);
 
@@ -233,7 +244,9 @@ gimp_enum_store_new_with_range (GType  enum_type,
                         "enum-type", enum_type,
                         NULL);
 
-  for (value = GIMP_ENUM_STORE (store)->enum_class->values;
+  enum_store = GIMP_ENUM_STORE (store);
+
+  for (value = enum_store->enum_class->values;
        value->value_name;
        value++)
     {
@@ -247,7 +260,7 @@ gimp_enum_store_new_with_range (GType  enum_type,
 }
 
 /**
- * gimp_enum_store_new_with_values
+ * gimp_enum_store_new_with_values: (skip)
  * @enum_type: the #GType of an enum.
  * @n_values:  the number of enum values to include
  * @...:       a list of enum values (exactly @n_values)
@@ -256,7 +269,7 @@ gimp_enum_store_new_with_range (GType  enum_type,
  * to explicitly list the enum values that should be added to the
  * store.
  *
- * Return value: a new #GimpEnumStore.
+ * Returns: a new #GimpEnumStore.
  *
  * Since: 2.4
  **/
@@ -278,14 +291,14 @@ gimp_enum_store_new_with_values (GType enum_type,
 }
 
 /**
- * gimp_enum_store_new_with_values_valist:
+ * gimp_enum_store_new_with_values_valist: (skip)
  * @enum_type: the #GType of an enum.
  * @n_values:  the number of enum values to include
  * @args:      a va_list of enum values (exactly @n_values)
  *
  * See gimp_enum_store_new_with_values().
  *
- * Return value: a new #GimpEnumStore.
+ * Returns: a new #GimpEnumStore.
  *
  * Since: 2.4
  **/
@@ -294,9 +307,10 @@ gimp_enum_store_new_with_values_valist (GType     enum_type,
                                         gint      n_values,
                                         va_list   args)
 {
-  GtkListStore *store;
-  GEnumValue   *value;
-  gint          i;
+  GimpEnumStore *enum_store;
+  GtkListStore  *store;
+  GEnumValue    *value;
+  gint           i;
 
   g_return_val_if_fail (G_TYPE_IS_ENUM (enum_type), NULL);
   g_return_val_if_fail (n_values > 1, NULL);
@@ -305,9 +319,11 @@ gimp_enum_store_new_with_values_valist (GType     enum_type,
                         "enum-type", enum_type,
                         NULL);
 
+  enum_store = GIMP_ENUM_STORE (store);
+
   for (i = 0; i < n_values; i++)
     {
-      value = g_enum_get_value (GIMP_ENUM_STORE (store)->enum_class,
+      value = g_enum_get_value (enum_store->enum_class,
                                 va_arg (args, gint));
 
       if (value)
@@ -315,27 +331,6 @@ gimp_enum_store_new_with_values_valist (GType     enum_type,
     }
 
   return store;
-}
-
-/**
- * gimp_enum_store_set_stock_prefix:
- * @store:        a #GimpEnumStore
- * @stock_prefix: a prefix to create icon stock ID from enum values
- *
- * Creates a stock ID for each enum value in the @store by appending
- * the value's nick to the given @stock_prefix, separated by a hyphen.
- *
- * See also: gimp_enum_combo_box_set_stock_prefix().
- *
- * Since: 2.4
- *
- * Deprecated: GIMP 2.10
- **/
-void
-gimp_enum_store_set_stock_prefix (GimpEnumStore *store,
-                                  const gchar   *stock_prefix)
-{
-  gimp_enum_store_set_icon_prefix (store, stock_prefix);
 }
 
 /**

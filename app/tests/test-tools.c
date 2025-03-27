@@ -60,9 +60,10 @@
 #include "core/gimptoolinfo.h"
 #include "core/gimptooloptions.h"
 
-#include "tests.h"
+#include "gimpcoreapp.h"
 
 #include "gimp-app-test-utils.h"
+#include "tests.h"
 
 
 #define GIMP_TEST_IMAGE_WIDTH            150
@@ -159,8 +160,8 @@ gimp_tools_set_tool (Gimp        *gimp,
 static GimpDisplay *
 gimp_test_get_only_display (Gimp *gimp)
 {
-  g_assert (g_list_length (gimp_get_image_iter (gimp)) == 1);
-  g_assert (g_list_length (gimp_get_display_iter (gimp)) == 1);
+  g_assert_true (g_list_length (gimp_get_image_iter (gimp)) == 1);
+  g_assert_true (g_list_length (gimp_get_display_iter (gimp)) == 1);
 
   return GIMP_DISPLAY (gimp_get_display_iter (gimp)->data);
 }
@@ -191,8 +192,8 @@ gimp_test_get_only_display_shell (Gimp *gimp)
 static GimpImage *
 gimp_test_get_only_image (Gimp *gimp)
 {
-  g_assert (g_list_length (gimp_get_image_iter (gimp)) == 1);
-  g_assert (g_list_length (gimp_get_display_iter (gimp)) == 1);
+  g_assert_true (g_list_length (gimp_get_image_iter (gimp)) == 1);
+  g_assert_true (g_list_length (gimp_get_display_iter (gimp)) == 1);
 
   return GIMP_IMAGE (gimp_get_image_iter (gimp)->data);
 }
@@ -208,9 +209,12 @@ gimp_test_synthesize_tool_button_event (GimpDisplayShell *shell,
   GdkEvent   *event   = gdk_event_new (button_event_type);
   GdkWindow  *window  = gtk_widget_get_window (GTK_WIDGET (shell->canvas));
   GdkDisplay *display = gdk_window_get_display (window);
+  GdkSeat    *seat    = gdk_display_get_default_seat (display);
 
-  g_assert (button_event_type == GDK_BUTTON_PRESS ||
-            button_event_type == GDK_BUTTON_RELEASE);
+  g_assert_true (button_event_type == GDK_BUTTON_PRESS ||
+                 button_event_type == GDK_BUTTON_RELEASE);
+
+  gdk_event_set_device (event, gdk_seat_get_pointer (seat));
 
   event->button.window     = g_object_ref (window);
   event->button.send_event = TRUE;
@@ -220,7 +224,6 @@ gimp_test_synthesize_tool_button_event (GimpDisplayShell *shell,
   event->button.axes       = NULL;
   event->button.state      = 0;
   event->button.button     = button;
-  event->button.device     = gdk_display_get_core_pointer (display);
   event->button.x_root     = -1;
   event->button.y_root     = -1;
 
@@ -239,6 +242,9 @@ gimp_test_synthesize_tool_motion_event (GimpDisplayShell *shell,
   GdkEvent   *event   = gdk_event_new (GDK_MOTION_NOTIFY);
   GdkWindow  *window  = gtk_widget_get_window (GTK_WIDGET (shell->canvas));
   GdkDisplay *display = gdk_window_get_display (window);
+  GdkSeat    *seat    = gdk_display_get_default_seat (display);
+
+  gdk_event_set_device (event, gdk_seat_get_pointer (seat));
 
   event->motion.window     = g_object_ref (window);
   event->motion.send_event = TRUE;
@@ -248,7 +254,6 @@ gimp_test_synthesize_tool_motion_event (GimpDisplayShell *shell,
   event->motion.axes       = NULL;
   event->motion.state      = GDK_BUTTON1_MASK | modifiers;
   event->motion.is_hint    = FALSE;
-  event->motion.device     = gdk_display_get_core_pointer (display);
   event->motion.x_root     = -1;
   event->motion.y_root     = -1;
 
@@ -267,9 +272,13 @@ gimp_test_synthesize_tool_crossing_event (GimpDisplayShell *shell,
 {
   GdkEvent   *event   = gdk_event_new (crossing_event_type);
   GdkWindow  *window  = gtk_widget_get_window (GTK_WIDGET (shell->canvas));
+  GdkDisplay *display = gdk_window_get_display (window);
+  GdkSeat    *seat    = gdk_display_get_default_seat (display);
 
-  g_assert (crossing_event_type == GDK_ENTER_NOTIFY ||
-            crossing_event_type == GDK_LEAVE_NOTIFY);
+  g_assert_true (crossing_event_type == GDK_ENTER_NOTIFY ||
+                 crossing_event_type == GDK_LEAVE_NOTIFY);
+
+  gdk_event_set_device (event, gdk_seat_get_pointer (seat));
 
   event->crossing.window     = g_object_ref (window);
   event->crossing.send_event = TRUE;
@@ -436,7 +445,6 @@ crop_set_width_without_pending_rect (GimpTestFixture *fixture,
   GimpDisplay          *display = gimp_test_get_only_display (gimp);
   GimpToolInfo         *tool_info;
   GimpRectangleOptions *rectangle_options;
-  GtkWidget            *tool_options_gui;
   GtkWidget            *size_entry;
 
   /* Activate crop tool */
@@ -444,7 +452,6 @@ crop_set_width_without_pending_rect (GimpTestFixture *fixture,
 
   /* Get tool options */
   tool_info         = gimp_get_tool_info (gimp, "gimp-crop-tool");
-  tool_options_gui  = gimp_tools_get_tool_options_gui (tool_info->tool_options);
   rectangle_options = GIMP_RECTANGLE_OPTIONS (tool_info->tool_options);
 
   /* Find 'Width' or 'Height' GtkTextEntry in tool options */
@@ -466,8 +473,6 @@ int main(int argc, char **argv)
   gimp_test_bail_if_no_display ();
   gtk_test_init (&argc, &argv, NULL);
 
-  gimp_test_utils_set_gimp2_directory ("GIMP_TESTING_ABS_TOP_SRCDIR",
-                                       "app/tests/gimpdir");
   gimp_test_utils_setup_menus_path ();
 
   /* Start up GIMP */
@@ -479,14 +484,11 @@ int main(int argc, char **argv)
   ADD_TEST (crop_set_width_without_pending_rect);
 
   /* Run the tests and return status */
-  result = g_test_run ();
+  g_application_run (gimp->app, 0, NULL);
+  result = gimp_core_app_get_exit_status (GIMP_CORE_APP (gimp->app));
 
-  /* Don't write files to the source dir */
-  gimp_test_utils_set_gimp2_directory ("GIMP_TESTING_ABS_TOP_BUILDDIR",
-                                       "app/tests/gimpdir-output");
-
-  /* Exit properly so we don't break script-fu plug-in wire */
-  gimp_exit (gimp, TRUE);
+  g_application_quit (G_APPLICATION (gimp->app));
+  g_clear_object (&gimp->app);
 
   return result;
 }

@@ -39,109 +39,29 @@ sub patterns_get_list {
     $blurb = 'Retrieve a complete listing of the available patterns.';
 
     $help = <<'HELP';
-This procedure returns a complete listing of available GIMP patterns. Each name
-returned can be used as input to the gimp_context_set_pattern().
+This procedure returns a complete listing of available GIMP patterns.
+
+Each pattern returned can be used as input to [func@Gimp.context_set_pattern].
 HELP
 
     &std_pdb_misc;
 
     @inargs = (
-	{ name => 'filter', type => 'string', null_ok => 1,
+	{ name => 'filter', type => 'string', none_ok => 1,
           desc => 'An optional regular expression used to filter the list' }
     );
 
     @outargs = (
-	{ name => 'pattern_list', type => 'stringarray',
-	  desc => 'The list of pattern names',
-	  array => { name => 'num_patterns',
-		     desc => 'The number of patterns in the pattern list' } }
+	{ name => 'pattern_list', type => 'patternarray',
+	  desc => 'The list of patterns' }
     );
 
     %invoke = (
         headers => [ qw("core/gimpcontainer-filter.h") ],
 	code => <<'CODE'
 {
-  pattern_list = gimp_container_get_filtered_name_array (gimp_data_factory_get_container (gimp->pattern_factory),
-                                                         filter, &num_patterns);
-}
-CODE
-    );
-}
-
-sub patterns_get_pattern {
-    &std_pdb_deprecated ('gimp-context-get-pattern');
-
-    @outargs = (
-	{ name => 'name', type => 'string',
-	  desc => 'The pattern name' },
-	{ name => 'width', type => 'int32',
-	  desc => 'The pattern width' },
-	{ name => 'height', type => 'int32',
-	  desc => 'The pattern height' }
-    );
-
-    %invoke = (
-	code => <<'CODE'
-{
-  GimpPattern *pattern = gimp_context_get_pattern (context);
-
-  if (pattern)
-    {
-      name   = g_strdup (gimp_object_get_name (pattern));
-      width  = gimp_temp_buf_get_width  (pattern->mask);
-      height = gimp_temp_buf_get_height (pattern->mask);
-    }
-  else
-    success = FALSE;
-}
-CODE
-    );
-}
-
-sub patterns_get_pattern_data {
-    &std_pdb_deprecated ('gimp-pattern-get-pixels');
-
-    @inargs = (
-	{ name => 'name', type => 'string', null_ok => 1,
-	  desc => 'The pattern name ("" means currently active pattern)' }
-    );
-
-    @outargs = (
-	{ name => 'actual_name', type => 'string',
-	  desc => 'The pattern name' },
-	{ name => 'width', type => 'int32',
-	  desc => 'The pattern width' },
-	{ name => 'height', type => 'int32',
-	  desc => 'The pattern height' },
-	{ name => 'mask_bpp', type => 'int32',
-	  desc => 'Pattern bytes per pixel' },
-	{ name => 'mask_data', type => 'int8array',
-	  desc => 'The pattern mask data',
-	  array => { name => 'length',
-		     desc => 'Length of pattern mask data' } }
-    );
-    
-    %invoke = (
-	code => <<'CODE'
-{
-  GimpPattern *pattern;
-
-  if (name && strlen (name))
-    pattern = gimp_pdb_get_pattern (gimp, name, error);
-  else
-    pattern = gimp_context_get_pattern (context);
-
-  if (pattern)
-    {
-      actual_name = g_strdup (gimp_object_get_name (pattern));
-      width       = gimp_temp_buf_get_width  (pattern->mask);
-      height      = gimp_temp_buf_get_height (pattern->mask);
-      mask_bpp    = babl_format_get_bytes_per_pixel (gimp_temp_buf_get_format (pattern->mask));
-      length      = gimp_temp_buf_get_data_size (pattern->mask);
-      mask_data   = g_memdup (gimp_temp_buf_get_data (pattern->mask), length);
-    }
-  else
-    success = FALSE;
+  pattern_list = (GimpPattern **) gimp_container_get_filtered_array (gimp_data_factory_get_container (gimp->pattern_factory),
+                                                                     filter);
 }
 CODE
     );
@@ -157,9 +77,7 @@ CODE
               "gimppdb-utils.h");
 
 @procs = qw(patterns_refresh
-            patterns_get_list
-            patterns_get_pattern
-            patterns_get_pattern_data);
+            patterns_get_list);
 
 %exports = (app => [@procs], lib => [@procs]);
 

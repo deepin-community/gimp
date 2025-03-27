@@ -18,10 +18,14 @@
 
 #include "config.h"
 
+#include <gegl.h>
+#include <gio/gio.h>
 #include <glib-object.h>
 
 #include "gimpbasetypes.h"
 
+#include "gimpchoice.h"
+#include "gimpparamspecs.h"
 #include "gimpparasite.h"
 #include "gimpprotocol.h"
 #include "gimpwire.h"
@@ -125,12 +129,15 @@ static void _gp_extension_ack_destroy    (GimpWireMessage  *msg);
 
 static void _gp_params_read              (GIOChannel       *channel,
                                           GPParam         **params,
-                                          guint            *nparams,
+                                          guint            *n_params,
                                           gpointer          user_data);
 static void _gp_params_write             (GIOChannel       *channel,
                                           GPParam          *params,
-                                          gint              nparams,
+                                          gint              n_params,
                                           gpointer          user_data);
+static void _gp_params_destroy           (GPParam          *params,
+                                          gint              n_params);
+
 
 static void _gp_has_init_read            (GIOChannel       *channel,
                                           GimpWireMessage  *msg,
@@ -198,6 +205,8 @@ gp_init (void)
                       _gp_has_init_write,
                       _gp_has_init_destroy);
 }
+
+/* public writing API */
 
 gboolean
 gp_quit_write (GIOChannel *channel,
@@ -473,22 +482,31 @@ _gp_config_read (GIOChannel      *channel,
   GPConfig *config = g_slice_new0 (GPConfig);
 
   if (! _gimp_wire_read_int32 (channel,
-                               &config->version, 1, user_data))
-    goto cleanup;
-  if (! _gimp_wire_read_int32 (channel,
                                &config->tile_width, 1, user_data))
     goto cleanup;
   if (! _gimp_wire_read_int32 (channel,
                                &config->tile_height, 1, user_data))
     goto cleanup;
   if (! _gimp_wire_read_int32 (channel,
-                               (guint32 *) &config->shm_ID, 1, user_data))
+                               (guint32 *) &config->shm_id, 1, user_data))
     goto cleanup;
   if (! _gimp_wire_read_int8 (channel,
                               (guint8 *) &config->check_size, 1, user_data))
     goto cleanup;
   if (! _gimp_wire_read_int8 (channel,
                               (guint8 *) &config->check_type, 1, user_data))
+    goto cleanup;
+  if (! _gimp_wire_read_gegl_color (channel,
+                                    &config->check_custom_color1,
+                                    &config->check_custom_icc1,
+                                    &config->check_custom_encoding1,
+                                    1, user_data))
+    goto cleanup;
+  if (! _gimp_wire_read_gegl_color (channel,
+                                    &config->check_custom_color2,
+                                    &config->check_custom_icc2,
+                                    &config->check_custom_encoding2,
+                                    1, user_data))
     goto cleanup;
   if (! _gimp_wire_read_int8 (channel,
                               (guint8 *) &config->show_help_button, 1,
@@ -503,6 +521,14 @@ _gp_config_read (GIOChannel      *channel,
                               user_data))
     goto cleanup;
   if (! _gimp_wire_read_int8 (channel,
+                              (guint8 *) &config->export_color_profile, 1,
+                              user_data))
+    goto cleanup;
+  if (! _gimp_wire_read_int8 (channel,
+                              (guint8 *) &config->export_comment, 1,
+                              user_data))
+    goto cleanup;
+  if (! _gimp_wire_read_int8 (channel,
                               (guint8 *) &config->export_exif, 1,
                               user_data))
     goto cleanup;
@@ -514,18 +540,9 @@ _gp_config_read (GIOChannel      *channel,
                               (guint8 *) &config->export_iptc, 1,
                               user_data))
     goto cleanup;
-  if (! _gimp_wire_read_int8 (channel,
-                              (guint8 *) &config->export_profile, 1,
-                              user_data))
-    goto cleanup;
-  if (! _gimp_wire_read_int8 (channel,
-                              (guint8 *) &config->show_tooltips, 1, user_data))
-    goto cleanup;
   if (! _gimp_wire_read_int32 (channel,
-                               (guint32 *) &config->min_colors, 1, user_data))
-    goto cleanup;
-  if (! _gimp_wire_read_int32 (channel,
-                               (guint32 *) &config->gdisp_ID, 1, user_data))
+                               (guint32 *) &config->default_display_id, 1,
+                               user_data))
     goto cleanup;
 
   if (! _gimp_wire_read_string (channel,
@@ -544,40 +561,34 @@ _gp_config_read (GIOChannel      *channel,
   if (! _gimp_wire_read_int32 (channel,
                                &config->timestamp, 1, user_data))
     goto cleanup;
-
-  if (config->version < 0x0017)
-    goto end;
-
   if (! _gimp_wire_read_string (channel,
                                 &config->icon_theme_dir, 1, user_data))
     goto cleanup;
-
-  if (config->version < 0x0019)
-    goto end;
-
   if (! _gimp_wire_read_int64 (channel,
                                &config->tile_cache_size, 1, user_data))
     goto cleanup;
   if (! _gimp_wire_read_string (channel,
                                 &config->swap_path, 1, user_data))
     goto cleanup;
+  if (! _gimp_wire_read_string (channel,
+                                &config->swap_compression, 1, user_data))
+    goto cleanup;
   if (! _gimp_wire_read_int32 (channel,
                                (guint32 *) &config->num_processors, 1,
                                user_data))
     goto cleanup;
 
-  if (config->version < 0x001A)
-    goto end;
-
-  if (! _gimp_wire_read_string (channel,
-                                &config->swap_compression, 1, user_data))
-    goto cleanup;
-
- end:
   msg->data = config;
   return;
 
  cleanup:
+  g_bytes_unref (config->check_custom_color1);
+  g_bytes_unref (config->check_custom_icc1);
+  g_free (config->check_custom_encoding1);
+  g_bytes_unref (config->check_custom_color2);
+  g_bytes_unref (config->check_custom_icc2);
+  g_free (config->check_custom_encoding2);
+
   g_free (config->app_name);
   g_free (config->wm_class);
   g_free (config->display_name);
@@ -595,16 +606,13 @@ _gp_config_write (GIOChannel      *channel,
   GPConfig *config = msg->data;
 
   if (! _gimp_wire_write_int32 (channel,
-                                &config->version, 1, user_data))
-    return;
-  if (! _gimp_wire_write_int32 (channel,
                                 &config->tile_width, 1, user_data))
     return;
   if (! _gimp_wire_write_int32 (channel,
                                 &config->tile_height, 1, user_data))
     return;
   if (! _gimp_wire_write_int32 (channel,
-                                (const guint32 *) &config->shm_ID, 1,
+                                (const guint32 *) &config->shm_id, 1,
                                 user_data))
     return;
   if (! _gimp_wire_write_int8 (channel,
@@ -614,6 +622,18 @@ _gp_config_write (GIOChannel      *channel,
   if (! _gimp_wire_write_int8 (channel,
                                (const guint8 *) &config->check_type, 1,
                                user_data))
+    return;
+  if (! _gimp_wire_write_gegl_color (channel,
+                                     &config->check_custom_color1,
+                                     &config->check_custom_icc1,
+                                     &config->check_custom_encoding1,
+                                     1, user_data))
+    return;
+  if (! _gimp_wire_write_gegl_color (channel,
+                                     &config->check_custom_color2,
+                                     &config->check_custom_icc2,
+                                     &config->check_custom_encoding2,
+                                     1, user_data))
     return;
   if (! _gimp_wire_write_int8 (channel,
                                (const guint8 *) &config->show_help_button, 1,
@@ -628,6 +648,14 @@ _gp_config_write (GIOChannel      *channel,
                                user_data))
     return;
   if (! _gimp_wire_write_int8 (channel,
+                               (const guint8 *) &config->export_color_profile, 1,
+                               user_data))
+    return;
+  if (! _gimp_wire_write_int8 (channel,
+                               (const guint8 *) &config->export_comment, 1,
+                               user_data))
+    return;
+  if (! _gimp_wire_write_int8 (channel,
                                (const guint8 *) &config->export_exif, 1,
                                user_data))
     return;
@@ -639,20 +667,8 @@ _gp_config_write (GIOChannel      *channel,
                                (const guint8 *) &config->export_iptc, 1,
                                user_data))
     return;
-  if (! _gimp_wire_write_int8 (channel,
-                               (const guint8 *) &config->export_profile, 1,
-                               user_data))
-    return;
-  if (! _gimp_wire_write_int8 (channel,
-                               (const guint8 *) &config->show_tooltips, 1,
-                               user_data))
-    return;
   if (! _gimp_wire_write_int32 (channel,
-                                (const guint32 *) &config->min_colors, 1,
-                                user_data))
-    return;
-  if (! _gimp_wire_write_int32 (channel,
-                                (const guint32 *) &config->gdisp_ID, 1,
+                                (const guint32 *) &config->default_display_id, 1,
                                 user_data))
     return;
   if (! _gimp_wire_write_string (channel,
@@ -672,33 +688,21 @@ _gp_config_write (GIOChannel      *channel,
                                 (const guint32 *) &config->timestamp, 1,
                                 user_data))
     return;
-
-  if (config->version < 0x0017)
-    return;
-
   if (! _gimp_wire_write_string (channel,
                                  &config->icon_theme_dir, 1, user_data))
     return;
-
-  if (config->version < 0x0019)
-    return;
-
   if (! _gimp_wire_write_int64 (channel,
                                 &config->tile_cache_size, 1, user_data))
     return;
   if (! _gimp_wire_write_string (channel,
                                  &config->swap_path, 1, user_data))
     return;
+  if (! _gimp_wire_write_string (channel,
+                                 &config->swap_compression, 1, user_data))
+    return;
   if (! _gimp_wire_write_int32 (channel,
                                 (const guint32 *) &config->num_processors, 1,
                                 user_data))
-    return;
-
-  if (config->version < 0x001A)
-    return;
-
-  if (! _gimp_wire_write_string (channel,
-                                 &config->swap_compression, 1, user_data))
     return;
 }
 
@@ -709,6 +713,13 @@ _gp_config_destroy (GimpWireMessage *msg)
 
   if (config)
     {
+      g_bytes_unref (config->check_custom_color1);
+      g_bytes_unref (config->check_custom_icc1);
+      g_free (config->check_custom_encoding1);
+      g_bytes_unref (config->check_custom_color2);
+      g_bytes_unref (config->check_custom_icc2);
+      g_free (config->check_custom_encoding2);
+
       g_free (config->app_name);
       g_free (config->wm_class);
       g_free (config->display_name);
@@ -729,7 +740,7 @@ _gp_tile_req_read (GIOChannel      *channel,
   GPTileReq *tile_req = g_slice_new0 (GPTileReq);
 
   if (! _gimp_wire_read_int32 (channel,
-                               (guint32 *) &tile_req->drawable_ID, 1,
+                               (guint32 *) &tile_req->drawable_id, 1,
                                user_data))
     goto cleanup;
   if (! _gimp_wire_read_int32 (channel,
@@ -755,7 +766,7 @@ _gp_tile_req_write (GIOChannel      *channel,
   GPTileReq *tile_req = msg->data;
 
   if (! _gimp_wire_write_int32 (channel,
-                                (const guint32 *) &tile_req->drawable_ID, 1,
+                                (const guint32 *) &tile_req->drawable_id, 1,
                                 user_data))
     return;
   if (! _gimp_wire_write_int32 (channel,
@@ -806,7 +817,7 @@ _gp_tile_data_read (GIOChannel      *channel,
   GPTileData *tile_data = g_slice_new0 (GPTileData);
 
   if (! _gimp_wire_read_int32 (channel,
-                               (guint32 *) &tile_data->drawable_ID, 1,
+                               (guint32 *) &tile_data->drawable_id, 1,
                                user_data))
     goto cleanup;
   if (! _gimp_wire_read_int32 (channel,
@@ -857,7 +868,7 @@ _gp_tile_data_write (GIOChannel      *channel,
   GPTileData *tile_data = msg->data;
 
   if (! _gimp_wire_write_int32 (channel,
-                                (const guint32 *) &tile_data->drawable_ID, 1,
+                                (const guint32 *) &tile_data->drawable_id, 1,
                                 user_data))
     return;
   if (! _gimp_wire_write_int32 (channel,
@@ -920,7 +931,7 @@ _gp_proc_run_read (GIOChannel      *channel,
     goto cleanup;
 
   _gp_params_read (channel,
-                   &proc_run->params, (guint *) &proc_run->nparams,
+                   &proc_run->params, (guint *) &proc_run->n_params,
                    user_data);
 
   msg->data = proc_run;
@@ -941,7 +952,7 @@ _gp_proc_run_write (GIOChannel      *channel,
   if (! _gimp_wire_write_string (channel, &proc_run->name, 1, user_data))
     return;
 
-  _gp_params_write (channel, proc_run->params, proc_run->nparams, user_data);
+  _gp_params_write (channel, proc_run->params, proc_run->n_params, user_data);
 }
 
 static void
@@ -951,7 +962,7 @@ _gp_proc_run_destroy (GimpWireMessage *msg)
 
   if (proc_run)
     {
-      gp_params_destroy (proc_run->params, proc_run->nparams);
+      _gp_params_destroy (proc_run->params, proc_run->n_params);
 
       g_free (proc_run->name);
       g_slice_free (GPProcRun, proc_run);
@@ -971,7 +982,7 @@ _gp_proc_return_read (GIOChannel      *channel,
     goto cleanup;
 
   _gp_params_read (channel,
-                   &proc_return->params, (guint *) &proc_return->nparams,
+                   &proc_return->params, (guint *) &proc_return->n_params,
                    user_data);
 
   msg->data = proc_return;
@@ -993,7 +1004,7 @@ _gp_proc_return_write (GIOChannel      *channel,
     return;
 
   _gp_params_write (channel,
-                    proc_return->params, proc_return->nparams, user_data);
+                    proc_return->params, proc_return->n_params, user_data);
 }
 
 static void
@@ -1003,7 +1014,7 @@ _gp_proc_return_destroy (GimpWireMessage *msg)
 
   if (proc_return)
     {
-      gp_params_destroy (proc_return->params, proc_return->nparams);
+      _gp_params_destroy (proc_return->params, proc_return->n_params);
 
       g_free (proc_return->name);
       g_slice_free (GPProcReturn, proc_return);
@@ -1060,6 +1071,307 @@ _gp_temp_proc_return_destroy (GimpWireMessage *msg)
 
 /*  proc_install  */
 
+static gboolean
+_gp_param_def_read (GIOChannel *channel,
+                    GPParamDef *param_def,
+                    gpointer    user_data)
+{
+  if (! _gimp_wire_read_int32 (channel,
+                               &param_def->param_def_type, 1,
+                               user_data))
+    return FALSE;
+
+  if (! _gimp_wire_read_string (channel,
+                                &param_def->type_name, 1,
+                                user_data))
+    return FALSE;
+
+  if (! _gimp_wire_read_string (channel,
+                                &param_def->value_type_name, 1,
+                                user_data))
+    return FALSE;
+
+  if (! _gimp_wire_read_string (channel,
+                                &param_def->name, 1,
+                                user_data))
+    return FALSE;
+
+  if (! _gimp_wire_read_string (channel,
+                                &param_def->nick, 1,
+                                user_data))
+    return FALSE;
+
+  if (! _gimp_wire_read_string (channel,
+                                &param_def->blurb, 1,
+                                user_data))
+    return FALSE;
+
+  if (! _gimp_wire_read_int32 (channel,
+                               &param_def->flags, 1,
+                               user_data))
+    return FALSE;
+
+  switch (param_def->param_def_type)
+    {
+    case GP_PARAM_DEF_TYPE_DEFAULT:
+    case GP_PARAM_DEF_TYPE_EXPORT_OPTIONS:
+      break;
+
+    case GP_PARAM_DEF_TYPE_INT:
+      if (! _gimp_wire_read_int64 (channel,
+                                   (guint64 *) &param_def->meta.m_int.min_val, 1,
+                                   user_data) ||
+          ! _gimp_wire_read_int64 (channel,
+                                   (guint64 *) &param_def->meta.m_int.max_val, 1,
+                                   user_data) ||
+          ! _gimp_wire_read_int64 (channel,
+                                   (guint64 *) &param_def->meta.m_int.default_val, 1,
+                                   user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_CHOICE:
+        {
+          GimpChoice *choice;
+          guint32     size;
+          gchar      *nick;
+
+          if (! _gimp_wire_read_string (channel, &nick, (int) 1, user_data))
+            return FALSE;
+
+          param_def->meta.m_choice.default_val = g_strdup (nick);
+
+          if (! _gimp_wire_read_int32 (channel, &size, 1, user_data))
+            return FALSE;
+
+          choice = gimp_choice_new ();
+
+          for (gint i = 0; i < size; i++)
+            {
+              gchar *label;
+              gchar *help;
+              gint   id;
+
+              if (! _gimp_wire_read_string (channel, &nick,
+                                           (int) 1, user_data)  ||
+                  ! _gimp_wire_read_int32 (channel, (guint32 *) &id,
+                                           1, user_data)        ||
+                  ! _gimp_wire_read_string (channel, &label,
+                                            (int) 1, user_data) ||
+                  ! _gimp_wire_read_string (channel, &help,
+                                            (int) 1, user_data))
+                {
+                  g_object_unref (choice);
+                  return FALSE;
+                }
+
+              gimp_choice_add (choice, nick, id, label, help);
+            }
+          param_def->meta.m_choice.choice = choice;
+        }
+      break;
+
+    case GP_PARAM_DEF_TYPE_UNIT:
+      if (! _gimp_wire_read_int32 (channel,
+                                   (guint32 *) &param_def->meta.m_unit.allow_pixels, 1,
+                                   user_data) ||
+          ! _gimp_wire_read_int32 (channel,
+                                   (guint32 *) &param_def->meta.m_unit.allow_percent, 1,
+                                   user_data) ||
+          ! _gimp_wire_read_int32 (channel,
+                                   (guint32 *) &param_def->meta.m_unit.default_val, 1,
+                                   user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_ENUM:
+      if (! _gimp_wire_read_int32 (channel,
+                                   (guint32 *) &param_def->meta.m_enum.default_val, 1,
+                                   user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_BOOLEAN:
+      if (! _gimp_wire_read_int32 (channel,
+                                   (guint32 *) &param_def->meta.m_boolean.default_val, 1,
+                                   user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_DOUBLE:
+      if (! _gimp_wire_read_double (channel,
+                                    &param_def->meta.m_double.min_val, 1,
+                                    user_data) ||
+          ! _gimp_wire_read_double (channel,
+                                    &param_def->meta.m_double.max_val, 1,
+                                    user_data) ||
+          ! _gimp_wire_read_double (channel,
+                                    &param_def->meta.m_double.default_val, 1,
+                                    user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_STRING:
+      if (! _gimp_wire_read_string (channel,
+                                    &param_def->meta.m_string.default_val, 1,
+                                    user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_GEGL_COLOR:
+        {
+          GPParamColor *default_val = NULL;
+          GBytes       *pixel_data = NULL;
+          GBytes       *icc_data   = NULL;
+          gchar        *encoding   = NULL;
+
+          if (! _gimp_wire_read_int32 (channel,
+                                       (guint32 *) &param_def->meta.m_gegl_color.has_alpha, 1,
+                                       user_data) ||
+              ! _gimp_wire_read_gegl_color (channel, &pixel_data, &icc_data, &encoding,
+                                            1, user_data))
+            return FALSE;
+
+          if (pixel_data != NULL)
+            {
+              default_val = g_new0 (GPParamColor, 1);
+
+              default_val->format.encoding = encoding;
+              default_val->size            = g_bytes_get_size (pixel_data);
+              if (default_val->size > 40)
+                {
+                  g_free (default_val);
+                  g_free (encoding);
+                  g_bytes_unref (pixel_data);
+                  g_bytes_unref (icc_data);
+                  return FALSE;
+                }
+              memcpy (default_val->data, g_bytes_get_data (pixel_data, NULL),
+                      default_val->size);
+              g_bytes_unref (pixel_data);
+              if (icc_data)
+                {
+                  gsize profile_size;
+
+                  default_val->format.profile_data = g_bytes_unref_to_data (icc_data, &profile_size);
+                  default_val->format.profile_size = (guint32) profile_size;
+                }
+              else
+                {
+                  default_val->format.profile_data = NULL;
+                  default_val->format.profile_size = 0;
+                }
+            }
+          param_def->meta.m_gegl_color.default_val = default_val;
+        }
+      break;
+
+    case GP_PARAM_DEF_TYPE_ID:
+      if (! _gimp_wire_read_int32 (channel,
+                                   (guint32 *) &param_def->meta.m_id.none_ok, 1,
+                                   user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_ID_ARRAY:
+      if (! _gimp_wire_read_string (channel,
+                                    &param_def->meta.m_id_array.type_name, 1,
+                                    user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_RESOURCE:
+      if (! _gimp_wire_read_int32 (channel,
+                                   (guint32 *) &param_def->meta.m_resource.none_ok, 1,
+                                   user_data))
+        return FALSE;
+      if (! _gimp_wire_read_int32 (channel,
+                                   (guint32 *) &param_def->meta.m_resource.default_to_context, 1,
+                                   user_data))
+        return FALSE;
+      if (! _gimp_wire_read_int32 (channel,
+                                   (guint32 *) &param_def->meta.m_resource.default_resource_id, 1,
+                                   user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_FILE:
+      if (! _gimp_wire_read_int32 (channel,
+                                   (guint32 *) &param_def->meta.m_file.action, 1,
+                                   user_data))
+        return FALSE;
+      if (! _gimp_wire_read_int32 (channel,
+                                   (guint32 *) &param_def->meta.m_file.none_ok, 1,
+                                   user_data))
+        return FALSE;
+      if (! _gimp_wire_read_string (channel,
+                                    &param_def->meta.m_file.default_uri, 1,
+                                    user_data))
+        return FALSE;
+      break;
+    }
+
+  return TRUE;
+}
+
+static void
+_gp_param_def_destroy (GPParamDef *param_def)
+{
+  g_free (param_def->type_name);
+  g_free (param_def->value_type_name);
+  g_free (param_def->name);
+  g_free (param_def->nick);
+  g_free (param_def->blurb);
+
+  switch (param_def->param_def_type)
+    {
+    case GP_PARAM_DEF_TYPE_DEFAULT:
+    case GP_PARAM_DEF_TYPE_INT:
+    case GP_PARAM_DEF_TYPE_UNIT:
+    case GP_PARAM_DEF_TYPE_ENUM:
+      break;
+
+    case GP_PARAM_DEF_TYPE_BOOLEAN:
+    case GP_PARAM_DEF_TYPE_DOUBLE:
+      break;
+
+    case GP_PARAM_DEF_TYPE_CHOICE:
+      g_free (param_def->meta.m_choice.default_val);
+      g_object_unref (param_def->meta.m_choice.choice);
+      break;
+
+    case GP_PARAM_DEF_TYPE_STRING:
+      g_free (param_def->meta.m_string.default_val);
+      break;
+
+    case GP_PARAM_DEF_TYPE_GEGL_COLOR:
+      if (param_def->meta.m_gegl_color.default_val)
+        {
+          g_free (param_def->meta.m_gegl_color.default_val->format.encoding);
+          g_free (param_def->meta.m_gegl_color.default_val->format.profile_data);
+        }
+      g_free (param_def->meta.m_gegl_color.default_val);
+      break;
+
+    case GP_PARAM_DEF_TYPE_ID:
+      break;
+
+    case GP_PARAM_DEF_TYPE_ID_ARRAY:
+      g_free (param_def->meta.m_id_array.type_name);
+      break;
+
+    case GP_PARAM_DEF_TYPE_EXPORT_OPTIONS:
+      break;
+
+    case GP_PARAM_DEF_TYPE_RESOURCE:
+      break;
+
+    case GP_PARAM_DEF_TYPE_FILE:
+      g_free (param_def->meta.m_file.default_uri);
+      break;
+    }
+}
+
 static void
 _gp_proc_install_read (GIOChannel      *channel,
                        GimpWireMessage *msg,
@@ -1069,73 +1381,32 @@ _gp_proc_install_read (GIOChannel      *channel,
   gint           i;
 
   if (! _gimp_wire_read_string (channel,
-                                &proc_install->name, 1, user_data))
-    goto cleanup;
-  if (! _gimp_wire_read_string (channel,
-                                &proc_install->blurb, 1, user_data))
-    goto cleanup;
-  if (! _gimp_wire_read_string (channel,
-                                &proc_install->help, 1, user_data))
-    goto cleanup;
-  if (! _gimp_wire_read_string (channel,
-                                &proc_install->author, 1, user_data))
-    goto cleanup;
-  if (! _gimp_wire_read_string (channel,
-                                &proc_install->copyright, 1, user_data))
-    goto cleanup;
-  if (! _gimp_wire_read_string (channel,
-                                &proc_install->date, 1, user_data))
-    goto cleanup;
-  if (! _gimp_wire_read_string (channel,
-                                &proc_install->menu_path, 1, user_data))
-    goto cleanup;
-  if (! _gimp_wire_read_string (channel,
-                                &proc_install->image_types, 1, user_data))
+                                &proc_install->name, 1, user_data)    ||
+      ! _gimp_wire_read_int32 (channel,
+                               &proc_install->type, 1, user_data)     ||
+      ! _gimp_wire_read_int32 (channel,
+                               &proc_install->n_params, 1, user_data) ||
+      ! _gimp_wire_read_int32 (channel,
+                               &proc_install->n_return_vals, 1, user_data))
     goto cleanup;
 
-  if (! _gimp_wire_read_int32 (channel,
-                               &proc_install->type, 1, user_data))
-    goto cleanup;
-  if (! _gimp_wire_read_int32 (channel,
-                               &proc_install->nparams, 1, user_data))
-    goto cleanup;
-  if (! _gimp_wire_read_int32 (channel,
-                               &proc_install->nreturn_vals, 1, user_data))
-    goto cleanup;
+  proc_install->params = g_new0 (GPParamDef, proc_install->n_params);
 
-  proc_install->params = g_new0 (GPParamDef, proc_install->nparams);
-
-  for (i = 0; i < proc_install->nparams; i++)
+  for (i = 0; i < proc_install->n_params; i++)
     {
-      if (! _gimp_wire_read_int32 (channel,
-                                   (guint32 *) &proc_install->params[i].type, 1,
-                                   user_data))
-        goto cleanup;
-      if (! _gimp_wire_read_string (channel,
-                                    &proc_install->params[i].name, 1,
-                                    user_data))
-        goto cleanup;
-      if (! _gimp_wire_read_string (channel,
-                                    &proc_install->params[i].description, 1,
-                                    user_data))
+      if (! _gp_param_def_read (channel,
+                                &proc_install->params[i],
+                                user_data))
         goto cleanup;
     }
 
-  proc_install->return_vals = g_new0 (GPParamDef, proc_install->nreturn_vals);
+  proc_install->return_vals = g_new0 (GPParamDef, proc_install->n_return_vals);
 
-  for (i = 0; i < proc_install->nreturn_vals; i++)
+  for (i = 0; i < proc_install->n_return_vals; i++)
     {
-      if (! _gimp_wire_read_int32 (channel,
-                                   (guint32 *) &proc_install->return_vals[i].type, 1,
-                                   user_data))
-        goto cleanup;
-      if (! _gimp_wire_read_string (channel,
-                                    &proc_install->return_vals[i].name, 1,
-                                    user_data))
-        goto cleanup;
-      if (! _gimp_wire_read_string (channel,
-                                    &proc_install->return_vals[i].description, 1,
-                                    user_data))
+      if (! _gp_param_def_read (channel,
+                                &proc_install->return_vals[i],
+                                user_data))
         goto cleanup;
     }
 
@@ -1144,23 +1415,15 @@ _gp_proc_install_read (GIOChannel      *channel,
 
  cleanup:
   g_free (proc_install->name);
-  g_free (proc_install->blurb);
-  g_free (proc_install->help);
-  g_free (proc_install->author);
-  g_free (proc_install->copyright);
-  g_free (proc_install->date);
-  g_free (proc_install->menu_path);
-  g_free (proc_install->image_types);
 
   if (proc_install->params)
     {
-      for (i = 0; i < proc_install->nparams; i++)
+      for (i = 0; i < proc_install->n_params; i++)
         {
-          if (!proc_install->params[i].name)
+          if (! proc_install->params[i].name)
             break;
 
-          g_free (proc_install->params[i].name);
-          g_free (proc_install->params[i].description);
+          _gp_param_def_destroy (&proc_install->params[i]);
         }
 
       g_free (proc_install->params);
@@ -1168,13 +1431,12 @@ _gp_proc_install_read (GIOChannel      *channel,
 
   if (proc_install->return_vals)
     {
-      for (i = 0; i < proc_install->nreturn_vals; i++)
+      for (i = 0; i < proc_install->n_return_vals; i++)
         {
-          if (!proc_install->return_vals[i].name)
+          if (! proc_install->return_vals[i].name)
             break;
 
-          g_free (proc_install->return_vals[i].name);
-          g_free (proc_install->return_vals[i].description);
+          _gp_param_def_destroy (&proc_install->return_vals[i]);
         }
 
       g_free (proc_install->return_vals);
@@ -1184,7 +1446,242 @@ _gp_proc_install_read (GIOChannel      *channel,
   msg->data = NULL;
 }
 
-static void
+static gboolean
+_gp_param_def_write (GIOChannel *channel,
+                     GPParamDef *param_def,
+                     gpointer    user_data)
+{
+  if (! _gimp_wire_write_int32 (channel,
+                                &param_def->param_def_type, 1,
+                                user_data))
+    return FALSE;
+
+  if (! _gimp_wire_write_string (channel,
+                                 &param_def->type_name, 1,
+                                 user_data))
+    return FALSE;
+
+  if (! _gimp_wire_write_string (channel,
+                                 &param_def->value_type_name, 1,
+                                 user_data))
+    return FALSE;
+
+  if (! _gimp_wire_write_string (channel,
+                                 &param_def->name, 1,
+                                 user_data))
+    return FALSE;
+
+  if (! _gimp_wire_write_string (channel,
+                                 &param_def->nick, 1,
+                                 user_data))
+    return FALSE;
+
+  if (! _gimp_wire_write_string (channel,
+                                 &param_def->blurb, 1,
+                                 user_data))
+    return FALSE;
+
+  if (! _gimp_wire_write_int32 (channel,
+                                &param_def->flags, 1,
+                                user_data))
+    return FALSE;
+
+  switch (param_def->param_def_type)
+    {
+    case GP_PARAM_DEF_TYPE_DEFAULT:
+    case GP_PARAM_DEF_TYPE_EXPORT_OPTIONS:
+      break;
+
+    case GP_PARAM_DEF_TYPE_INT:
+      if (! _gimp_wire_write_int64 (channel,
+                                    (guint64 *) &param_def->meta.m_int.min_val, 1,
+                                    user_data) ||
+          ! _gimp_wire_write_int64 (channel,
+                                    (guint64 *) &param_def->meta.m_int.max_val, 1,
+                                    user_data) ||
+          ! _gimp_wire_write_int64 (channel,
+                                    (guint64 *) &param_def->meta.m_int.default_val, 1,
+                                    user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_CHOICE:
+        {
+          GList *values;
+          gint   size;
+
+          if (! _gimp_wire_write_string (channel,
+                                         &param_def->meta.m_choice.default_val,
+                                         1, user_data))
+            return FALSE;
+
+          values = gimp_choice_list_nicks (param_def->meta.m_choice.choice);
+          size   = g_list_length (values);
+
+          if (! _gimp_wire_write_int32 (channel,
+                                        (guint32 *) &size, 1,
+                                        user_data))
+            return FALSE;
+
+          for (GList *iter = values; iter; iter = iter->next)
+            {
+              const gchar *label;
+              const gchar *help;
+              gint         id;
+
+              gimp_choice_get_documentation (param_def->meta.m_choice.choice,
+                                             iter->data, &label, &help);
+              id = gimp_choice_get_id (param_def->meta.m_choice.choice,
+                                       iter->data);
+              if (! _gimp_wire_write_string (channel,
+                                             (gchar **) &iter->data,
+                                             1, user_data)  ||
+                  ! _gimp_wire_write_int32 (channel,
+                                            (guint32 *) &id, 1,
+                                            user_data)      ||
+                  ! _gimp_wire_write_string (channel,
+                                             (gchar **) &label,
+                                             1, user_data)  ||
+                  ! _gimp_wire_write_string (channel,
+                                             (gchar **) &help,
+                                             1, user_data))
+                return FALSE;
+            }
+        }
+      break;
+
+    case GP_PARAM_DEF_TYPE_UNIT:
+      if (! _gimp_wire_write_int32 (channel,
+                                    (guint32 *) &param_def->meta.m_unit.allow_pixels, 1,
+                                    user_data) ||
+          ! _gimp_wire_write_int32 (channel,
+                                    (guint32 *) &param_def->meta.m_unit.allow_percent, 1,
+                                    user_data) ||
+          ! _gimp_wire_write_int32 (channel,
+                                    (guint32 *) &param_def->meta.m_unit.default_val, 1,
+                                    user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_ENUM:
+      if (! _gimp_wire_write_int32 (channel,
+                                    (guint32 *) &param_def->meta.m_enum.default_val, 1,
+                                    user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_BOOLEAN:
+      if (! _gimp_wire_write_int32 (channel,
+                                    (guint32 *) &param_def->meta.m_boolean.default_val, 1,
+                                    user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_DOUBLE:
+      if (! _gimp_wire_write_double (channel,
+                                     &param_def->meta.m_double.min_val, 1,
+                                     user_data) ||
+          ! _gimp_wire_write_double (channel,
+                                     &param_def->meta.m_double.max_val, 1,
+                                     user_data) ||
+          ! _gimp_wire_write_double (channel,
+                                     &param_def->meta.m_double.default_val, 1,
+                                     user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_STRING:
+      if (! _gimp_wire_write_string (channel,
+                                     &param_def->meta.m_string.default_val, 1,
+                                     user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_GEGL_COLOR:
+        {
+          GBytes *pixel_data = NULL;
+          GBytes *icc_data   = NULL;
+          gchar  *encoding   = "";
+
+          if (! _gimp_wire_write_int32 (channel,
+                                        (guint32 *) &param_def->meta.m_gegl_color.has_alpha, 1,
+                                        user_data))
+            return FALSE;
+
+          if (param_def->meta.m_gegl_color.default_val)
+            {
+              pixel_data = g_bytes_new_static (param_def->meta.m_gegl_color.default_val->data,
+                                               param_def->meta.m_gegl_color.default_val->size);
+              icc_data   = g_bytes_new_static (param_def->meta.m_gegl_color.default_val->format.profile_data,
+                                               param_def->meta.m_gegl_color.default_val->format.profile_size);
+              encoding   = param_def->meta.m_gegl_color.default_val->format.encoding;
+            }
+
+          if (! _gimp_wire_write_gegl_color (channel,
+                                             &pixel_data,
+                                             &icc_data,
+                                             &encoding,
+                                             1, user_data))
+            {
+              g_bytes_unref (pixel_data);
+              g_bytes_unref (icc_data);
+              return FALSE;
+            }
+
+          g_bytes_unref (pixel_data);
+          g_bytes_unref (icc_data);
+        }
+      break;
+
+    case GP_PARAM_DEF_TYPE_ID:
+      if (! _gimp_wire_write_int32 (channel,
+                                    (guint32 *) &param_def->meta.m_id.none_ok, 1,
+                                    user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_ID_ARRAY:
+      if (! _gimp_wire_write_string (channel,
+                                     &param_def->meta.m_id_array.type_name, 1,
+                                     user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_RESOURCE:
+      if (! _gimp_wire_write_int32 (channel,
+                                    (guint32 *) &param_def->meta.m_resource.none_ok, 1,
+                                    user_data))
+        return FALSE;
+      if (! _gimp_wire_write_int32 (channel,
+                                    (guint32 *) &param_def->meta.m_resource.default_to_context, 1,
+                                    user_data))
+        return FALSE;
+      if (! _gimp_wire_write_int32 (channel,
+                                    (guint32 *) &param_def->meta.m_resource.default_resource_id, 1,
+                                    user_data))
+        return FALSE;
+      break;
+
+    case GP_PARAM_DEF_TYPE_FILE:
+      if (! _gimp_wire_write_int32 (channel,
+                                    (guint32 *) &param_def->meta.m_file.action, 1,
+                                    user_data))
+        return FALSE;
+      if (! _gimp_wire_write_int32 (channel,
+                                    (guint32 *) &param_def->meta.m_file.none_ok, 1,
+                                    user_data))
+        return FALSE;
+      if (! _gimp_wire_write_string (channel,
+                                     &param_def->meta.m_file.default_uri, 1,
+                                     user_data))
+        return FALSE;
+      break;
+    }
+
+  return TRUE;
+}
+
+  static void
 _gp_proc_install_write (GIOChannel      *channel,
                         GimpWireMessage *msg,
                         gpointer         user_data)
@@ -1193,69 +1690,28 @@ _gp_proc_install_write (GIOChannel      *channel,
   gint           i;
 
   if (! _gimp_wire_write_string (channel,
-                                 &proc_install->name, 1, user_data))
-    return;
-  if (! _gimp_wire_write_string (channel,
-                                 &proc_install->blurb, 1, user_data))
-    return;
-  if (! _gimp_wire_write_string (channel,
-                                 &proc_install->help, 1, user_data))
-    return;
-  if (! _gimp_wire_write_string (channel,
-                                 &proc_install->author, 1, user_data))
-    return;
-  if (! _gimp_wire_write_string (channel,
-                                 &proc_install->copyright, 1, user_data))
-    return;
-  if (! _gimp_wire_write_string (channel,
-                                 &proc_install->date, 1, user_data))
-    return;
-  if (! _gimp_wire_write_string (channel,
-                                 &proc_install->menu_path, 1, user_data))
-    return;
-  if (! _gimp_wire_write_string (channel,
-                                 &proc_install->image_types, 1, user_data))
+                                 &proc_install->name, 1, user_data)    ||
+      ! _gimp_wire_write_int32 (channel,
+                                &proc_install->type, 1, user_data)     ||
+      ! _gimp_wire_write_int32 (channel,
+                                &proc_install->n_params, 1, user_data) ||
+      ! _gimp_wire_write_int32 (channel,
+                                &proc_install->n_return_vals, 1, user_data))
     return;
 
-  if (! _gimp_wire_write_int32 (channel,
-                                &proc_install->type, 1, user_data))
-    return;
-  if (! _gimp_wire_write_int32 (channel,
-                                &proc_install->nparams, 1, user_data))
-    return;
-  if (! _gimp_wire_write_int32 (channel,
-                                &proc_install->nreturn_vals, 1, user_data))
-    return;
-
-  for (i = 0; i < proc_install->nparams; i++)
+  for (i = 0; i < proc_install->n_params; i++)
     {
-      if (! _gimp_wire_write_int32 (channel,
-                                    (guint32 *) &proc_install->params[i].type, 1,
-                                    user_data))
-        return;
-      if (! _gimp_wire_write_string (channel,
-                                     &proc_install->params[i].name, 1,
-                                     user_data))
-        return;
-      if (! _gimp_wire_write_string (channel,
-                                     &proc_install->params[i].description, 1,
-                                     user_data))
+      if (! _gp_param_def_write (channel,
+                                 &proc_install->params[i],
+                                 user_data))
         return;
     }
 
-  for (i = 0; i < proc_install->nreturn_vals; i++)
+  for (i = 0; i < proc_install->n_return_vals; i++)
     {
-      if (! _gimp_wire_write_int32 (channel,
-                                    (guint32 *) &proc_install->return_vals[i].type, 1,
-                                    user_data))
-        return;
-      if (! _gimp_wire_write_string (channel,
-                                     &proc_install->return_vals[i].name, 1,
-                                     user_data))
-        return;
-      if (! _gimp_wire_write_string (channel,
-                                     &proc_install->return_vals[i].description, 1,
-                                     user_data))
+      if (! _gp_param_def_write (channel,
+                                 &proc_install->return_vals[i],
+                                 user_data))
         return;
     }
 }
@@ -1270,24 +1726,15 @@ _gp_proc_install_destroy (GimpWireMessage *msg)
       gint i;
 
       g_free (proc_install->name);
-      g_free (proc_install->blurb);
-      g_free (proc_install->help);
-      g_free (proc_install->author);
-      g_free (proc_install->copyright);
-      g_free (proc_install->date);
-      g_free (proc_install->menu_path);
-      g_free (proc_install->image_types);
 
-      for (i = 0; i < proc_install->nparams; i++)
+      for (i = 0; i < proc_install->n_params; i++)
         {
-          g_free (proc_install->params[i].name);
-          g_free (proc_install->params[i].description);
+          _gp_param_def_destroy (&proc_install->params[i]);
         }
 
-      for (i = 0; i < proc_install->nreturn_vals; i++)
+      for (i = 0; i < proc_install->n_return_vals; i++)
         {
-          g_free (proc_install->return_vals[i].name);
-          g_free (proc_install->return_vals[i].description);
+          _gp_param_def_destroy (&proc_install->return_vals[i]);
         }
 
       g_free (proc_install->params);
@@ -1364,216 +1811,319 @@ _gp_extension_ack_destroy (GimpWireMessage *msg)
 static void
 _gp_params_read (GIOChannel  *channel,
                  GPParam    **params,
-                 guint       *nparams,
+                 guint       *n_params,
                  gpointer     user_data)
 {
-  gint i, j;
+  guint i;
 
-  if (! _gimp_wire_read_int32 (channel, (guint32 *) nparams, 1, user_data))
+  if (! _gimp_wire_read_int32 (channel, (guint32 *) n_params, 1, user_data))
     return;
 
-  if (*nparams == 0)
+  if (*n_params == 0)
     {
       *params = NULL;
       return;
     }
 
-  *params = g_new0 (GPParam, *nparams);
+  *params = g_try_new0 (GPParam, *n_params);
 
-  for (i = 0; i < *nparams; i++)
+  /* We may read crap on the wire (and as a consequence try to allocate
+   * far too much), which would be a plug-in error.
+   */
+  if (*params == NULL)
+    {
+      /* Output on stderr but no WARNING/CRITICAL. This is likely a
+       * plug-in bug sending bogus data, not a core bug.
+       */
+      g_printerr ("%s: failed to allocate %u parameters\n",
+                  G_STRFUNC, *n_params);
+      *n_params = 0;
+      return;
+    }
+
+  for (i = 0; i < *n_params; i++)
     {
       if (! _gimp_wire_read_int32 (channel,
-                                   (guint32 *) &(*params)[i].type, 1,
-                                   user_data))
-        goto cleanup;
+                                   (guint32 *) &(*params)[i].param_type, 1,
+                                   user_data) ||
+          ! _gimp_wire_read_string (channel,
+                                    &(*params)[i].type_name, 1,
+                                    user_data))
+        return;
 
-      switch ((*params)[i].type)
+      switch ((*params)[i].param_type)
         {
-        case GIMP_PDB_INT32:
+        case GP_PARAM_TYPE_INT:
           if (! _gimp_wire_read_int32 (channel,
-                                       (guint32 *) &(*params)[i].data.d_int32, 1,
+                                       (guint32 *) &(*params)[i].data.d_int, 1,
                                        user_data))
             goto cleanup;
           break;
 
-        case GIMP_PDB_INT16:
-          if (! _gimp_wire_read_int16 (channel,
-                                       (guint16 *) &(*params)[i].data.d_int16, 1,
-                                       user_data))
-            goto cleanup;
-          break;
-
-        case GIMP_PDB_INT8:
-          if (! _gimp_wire_read_int8 (channel,
-                                      &(*params)[i].data.d_int8, 1,
-                                      user_data))
-            goto cleanup;
-          break;
-
-        case GIMP_PDB_FLOAT:
+        case GP_PARAM_TYPE_DOUBLE:
           if (! _gimp_wire_read_double (channel,
-                                        &(*params)[i].data.d_float, 1,
+                                        &(*params)[i].data.d_double, 1,
                                         user_data))
             goto cleanup;
           break;
 
-        case GIMP_PDB_STRING:
+        case GP_PARAM_TYPE_STRING:
+        case GP_PARAM_TYPE_FILE:
           if (! _gimp_wire_read_string (channel,
                                         &(*params)[i].data.d_string, 1,
                                         user_data))
             goto cleanup;
           break;
 
-        case GIMP_PDB_INT32ARRAY:
-          (*params)[i-1].data.d_int32 = MAX (0, (*params)[i-1].data.d_int32);
-          (*params)[i].data.d_int32array = g_new (gint32,
-                                                  (*params)[i-1].data.d_int32);
+        case GP_PARAM_TYPE_BABL_FORMAT:
+          /* Read encoding. */
+          if (! _gimp_wire_read_string (channel,
+                                        &(*params)[i].data.d_format.encoding, 1,
+                                        user_data))
+            goto cleanup;
 
+          /* Read space (profile data). */
           if (! _gimp_wire_read_int32 (channel,
-                                       (guint32 *) (*params)[i].data.d_int32array,
-                                       (*params)[i-1].data.d_int32,
+                                       &(*params)[i].data.d_format.profile_size, 1,
                                        user_data))
             {
-              g_free ((*params)[i].data.d_int32array);
+              g_clear_pointer (&(*params)[i].data.d_format.encoding, g_free);
               goto cleanup;
             }
-          break;
 
-        case GIMP_PDB_INT16ARRAY:
-          (*params)[i-1].data.d_int32 = MAX (0, (*params)[i-1].data.d_int32);
-          (*params)[i].data.d_int16array = g_new (gint16,
-                                                  (*params)[i-1].data.d_int32);
-          if (! _gimp_wire_read_int16 (channel,
-                                       (guint16 *) (*params)[i].data.d_int16array,
-                                       (*params)[i-1].data.d_int32,
-                                       user_data))
-            {
-              g_free ((*params)[i].data.d_int16array);
-              goto cleanup;
-            }
-          break;
-
-        case GIMP_PDB_INT8ARRAY:
-          (*params)[i-1].data.d_int32 = MAX (0, (*params)[i-1].data.d_int32);
-          (*params)[i].data.d_int8array = g_new (guint8,
-                                                 (*params)[i-1].data.d_int32);
+          (*params)[i].data.d_format.profile_data = g_new0 (guint8, (*params)[i].data.d_format.profile_size);
           if (! _gimp_wire_read_int8 (channel,
-                                      (*params)[i].data.d_int8array,
-                                      (*params)[i-1].data.d_int32,
+                                      (*params)[i].data.d_format.profile_data,
+                                      (*params)[i].data.d_format.profile_size,
                                       user_data))
             {
-              g_free ((*params)[i].data.d_int8array);
+              g_clear_pointer (&(*params)[i].data.d_format.encoding, g_free);
+              g_clear_pointer (&(*params)[i].data.d_format.profile_data, g_free);
               goto cleanup;
             }
+
           break;
 
-        case GIMP_PDB_FLOATARRAY:
-          (*params)[i-1].data.d_int32 = MAX (0, (*params)[i-1].data.d_int32);
-          (*params)[i].data.d_floatarray = g_new (gdouble,
-                                                  (*params)[i-1].data.d_int32);
-          if (! _gimp_wire_read_double (channel,
-                                        (*params)[i].data.d_floatarray,
-                                        (*params)[i-1].data.d_int32,
-                                        user_data))
-            {
-              g_free ((*params)[i].data.d_floatarray);
-              goto cleanup;
-            }
-          break;
+        case GP_PARAM_TYPE_GEGL_COLOR:
+          /* Read the color data. */
+          if (! _gimp_wire_read_int32 (channel,
+                                       &(*params)[i].data.d_gegl_color.size, 1,
+                                       user_data))
+            goto cleanup;
 
-        case GIMP_PDB_STRINGARRAY:
-          (*params)[i-1].data.d_int32 = MAX (0, (*params)[i-1].data.d_int32);
-          (*params)[i].data.d_stringarray = g_new0 (gchar *,
-                                                    (*params)[i-1].data.d_int32);
+          if ((*params)[i].data.d_gegl_color.size > 40 ||
+              ! _gimp_wire_read_int8 (channel,
+                                      (*params)[i].data.d_gegl_color.data,
+                                      (*params)[i].data.d_gegl_color.size,
+                                      user_data))
+            goto cleanup;
+
+          /* Read encoding. */
           if (! _gimp_wire_read_string (channel,
-                                        (*params)[i].data.d_stringarray,
-                                        (*params)[i-1].data.d_int32,
+                                        &(*params)[i].data.d_gegl_color.format.encoding, 1,
                                         user_data))
+            goto cleanup;
+
+          /* Read space (profile data). */
+          if (! _gimp_wire_read_int32 (channel,
+                                       &(*params)[i].data.d_gegl_color.format.profile_size, 1,
+                                       user_data))
             {
-              for (j = 0; j < (*params)[i-1].data.d_int32; j++)
-                g_free (((*params)[i].data.d_stringarray)[j]);
-              g_free ((*params)[i].data.d_stringarray);
+              g_clear_pointer (&(*params)[i].data.d_gegl_color.format.encoding, g_free);
+              goto cleanup;
+            }
+
+          (*params)[i].data.d_gegl_color.format.profile_data = g_new0 (guint8, (*params)[i].data.d_gegl_color.format.profile_size);
+          if (! _gimp_wire_read_int8 (channel,
+                                      (*params)[i].data.d_gegl_color.format.profile_data,
+                                      (*params)[i].data.d_gegl_color.format.profile_size,
+                                      user_data))
+            {
+              g_clear_pointer (&(*params)[i].data.d_gegl_color.format.encoding, g_free);
+              g_clear_pointer (&(*params)[i].data.d_gegl_color.format.profile_data, g_free);
+              goto cleanup;
+            }
+
+          break;
+
+        case GP_PARAM_TYPE_COLOR_ARRAY:
+          if (! _gimp_wire_read_int32 (channel,
+                                       &(*params)[i].data.d_color_array.size, 1,
+                                       user_data))
+            goto cleanup;
+
+          (*params)[i].data.d_color_array.colors = g_new0 (GPParamColor,
+                                                           (*params)[i].data.d_color_array.size);
+
+          for (gint j = 0; j < (*params)[i].data.d_color_array.size; j++)
+            {
+              /* Read the color data. */
+              if (! _gimp_wire_read_int32 (channel,
+                                           &(*params)[i].data.d_color_array.colors[j].size, 1,
+                                           user_data))
+                {
+                  for (gint k = 0; k < j; k++)
+                    {
+                      g_free ((*params)[i].data.d_color_array.colors[k].format.encoding);
+                      g_free ((*params)[i].data.d_color_array.colors[k].format.profile_data);
+                    }
+                  g_clear_pointer (&(*params)[i].data.d_color_array.colors, g_free);
+                  goto cleanup;
+                }
+
+              if ((*params)[i].data.d_color_array.colors[j].size > 40 ||
+                  ! _gimp_wire_read_int8 (channel,
+                                          (*params)[i].data.d_color_array.colors[j].data,
+                                          (*params)[i].data.d_color_array.colors[j].size,
+                                          user_data))
+                {
+                  for (gint k = 0; k < j; k++)
+                    {
+                      g_free ((*params)[i].data.d_color_array.colors[k].format.encoding);
+                      g_free ((*params)[i].data.d_color_array.colors[k].format.profile_data);
+                    }
+                  g_clear_pointer (&(*params)[i].data.d_color_array.colors, g_free);
+                  goto cleanup;
+                }
+
+              /* Read encoding. */
+              if (! _gimp_wire_read_string (channel,
+                                            &(*params)[i].data.d_color_array.colors[j].format.encoding, 1,
+                                            user_data))
+                {
+                  for (gint k = 0; k < j; k++)
+                    {
+                      g_free ((*params)[i].data.d_color_array.colors[k].format.encoding);
+                      g_free ((*params)[i].data.d_color_array.colors[k].format.profile_data);
+                    }
+                  g_clear_pointer (&(*params)[i].data.d_color_array.colors, g_free);
+                  goto cleanup;
+                }
+
+              /* Read space (profile data). */
+              if (! _gimp_wire_read_int32 (channel,
+                                           &(*params)[i].data.d_color_array.colors[j].format.profile_size, 1,
+                                           user_data))
+                {
+                  for (gint k = 0; k < j; k++)
+                    {
+                      g_free ((*params)[i].data.d_color_array.colors[k].format.encoding);
+                      g_free ((*params)[i].data.d_color_array.colors[k].format.profile_data);
+                    }
+                  g_clear_pointer (&(*params)[i].data.d_color_array.colors[j].format.encoding, g_free);
+                  g_clear_pointer (&(*params)[i].data.d_color_array.colors, g_free);
+                  goto cleanup;
+                }
+
+              if ((*params)[i].data.d_color_array.colors[j].format.profile_size > 0)
+                {
+                  (*params)[i].data.d_color_array.colors[j].format.profile_data = g_new0 (guint8, (*params)[i].data.d_color_array.colors[j].format.profile_size);
+                  if (! _gimp_wire_read_int8 (channel,
+                                              (*params)[i].data.d_color_array.colors[j].format.profile_data,
+                                              (*params)[i].data.d_color_array.colors[j].format.profile_size,
+                                              user_data))
+                    {
+                      for (gint k = 0; k < j; k++)
+                        {
+                          g_free ((*params)[i].data.d_color_array.colors[k].format.encoding);
+                          g_free ((*params)[i].data.d_color_array.colors[k].format.profile_data);
+                        }
+                      g_clear_pointer (&(*params)[i].data.d_color_array.colors[j].format.encoding, g_free);
+                      g_clear_pointer (&(*params)[i].data.d_color_array.colors[j].format.profile_data, g_free);
+                      g_clear_pointer (&(*params)[i].data.d_color_array.colors, g_free);
+                      goto cleanup;
+                    }
+                }
+            }
+          break;
+
+        case GP_PARAM_TYPE_ARRAY:
+          if (! _gimp_wire_read_int32 (channel,
+                                       &(*params)[i].data.d_array.size, 1,
+                                       user_data))
+            goto cleanup;
+
+          (*params)[i].data.d_array.data = g_new0 (guint8,
+                                                   (*params)[i].data.d_array.size);
+
+          if (! _gimp_wire_read_int8 (channel,
+                                      (*params)[i].data.d_array.data,
+                                      (*params)[i].data.d_array.size,
+                                      user_data))
+            {
+              g_free ((*params)[i].data.d_array.data);
+              (*params)[i].data.d_array.data = NULL;
               goto cleanup;
             }
           break;
 
-        case GIMP_PDB_COLOR:
-          if (! _gimp_wire_read_color (channel,
-                                       &(*params)[i].data.d_color, 1,
-                                       user_data))
-            goto cleanup;
+        case GP_PARAM_TYPE_BYTES:
+          {
+            guint32 data_len;
+            guint8* data;
+
+            if (! _gimp_wire_read_int32 (channel, &data_len, 1, user_data))
+              goto cleanup;
+
+            data = g_new0 (guint8, data_len);
+
+            if (! _gimp_wire_read_int8 (channel, data, data_len, user_data))
+              {
+                g_free (data);
+                goto cleanup;
+              }
+
+            (*params)[i].data.d_bytes = g_bytes_new_take (data, data_len);
+          }
           break;
 
-        case GIMP_PDB_ITEM:
+        case GP_PARAM_TYPE_STRV:
+          {
+            guint32 size;
+
+            if (! _gimp_wire_read_int32 (channel, &size, 1, user_data))
+              goto cleanup;
+
+            (*params)[i].data.d_strv = g_new0 (gchar *, size + 1);
+
+            if (! _gimp_wire_read_string (channel,
+                                          (*params)[i].data.d_strv,
+                                          (int) size,
+                                          user_data))
+              {
+                g_strfreev ((*params)[i].data.d_strv);
+                (*params)[i].data.d_strv = NULL;
+                goto cleanup;
+              }
+            break;
+          }
+
+        case GP_PARAM_TYPE_ID_ARRAY:
+          if (! _gimp_wire_read_string (channel,
+                                        &(*params)[i].data.d_id_array.type_name, 1,
+                                        user_data))
+            goto cleanup;
+
           if (! _gimp_wire_read_int32 (channel,
-                                       (guint32 *) &(*params)[i].data.d_item, 1,
+                                       &(*params)[i].data.d_id_array.size, 1,
                                        user_data))
             goto cleanup;
-          break;
 
-        case GIMP_PDB_DISPLAY:
+          (*params)[i].data.d_id_array.data = g_new0 (gint32,
+                                                      (*params)[i].data.d_id_array.size);
+
           if (! _gimp_wire_read_int32 (channel,
-                                       (guint32 *) &(*params)[i].data.d_display, 1,
-                                       user_data))
-            goto cleanup;
-          break;
-
-        case GIMP_PDB_IMAGE:
-          if (! _gimp_wire_read_int32 (channel,
-                                       (guint32 *) &(*params)[i].data.d_image, 1,
-                                       user_data))
-            goto cleanup;
-          break;
-
-        case GIMP_PDB_LAYER:
-          if (! _gimp_wire_read_int32 (channel,
-                                       (guint32 *) &(*params)[i].data.d_layer, 1,
-                                       user_data))
-            goto cleanup;
-          break;
-
-        case GIMP_PDB_CHANNEL:
-          if (! _gimp_wire_read_int32 (channel,
-                                       (guint32 *) &(*params)[i].data.d_channel, 1,
-                                       user_data))
-            goto cleanup;
-          break;
-
-        case GIMP_PDB_DRAWABLE:
-          if (! _gimp_wire_read_int32 (channel,
-                                       (guint32 *) &(*params)[i].data.d_drawable, 1,
-                                       user_data))
-            goto cleanup;
-          break;
-
-        case GIMP_PDB_SELECTION:
-          if (! _gimp_wire_read_int32 (channel,
-                                       (guint32 *) &(*params)[i].data.d_selection, 1,
-                                       user_data))
-            goto cleanup;
-          break;
-
-        case GIMP_PDB_COLORARRAY:
-          (*params)[i].data.d_colorarray = g_new (GimpRGB,
-                                                  (*params)[i-1].data.d_int32);
-          if (! _gimp_wire_read_color (channel,
-                                       (*params)[i].data.d_colorarray,
-                                       (*params)[i-1].data.d_int32,
+                                       (guint32 *) (*params)[i].data.d_id_array.data,
+                                       (*params)[i].data.d_id_array.size,
                                        user_data))
             {
-              g_free ((*params)[i].data.d_colorarray);
+              g_free ((*params)[i].data.d_id_array.data);
+              (*params)[i].data.d_id_array.data = NULL;
               goto cleanup;
             }
           break;
 
-        case GIMP_PDB_VECTORS:
-          if (! _gimp_wire_read_int32 (channel,
-                                       (guint32 *) &(*params)[i].data.d_vectors, 1,
-                                       user_data))
-            goto cleanup;
-          break;
-
-        case GIMP_PDB_PARASITE:
+        case GP_PARAM_TYPE_PARASITE:
           if (! _gimp_wire_read_string (channel,
                                         &(*params)[i].data.d_parasite.name, 1,
                                         user_data))
@@ -1609,22 +2159,36 @@ _gp_params_read (GIOChannel  *channel,
             (*params)[i].data.d_parasite.data = NULL;
           break;
 
-        case GIMP_PDB_STATUS:
-          if (! _gimp_wire_read_int32 (channel,
-                                       (guint32 *) &(*params)[i].data.d_status, 1,
-                                       user_data))
+        case GP_PARAM_TYPE_EXPORT_OPTIONS:
+          /* XXX: reading export options when we'll have any. */
+          break;
+
+        case GP_PARAM_TYPE_PARAM_DEF:
+          if (! _gp_param_def_read (channel,
+                                    &(*params)[i].data.d_param_def,
+                                    user_data))
             goto cleanup;
           break;
 
-        case GIMP_PDB_END:
-          break;
+        case GP_PARAM_TYPE_VALUE_ARRAY:
+          {
+            guint n_values = 0;
+
+            (*params)[i].data.d_value_array.values = NULL;
+            _gp_params_read (channel,
+                             &(*params)[i].data.d_value_array.values,
+                             &n_values,
+                             user_data);
+            (*params)[i].data.d_value_array.n_values = (guint32) n_values;
+            break;
+          }
         }
     }
 
   return;
 
  cleanup:
-  *nparams = 0;
+  *n_params = 0;
   g_free (*params);
   *params = NULL;
 }
@@ -1632,170 +2196,178 @@ _gp_params_read (GIOChannel  *channel,
 static void
 _gp_params_write (GIOChannel *channel,
                   GPParam    *params,
-                  gint        nparams,
+                  gint        n_params,
                   gpointer    user_data)
 {
   gint i;
 
   if (! _gimp_wire_write_int32 (channel,
-                                (const guint32 *) &nparams, 1, user_data))
+                                (const guint32 *) &n_params, 1, user_data))
     return;
 
-  for (i = 0; i < nparams; i++)
+  for (i = 0; i < n_params; i++)
     {
       if (! _gimp_wire_write_int32 (channel,
-                                    (const guint32 *) &params[i].type, 1,
+                                    (const guint32 *) &params[i].param_type, 1,
                                     user_data))
         return;
 
-      switch (params[i].type)
+      if (! _gimp_wire_write_string (channel,
+                                     &params[i].type_name, 1,
+                                     user_data))
+        return;
+
+      switch (params[i].param_type)
         {
-        case GIMP_PDB_INT32:
+        case GP_PARAM_TYPE_INT:
           if (! _gimp_wire_write_int32 (channel,
-                                        (const guint32 *) &params[i].data.d_int32, 1,
+                                        (const guint32 *) &params[i].data.d_int, 1,
                                         user_data))
             return;
           break;
 
-        case GIMP_PDB_INT16:
-          if (! _gimp_wire_write_int16 (channel,
-                                        (const guint16 *) &params[i].data.d_int16, 1,
-                                        user_data))
-            return;
-          break;
-
-        case GIMP_PDB_INT8:
-          if (! _gimp_wire_write_int8 (channel,
-                                       (const guint8 *) &params[i].data.d_int8, 1,
-                                       user_data))
-            return;
-          break;
-
-        case GIMP_PDB_FLOAT:
+        case GP_PARAM_TYPE_DOUBLE:
           if (! _gimp_wire_write_double (channel,
-                                         &params[i].data.d_float, 1,
+                                         (const gdouble *) &params[i].data.d_double, 1,
                                          user_data))
             return;
           break;
 
-        case GIMP_PDB_STRING:
+        case GP_PARAM_TYPE_STRING:
+        case GP_PARAM_TYPE_FILE:
           if (! _gimp_wire_write_string (channel,
                                          &params[i].data.d_string, 1,
                                          user_data))
             return;
           break;
 
-        case GIMP_PDB_INT32ARRAY:
-          if (! _gimp_wire_write_int32 (channel,
-                                        (const guint32 *) params[i].data.d_int32array,
-                                        params[i-1].data.d_int32,
-                                        user_data))
-            return;
-          break;
-
-        case GIMP_PDB_INT16ARRAY:
-          if (! _gimp_wire_write_int16 (channel,
-                                        (const guint16 *) params[i].data.d_int16array,
-                                        params[i-1].data.d_int32,
-                                        user_data))
-            return;
-          break;
-
-        case GIMP_PDB_INT8ARRAY:
-          if (! _gimp_wire_write_int8 (channel,
-                                       (const guint8 *) params[i].data.d_int8array,
-                                       params[i-1].data.d_int32,
+        case GP_PARAM_TYPE_BABL_FORMAT:
+          if (! _gimp_wire_write_string (channel,
+                                         &params[i].data.d_format.encoding, 1,
+                                         user_data) ||
+              ! _gimp_wire_write_int32 (channel,
+                                        (const guint32 *) &params[i].data.d_format.profile_size, 1,
+                                        user_data)  ||
+              ! _gimp_wire_write_int8 (channel,
+                                       (const guint8 *) params[i].data.d_format.profile_data,
+                                       params[i].data.d_format.profile_size,
                                        user_data))
             return;
           break;
 
-        case GIMP_PDB_FLOATARRAY:
-          if (! _gimp_wire_write_double (channel,
-                                         params[i].data.d_floatarray,
-                                         params[i-1].data.d_int32,
-                                         user_data))
+        case GP_PARAM_TYPE_GEGL_COLOR:
+          if (! _gimp_wire_write_int32 (channel,
+                                        (const guint32 *) &params[i].data.d_gegl_color.size, 1,
+                                        user_data)  ||
+              ! _gimp_wire_write_int8 (channel,
+                                       (const guint8 *) params[i].data.d_gegl_color.data,
+                                       params[i].data.d_gegl_color.size,
+                                       user_data)   ||
+              ! _gimp_wire_write_string (channel,
+                                         &params[i].data.d_gegl_color.format.encoding, 1,
+                                         user_data) ||
+              ! _gimp_wire_write_int32 (channel,
+                                        (const guint32 *) &params[i].data.d_gegl_color.format.profile_size, 1,
+                                        user_data)  ||
+              ! _gimp_wire_write_int8 (channel,
+                                       (const guint8 *) params[i].data.d_gegl_color.format.profile_data,
+                                       params[i].data.d_gegl_color.format.profile_size,
+                                       user_data))
             return;
           break;
 
-        case GIMP_PDB_STRINGARRAY:
+        case GP_PARAM_TYPE_COLOR_ARRAY:
+          if (! _gimp_wire_write_int32 (channel,
+                                        (const guint32 *) &params[i].data.d_color_array.size, 1,
+                                        user_data))
+            return;
+
+          for (gint j = 0; j < params[i].data.d_color_array.size; j++)
+            {
+              if (! _gimp_wire_write_int32 (channel,
+                                            (const guint32 *) &params[i].data.d_color_array.colors[j].size, 1,
+                                            user_data)  ||
+                  ! _gimp_wire_write_int8 (channel,
+                                           (const guint8 *) params[i].data.d_color_array.colors[j].data,
+                                           params[i].data.d_color_array.colors[j].size,
+                                           user_data)   ||
+                  ! _gimp_wire_write_string (channel,
+                                             &params[i].data.d_color_array.colors[j].format.encoding, 1,
+                                             user_data) ||
+                  ! _gimp_wire_write_int32 (channel,
+                                            (const guint32 *) &params[i].data.d_color_array.colors[j].format.profile_size, 1,
+                                            user_data)  ||
+                  ! _gimp_wire_write_int8 (channel,
+                                           (const guint8 *) params[i].data.d_color_array.colors[j].format.profile_data,
+                                           params[i].data.d_color_array.colors[j].format.profile_size,
+                                           user_data))
+                return;
+            }
+          break;
+
+        case GP_PARAM_TYPE_ARRAY:
+          if (! _gimp_wire_write_int32 (channel,
+                                        (const guint32 *) &params[i].data.d_array.size, 1,
+                                        user_data) ||
+              ! _gimp_wire_write_int8 (channel,
+                                       (const guint8 *) params[i].data.d_array.data,
+                                       params[i].data.d_array.size,
+                                       user_data))
+            return;
+          break;
+
+        case GP_PARAM_TYPE_BYTES:
+          {
+            const guint8 *bytes = NULL;
+            guint32       size  = 0;
+
+            if (params[i].data.d_bytes)
+              {
+                bytes = g_bytes_get_data (params[i].data.d_bytes, NULL);
+                size = g_bytes_get_size (params[i].data.d_bytes);
+              }
+
+            if (! _gimp_wire_write_int32 (channel, &size, 1, user_data) ||
+                ! _gimp_wire_write_int8 (channel, bytes, size, user_data))
+              return;
+          }
+          break;
+
+        case GP_PARAM_TYPE_STRV:
+          {
+            gint size;
+
+            if (params[i].data.d_strv)
+              size = g_strv_length (params[i].data.d_strv);
+            else
+              size = 0;
+
+            if (! _gimp_wire_write_int32 (channel,
+                                          (guint32*) &size, 1,
+                                          user_data) ||
+                ! _gimp_wire_write_string (channel,
+                                           params[i].data.d_strv,
+                                           size,
+                                           user_data))
+              return;
+          }
+          break;
+
+        case GP_PARAM_TYPE_ID_ARRAY:
           if (! _gimp_wire_write_string (channel,
-                                         params[i].data.d_stringarray,
-                                         params[i-1].data.d_int32,
-                                         user_data))
-            return;
-          break;
-
-        case GIMP_PDB_COLOR:
-          if (! _gimp_wire_write_color (channel,
-                                        &params[i].data.d_color, 1, user_data))
-            return;
-          break;
-
-        case GIMP_PDB_ITEM:
-          if (! _gimp_wire_write_int32 (channel,
-                                        (const guint32 *) &params[i].data.d_item, 1,
+                                         &params[i].data.d_id_array.type_name, 1,
+                                         user_data) ||
+              ! _gimp_wire_write_int32 (channel,
+                                        (const guint32 *) &params[i].data.d_id_array.size, 1,
+                                        user_data) ||
+              ! _gimp_wire_write_int32 (channel,
+                                        (const guint32 *) params[i].data.d_id_array.data,
+                                        params[i].data.d_id_array.size,
                                         user_data))
             return;
           break;
 
-        case GIMP_PDB_DISPLAY:
-          if (! _gimp_wire_write_int32 (channel,
-                                        (const guint32 *) &params[i].data.d_display, 1,
-                                        user_data))
-            return;
-          break;
-
-        case GIMP_PDB_IMAGE:
-          if (! _gimp_wire_write_int32 (channel,
-                                        (const guint32 *) &params[i].data.d_image, 1,
-                                        user_data))
-            return;
-          break;
-
-        case GIMP_PDB_LAYER:
-          if (! _gimp_wire_write_int32 (channel,
-                                        (const guint32 *) &params[i].data.d_layer, 1,
-                                        user_data))
-            return;
-          break;
-
-        case GIMP_PDB_CHANNEL:
-          if (! _gimp_wire_write_int32 (channel,
-                                        (const guint32 *) &params[i].data.d_channel, 1,
-                                        user_data))
-            return;
-          break;
-
-        case GIMP_PDB_DRAWABLE:
-          if (! _gimp_wire_write_int32 (channel,
-                                        (const guint32 *) &params[i].data.d_drawable, 1,
-                                        user_data))
-            return;
-          break;
-
-        case GIMP_PDB_SELECTION:
-          if (! _gimp_wire_write_int32 (channel,
-                                        (const guint32 *) &params[i].data.d_selection, 1,
-                                        user_data))
-            return;
-          break;
-
-        case GIMP_PDB_COLORARRAY:
-          if (! _gimp_wire_write_color (channel,
-                                        params[i].data.d_colorarray,
-                                        params[i-1].data.d_int32,
-                                        user_data))
-            return;
-          break;
-
-        case GIMP_PDB_VECTORS:
-          if (! _gimp_wire_write_int32 (channel,
-                                        (const guint32 *) &params[i].data.d_vectors, 1,
-                                        user_data))
-            return;
-          break;
-
-        case GIMP_PDB_PARASITE:
+        case GP_PARAM_TYPE_PARASITE:
           {
             GimpParasite *p = &params[i].data.d_parasite;
 
@@ -1821,90 +2393,103 @@ _gp_params_write (GIOChannel *channel,
           }
           break;
 
-        case GIMP_PDB_STATUS:
-          if (! _gimp_wire_write_int32 (channel,
-                                        (const guint32 *) &params[i].data.d_status, 1,
-                                        user_data))
+        case GP_PARAM_TYPE_EXPORT_OPTIONS:
+          /* XXX When we'll have actual export options, this is where
+           * we'll want to pass them through the wire.
+           */
+          break;
+
+        case GP_PARAM_TYPE_PARAM_DEF:
+          if (! _gp_param_def_write (channel,
+                                     &params[i].data.d_param_def,
+                                     user_data))
             return;
           break;
 
-        case GIMP_PDB_END:
+        case GP_PARAM_TYPE_VALUE_ARRAY:
+          _gp_params_write (channel,
+                            params[i].data.d_value_array.values,
+                            params[i].data.d_value_array.n_values,
+                            user_data);
           break;
+
         }
     }
 }
 
-void
-gp_params_destroy (GPParam *params,
-                   gint     nparams)
+static void
+_gp_params_destroy (GPParam *params,
+                    gint     n_params)
 {
   gint i;
 
-  for (i = 0; i < nparams; i++)
+  for (i = 0; i < n_params; i++)
     {
-      switch (params[i].type)
+      g_free (params[i].type_name);
+
+      switch (params[i].param_type)
         {
-        case GIMP_PDB_INT32:
-        case GIMP_PDB_INT16:
-        case GIMP_PDB_INT8:
-        case GIMP_PDB_FLOAT:
-        case GIMP_PDB_COLOR:
-        case GIMP_PDB_ITEM:
-        case GIMP_PDB_DISPLAY:
-        case GIMP_PDB_IMAGE:
-        case GIMP_PDB_LAYER:
-        case GIMP_PDB_CHANNEL:
-        case GIMP_PDB_DRAWABLE:
-        case GIMP_PDB_SELECTION:
-        case GIMP_PDB_VECTORS:
-        case GIMP_PDB_STATUS:
+        case GP_PARAM_TYPE_INT:
+        case GP_PARAM_TYPE_DOUBLE:
           break;
 
-        case GIMP_PDB_STRING:
+        case GP_PARAM_TYPE_STRING:
+        case GP_PARAM_TYPE_FILE:
           g_free (params[i].data.d_string);
           break;
 
-        case GIMP_PDB_INT32ARRAY:
-          g_free (params[i].data.d_int32array);
+        case GP_PARAM_TYPE_BABL_FORMAT:
+          g_free (params[i].data.d_format.profile_data);
           break;
 
-        case GIMP_PDB_INT16ARRAY:
-          g_free (params[i].data.d_int16array);
+        case GP_PARAM_TYPE_GEGL_COLOR:
+          g_free (params[i].data.d_gegl_color.format.encoding);
+          g_free (params[i].data.d_gegl_color.format.profile_data);
           break;
 
-        case GIMP_PDB_INT8ARRAY:
-          g_free (params[i].data.d_int8array);
+        case GP_PARAM_TYPE_COLOR_ARRAY:
+         for (gint j = 0; j < params[i].data.d_color_array.size; j++)
+           {
+             g_free (params[i].data.d_color_array.colors[j].format.encoding);
+             g_free (params[i].data.d_color_array.colors[j].format.profile_data);
+           }
+          g_free (params[i].data.d_color_array.colors);
           break;
 
-        case GIMP_PDB_FLOATARRAY:
-          g_free (params[i].data.d_floatarray);
+        case GP_PARAM_TYPE_ARRAY:
+          g_free (params[i].data.d_array.data);
           break;
 
-        case GIMP_PDB_STRINGARRAY:
-          if ((i > 0) && (params[i-1].type == GIMP_PDB_INT32))
-            {
-              gint count = params[i-1].data.d_int32;
-              gint j;
-
-              for (j = 0; j < count; j++)
-                g_free (params[i].data.d_stringarray[j]);
-
-              g_free (params[i].data.d_stringarray);
-            }
+        case GP_PARAM_TYPE_BYTES:
+          g_bytes_unref (params[i].data.d_bytes);
           break;
 
-        case GIMP_PDB_COLORARRAY:
-          g_free (params[i].data.d_colorarray);
+        case GP_PARAM_TYPE_STRV:
+          g_strfreev (params[i].data.d_strv);
           break;
 
-        case GIMP_PDB_PARASITE:
+        case GP_PARAM_TYPE_ID_ARRAY:
+          g_free (params[i].data.d_id_array.type_name);
+          g_free (params[i].data.d_id_array.data);
+          break;
+
+        case GP_PARAM_TYPE_PARASITE:
           if (params[i].data.d_parasite.name)
             g_free (params[i].data.d_parasite.name);
           if (params[i].data.d_parasite.data)
             g_free (params[i].data.d_parasite.data);
           break;
 
-        case GIMP_PDB_END:
+        case GP_PARAM_TYPE_EXPORT_OPTIONS:
+          break;
+
+        case GP_PARAM_TYPE_PARAM_DEF:
+          _gp_param_def_destroy (&params[i].data.d_param_def);
+          break;
+
+        case GP_PARAM_TYPE_VALUE_ARRAY:
+          _gp_params_destroy (params[i].data.d_value_array.values,
+                              params[i].data.d_value_array.n_values);
           break;
         }
     }

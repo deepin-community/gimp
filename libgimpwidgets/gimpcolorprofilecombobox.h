@@ -28,61 +28,26 @@
 
 G_BEGIN_DECLS
 
-#define GIMP_TYPE_COLOR_PROFILE_COMBO_BOX            (gimp_color_profile_combo_box_get_type ())
-#define GIMP_COLOR_PROFILE_COMBO_BOX(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_COLOR_PROFILE_COMBO_BOX, GimpColorProfileComboBox))
-#define GIMP_COLOR_PROFILE_COMBO_BOX_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_COLOR_PROFILE_COMBO_BOX, GimpColorProfileComboBoxClass))
-#define GIMP_IS_COLOR_PROFILE_COMBO_BOX(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_COLOR_PROFILE_COMBO_BOX))
-#define GIMP_IS_COLOR_PROFILE_COMBO_BOX_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_COLOR_PROFILE_COMBO_BOX))
-#define GIMP_COLOR_PROFILE_COMBO_BOX_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_COLOR_PROFILE_COMBO_BOX, GimpColorProfileComboBoxClass))
+#define GIMP_TYPE_COLOR_PROFILE_COMBO_BOX (gimp_color_profile_combo_box_get_type ())
+G_DECLARE_FINAL_TYPE (GimpColorProfileComboBox, gimp_color_profile_combo_box, GIMP, COLOR_PROFILE_COMBO_BOX, GtkComboBox)
 
 
-typedef struct _GimpColorProfileComboBoxClass  GimpColorProfileComboBoxClass;
+GtkWidget * gimp_color_profile_combo_box_new                (GtkWidget    *dialog,
+                                                             GFile        *history);
+GtkWidget * gimp_color_profile_combo_box_new_with_model     (GtkWidget    *dialog,
+                                                             GtkTreeModel *model);
 
-struct _GimpColorProfileComboBox
-{
-  GtkComboBox       parent_instance;
+void        gimp_color_profile_combo_box_add_file           (GimpColorProfileComboBox *combo,
+                                                             GFile                    *file,
+                                                             const gchar              *label);
 
-  GtkWidget        *dialog;
-};
+void        gimp_color_profile_combo_box_set_active_file    (GimpColorProfileComboBox *combo,
+                                                             GFile                    *file,
+                                                             const gchar              *label);
+void        gimp_color_profile_combo_box_set_active_profile (GimpColorProfileComboBox *combo,
+                                                             GimpColorProfile         *profile);
 
-struct _GimpColorProfileComboBoxClass
-{
-  GtkComboBoxClass  parent_class;
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-};
-
-
-GType       gimp_color_profile_combo_box_get_type         (void) G_GNUC_CONST;
-
-GtkWidget * gimp_color_profile_combo_box_new              (GtkWidget    *dialog,
-                                                           const gchar  *history);
-GtkWidget * gimp_color_profile_combo_box_new_with_model   (GtkWidget    *dialog,
-                                                           GtkTreeModel *model);
-
-GIMP_DEPRECATED_FOR (gimp_color_profile_combo_box_add_file)
-void        gimp_color_profile_combo_box_add              (GimpColorProfileComboBox *combo,
-                                                           const gchar              *filename,
-                                                           const gchar              *label);
-void        gimp_color_profile_combo_box_add_file         (GimpColorProfileComboBox *combo,
-                                                           GFile                    *file,
-                                                           const gchar              *label);
-
-GIMP_DEPRECATED_FOR (gimp_color_profile_combo_box_set_active_file)
-void        gimp_color_profile_combo_box_set_active       (GimpColorProfileComboBox *combo,
-                                                           const gchar              *filename,
-                                                           const gchar              *label);
-void        gimp_color_profile_combo_box_set_active_file  (GimpColorProfileComboBox *combo,
-                                                           GFile                    *file,
-                                                           const gchar              *label);
-
-GIMP_DEPRECATED_FOR (gimp_color_profile_combo_box_get_active_file)
-gchar *     gimp_color_profile_combo_box_get_active       (GimpColorProfileComboBox *combo);
-GFile *     gimp_color_profile_combo_box_get_active_file  (GimpColorProfileComboBox *combo);
+GFile *     gimp_color_profile_combo_box_get_active_file    (GimpColorProfileComboBox *combo);
 
 
 G_END_DECLS

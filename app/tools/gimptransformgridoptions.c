@@ -20,6 +20,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
@@ -29,7 +30,6 @@
 #include "core/gimptoolinfo.h"
 
 #include "widgets/gimppropwidgets.h"
-#include "widgets/gimpspinscale.h"
 #include "widgets/gimpwidgets-utils.h"
 
 #include "gimpperspectivetool.h"
@@ -50,7 +50,6 @@ enum
   PROP_DIRECTION_LINKED,
   PROP_SHOW_PREVIEW,
   PROP_COMPOSITED_PREVIEW,
-  PROP_PREVIEW_LINKED,
   PROP_SYNCHRONOUS_PREVIEW,
   PROP_PREVIEW_OPACITY,
   PROP_GRID_TYPE,
@@ -118,13 +117,6 @@ gimp_transform_grid_options_class_init (GimpTransformGridOptionsClass *klass)
                             "composited-preview",
                             _("Composited preview"),
                             _("Show preview as part of the image composition"),
-                            FALSE,
-                            GIMP_PARAM_STATIC_STRINGS);
-
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_PREVIEW_LINKED,
-                            "preview-linked",
-                            _("Preview linked items"),
-                            _("Include linked items in the preview"),
                             FALSE,
                             GIMP_PARAM_STATIC_STRINGS);
 
@@ -255,9 +247,6 @@ gimp_transform_grid_options_set_property (GObject      *object,
     case PROP_COMPOSITED_PREVIEW:
       options->composited_preview = g_value_get_boolean (value);
       break;
-    case PROP_PREVIEW_LINKED:
-      options->preview_linked = g_value_get_boolean (value);
-      break;
     case PROP_SYNCHRONOUS_PREVIEW:
       options->synchronous_preview = g_value_get_boolean (value);
       break;
@@ -329,9 +318,6 @@ gimp_transform_grid_options_get_property (GObject    *object,
     case PROP_COMPOSITED_PREVIEW:
       g_value_set_boolean (value, options->composited_preview);
       break;
-    case PROP_PREVIEW_LINKED:
-      g_value_set_boolean (value, options->preview_linked);
-      break;
     case PROP_SYNCHRONOUS_PREVIEW:
       g_value_set_boolean (value, options->synchronous_preview);
       break;
@@ -386,7 +372,7 @@ gimp_transform_grid_options_get_property (GObject    *object,
  *
  * Build the TransformGrid Tool Options.
  *
- * Return value: a container holding the transform_grid tool options
+ * Returns: a container holding the transform_grid tool options
  **/
 GtkWidget *
 gimp_transform_grid_options_gui (GimpToolOptions *tool_options)
@@ -448,10 +434,6 @@ gimp_transform_grid_options_gui (GimpToolOptions *tool_options)
 
   vbox3 = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
 
-  button = gimp_prop_check_button_new (config, "preview-linked", NULL);
-  gtk_box_pack_start (GTK_BOX (vbox3), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
-
   button = gimp_prop_check_button_new (config, "synchronous-preview", NULL);
   gtk_box_pack_start (GTK_BOX (vbox3), button, FALSE, FALSE, 0);
   gtk_widget_show (button);
@@ -461,9 +443,9 @@ gimp_transform_grid_options_gui (GimpToolOptions *tool_options)
   gtk_box_pack_start (GTK_BOX (vbox2), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
 
-  scale = gimp_prop_spin_scale_new (config, "preview-opacity", NULL,
+  scale = gimp_prop_spin_scale_new (config, "preview-opacity",
                                     0.01, 0.1, 0);
-  gimp_prop_widget_set_factor (scale, 100.0, 0.0, 0.0, 1);
+  gimp_prop_widget_set_factor (scale, 100.0, 1.0, 10.0, 1);
   gtk_box_pack_start (GTK_BOX (vbox2), scale, FALSE, FALSE, 0);
   gtk_widget_show (scale);
 
@@ -475,7 +457,6 @@ gimp_transform_grid_options_gui (GimpToolOptions *tool_options)
   frame = gimp_prop_expanding_frame_new (config, "show-preview", NULL,
                                          vbox2, NULL);
   gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
 
   /*  the guides frame  */
   frame = gimp_frame_new (NULL);
@@ -487,10 +468,9 @@ gimp_transform_grid_options_gui (GimpToolOptions *tool_options)
   gimp_int_combo_box_set_label (GIMP_INT_COMBO_BOX (combo), _("Guides"));
   g_object_set (combo, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
   gtk_frame_set_label_widget (GTK_FRAME (frame), combo);
-  gtk_widget_show (combo);
 
   /*  the grid density scale  */
-  scale = gimp_prop_spin_scale_new (config, "grid-size", NULL,
+  scale = gimp_prop_spin_scale_new (config, "grid-size",
                                     1.8, 8.0, 0);
   gimp_spin_scale_set_label (GIMP_SPIN_SCALE (scale), NULL);
   gtk_container_add (GTK_CONTAINER (frame), scale);
@@ -511,7 +491,6 @@ gimp_transform_grid_options_gui (GimpToolOptions *tool_options)
 
       button = gimp_prop_check_button_new (config, "constrain-rotate", label);
       gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
 
       gimp_help_set_help_data (button, _("Limit rotation steps to 15 degrees"),
                                NULL);
@@ -527,7 +506,6 @@ gimp_transform_grid_options_gui (GimpToolOptions *tool_options)
 
       button = gimp_prop_check_button_new (config, "constrain-scale", label);
       gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
 
       gimp_help_set_help_data (button, _("Keep the original aspect ratio"),
                                NULL);
@@ -539,7 +517,6 @@ gimp_transform_grid_options_gui (GimpToolOptions *tool_options)
 
       button = gimp_prop_check_button_new (config, "frompivot-scale", label);
       gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
 
       gimp_help_set_help_data (button, _("Scale around the center point"),
                                NULL);
@@ -555,7 +532,6 @@ gimp_transform_grid_options_gui (GimpToolOptions *tool_options)
 
       button = gimp_prop_check_button_new (config, "constrain-perspective", label);
       gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
 
       gimp_help_set_help_data (
         button, _("Constrain handles to move along edges and diagonal (%s)"),
@@ -568,7 +544,6 @@ gimp_transform_grid_options_gui (GimpToolOptions *tool_options)
 
       button = gimp_prop_check_button_new (config, "frompivot-perspective", label);
       gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
 
       gimp_help_set_help_data (
         button, _("Transform around the center point"),
@@ -636,11 +611,8 @@ gimp_transform_grid_options_gui (GimpToolOptions *tool_options)
             {
               button = gimp_prop_check_button_new (config, opt_list[i].name,
                                                    label);
-
               gtk_box_pack_start (GTK_BOX (frame ? grid_box : vbox),
                                   button, FALSE, FALSE, 0);
-
-              gtk_widget_show (button);
 
               g_free (label);
               label = g_strdup_printf (gettext (opt_list[i].tip),

@@ -19,6 +19,17 @@
 
 #include <string.h>
 
+#ifdef HAVE_UNISTD_H
+#include <unistd.h>
+#endif
+
+#ifdef G_OS_WIN32
+#define STRICT
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#include <io.h>
+#endif
+
 #include <gegl.h>
 #include <gtk/gtk.h>
 
@@ -46,7 +57,7 @@
 
 #include "vectors/gimpanchor.h"
 #include "vectors/gimpbezierstroke.h"
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
 #include "plug-in/gimppluginmanager-file.h"
 
@@ -66,7 +77,7 @@
 #define GIMP_MAINIMAGE_WIDTH            100
 #define GIMP_MAINIMAGE_HEIGHT           90
 #define GIMP_MAINIMAGE_TYPE             GIMP_RGB
-#define GIMP_MAINIMAGE_PRECISION        GIMP_PRECISION_U8_GAMMA
+#define GIMP_MAINIMAGE_PRECISION        GIMP_PRECISION_U8_NON_LINEAR
 
 #define GIMP_MAINIMAGE_LAYER1_NAME      "layer1"
 #define GIMP_MAINIMAGE_LAYER1_WIDTH     50
@@ -115,7 +126,7 @@
                                         "manually and may thus look weird if "\
                                         "opened and inspected in GIMP."
 
-#define GIMP_MAINIMAGE_UNIT             GIMP_UNIT_PICA
+#define GIMP_MAINIMAGE_UNIT             gimp_unit_pica ()
 
 #define GIMP_MAINIMAGE_GRIDXSPACING     25.0
 #define GIMP_MAINIMAGE_GRIDYSPACING     27.0
@@ -184,7 +195,7 @@ write_and_read_gimp_2_6_format (gconstpointer data)
  *
  * Do a write and read test on a file that could as well be
  * constructed with GIMP 2.6, and make it unusual, like compatible
- * vectors and with a floating selection.
+ * paths and with a floating selection.
  **/
 static void
 write_and_read_gimp_2_6_format_unusual (gconstpointer data)
@@ -267,7 +278,7 @@ gimp_test_load_image (Gimp  *gimp,
                            gimp_get_user_context (gimp),
                            NULL /*progress*/,
                            file,
-                           file,
+                           0, 0, /* vector width, height */
                            FALSE /*as_new*/,
                            proc,
                            GIMP_RUN_NONINTERACTIVE,
@@ -295,7 +306,8 @@ gimp_write_and_read_file (Gimp     *gimp,
   GimpImage           *image;
   GimpImage           *loaded_image;
   GimpPlugInProcedure *proc;
-  gchar               *filename;
+  gchar               *filename = NULL;
+  gint                 file_handle;
   GFile               *file;
 
   /* Create the image */
@@ -311,7 +323,9 @@ gimp_write_and_read_file (Gimp     *gimp,
                          use_gimp_2_8_features);
 
   /* Write to file */
-  filename = g_build_filename (g_get_tmp_dir (), "gimp-test.xcf", NULL);
+  file_handle = g_file_open_tmp ("gimp-test-XXXXXX.xcf", &filename, NULL);
+  g_assert_true (file_handle != -1);
+  close (file_handle);
   file = g_file_new_for_path (filename);
   g_free (filename);
 
@@ -365,14 +379,16 @@ gimp_create_mainimage (Gimp     *gimp,
   GimpParasite  *parasite          = NULL;
   GimpGrid      *grid              = NULL;
   GimpChannel   *channel           = NULL;
-  GimpRGB        channel_color     = GIMP_MAINIMAGE_CHANNEL1_COLOR;
+  GeglColor     *channel_color     = gegl_color_new (NULL);
   GimpChannel   *selection         = NULL;
-  GimpVectors   *vectors           = NULL;
+  GimpPath      *vectors           = NULL;
   GimpCoords     vectors1_coords[] = GIMP_MAINIMAGE_VECTORS1_COORDS;
   GimpCoords     vectors2_coords[] = GIMP_MAINIMAGE_VECTORS2_COORDS;
   GimpStroke    *stroke            = NULL;
   GimpLayerMask *layer_mask        = NULL;
+  gdouble        rgb[4]            = GIMP_MAINIMAGE_CHANNEL1_COLOR;
 
+  gegl_color_set_pixel (channel_color, babl_format ("R'G'B'A double"), &rgb);
   /* Image size and type */
   image = gimp_image_new (gimp,
                           GIMP_MAINIMAGE_WIDTH,
@@ -462,13 +478,13 @@ gimp_create_mainimage (Gimp     *gimp,
                                 GIMP_MAINIMAGE_PARASITE_SIZE,
                                 GIMP_MAINIMAGE_PARASITE_DATA);
   gimp_image_parasite_attach (image,
-                              parasite, TRUE);
+                              parasite, FALSE);
   gimp_parasite_free (parasite);
   parasite = gimp_parasite_new ("gimp-comment",
                                 GIMP_PARASITE_PERSISTENT,
                                 strlen (GIMP_MAINIMAGE_COMMENT) + 1,
                                 GIMP_MAINIMAGE_COMMENT);
-  gimp_image_parasite_attach (image, parasite, TRUE);
+  gimp_image_parasite_attach (image, parasite, FALSE);
   gimp_parasite_free (parasite);
 
 
@@ -491,7 +507,8 @@ gimp_create_mainimage (Gimp     *gimp,
                               GIMP_MAINIMAGE_CHANNEL1_WIDTH,
                               GIMP_MAINIMAGE_CHANNEL1_HEIGHT,
                               GIMP_MAINIMAGE_CHANNEL1_NAME,
-                              &channel_color);
+                              channel_color);
+  g_object_unref (channel_color);
   gimp_image_add_channel (image,
                           channel,
                           NULL,
@@ -512,11 +529,11 @@ gimp_create_mainimage (Gimp     *gimp,
                                  FALSE /*push_undo*/);
 
   /* Vectors 1 */
-  vectors = gimp_vectors_new (image,
-                              GIMP_MAINIMAGE_VECTORS1_NAME);
+  vectors = gimp_path_new (image,
+                           GIMP_MAINIMAGE_VECTORS1_NAME);
   /* The XCF file can save vectors in two kind of ways, one old way
    * and a new way. Parameterize the way so we can test both variants,
-   * i.e. gimp_vectors_compat_is_compatible() must return both TRUE
+   * i.e. gimp_path_compat_is_compatible() must return both TRUE
    * and FALSE.
    */
   if (! compat_paths)
@@ -531,26 +548,26 @@ gimp_create_mainimage (Gimp     *gimp,
   stroke = gimp_bezier_stroke_new_from_coords (vectors1_coords,
                                                G_N_ELEMENTS (vectors1_coords),
                                                TRUE /*closed*/);
-  gimp_vectors_stroke_add (vectors, stroke);
-  gimp_image_add_vectors (image,
-                          vectors,
-                          NULL /*parent*/,
-                          -1 /*position*/,
-                          FALSE /*push_undo*/);
+  gimp_path_stroke_add (vectors, stroke);
+  gimp_image_add_path (image,
+                       vectors,
+                       NULL /*parent*/,
+                       -1 /*position*/,
+                       FALSE /*push_undo*/);
 
   /* Vectors 2 */
-  vectors = gimp_vectors_new (image,
-                              GIMP_MAINIMAGE_VECTORS2_NAME);
+  vectors = gimp_path_new (image,
+                           GIMP_MAINIMAGE_VECTORS2_NAME);
 
   stroke = gimp_bezier_stroke_new_from_coords (vectors2_coords,
                                                G_N_ELEMENTS (vectors2_coords),
                                                TRUE /*closed*/);
-  gimp_vectors_stroke_add (vectors, stroke);
-  gimp_image_add_vectors (image,
-                          vectors,
-                          NULL /*parent*/,
-                          -1 /*position*/,
-                          FALSE /*push_undo*/);
+  gimp_path_stroke_add (vectors, stroke);
+  gimp_image_add_path (image,
+                       vectors,
+                       NULL /*parent*/,
+                       -1 /*position*/,
+                       FALSE /*push_undo*/);
 
   /* Some of these things are pretty unusual, parameterize the
    * inclusion of this in the written file so we can do our test both
@@ -558,14 +575,19 @@ gimp_create_mainimage (Gimp     *gimp,
    */
   if (with_unusual_stuff)
     {
+      GList *drawables;
+
+      drawables = gimp_image_get_selected_drawables (image);
+
       /* Floating selection */
       gimp_selection_float (GIMP_SELECTION (gimp_image_get_mask (image)),
-                            gimp_image_get_active_drawable (image),
+                            drawables,
                             gimp_get_user_context (gimp),
                             TRUE /*cut_image*/,
                             0 /*off_x*/,
                             0 /*off_y*/,
                             NULL /*error*/);
+      g_list_free (drawables);
     }
 
   /* Adds stuff like layer groups */
@@ -665,18 +687,18 @@ gimp_assert_vectors (GimpImage   *image,
                      gsize        coords_size,
                      gboolean     visible)
 {
-  GimpVectors *vectors        = NULL;
+  GimpPath    *vectors        = NULL;
   GimpStroke  *stroke         = NULL;
   GArray      *control_points = NULL;
   gboolean     closed         = FALSE;
   gint         i              = 0;
 
-  vectors = gimp_image_get_vectors_by_name (image, name);
-  stroke = gimp_vectors_stroke_get_next (vectors, NULL);
-  g_assert (stroke != NULL);
+  vectors = gimp_image_get_path_by_name (image, name);
+  stroke = gimp_path_stroke_get_next (vectors, NULL);
+  g_assert_true (stroke != NULL);
   control_points = gimp_stroke_control_points_get (stroke,
                                                    &closed);
-  g_assert (closed);
+  g_assert_true (closed);
   g_assert_cmpint (control_points->len,
                    ==,
                    coords_size);
@@ -694,8 +716,8 @@ gimp_assert_vectors (GimpImage   *image,
                                       i).position.y);
     }
 
-  g_assert (gimp_item_get_visible (GIMP_ITEM (vectors)) ? TRUE : FALSE ==
-            visible ? TRUE : FALSE);
+  g_assert_true (gimp_item_get_visible (GIMP_ITEM (vectors)) ? TRUE : FALSE ==
+                 visible ? TRUE : FALSE);
 }
 
 /**
@@ -712,6 +734,8 @@ gimp_assert_mainimage (GimpImage *image,
                        gboolean   use_gimp_2_8_features)
 {
   const GimpParasite *parasite               = NULL;
+  gchar              *parasite_data          = NULL;
+  guint32             parasite_size          = -1;
   GimpLayer          *layer                  = NULL;
   GList              *iter                   = NULL;
   GimpGuide          *guide                  = NULL;
@@ -724,8 +748,9 @@ gimp_assert_mainimage (GimpImage *image,
   gdouble             xspacing               = 0.0;
   gdouble             yspacing               = 0.0;
   GimpChannel        *channel                = NULL;
-  GimpRGB             expected_channel_color = GIMP_MAINIMAGE_CHANNEL1_COLOR;
-  GimpRGB             actual_channel_color   = { 0, };
+  GeglColor          *actual_channel_color;
+  gdouble             expected_rgb_color[4]  = GIMP_MAINIMAGE_CHANNEL1_COLOR;
+  gdouble             rgb[4];
   GimpChannel        *selection              = NULL;
   gint                x                      = -1;
   gint                y                      = -1;
@@ -789,37 +814,37 @@ gimp_assert_mainimage (GimpImage *image,
 
   /* Guides, note that we rely on internal ordering */
   iter = gimp_image_get_guides (image);
-  g_assert (iter != NULL);
+  g_assert_true (iter != NULL);
   guide = iter->data;
   g_assert_cmpint (gimp_guide_get_position (guide),
                    ==,
                    GIMP_MAINIMAGE_VGUIDE1_POS);
   iter = g_list_next (iter);
-  g_assert (iter != NULL);
+  g_assert_true (iter != NULL);
   guide = iter->data;
   g_assert_cmpint (gimp_guide_get_position (guide),
                    ==,
                    GIMP_MAINIMAGE_VGUIDE2_POS);
   iter = g_list_next (iter);
-  g_assert (iter != NULL);
+  g_assert_true (iter != NULL);
   guide = iter->data;
   g_assert_cmpint (gimp_guide_get_position (guide),
                    ==,
                    GIMP_MAINIMAGE_HGUIDE1_POS);
   iter = g_list_next (iter);
-  g_assert (iter != NULL);
+  g_assert_true (iter != NULL);
   guide = iter->data;
   g_assert_cmpint (gimp_guide_get_position (guide),
                    ==,
                    GIMP_MAINIMAGE_HGUIDE2_POS);
   iter = g_list_next (iter);
-  g_assert (iter == NULL);
+  g_assert_true (iter == NULL);
 
   /* Sample points, we rely on the same ordering as when we added
    * them, although this ordering is not a necessity
    */
   iter = gimp_image_get_sample_points (image);
-  g_assert (iter != NULL);
+  g_assert_true (iter != NULL);
   sample_point = iter->data;
   gimp_sample_point_get_position (sample_point,
                                   &sample_point_x, &sample_point_y);
@@ -830,7 +855,7 @@ gimp_assert_mainimage (GimpImage *image,
                    ==,
                    GIMP_MAINIMAGE_SAMPLEPOINT1_Y);
   iter = g_list_next (iter);
-  g_assert (iter != NULL);
+  g_assert_true (iter != NULL);
   sample_point = iter->data;
   gimp_sample_point_get_position (sample_point,
                                   &sample_point_x, &sample_point_y);
@@ -841,7 +866,7 @@ gimp_assert_mainimage (GimpImage *image,
                    ==,
                    GIMP_MAINIMAGE_SAMPLEPOINT2_Y);
   iter = g_list_next (iter);
-  g_assert (iter == NULL);
+  g_assert_true (iter == NULL);
 
   /* Resolution */
   gimp_image_get_resolution (image, &xres, &yres);
@@ -855,25 +880,30 @@ gimp_assert_mainimage (GimpImage *image,
   /* Parasites */
   parasite = gimp_image_parasite_find (image,
                                        GIMP_MAINIMAGE_PARASITE_NAME);
-  g_assert_cmpint (gimp_parasite_data_size (parasite),
+  parasite_data = (gchar *) gimp_parasite_get_data (parasite, &parasite_size);
+  parasite_data = g_strndup (parasite_data, parasite_size);
+  g_assert_cmpint (parasite_size,
                    ==,
                    GIMP_MAINIMAGE_PARASITE_SIZE);
-  g_assert_cmpstr (gimp_parasite_data (parasite),
+  g_assert_cmpstr (parasite_data,
                    ==,
                    GIMP_MAINIMAGE_PARASITE_DATA);
+  g_free (parasite_data);
+
   parasite = gimp_image_parasite_find (image,
                                        "gimp-comment");
-  g_assert_cmpint (gimp_parasite_data_size (parasite),
+  parasite_data = (gchar *) gimp_parasite_get_data (parasite, &parasite_size);
+  parasite_data = g_strndup (parasite_data, parasite_size);
+  g_assert_cmpint (parasite_size,
                    ==,
                    strlen (GIMP_MAINIMAGE_COMMENT) + 1);
-  g_assert_cmpstr (gimp_parasite_data (parasite),
+  g_assert_cmpstr (parasite_data,
                    ==,
                    GIMP_MAINIMAGE_COMMENT);
+  g_free (parasite_data);
 
   /* Unit */
-  g_assert_cmpint (gimp_image_get_unit (image),
-                   ==,
-                   GIMP_MAINIMAGE_UNIT);
+  g_assert_true (gimp_image_get_unit (image) == GIMP_MAINIMAGE_UNIT);
 
   /* Grid */
   grid = gimp_image_get_grid (image);
@@ -892,16 +922,15 @@ gimp_assert_mainimage (GimpImage *image,
   /* Channel */
   channel = gimp_image_get_channel_by_name (image,
                                             GIMP_MAINIMAGE_CHANNEL1_NAME);
-  gimp_channel_get_color (channel, &actual_channel_color);
+  actual_channel_color = gimp_channel_get_color (channel);
   g_assert_cmpint (gimp_item_get_width (GIMP_ITEM (channel)),
                    ==,
                    GIMP_MAINIMAGE_CHANNEL1_WIDTH);
   g_assert_cmpint (gimp_item_get_height (GIMP_ITEM (channel)),
                    ==,
                    GIMP_MAINIMAGE_CHANNEL1_HEIGHT);
-  g_assert (memcmp (&expected_channel_color,
-                    &actual_channel_color,
-                    sizeof (GimpRGB)) == 0);
+  gegl_color_get_pixel (actual_channel_color, babl_format ("R'G'B'A double"), &rgb);
+  g_assert_true (memcmp (&expected_rgb_color, &rgb, sizeof (expected_rgb_color)) == 0);
 
   /* Selection, if the image contains unusual stuff it contains a
    * floating select, and when floating a selection, the selection
@@ -941,9 +970,9 @@ gimp_assert_mainimage (GimpImage *image,
                        FALSE /*visible*/);
 
   if (with_unusual_stuff)
-    g_assert (gimp_image_get_floating_selection (image) != NULL);
+    g_assert_true (gimp_image_get_floating_selection (image) != NULL);
   else /* if (! with_unusual_stuff) */
-    g_assert (gimp_image_get_floating_selection (image) == NULL);
+    g_assert_true (gimp_image_get_floating_selection (image) == NULL);
 
   if (use_gimp_2_8_features)
     {
@@ -956,11 +985,11 @@ gimp_assert_mainimage (GimpImage *image,
       GimpItem *group2 = GIMP_ITEM (gimp_image_get_layer_by_name (image, GIMP_MAINIMAGE_GROUP2_NAME));
       GimpItem *layer5 = GIMP_ITEM (gimp_image_get_layer_by_name (image, GIMP_MAINIMAGE_LAYER5_NAME));
 
-      g_assert (gimp_item_get_parent (group1) == NULL);
-      g_assert (gimp_item_get_parent (layer3) == group1);
-      g_assert (gimp_item_get_parent (layer4) == group1);
-      g_assert (gimp_item_get_parent (group2) == group1);
-      g_assert (gimp_item_get_parent (layer5) == group2);
+      g_assert_true (gimp_item_get_parent (group1) == NULL);
+      g_assert_true (gimp_item_get_parent (layer3) == group1);
+      g_assert_true (gimp_item_get_parent (layer4) == group1);
+      g_assert_true (gimp_item_get_parent (group2) == group1);
+      g_assert_true (gimp_item_get_parent (layer5) == group2);
     }
 }
 
@@ -988,7 +1017,7 @@ main (int    argc,
 
   g_test_init (&argc, &argv, NULL);
 
-  gimp_test_utils_set_gimp2_directory ("GIMP_TESTING_ABS_TOP_SRCDIR",
+  gimp_test_utils_set_gimp3_directory ("GIMP_TESTING_ABS_TOP_SRCDIR",
                                        "app/tests/gimpdir");
 
   /* We share the same application instance across all tests. We need
@@ -1003,7 +1032,7 @@ main (int    argc,
   ADD_TEST (write_and_read_gimp_2_8_format);
 
   /* Don't write files to the source dir */
-  gimp_test_utils_set_gimp2_directory ("GIMP_TESTING_ABS_TOP_BUILDDIR",
+  gimp_test_utils_set_gimp3_directory ("GIMP_TESTING_ABS_TOP_BUILDDIR",
                                        "app/tests/gimpdir-output");
 
   /* Run the tests */

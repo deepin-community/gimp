@@ -41,15 +41,25 @@ struct _GimpText
 
   gchar                 *text;
   gchar                 *markup;
-  gchar                 *font;
-  GimpUnit               unit;
+  GimpFont              *font;
+  GimpUnit              *unit;
   gdouble                font_size;
   gboolean               antialias;
   GimpTextHintStyle      hint_style;
   gboolean               kerning;
   gchar                 *language;
   GimpTextDirection      base_dir;
-  GimpRGB                color;
+  GeglColor             *color;
+  GimpCustomStyle        outline_style;
+  GimpPattern           *outline_pattern;
+  GeglColor             *outline_foreground;
+  gdouble                outline_width;
+  GimpCapStyle           outline_cap_style;
+  GimpJoinStyle          outline_join_style;
+  gdouble                outline_miter_limit;
+  gboolean               outline_antialias;
+  gdouble                outline_dash_offset;
+  GArray                *outline_dash_info;
   GimpTextOutline        outline;
   GimpTextJustification  justify;
   gdouble                indent;
@@ -58,12 +68,13 @@ struct _GimpText
   GimpTextBoxMode        box_mode;
   gdouble                box_width;
   gdouble                box_height;
-  GimpUnit               box_unit;
+  GimpUnit              *box_unit;
   GimpMatrix2            transformation;
   gdouble                offset_x;
   gdouble                offset_y;
 
   gdouble                border;
+  Gimp                  *gimp;
 };
 
 struct _GimpTextClass

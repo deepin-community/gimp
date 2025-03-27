@@ -101,7 +101,9 @@ typedef enum
   GIMP_HANDLE_DASHED_DIAMOND,
   GIMP_HANDLE_FILLED_DIAMOND,
   GIMP_HANDLE_CROSS,
-  GIMP_HANDLE_CROSSHAIR
+  GIMP_HANDLE_CROSSHAIR,
+  GIMP_HANDLE_DROP,
+  GIMP_HANDLE_FILLED_DROP
 } GimpHandleType;
 
 
@@ -257,6 +259,29 @@ typedef enum
   GIMP_ZOOM_FOCUS_RETAIN_CENTERING_ELSE_BEST_GUESS
 
 } GimpZoomFocus;
+
+
+#define GIMP_TYPE_MODIFIER_ACTION (gimp_modifier_action_get_type ())
+
+GType gimp_modifier_action_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+  GIMP_MODIFIER_ACTION_NONE,                    /*< desc="No action"                                  >*/
+  GIMP_MODIFIER_ACTION_PANNING,                 /*< desc="Pan"                                        >*/
+  GIMP_MODIFIER_ACTION_ZOOMING,                 /*< desc="Zoom"                                       >*/
+  GIMP_MODIFIER_ACTION_ROTATING,                /*< desc="Rotate View"                                >*/
+  GIMP_MODIFIER_ACTION_STEP_ROTATING,           /*< desc="Rotate View by 15 degree steps"             >*/
+  GIMP_MODIFIER_ACTION_LAYER_PICKING,           /*< desc="Pick a layer"                               >*/
+
+  GIMP_MODIFIER_ACTION_MENU,                    /*< desc="Display the menu"                           >*/
+
+  GIMP_MODIFIER_ACTION_ACTION,                  /*< desc="Custom action"                              >*/
+
+  GIMP_MODIFIER_ACTION_BRUSH_PIXEL_SIZE,        /*< desc="Change brush size in canvas pixels"         >*/
+  GIMP_MODIFIER_ACTION_BRUSH_RADIUS_PIXEL_SIZE, /*< desc="Change brush radius' size in canvas pixels" >*/
+  GIMP_MODIFIER_ACTION_TOOL_OPACITY,            /*< desc="Change tool opacity"                        >*/
+} GimpModifierAction;
 
 
 /*

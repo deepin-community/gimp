@@ -123,10 +123,6 @@ gimp_item_prop_undo_constructed (GObject *object)
       item_prop_undo->visible = gimp_item_get_visible (item);
       break;
 
-    case GIMP_UNDO_ITEM_LINKED:
-      item_prop_undo->linked = gimp_item_get_linked (item);
-      break;
-
     case GIMP_UNDO_ITEM_COLOR_TAG:
       item_prop_undo->color_tag = gimp_item_get_color_tag (item);
       break;
@@ -137,6 +133,10 @@ gimp_item_prop_undo_constructed (GObject *object)
 
     case GIMP_UNDO_ITEM_LOCK_POSITION:
       item_prop_undo->lock_position = gimp_item_get_lock_position (item);
+      break;
+
+    case GIMP_UNDO_ITEM_LOCK_VISIBILITY:
+      item_prop_undo->lock_visibility = gimp_item_get_lock_visibility (item);
       break;
 
     case GIMP_UNDO_PARASITE_ATTACH:
@@ -279,16 +279,6 @@ gimp_item_prop_undo_pop (GimpUndo            *undo,
       }
       break;
 
-    case GIMP_UNDO_ITEM_LINKED:
-      {
-        gboolean linked;
-
-        linked = gimp_item_get_linked (item);
-        gimp_item_set_linked (item, item_prop_undo->linked, FALSE);
-        item_prop_undo->linked = linked;
-      }
-      break;
-
     case GIMP_UNDO_ITEM_COLOR_TAG:
       {
         GimpColorTag color_tag;
@@ -316,6 +306,16 @@ gimp_item_prop_undo_pop (GimpUndo            *undo,
         lock_position = gimp_item_get_lock_position (item);
         gimp_item_set_lock_position (item, item_prop_undo->lock_position, FALSE);
         item_prop_undo->lock_position = lock_position;
+      }
+      break;
+
+    case GIMP_UNDO_ITEM_LOCK_VISIBILITY:
+      {
+        gboolean lock_visibility;
+
+        lock_visibility = gimp_item_get_lock_visibility (item);
+        gimp_item_set_lock_visibility (item, item_prop_undo->lock_visibility, FALSE);
+        item_prop_undo->lock_visibility = lock_visibility;
       }
       break;
 

@@ -21,6 +21,7 @@
 #ifndef __GIMP_ACTION_GROUP_H__
 #define __GIMP_ACTION_GROUP_H__
 
+#include "core/gimpobject.h"
 
 #define GIMP_TYPE_ACTION_GROUP              (gimp_action_group_get_type ())
 #define GIMP_ACTION_GROUP(obj)              (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_ACTION_GROUP, GimpActionGroup))
@@ -34,7 +35,7 @@ typedef struct _GimpActionGroupClass GimpActionGroupClass;
 
 struct _GimpActionGroup
 {
-  GtkActionGroup             parent_instance;
+  GimpObject                 parent_instance;
 
   Gimp                      *gimp;
   gchar                     *label;
@@ -43,17 +44,15 @@ struct _GimpActionGroup
   gpointer                   user_data;
 
   GimpActionGroupUpdateFunc  update_func;
+
+  GList                     *actions;
 };
 
 struct _GimpActionGroupClass
 {
-  GtkActionGroupClass  parent_class;
+  GimpObjectClass      parent_class;
 
   GHashTable          *groups;
-
-  /* signals */
-  void (* action_added) (GimpActionGroup *group,
-                         GimpAction      *action);
 };
 
 
@@ -66,7 +65,8 @@ struct _GimpActionEntry
   const gchar        *name;
   const gchar        *icon_name;
   const gchar        *label;
-  const gchar        *accelerator;
+  const gchar        *short_label;
+  const gchar        *accelerator[4];
   const gchar        *tooltip;
   GimpActionCallback  callback;
 
@@ -78,12 +78,13 @@ struct _GimpToggleActionEntry
   const gchar        *name;
   const gchar        *icon_name;
   const gchar        *label;
-  const gchar        *accelerator;
+  const gchar        *short_label;
+  const gchar        *accelerator[4];
   const gchar        *tooltip;
   GimpActionCallback  callback;
   gboolean            is_active;
 
-  const gchar *help_id;
+  const gchar        *help_id;
 };
 
 struct _GimpRadioActionEntry
@@ -91,7 +92,8 @@ struct _GimpRadioActionEntry
   const gchar *name;
   const gchar *icon_name;
   const gchar *label;
-  const gchar *accelerator;
+  const gchar *short_label;
+  const gchar *accelerator[4];
   const gchar *tooltip;
   gint         value;
 
@@ -103,7 +105,8 @@ struct _GimpEnumActionEntry
   const gchar *name;
   const gchar *icon_name;
   const gchar *label;
-  const gchar *accelerator;
+  const gchar *short_label;
+  const gchar *accelerator[4];
   const gchar *tooltip;
   gint         value;
   gboolean     value_variable;
@@ -116,11 +119,25 @@ struct _GimpStringActionEntry
   const gchar *name;
   const gchar *icon_name;
   const gchar *label;
-  const gchar *accelerator;
+  const gchar *short_label;
+  const gchar *accelerator[4];
   const gchar *tooltip;
   const gchar *value;
 
   const gchar *help_id;
+};
+
+struct _GimpDoubleActionEntry
+{
+  const gchar   *name;
+  const gchar   *icon_name;
+  const gchar   *label;
+  const gchar   *short_label;
+  const gchar   *accelerator[4];
+  const gchar   *tooltip;
+  const gdouble  value;
+
+  const gchar   *help_id;
 };
 
 struct _GimpProcedureActionEntry
@@ -153,7 +170,7 @@ void  gimp_action_group_add_action            (GimpActionGroup *action_group,
                                                GimpAction      *action);
 void  gimp_action_group_add_action_with_accel (GimpActionGroup *action_group,
                                                GimpAction      *action,
-                                               const gchar     *accelerator);
+                                               const gchar * const*accelerators);
 void  gimp_action_group_remove_action         (GimpActionGroup *action_group,
                                                GimpAction      *action);
 
@@ -189,6 +206,11 @@ void   gimp_action_group_add_string_actions   (GimpActionGroup             *grou
                                                const GimpStringActionEntry *entries,
                                                guint                        n_entries,
                                                GimpActionCallback           callback);
+void   gimp_action_group_add_double_actions   (GimpActionGroup             *group,
+                                               const gchar                 *msg_context,
+                                               const GimpDoubleActionEntry *entries,
+                                               guint                        n_entries,
+                                               GimpActionCallback           callback);
 void   gimp_action_group_add_procedure_actions(GimpActionGroup             *group,
                                                const GimpProcedureActionEntry *entries,
                                                guint                        n_entries,
@@ -197,14 +219,13 @@ void   gimp_action_group_add_procedure_actions(GimpActionGroup             *grou
 void   gimp_action_group_remove_action_and_accel (GimpActionGroup          *group,
                                                   GimpAction               *action);
 
-void          gimp_action_group_activate_action       (GimpActionGroup *group,
-                                                       const gchar     *action_name);
 void          gimp_action_group_set_action_visible    (GimpActionGroup *group,
                                                        const gchar     *action_name,
                                                        gboolean         visible);
 void          gimp_action_group_set_action_sensitive  (GimpActionGroup *group,
                                                        const gchar     *action_name,
-                                                       gboolean         sensitive);
+                                                       gboolean         sensitive,
+                                                       const gchar     *reason);
 void          gimp_action_group_set_action_active     (GimpActionGroup *group,
                                                        const gchar     *action_name,
                                                        gboolean         active);
@@ -219,12 +240,9 @@ void          gimp_action_group_set_action_tooltip    (GimpActionGroup *group,
                                                        const gchar     *tooltip);
 const gchar * gimp_action_group_get_action_tooltip    (GimpActionGroup *group,
                                                        const gchar     *action_name);
-void          gimp_action_group_set_action_context    (GimpActionGroup *group,
-                                                       const gchar     *action_name,
-                                                       GimpContext     *context);
 void          gimp_action_group_set_action_color      (GimpActionGroup *group,
                                                        const gchar     *action_name,
-                                                       const GimpRGB   *color,
+                                                       GeglColor       *color,
                                                        gboolean         set_label);
 void          gimp_action_group_set_action_viewable   (GimpActionGroup *group,
                                                        const gchar     *action_name,

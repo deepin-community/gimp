@@ -9,14 +9,14 @@
 # Ole Laursen <olau@hardworking.dk>, 2001, 02, 04.
 # Joe Hansen <joedalton2@yahoo.dk>, 2008, 2011.
 # scootergrisen, 2015, 2016.
-# Alan Mortensen <alanmortensen.am@gmail.com>, 2018 (oversat og gennemgået i sin helhed), 2019-22.
+# Alan Mortensen <alanmortensen.am@gmail.com>, 2018 (oversat og gennemgået i sin helhed), 2019-24.
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: GIMP python\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gimp/issues\n"
-"POT-Creation-Date: 2022-01-27 10:19+0000\n"
-"PO-Revision-Date: 2022-01-27 19:18+0100\n"
+"POT-Creation-Date: 2024-07-14 10:50+0000\n"
+"PO-Revision-Date: 2024-07-16 10:03+0200\n"
 "Last-Translator: Alan Mortensen <alanmortensen.am@gmail.com>\n"
 "Language-Team: Danish <dansk@dansk-gruppen.dk>\n"
 "Language: da\n"
@@ -24,584 +24,667 @@ msgstr ""
 "Content-Type: text/plain; charset=UTF-8\n"
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
-"X-Generator: Poedit 2.3\n"
+"X-Generator: Poedit 3.0.1\n"
 "X-Language: da_DK\n"
 "X-Source-Language: C\n"
 
-#: ../plug-ins/pygimp/gimpfu.py:395
-msgid "Missing exception information"
-msgstr "Manglende undtagelsesinformation"
+#: plug-ins/python/colorxhtml.py:78
+msgid "Save as colored HTML text..."
+msgstr "Gem som farvet HTML-tekst …"
 
-#: ../plug-ins/pygimp/gimpfu.py:404
-#, python-format
-msgid "An error occurred running %s"
-msgstr "Der opstod en fejl under kørsel af %s"
-
-#: ../plug-ins/pygimp/gimpfu.py:415
-msgid "_More Information"
-msgstr "_Yderligere information"
-
-#: ../plug-ins/pygimp/gimpfu.py:528 ../plug-ins/pygimp/gimpfu.py:540
-#: ../plug-ins/pygimp/gimpfu.py:546
-msgid "No"
-msgstr "Nej"
-
-#: ../plug-ins/pygimp/gimpfu.py:538 ../plug-ins/pygimp/gimpfu.py:546
-msgid "Yes"
-msgstr "Ja"
-
-#: ../plug-ins/pygimp/gimpfu.py:599 ../plug-ins/pygimp/gimpui.py:223
-msgid "Python-Fu File Selection"
-msgstr "Pyton-Fu-filvælger"
-
-#: ../plug-ins/pygimp/gimpfu.py:648
-msgid "Python-Fu Folder Selection"
-msgstr "Python-Fu-mappevælger"
-
-#: ../plug-ins/pygimp/gimpfu.py:737
-#, python-format
-msgid "Invalid input for '%s'"
-msgstr "Ugyldige input for \"%s\""
-
-#: ../plug-ins/pygimp/gimpui.py:176
-msgid "Python-Fu Color Selection"
-msgstr "Python-Fu-farvevælger"
-
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:109
+#: plug-ins/python/colorxhtml.py:137
 msgid "Saving as colored XHTML"
 msgstr "Gemmer som farvet XHTML"
 
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:186
-msgid "Save as colored XHTML"
-msgstr "Gem som farvet XHTML"
+#: plug-ins/python/colorxhtml.py:211
+msgid "Save as colored HTML text"
+msgstr "Gem som farvet HTML-tekst"
 
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:191
-msgid "Colored XHTML"
-msgstr "Farvet XHTML"
-
-# var lidt i tvivl om den her (karakter, bogstav, tegn, tast). Head bruger tegn og tast.
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:198
-msgid "Character _source"
-msgstr "Tegn_kilde"
-
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:199
-msgid "Source code"
-msgstr "Kildekode"
-
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:200
-msgid "Text file"
-msgstr "Tekstfil"
-
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:201
-msgid "Entry box"
-msgstr "Indtastningsboks"
+#: plug-ins/python/colorxhtml.py:214
+msgid "Colored HTML text"
+msgstr "Farvet HTML-tekst"
 
 # var lidt i tvivl om den her (karakter, bogstav, tegn, tast). Head bruger tegn og tast.
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:202
-msgid "_File to read or characters to use"
-msgstr "_Fil at læse eller tegn til brug"
+#: plug-ins/python/colorxhtml.py:222
+msgid "Rea_d characters from file"
+msgstr "L_æs tegn fra fil"
 
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:204
+#: plug-ins/python/colorxhtml.py:223
+msgid "Read characters from file, if true, or use text entry"
+msgstr "Læs tegn fra fil, hvis sand, eller brug indtastning"
+
+# var lidt i tvivl om den her (karakter, bogstav, tegn, tast). Head bruger tegn og tast.
+#: plug-ins/python/colorxhtml.py:225
+msgid "Charac_ters"
+msgstr "_Tegn"
+
+#: plug-ins/python/colorxhtml.py:226
+msgid "Characters that will be used as colored pixels."
+msgstr "Tegn der vil blive brugt som farvede pixels."
+
+#: plug-ins/python/colorxhtml.py:228
 msgid "Fo_nt size in pixels"
 msgstr "_Skriftstørrelse i pixels"
 
-#: ../plug-ins/pygimp/plug-ins/colorxhtml.py:205
+#: plug-ins/python/colorxhtml.py:229
+msgid "Font size in pixels"
+msgstr "Skriftstørrelse i pixels"
+
+#: plug-ins/python/colorxhtml.py:231
 msgid "_Write a separate CSS file"
 msgstr "_Skriv en separat CSS-fil"
 
-#: ../plug-ins/pygimp/plug-ins/gradients-save-as-css.py:96
-msgid "Gradient to use"
-msgstr "Farveovergang at bruge"
+#: plug-ins/python/colorxhtml.py:232
+msgid "Write a separate CSS file"
+msgstr "Skriv en separat CSS-fil"
 
-#: ../plug-ins/pygimp/plug-ins/gradients-save-as-css.py:97
-msgid "File Name"
-msgstr "Filnavn"
+#. GUI only, used to create a widget to open a file if source-file is enabled
+#: plug-ins/python/colorxhtml.py:235
+msgid "Choose File"
+msgstr "Vælg fil"
 
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:89
-msgid "Exports the image histogram to a text file (CSV)"
-msgstr "Eksporterer billedhistogrammet til en tekstfil (CSV)"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:94
-msgid "_Export histogram..."
-msgstr "_Eksportér histogram …"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:96
-msgid "_Image"
-msgstr "_Billede"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:97
-msgid "_Drawable"
-msgstr "_Tegneobjekt"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:98
-msgid "Histogram _File"
-msgstr "_Histogramfil"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:99
-msgid "_Bucket Size"
-msgstr "_Spandstørrelse"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:100
-msgid "Sample _Average"
-msgstr "_Prøvegennemsnit"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:101
-msgid "Output format"
-msgstr "Outputformat"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:102
-msgid "Pixel count"
-msgstr "Antal pixels"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:103
-msgid "Normalized"
-msgstr "Normaliseret"
-
-#: ../plug-ins/pygimp/plug-ins/histogram-export.py:104
-msgid "Percent"
-msgstr "Procent"
-
-#: ../plug-ins/pygimp/plug-ins/foggify.py:56
+#: plug-ins/python/foggify.py:114
 msgid "Add a layer of fog"
 msgstr "Tilføj et lag af tåge"
 
-#: ../plug-ins/pygimp/plug-ins/foggify.py:61
+#: plug-ins/python/foggify.py:115
+msgid "Adds a layer of fog to the image."
+msgstr "Tilføjer et lag af tåge til billedet."
+
+#: plug-ins/python/foggify.py:117
 msgid "_Fog..."
 msgstr "_Tåge …"
 
-#: ../plug-ins/pygimp/plug-ins/foggify.py:66
-msgid "_Layer name"
+#: plug-ins/python/foggify.py:123
+msgid "Layer _name"
 msgstr "_Lagnavn"
 
-#: ../plug-ins/pygimp/plug-ins/foggify.py:66
+#: plug-ins/python/foggify.py:123
+msgid "Layer name"
+msgstr "Lagnavn"
+
+#: plug-ins/python/foggify.py:124
 msgid "Clouds"
 msgstr "Skyer"
 
-#: ../plug-ins/pygimp/plug-ins/foggify.py:67
+#: plug-ins/python/foggify.py:125
 msgid "_Fog color"
 msgstr "T_ågefarve"
 
-#: ../plug-ins/pygimp/plug-ins/foggify.py:68
+#: plug-ins/python/foggify.py:125
+msgid "Fog color"
+msgstr "Tågefarve"
+
+#: plug-ins/python/foggify.py:127
 msgid "_Turbulence"
 msgstr "_Turbulens"
 
-#: ../plug-ins/pygimp/plug-ins/foggify.py:69
-msgid "Op_acity"
+#: plug-ins/python/foggify.py:127
+msgid "Turbulence"
+msgstr "Turbulens"
+
+#: plug-ins/python/foggify.py:129
+msgid "O_pacity"
 msgstr "_Uigennemsigtighed"
 
-#: ../plug-ins/pygimp/plug-ins/palette-offset.py:44
-msgid "Offset the colors in a palette"
-msgstr "Forskyd farverne i en palet"
+#: plug-ins/python/foggify.py:129
+msgid "Opacity"
+msgstr "Uigennemsigtighed"
 
-#: ../plug-ins/pygimp/plug-ins/palette-offset.py:49
+# NB den her har jeg ikke kunnet finde i head og plugins (hvilket undrer mig lidt. Der var en, men den var uoversat)
+#: plug-ins/python/gradients-save-as-css.py:94
+msgid "_File..."
+msgstr "_File …"
+
+#: plug-ins/python/gradients-save-as-css.py:102
+msgid "Choose CSS file..."
+msgstr "Vælg CSS-fil …"
+
+# NB den her har jeg ikke kunnet finde i head og plugins (hvilket undrer mig lidt. Der var en, men den var uoversat)
+#: plug-ins/python/gradients-save-as-css.py:111
+msgid "Save as CSS file..."
+msgstr "Gem som CSS-fil …"
+
+#: plug-ins/python/gradients-save-as-css.py:113
+#: plug-ins/python/python-console/python-console.py:272
+#: plug-ins/python/spyro-plus.py:1735
+msgid "_Cancel"
+msgstr "_Annullér"
+
+#: plug-ins/python/gradients-save-as-css.py:114
+#: plug-ins/python/spyro-plus.py:1736
+msgid "_OK"
+msgstr "_OK"
+
+#: plug-ins/python/gradients-save-as-css.py:192
+#: plug-ins/python/gradients-save-as-css.py:193
+msgid "Creates a new palette from a given gradient"
+msgstr "Opretter en ny palet baseret på en given farveovergang"
+
+#: plug-ins/python/gradients-save-as-css.py:195
+msgid "Save Gradient as CSS..."
+msgstr "Gem farveovergang som CSS …"
+
+#: plug-ins/python/gradients-save-as-css.py:201
+#: plug-ins/python/palette-offset.py:55 plug-ins/python/palette-sort.py:354
+#: plug-ins/python/palette-to-gradient.py:143
+#: plug-ins/python/python-console/python-console.py:316
+msgid "Run mode"
+msgstr "Kørselstilstand"
+
+#: plug-ins/python/gradients-save-as-css.py:202
+#: plug-ins/python/palette-offset.py:56 plug-ins/python/palette-sort.py:355
+#: plug-ins/python/palette-to-gradient.py:144
+#: plug-ins/python/python-console/python-console.py:317
+msgid "The run mode"
+msgstr "Kørselstilstanden"
+
+#: plug-ins/python/gradients-save-as-css.py:205
+msgid "_Gradient to use"
+msgstr "_Farveovergang der skal bruges"
+
+#: plug-ins/python/gradients-save-as-css.py:207
+msgid "_File"
+msgstr "_Fil"
+
+#: plug-ins/python/histogram-export.py:153
+msgid "File is either a directory or file name is empty."
+msgstr "Filen er enten en mappe eller filnavnet er tomt."
+
+#: plug-ins/python/histogram-export.py:156
+msgid "Directory not found."
+msgstr "Mappen blev ikke fundet."
+
+#: plug-ins/python/histogram-export.py:171
+msgid "Histogram Export..."
+msgstr "Eksport af histogram …"
+
+#: plug-ins/python/histogram-export.py:214
+msgid "Exports the image histogram to a text file (CSV)"
+msgstr "Eksporterer billedhistogrammet til en tekstfil (CSV)"
+
+#: plug-ins/python/histogram-export.py:217
+msgid "_Export histogram..."
+msgstr "_Eksportér histogram …"
+
+#. TODO: GFile props still don't have labels + only load existing files
+#. (here we likely want to create a new file).
+#: plug-ins/python/histogram-export.py:225
+msgid "Histogram File"
+msgstr "Histogramfil"
+
+#: plug-ins/python/histogram-export.py:226
+msgid "Histogram export file"
+msgstr "Eksportfil til histogram"
+
+#: plug-ins/python/histogram-export.py:227
+msgid "_Bucket Size"
+msgstr "_Spandstørrelse"
+
+#: plug-ins/python/histogram-export.py:227
+msgid "Bucket Size"
+msgstr "Spandstørrelse"
+
+#: plug-ins/python/histogram-export.py:229
+msgid "Sample _Average"
+msgstr "_Prøvegennemsnit"
+
+#: plug-ins/python/histogram-export.py:229
+msgid "Sample Average"
+msgstr "Prøvegennemsnit"
+
+#: plug-ins/python/histogram-export.py:232
+msgid "Pixel Count"
+msgstr "Antal pixels"
+
+#: plug-ins/python/histogram-export.py:233
+msgid "Normalized"
+msgstr "Normaliseret"
+
+#: plug-ins/python/histogram-export.py:234
+msgid "Percent"
+msgstr "Procent"
+
+#: plug-ins/python/histogram-export.py:235
+msgid "Output _format"
+msgstr "O_utputformat"
+
+#: plug-ins/python/histogram-export.py:235
+msgid "Output format"
+msgstr "Outputformat"
+
+#: plug-ins/python/palette-offset.py:48
 msgid "_Offset Palette..."
 msgstr "_Forskyd palet …"
 
-#: ../plug-ins/pygimp/plug-ins/palette-offset.py:52
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:334
-#: ../plug-ins/pygimp/plug-ins/palette-to-gradient.py:59
-#: ../plug-ins/pygimp/plug-ins/palette-to-gradient.py:81
+#: plug-ins/python/palette-offset.py:49
+msgid "Offset the colors in a palette"
+msgstr "Forskyd farverne i en palet"
+
+#: plug-ins/python/palette-offset.py:59 plug-ins/python/palette-sort.py:358
+#: plug-ins/python/palette-to-gradient.py:147
+msgid "_Palette"
+msgstr "_Palet"
+
+#: plug-ins/python/palette-offset.py:60 plug-ins/python/palette-sort.py:359
+#: plug-ins/python/palette-sort.py:399 plug-ins/python/palette-sort.py:400
+#: plug-ins/python/palette-to-gradient.py:148
 msgid "Palette"
 msgstr "Palet"
 
-#: ../plug-ins/pygimp/plug-ins/palette-offset.py:53
-msgid "Off_set"
-msgstr "For_skyd"
+#: plug-ins/python/palette-offset.py:62
+msgid "O_ffset"
+msgstr "Forsk_ydning"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:25
+#: plug-ins/python/palette-offset.py:62
+msgid "Offset"
+msgstr "Forskydning"
+
+#: plug-ins/python/palette-offset.py:64
+msgid "The edited palette"
+msgstr "Den redigerede palet"
+
+#: plug-ins/python/palette-offset.py:65
+msgid "The newly created palette when read-only, otherwise the input palette"
+msgstr "Den nyoprettede palet (når skrivebeskyttet) og ellers inputpaletten"
+
+#. TODO: Re-incorporate LAB and LCHab options with GeglColor
+#: plug-ins/python/palette-sort.py:45 plug-ins/python/palette-sort.py:463
 msgid "Red"
 msgstr "Rød"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:25
+#: plug-ins/python/palette-sort.py:45 plug-ins/python/palette-sort.py:464
 msgid "Green"
 msgstr "Grøn"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:25
+#: plug-ins/python/palette-sort.py:45 plug-ins/python/palette-sort.py:465
 msgid "Blue"
 msgstr "Blå"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:26
+#: plug-ins/python/palette-sort.py:46 plug-ins/python/palette-sort.py:466
 msgid "Luma (Y)"
 msgstr "Luma (Y)"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:27
+#: plug-ins/python/palette-sort.py:47 plug-ins/python/palette-sort.py:467
 msgid "Hue"
 msgstr "Farvetone"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:27
+#: plug-ins/python/palette-sort.py:47 plug-ins/python/palette-sort.py:468
 msgid "Saturation"
 msgstr "Mætning"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:27
+#: plug-ins/python/palette-sort.py:47 plug-ins/python/palette-sort.py:469
 msgid "Value"
 msgstr "Valør"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:28
+#: plug-ins/python/palette-sort.py:48 plug-ins/python/palette-sort.py:470
 msgid "Saturation (HSL)"
 msgstr "Mætning (HSL)"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:28
+#: plug-ins/python/palette-sort.py:48 plug-ins/python/palette-sort.py:471
 msgid "Lightness (HSL)"
 msgstr "Lyshed (HSL)"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:29
+#: plug-ins/python/palette-sort.py:49 plug-ins/python/palette-sort.py:472
 msgid "Index"
 msgstr "Indeks"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:30
+#: plug-ins/python/palette-sort.py:50 plug-ins/python/palette-sort.py:473
 msgid "Random"
 msgstr "Tilfældig"
 
-# I Lab-systemet betegnes farveakserne a og b med småt
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:81
-msgid "Lightness (LAB)"
-msgstr "Lyshed (Lab)"
+#: plug-ins/python/palette-sort.py:94
+msgid ""
+"\n"
+"    Format is 'start:nrows,length' . All items are optional.\n"
+"\n"
+"    The empty string selects all items, as does ':'\n"
+"    ':4,' makes a 4-row selection out of all colors (length auto-"
+"determined)\n"
+"    ':4' also.\n"
+"    ':1,4' selects the first 4 colors\n"
+"    ':,4' selects rows of 4 colors (nrows auto-determined)\n"
+"    ':3,4' selects 3 rows of 4 colors\n"
+"    '4:' selects a single row of all colors after 4, inclusive.\n"
+"    '3:,4' selects rows of 4 colors, starting at 3 (nrows auto-determined)\n"
+"    '2:3,4' selects 3 rows of 4 colors (12 colors total), beginning at index "
+"2.\n"
+"    '4' is illegal (ambiguous)\n"
+msgstr ""
+"\n"
+"    Formatet er “start:nrækker,længde”. Alle elementer er valgfrie.\n"
+"\n"
+"    Den tomme streng vælger alle elementer, og det samme gør “:”.\n"
+"    “:4,” vælger 4 rækker ud fra alle farver (længden bestemmes "
+"automatisk).\n"
+"    “:4” samme.\n"
+"    “:1,4” vælger de første 4 farver\n"
+"    “:,4” vælger rækker af 4 farver (nrækker bestemmes automatisk)\n"
+"    “:3,4” vælger 3 rækker med 4 farver\n"
+"    “4:” vælger en enkelt række med alle farver efter 4, inklusive.\n"
+"    “3:,4” vælger rækker med 4 farver, der starter ved 3 (nrækker bestemmes "
+"automatisk)\n"
+"    “2:3,4” vælger 3 rækker med 4 farver (12 farver i alt), begyndende ved "
+"indeks 2.\n"
+"    “4” er ulovlig (tvetydig)\n"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:82
-msgid "A-color"
-msgstr "a-farve"
-
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:82
-msgid "B-color"
-msgstr "b-farve"
-
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:83
-msgid "Chroma (LCHab)"
-msgstr "Farvestyrke (LCHab)"
-
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:84
-msgid "Hue (LCHab)"
-msgstr "Farvetone (LCHab)"
-
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:312
-msgid "Sort the colors in a palette"
-msgstr "Sortér farverne i en palet"
-
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:331
+#: plug-ins/python/palette-sort.py:343
 msgid "_Sort Palette..."
 msgstr "_Sortér palet …"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:335
-msgid "Se_lections"
-msgstr "_Markeringer"
+#: plug-ins/python/palette-sort.py:345
+msgid "Sort the colors in a palette"
+msgstr "Sortér farverne i en palet"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:336
+#: plug-ins/python/palette-sort.py:363
 msgid "All"
 msgstr "Alle"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:336
+#: plug-ins/python/palette-sort.py:364
 msgid "Slice / Array"
 msgstr "Gitteropdeling/matrix"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:336
+#: plug-ins/python/palette-sort.py:365
 msgid "Autoslice (fg->bg)"
 msgstr "Auto-gitteropdeling (fg->bg)"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:337
+#: plug-ins/python/palette-sort.py:366
 msgid "Partitioned"
 msgstr "Opdelt"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:338
+#: plug-ins/python/palette-sort.py:367
+msgid "Select_ions"
+msgstr "_Markeringer"
+
+#: plug-ins/python/palette-sort.py:367
+msgid "Selections"
+msgstr "Markeringer"
+
+#. TODO: It would be much simpler to replace the slice expression with three
+#. separate parameters: start-index, number-of-rows, row_length
+#: plug-ins/python/palette-sort.py:371
 msgid "Slice _expression"
 msgstr "Opdelings_udtryk"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:339
-msgid "Channel to _sort"
+#: plug-ins/python/palette-sort.py:376
+msgid "Channel _to sort"
 msgstr "Kanal der skal _sorteres"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:341
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:344
+#: plug-ins/python/palette-sort.py:376
+msgid "Channel to sort"
+msgstr "Kanal der skal sorteres"
+
+#: plug-ins/python/palette-sort.py:378
 msgid "_Ascending"
 msgstr "_Stigende"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:342
-msgid "Secondary Channel to s_ort"
+#: plug-ins/python/palette-sort.py:378 plug-ins/python/palette-sort.py:385
+msgid "Ascending"
+msgstr "Stigende"
+
+#: plug-ins/python/palette-sort.py:382
+msgid "Secondary C_hannel to sort"
 msgstr "Sekund_ær kanal der skal sorteres"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:345
+#: plug-ins/python/palette-sort.py:383
+msgid "Secondary Channel to sort"
+msgstr "Sekundær kanal der skal sorteres"
+
+#: plug-ins/python/palette-sort.py:385
+msgid "Ascen_ding"
+msgstr "S_tigende"
+
+#: plug-ins/python/palette-sort.py:387
 msgid "_Quantization"
 msgstr "_Kvantisering"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:346
-msgid "_Partitioning channel"
+#: plug-ins/python/palette-sort.py:388
+msgid "Quantization"
+msgstr "Kvantisering"
+
+#: plug-ins/python/palette-sort.py:392
+msgid "Partitionin_g channel"
 msgstr "Kanal til o_pdeling"
 
-#: ../plug-ins/pygimp/plug-ins/palette-sort.py:348
+#: plug-ins/python/palette-sort.py:393
+msgid "Partitioning channel"
+msgstr "Kanal til opdeling"
+
+#: plug-ins/python/palette-sort.py:395
 msgid "Partition q_uantization"
+msgstr "Opdelings_kvantisering"
+
+#: plug-ins/python/palette-sort.py:396
+msgid "Partition quantization"
 msgstr "Opdelingskvantisering"
 
-#: ../plug-ins/pygimp/plug-ins/palette-to-gradient.py:52
-msgid "Create a repeating gradient using colors from the palette"
-msgstr "Opret en gentagende farveovergang med brug af farver fra paletten"
+# I Lab-systemet betegnes farveakserne a og b med småt
+#: plug-ins/python/palette-sort.py:474
+msgid "Lightness (LAB)"
+msgstr "Lyshed (Lab)"
 
-#: ../plug-ins/pygimp/plug-ins/palette-to-gradient.py:57
-msgid "Palette to _Repeating Gradient"
-msgstr "Palet til _gentagende farveovergang"
+#: plug-ins/python/palette-sort.py:475
+msgid "A-color"
+msgstr "a-farve"
 
-#: ../plug-ins/pygimp/plug-ins/palette-to-gradient.py:74
-msgid "Create a gradient using colors from the palette"
-msgstr "Opret en farveovergang med brug af farver fra paletten"
+#: plug-ins/python/palette-sort.py:476
+msgid "B-color"
+msgstr "b-farve"
 
-#: ../plug-ins/pygimp/plug-ins/palette-to-gradient.py:79
+#: plug-ins/python/palette-sort.py:477
+msgid "Chroma (LCHab)"
+msgstr "Farvestyrke (LCHab)"
+
+#: plug-ins/python/palette-sort.py:478
+msgid "Hue (LCHab)"
+msgstr "Farvetone (LCHab)"
+
+#: plug-ins/python/palette-to-gradient.py:127
 msgid "Palette to _Gradient"
 msgstr "Palet til _farveovergang"
 
-# NB den her har jeg ikke kunnet finde i head og plugins (hvilket undrer mig lidt. Der var en, men den var uoversat)
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:59
-msgid "Slice"
-msgstr "O_pdel i gitter"
+#: plug-ins/python/palette-to-gradient.py:128
+msgid "Create a gradient using colors from the palette"
+msgstr "Opret en farveovergang med brug af farver fra paletten"
 
-# NB i tvivl her er en snippet en tekststump?
-#. table snippet means a small piece of HTML code here
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:421
-msgid "Cuts an image along its guides, creates images and a HTML table snippet"
-msgstr ""
-"Klipper et billede langs dets hjælpelinjer, opretter billeder og en HTML-"
-"tabeltekststump"
+#: plug-ins/python/palette-to-gradient.py:129
+msgid "Create a new gradient using colors from the palette."
+msgstr "Opret en ny farveovergang med brug af farver fra paletten."
 
-# NB den her har jeg ikke kunnet finde i head og plugins (hvilket undrer mig lidt. Der var en, men den var uoversat)
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:432
-msgid "_Slice..."
-msgstr "_Skive …"
+#: plug-ins/python/palette-to-gradient.py:132
+msgid "Palette to _Repeating Gradient"
+msgstr "Palet til _gentagende farveovergang"
 
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:437
-msgid "Path for HTML export"
-msgstr "Sti til HTML-eksport"
+#: plug-ins/python/palette-to-gradient.py:133
+msgid "Create a repeating gradient using colors from the palette"
+msgstr "Opret en gentagende farveovergang med brug af farver fra paletten"
 
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:438
-msgid "Filename for export"
-msgstr "Filnavn til eksport"
+#: plug-ins/python/palette-to-gradient.py:134
+msgid "Create a new repeating gradient using colors from the palette."
+msgstr "Opret en ny gentagende farveovergang med brug af farver fra paletten."
 
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:439
-msgid "Image name prefix"
-msgstr "Præfiks til billednavnet"
+#: plug-ins/python/palette-to-gradient.py:150
+#: plug-ins/python/palette-to-gradient.py:151
+msgid "The newly created gradient"
+msgstr "Den nyoprettede farvegradient"
 
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:440
-msgid "Image format"
-msgstr "Billedformat"
-
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:441
-msgid "Separate image folder"
-msgstr "Separat billedmappe"
-
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:443
-msgid "Folder for image export"
-msgstr "Mappe til billedeksport"
-
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:444
-msgid "Space between table elements"
-msgstr "Mellemrum mellem tabelelementer"
-
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:446
-msgid "Javascript for onmouseover and clicked"
-msgstr "JavaScript for onmouseover og clicked"
-
-# har ikke kunnet finde en egnet oversættelse for table caps. Nogen ideer?
-#. table caps are table cells on the edge of the table
-#: ../plug-ins/pygimp/plug-ins/py-slice.py:449
-msgid "Skip animation for table caps"
-msgstr "Undlad animation for celler yderst i tabellen"
-
-#: ../plug-ins/pygimp/plug-ins/python-console.py:57
+#: plug-ins/python/python-console/python-console.py:79
 msgid "Python Console"
 msgstr "Python-konsol"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:61
+#: plug-ins/python/python-console/python-console.py:81
+#: plug-ins/python/python-console/python-console.py:273
+msgid "_Save"
+msgstr "_Gem"
+
+#: plug-ins/python/python-console/python-console.py:82
+msgid "Cl_ear"
+msgstr "_Ryd"
+
+#: plug-ins/python/python-console/python-console.py:83
 msgid "_Browse..."
 msgstr "G_ennemse …"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:154
+#: plug-ins/python/python-console/python-console.py:84
+#: plug-ins/python/python-console/python-console.py:221
+msgid "_Close"
+msgstr "_Luk"
+
+#: plug-ins/python/python-console/python-console.py:218
 msgid "Python Procedure Browser"
 msgstr "Python-procedurebrowser"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:183
+#: plug-ins/python/python-console/python-console.py:220
+msgid "_Apply"
+msgstr "An_vend"
+
+#: plug-ins/python/python-console/python-console.py:246
 #, python-format
 msgid "Could not open '%s' for writing: %s"
-msgstr "Kunne ikke åbne \"%s\" under forsøg på skrivning: %s"
+msgstr "Kunne ikke åbne “%s” under forsøg på skrivning: %s"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:198
+#: plug-ins/python/python-console/python-console.py:261
 #, python-format
 msgid "Could not write to '%s': %s"
-msgstr "Kunne ikke skrive til \"%s\": %s"
+msgstr "Kunne ikke skrive til “%s”: %s"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:206
+#: plug-ins/python/python-console/python-console.py:270
 msgid "Save Python-Fu Console Output"
 msgstr "Gem konsoloutput fra Python-Fu"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:232
+#: plug-ins/python/python-console/python-console.py:309
+msgid "Python _Console"
+msgstr "Python-_konsol"
+
+#: plug-ins/python/python-console/python-console.py:310
 msgid "Interactive GIMP Python interpreter"
 msgstr "Interaktiv GIMP-Python-fortolker"
 
-#: ../plug-ins/pygimp/plug-ins/python-console.py:237
-msgid "_Console"
-msgstr "_Konsol"
-
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:60
-msgid "Add a drop shadow to a layer, and optionally bevel it"
-msgstr "Tilføj en skyggeeffekt til et lag, og giv det eventuelt en kant"
-
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:65
-msgid "_Drop Shadow and Bevel..."
-msgstr "_Skyggeeffekt og kant …"
-
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:70
-msgid "_Shadow blur"
-msgstr "_Sløring af skygge"
-
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:71
-msgid "_Bevel"
-msgstr "_Kant"
-
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:72
-msgid "_Drop shadow"
-msgstr "_Skyggeeffekt"
-
-# Fra konventioner
-# X, Y og Z er oversat med x, y og z i overenstemmelse med almindelig dansk
-# praksis.
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:73
-msgid "Drop shadow _X displacement"
-msgstr "Skyggeeffektens _x-forskydning"
-
-# Fra konventioner
-# X, Y og Z er oversat med x, y og z i overenstemmelse med almindelig dansk
-# praksis.
-#: ../plug-ins/pygimp/plug-ins/shadow_bevel.py:74
-msgid "Drop shadow _Y displacement"
-msgstr "Skyggeeffektens _y-forskydning"
+#: plug-ins/python/python-console/python-console.py:311
+msgid "Type in commands and see results"
+msgstr "Indtast kommandoer og se resultater"
 
 # Ikke en stavefejl: https://en.wikipedia.org/wiki/Spirograph
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:44
+#: plug-ins/python/spyro-plus.py:51
 msgid "Spyro Layer"
 msgstr "Spiro-lag"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:45
+#: plug-ins/python/spyro-plus.py:52
 msgid "Spyro Path"
 msgstr "Spiro-kurve"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:56
-msgid ""
-"Save\n"
-"as New Layer"
-msgstr ""
-"Gem\n"
-"som nyt lag"
+#: plug-ins/python/spyro-plus.py:62
+msgid "As New Layer"
+msgstr "Som nyt lag"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:57
-msgid ""
-"Redraw on\n"
-"Active layer"
-msgstr ""
-"Gentegn på\n"
-"aktivt lag"
+#: plug-ins/python/spyro-plus.py:63
+msgid "Redraw on last active layer"
+msgstr "Gentegn i det senest aktive lag"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:58
-msgid ""
-"Save\n"
-"as Path"
-msgstr ""
-"Gem\n"
-"som kurve"
+#: plug-ins/python/spyro-plus.py:64
+msgid "As Path"
+msgstr "Som kurve"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:104
+#: plug-ins/python/spyro-plus.py:112 plug-ins/python/spyro-plus.py:2255
 msgid "Circle"
 msgstr "Cirkel"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:140
+#: plug-ins/python/spyro-plus.py:148 plug-ins/python/spyro-plus.py:2259
 msgid "Polygon-Star"
 msgstr "Polygonstjerne"
 
 #. Sine wave on a circle ring.
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:156
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:947
+#: plug-ins/python/spyro-plus.py:164 plug-ins/python/spyro-plus.py:996
+#: plug-ins/python/spyro-plus.py:2250 plug-ins/python/spyro-plus.py:2260
 msgid "Sine"
 msgstr "Sinus"
 
 #. Semi-circles, based on a polygon
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:166
+#: plug-ins/python/spyro-plus.py:174 plug-ins/python/spyro-plus.py:2261
 msgid "Bumps"
 msgstr "Buler"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:271
+#: plug-ins/python/spyro-plus.py:279
 msgid "Rack"
 msgstr "Tandstang"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:315
+#: plug-ins/python/spyro-plus.py:323
 msgid "Frame"
 msgstr "Ramme"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:404
+#: plug-ins/python/spyro-plus.py:436 plug-ins/python/spyro-plus.py:2258
 msgid "Selection"
 msgstr "Markering"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:494
+#: plug-ins/python/spyro-plus.py:526 plug-ins/python/spyro-plus.py:2295
 msgid "Pencil"
 msgstr "Blyant"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:510
+#: plug-ins/python/spyro-plus.py:542 plug-ins/python/spyro-plus.py:2296
 msgid "AirBrush"
 msgstr "Airbrush"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:570
+#: plug-ins/python/spyro-plus.py:609 plug-ins/python/spyro-plus.py:2293
 msgid "Preview"
 msgstr "Forhåndsvisning"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:575
+#: plug-ins/python/spyro-plus.py:614 plug-ins/python/spyro-plus.py:2297
 msgid "Stroke"
 msgstr "Optegn"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:622
+#: plug-ins/python/spyro-plus.py:661 plug-ins/python/spyro-plus.py:2294
 msgid "PaintBrush"
 msgstr "Malerpensel"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:624
+#: plug-ins/python/spyro-plus.py:665 plug-ins/python/spyro-plus.py:2298
 msgid "Ink"
 msgstr "Blæk"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:625
+#: plug-ins/python/spyro-plus.py:666 plug-ins/python/spyro-plus.py:2299
 msgid "MyPaintBrush"
 msgstr "MyPaintBrush"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:933
+#: plug-ins/python/spyro-plus.py:982 plug-ins/python/spyro-plus.py:2248
 msgid "Spyrograph"
 msgstr "Spirograf"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:940
+#: plug-ins/python/spyro-plus.py:989 plug-ins/python/spyro-plus.py:2249
 msgid "Epitrochoid"
-msgstr "Epitrochoide"
+msgstr "Epitrokoide"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:967
+#: plug-ins/python/spyro-plus.py:1016 plug-ins/python/spyro-plus.py:2251
 msgid "Lissajous"
 msgstr "Lissajous"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1397
+#: plug-ins/python/spyro-plus.py:1472 plug-ins/python/spyro-plus.py:2252
 msgid "Curve Type"
 msgstr "Kurvetype"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1398
+#: plug-ins/python/spyro-plus.py:1473
 msgid ""
 "An Epitrochoid pattern is when the moving gear is on the outside of the "
 "fixed gear."
 msgstr ""
-"Et epitrochoidemønster er, når det bevægelige tandhjul er uden på det faste "
-"tandhjul."
+"Et epitrokoidemønster er, når det roterende tandhjul er uden på det "
+"fastlåste tandhjul."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1403
+#. TODO: Add Clone option once it's fixed
+#: plug-ins/python/spyro-plus.py:1478 plug-ins/python/spyro-plus.py:2301
 msgid "Tool"
 msgstr "Værktøj"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1404
+#: plug-ins/python/spyro-plus.py:1479
 msgid ""
 "The tool with which to draw the pattern. The Preview tool just draws quickly."
 msgstr ""
 "Værktøjet som mønsteret skal tegnes med. Værktøjet forhåndsvisning tegner "
 "bare hurtigt."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1409
+#: plug-ins/python/spyro-plus.py:1484
 msgid "Long Gradient"
 msgstr "Lang farveovergang"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1411
+#: plug-ins/python/spyro-plus.py:1486
 msgid ""
 "When unchecked, the current tool settings will be used. When checked, will "
 "use a long gradient to match the length of the pattern, based on current "
@@ -612,11 +695,11 @@ msgstr ""
 "og gentagetilstanden fra værktøjet farveovergangs indstillinger, blive brugt "
 "til at matche mønsterets længde."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1431
+#: plug-ins/python/spyro-plus.py:1506
 msgid "Specify pattern using one of the following tabs:"
 msgstr "Angiv mønsteret ved brug af et af følgende faneblade:"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1433
+#: plug-ins/python/spyro-plus.py:1508
 msgid ""
 "The pattern is specified only by the active tab. Toy Kit is similar to "
 "Gears, but it uses gears and hole numbers which are found in toy kits. If "
@@ -627,20 +710,19 @@ msgstr ""
 "men bruger tandhjul og hulnumre, som findes i legetøjssæt. Følger du "
 "vejledningen i manualen til legetøjssættet, skulle resultatet være det samme."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1457
+#: plug-ins/python/spyro-plus.py:1532
 msgid ""
 "Number of teeth of fixed gear. The size of the fixed gear is proportional to "
 "the number of teeth."
 msgstr ""
-"Antal tænder på det fastlåste tandhjul. Størrelsen på det faste tandhjul er "
-"proportional med antallet af tænder."
+"Antal tænder på det fastlåste tandhjul. Størrelsen på det fastlåste tandhjul "
+"er proportional med antallet af tænder."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1460
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1486
+#: plug-ins/python/spyro-plus.py:1535 plug-ins/python/spyro-plus.py:1563
 msgid "Fixed Gear Teeth"
-msgstr "Tænder i fastlåst tandhjul."
+msgstr "Tænder i fastlåst tandhjul"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1466
+#: plug-ins/python/spyro-plus.py:1543
 msgid ""
 "Number of teeth of moving gear. The size of the moving gear is proportional "
 "to the number of teeth."
@@ -648,16 +730,15 @@ msgstr ""
 "Antal tænder på det roterende tandhjul. Størrelsen på det roterende tandhjul "
 "er proportional med antallet af tænder."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1469
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1491
+#: plug-ins/python/spyro-plus.py:1546 plug-ins/python/spyro-plus.py:1568
 msgid "Moving Gear Teeth"
-msgstr "Tænder i roterende tandhjul."
+msgstr "Tænder i roterende tandhjul"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1474
+#: plug-ins/python/spyro-plus.py:1551
 msgid "Hole percent"
 msgstr "Hulprocent"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1475
+#: plug-ins/python/spyro-plus.py:1552
 msgid ""
 "How far is the hole from the center of the moving gear. 100% means that the "
 "hole is at the gear's edge."
@@ -665,11 +746,11 @@ msgstr ""
 "Hvor langt hullet er fra det roterende tandhjuls centrum. 100 % betyder, at "
 "hullet er i tandhjulets kant."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1496
+#: plug-ins/python/spyro-plus.py:1573
 msgid "Hole Number"
 msgstr "Hulnummer"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1497
+#: plug-ins/python/spyro-plus.py:1574
 msgid ""
 "Hole #1 is at the edge of the gear. The maximum hole number is near the "
 "center. The maximum hole number is different for each gear."
@@ -678,27 +759,27 @@ msgstr ""
 "største hulnummer er forskelligt for hvert tandhjul."
 
 # Flower er overflødigt, da petals er en del af blomsten
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1508
+#: plug-ins/python/spyro-plus.py:1585
 msgid "Flower Petals"
 msgstr "Kronblade"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1508
+#: plug-ins/python/spyro-plus.py:1586
 msgid "The number of petals in the pattern."
 msgstr "Antal kronblade i mønsteret."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1513
+#: plug-ins/python/spyro-plus.py:1591
 msgid "Petal Skip"
 msgstr "Overspring kronblade"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1514
+#: plug-ins/python/spyro-plus.py:1592
 msgid "The number of petals to advance for drawing the next petal."
 msgstr "Antal kronblade der skal gås frem for at tegne det næste kronblad."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1519
+#: plug-ins/python/spyro-plus.py:1597
 msgid "Hole Radius(%)"
 msgstr "Hulradius (%)"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1520
+#: plug-ins/python/spyro-plus.py:1598
 msgid ""
 "The radius of the hole in the center of the pattern where nothing will be "
 "drawn. Given as a percentage of the size of the pattern. A value of 0 will "
@@ -707,37 +788,36 @@ msgstr ""
 "Radius af det centrale hul hvor intet tegnes. Givet som en procentdel af "
 "mønsterets størrelse. 0 giver intet hul og 99 giver en tynd linje på kanten."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1533
+#: plug-ins/python/spyro-plus.py:1619
 msgid "Width(%)"
 msgstr "Bredde (%)"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1534
+#: plug-ins/python/spyro-plus.py:1620
 msgid ""
 "The width of the pattern as a percentage of the size of the pattern. A Value "
 "of 1 will just draw a thin pattern. A Value of 100 will fill the entire "
 "fixed gear."
 msgstr ""
 "Mønsterets bredde som en procentdel af mønsterets størrelse. 1 giver et "
-"tyndt mønster og 100 vil udfylde hele det faste tandhjul."
+"tyndt mønster og 100 vil udfylde hele det fastlåste tandhjul."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1544
+#: plug-ins/python/spyro-plus.py:1631
 msgid "Visual"
 msgstr "Visuel"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1549
+#: plug-ins/python/spyro-plus.py:1637
 msgid "Toy Kit"
 msgstr "Legetøjssæt"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1554
+#: plug-ins/python/spyro-plus.py:1643
 msgid "Gears"
 msgstr "Tandhjul"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1566
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1610
+#: plug-ins/python/spyro-plus.py:1656 plug-ins/python/spyro-plus.py:1700
 msgid "Rotation"
 msgstr "Rotation"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1567
+#: plug-ins/python/spyro-plus.py:1657
 msgid ""
 "Rotation of the pattern, in degrees. The starting position of the moving "
 "gear in the fixed gear."
@@ -745,11 +825,11 @@ msgstr ""
 "Rotation af mønsteret i grader. Udgangspunktet for det roterende tandhjul i "
 "det fastlåste tandhjul."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1590
+#: plug-ins/python/spyro-plus.py:1680 plug-ins/python/spyro-plus.py:2262
 msgid "Shape"
 msgstr "Form"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1591
+#: plug-ins/python/spyro-plus.py:1681
 msgid ""
 "The shape of the fixed gear to be used inside current selection. Rack is a "
 "long round-edged shape provided in the toy kits. Frame hugs the boundaries "
@@ -763,39 +843,40 @@ msgstr ""
 "tandhjulsnotation for at berøre grænsen. Markering vil omfavne den nuværende "
 "markerings grænser (prøv med noget som ikke er rektangulært)."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1600
+#: plug-ins/python/spyro-plus.py:1690
 msgid "Sides"
 msgstr "Sider"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1600
+#: plug-ins/python/spyro-plus.py:1690
 msgid "Number of sides of the shape."
 msgstr "Antal sider i formen."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1605
+#: plug-ins/python/spyro-plus.py:1695
 msgid "Morph"
 msgstr "Omform"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1605
+#: plug-ins/python/spyro-plus.py:1695
 msgid "Morph fixed gear shape. Only affects some of the shapes."
 msgstr "Omform det fastlåste tandhjul. Påvirker kun nogle af formerne."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1610
+#: plug-ins/python/spyro-plus.py:1700
 msgid "Rotation of the fixed gear, in degrees"
 msgstr "Rotation af det fastlåste tandhjul i grader"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1625
+#: plug-ins/python/spyro-plus.py:1715
 msgid "Margin (px)"
 msgstr "Margen (px)"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1625
+#: plug-ins/python/spyro-plus.py:1715
 msgid "Margin from edge of selection."
 msgstr "Margen fra markeringens kant."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1630
+#: plug-ins/python/spyro-plus.py:1720 plug-ins/python/spyro-plus.py:2283
+#: plug-ins/python/spyro-plus.py:2284
 msgid "Make width and height equal"
 msgstr "Gør højde og bredde ens"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1632
+#: plug-ins/python/spyro-plus.py:1722
 msgid ""
 "When unchecked, the pattern will fill the current image or selection. When "
 "checked, the pattern will have same width and height, and will be centered."
@@ -804,11 +885,11 @@ msgstr ""
 "Hvis markeret vil mønsterets højde og bredde være ens, og mønsteret vil være "
 "centreret."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1656
+#: plug-ins/python/spyro-plus.py:1737
 msgid "Re_draw"
 msgstr "_Gentegn"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1657
+#: plug-ins/python/spyro-plus.py:1739
 msgid ""
 "If you change the settings of a tool, change color, or change the selection, "
 "press this to preview how the pattern looks."
@@ -816,19 +897,15 @@ msgstr ""
 "Ændrer du et værktøjs indstillinger, skifter farve eller ændrer markeringen, "
 "så tryk her for at se, hvordan mønsteret ser ud."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1659
+#: plug-ins/python/spyro-plus.py:1742
 msgid "_Reset"
 msgstr "_Nulstil"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1660
-msgid "_Cancel"
-msgstr "_Annullér"
+#: plug-ins/python/spyro-plus.py:1750
+msgid "Save"
+msgstr "Gem"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1661
-msgid "_OK"
-msgstr "_OK"
-
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1667
+#: plug-ins/python/spyro-plus.py:1751
 msgid ""
 "Choose whether to save as new layer, redraw on last active layer, or save to "
 "path"
@@ -836,85 +913,183 @@ msgstr ""
 "Vælg om der skal gemmes som et nyt lag, gentegnes på senest aktive lag eller "
 "gemmes som kurve"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1679
+#: plug-ins/python/spyro-plus.py:1765
 msgid "Spyrogimp"
 msgstr "Spyrogimp"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1688
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:2195
+#: plug-ins/python/spyro-plus.py:1774 plug-ins/python/spyro-plus.py:2237
 msgid "Draw spyrographs using current tool settings and selection."
 msgstr "Tegn spirografer med aktuelle værktøjsindstillinger og markering."
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1701
+#: plug-ins/python/spyro-plus.py:1787
 msgid "Curve Pattern"
 msgstr "Kurvemønster"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1704
+#: plug-ins/python/spyro-plus.py:1790
 msgid "Fixed Gear"
 msgstr "Fastlåst tandhjul"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:1707
+#: plug-ins/python/spyro-plus.py:1793
 msgid "Size"
 msgstr "Størrelse"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:2047
+#: plug-ins/python/spyro-plus.py:2149
 msgid "Rendering Pattern"
 msgstr "Gentegner mønster"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:2059
+#: plug-ins/python/spyro-plus.py:2161
 msgid "Please wait : Rendering Pattern"
 msgstr "Vent venligst: Mønsteret gentegnes"
 
-#: ../plug-ins/pygimp/plug-ins/spyro_plus.py:2164
+#: plug-ins/python/spyro-plus.py:2238
+msgid ""
+"Uses current tool settings to draw Spyrograph patterns. The size and "
+"location of the pattern is based on the current selection."
+msgstr ""
+"Bruger de aktuelle værktøjsindstillinger til at tegne spirografmønstre. "
+"Mønsterets størrelse og placering er baseret på den aktuelle markering."
+
+#: plug-ins/python/spyro-plus.py:2241
 msgid "Spyrogimp..."
 msgstr "Spyrogimp …"
 
-#~ msgid ""
-#~ "Keep\n"
-#~ "Layer"
-#~ msgstr ""
-#~ "Behold\n"
-#~ "Lag"
+#: plug-ins/python/spyro-plus.py:2256
+msgid "rack"
+msgstr "tandstang"
+
+#: plug-ins/python/spyro-plus.py:2257
+msgid "frame"
+msgstr "ramme"
+
+#: plug-ins/python/spyro-plus.py:2264
+msgid "Si_des"
+msgstr "Si_der"
+
+#: plug-ins/python/spyro-plus.py:2265
+msgid "Number of sides of fixed gear (3 or greater). Only used by some shapes."
+msgstr ""
+"Antal sider på det fastlåste tandhjul (3 eller større). Bruges kun af nogle "
+"former."
+
+#: plug-ins/python/spyro-plus.py:2267
+msgid "_Morph"
+msgstr "O_mform"
+
+#: plug-ins/python/spyro-plus.py:2268
+msgid "Morph shape of fixed gear, between 0 and 1. Only used by some shapes."
+msgstr ""
+"Omform det fastlåste tandhjul (mellem 0 og 1). Bruges kun af nogle former."
+
+#: plug-ins/python/spyro-plus.py:2270
+msgid "Fi_xed Gear Teeth"
+msgstr "T_ænder i fastlåst tandhjul"
+
+#: plug-ins/python/spyro-plus.py:2271 plug-ins/python/spyro-plus.py:2274
+msgid "Number of teeth for fixed gear."
+msgstr "Antal tænder i fastlåst tandhjul."
+
+#: plug-ins/python/spyro-plus.py:2273
+msgid "Mo_ving Gear Teeth"
+msgstr "_Tænder i roterende tandhjul"
+
+#: plug-ins/python/spyro-plus.py:2276
+msgid "_Hole Radius (%)"
+msgstr "_Hulradius (%)"
+
+#: plug-ins/python/spyro-plus.py:2277
+msgid ""
+"Location of hole in moving gear in percent, where 100 means that the hole is "
+"at the edge of the gear, and 0 means the hole is at the center"
+msgstr ""
+"Placering af huller i det roterende tandhjul (i procent), hvor 100 betyder, "
+"at hullet er nær tandhjulets kant og 0, at hullet er i midten"
+
+#: plug-ins/python/spyro-plus.py:2280
+msgid "Margin (_px)"
+msgstr "Margen (_px)"
+
+#: plug-ins/python/spyro-plus.py:2281
+msgid "Margin from selection, in pixels"
+msgstr "Margen fra markering (i pixels)"
+
+#: plug-ins/python/spyro-plus.py:2286 plug-ins/python/spyro-plus.py:2289
+msgid "_Rotation"
+msgstr "_Rotation"
+
+#: plug-ins/python/spyro-plus.py:2287
+msgid "Pattern rotation, in degrees"
+msgstr "Mønsterrotation (i grader)"
+
+#: plug-ins/python/spyro-plus.py:2290
+msgid "Shape rotation of fixed gear, in degrees"
+msgstr "Omform det fastlåste tandhjuls rotation (i grader)"
+
+#: plug-ins/python/spyro-plus.py:2304
+msgid "Long _Gradient"
+msgstr "Lang _farveovergang"
+
+#: plug-ins/python/spyro-plus.py:2305
+msgid ""
+"Whether to apply a long gradient to match the length of the pattern. Only "
+"applicable to some of the tools."
+msgstr ""
+"Om der skal anvendes en lang farveovergang for at matche mønsterets længde. "
+"Gælder kun for nogle af værktøjerne."
+
+#~ msgid "Read characters from file..."
+#~ msgstr "Læs tegn fra fil …"
+
+#~ msgid "Characters or file location"
+#~ msgstr "Tegn- eller filplacering"
 
 #~ msgid ""
-#~ "If checked, then once OK is pressed, the spyro layer is kept, and the "
-#~ "plugin exits quickly. If unchecked, the spyro layer is deleted, and the "
-#~ "pattern is redrawn on the layer that was active when the plugin was "
-#~ "launched."
+#~ "If set, the Characters text entry will be used as a file name, from which "
+#~ "the characters will be read. Otherwise, the characters in the text entry "
+#~ "will be used to render the image."
 #~ msgstr ""
-#~ "Når markeret beholdes spiro-laget, når der trykkes OK, og "
-#~ "udvidelsesmodulet afslutter hurtigt. Hvis umarkeret slettes spiro-laget, "
-#~ "og mønsteret gentegnes på laget, som var aktivt, da udvidelsesmodulet "
-#~ "blev startet."
+#~ "Hvis angivet vil tekstindgangen for tegn blive brugt som filnavn, hvorfra "
+#~ "tegnene vil blive læst. Ellers vil tegnene i tekstindgangen blive brugt "
+#~ "til at gengive billedet."
 
-#~ msgid "Color _model"
-#~ msgstr "Farve_model"
+#~ msgid "Font Size(px)"
+#~ msgstr "Skrifttypestørrelse (px)"
 
-#~ msgid "RGB"
-#~ msgstr "RGB"
+#~ msgid "Write separate CSS file"
+#~ msgstr "Skriv separat CSS-fil"
 
-#~ msgid "HSV"
-#~ msgstr "HSV"
+# var lidt i tvivl om den her (karakter, bogstav, tegn, tast). Head bruger tegn og tast.
+#~ msgid "_File to read or characters to use"
+#~ msgstr "_Fil at læse eller tegn til brug"
 
-#~ msgid "Red or Hue"
-#~ msgstr "Rød eller farvetone"
+#~ msgid "Off_set"
+#~ msgstr "For_skyd"
 
-#~ msgid "Blue or Value"
-#~ msgstr "Blå eller værdi"
+#~ msgid "Offset Palette..."
+#~ msgstr "Forskyd palet …"
 
-#~ msgid "Create a new brush with characters from a text sequence"
-#~ msgstr "Opret en ny pensel med tegn fra en tekstsekvens"
+#~ msgid ""
+#~ "The curve type { Spyrograph (0), Epitrochoid (1), Sine (2), Lissajous(3) }"
+#~ msgstr ""
+#~ "Kurvetypen { spirograf (0), epitrokoide (1), sinus (2), Lissajous (3) }"
 
-#~ msgid "New Brush from _Text..."
-#~ msgstr "Ny pensel fra _tekst..."
+#~ msgid "Shape of fixed gear"
+#~ msgstr "Form på fast tandhjul"
 
-#~ msgid "Font"
-#~ msgstr "Skrifttype"
+#~ msgid "Number of teeth for moving gear"
+#~ msgstr "Antal tænder i roterende tandhjul"
 
-# i hovedfilen er der en streng hvor forklaringen er pixel size
-# og oversættelsen "%d × %d punkter"
-#~ msgid "Pixel Size"
-#~ msgstr "Pixelstørrelse"
+#~ msgid "Make height and width equal"
+#~ msgstr "Gør højde og bredde ens"
 
-#~ msgid "Text"
-#~ msgstr "Tekst"
+#~ msgid "Tool to use for drawing the pattern."
+#~ msgstr "Værktøj der skal anvendes til at tegne mønsteret."
+
+#~ msgid ""
+#~ "If checked, the histogram is generated from merging all visible layers. "
+#~ "Otherwise, the histogram is only for the current layer."
+#~ msgstr ""
+#~ "Hvis markeret genereres histogrammet fra forening af alle synlige lag. "
+#~ "Ellers er histogrammet kun for det aktuelle lag."
+
+#~ msgid "_Output Format"
+#~ msgstr "_Outputformat"

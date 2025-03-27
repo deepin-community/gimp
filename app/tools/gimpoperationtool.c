@@ -38,7 +38,6 @@
 #include "core/gimperror.h"
 #include "core/gimpimage.h"
 #include "core/gimplist.h"
-#include "core/gimpparamspecs-duplicate.h"
 #include "core/gimppickable.h"
 #include "core/gimpsettings.h"
 
@@ -70,51 +69,48 @@ struct _AuxInput
 
 /*  local function prototypes  */
 
-static void        gimp_operation_tool_finalize                  (GObject           *object);
+static void        gimp_operation_tool_finalize        (GObject           *object);
 
-static gboolean    gimp_operation_tool_initialize                (GimpTool          *tool,
-                                                                  GimpDisplay       *display,
-                                                                  GError           **error);
-static void        gimp_operation_tool_control                   (GimpTool          *tool,
-                                                                  GimpToolAction     action,
-                                                                  GimpDisplay       *display);
+static gboolean    gimp_operation_tool_initialize      (GimpTool          *tool,
+                                                        GimpDisplay       *display,
+                                                        GError           **error);
+static void        gimp_operation_tool_control         (GimpTool          *tool,
+                                                        GimpToolAction     action,
+                                                        GimpDisplay       *display);
 
-static gchar     * gimp_operation_tool_get_operation             (GimpFilterTool    *filter_tool,
-                                                                  gchar            **description);
-static void        gimp_operation_tool_dialog                    (GimpFilterTool    *filter_tool);
-static void        gimp_operation_tool_reset                     (GimpFilterTool    *filter_tool);
-static void        gimp_operation_tool_set_config                (GimpFilterTool    *filter_tool,
-                                                                  GimpConfig        *config);
-static void        gimp_operation_tool_region_changed            (GimpFilterTool    *filter_tool);
-static void        gimp_operation_tool_color_picked              (GimpFilterTool    *filter_tool,
-                                                                  gpointer           identifier,
-                                                                  gdouble            x,
-                                                                  gdouble            y,
-                                                                  const Babl        *sample_format,
-                                                                  const GimpRGB     *color);
+static gchar     * gimp_operation_tool_get_operation   (GimpFilterTool    *filter_tool,
+                                                        gchar            **description);
+static void        gimp_operation_tool_dialog          (GimpFilterTool    *filter_tool);
+static void        gimp_operation_tool_reset           (GimpFilterTool    *filter_tool);
+static void        gimp_operation_tool_set_config      (GimpFilterTool    *filter_tool,
+                                                        GimpConfig        *config);
+static void        gimp_operation_tool_region_changed  (GimpFilterTool    *filter_tool);
+static void        gimp_operation_tool_color_picked    (GimpFilterTool    *filter_tool,
+                                                        gpointer           identifier,
+                                                        gdouble            x,
+                                                        gdouble            y,
+                                                        const Babl        *sample_format,
+                                                        GeglColor         *color);
 
-static void        gimp_operation_tool_options_box_size_allocate (GtkWidget         *options_box,
-                                                                  GdkRectangle      *allocation,
-                                                                  GimpOperationTool *tool);
+static void        gimp_operation_tool_halt            (GimpOperationTool *op_tool);
+static void        gimp_operation_tool_commit          (GimpOperationTool *op_tool);
 
-static void        gimp_operation_tool_halt                      (GimpOperationTool *op_tool);
-static void        gimp_operation_tool_commit                    (GimpOperationTool *op_tool);
+static void        gimp_operation_tool_sync_op         (GimpOperationTool *op_tool,
+                                                        gboolean           sync_colors);
+static void        gimp_operation_tool_create_gui      (GimpOperationTool *tool);
+static void        gimp_operation_tool_add_gui         (GimpOperationTool *tool);
 
-static void        gimp_operation_tool_sync_op                   (GimpOperationTool *op_tool,
-                                                                  gboolean           sync_colors);
-static void        gimp_operation_tool_create_gui                (GimpOperationTool *tool);
-static void        gimp_operation_tool_add_gui                   (GimpOperationTool *tool);
+static AuxInput *  gimp_operation_tool_aux_input_new   (GimpOperationTool *tool,
+                                                        GeglNode          *operation,
+                                                        const gchar       *input_pad,
+                                                        const gchar       *label,
+                                                        const gchar       *description);
+static void        gimp_operation_tool_aux_input_detach(AuxInput          *input);
+static void        gimp_operation_tool_aux_input_clear (AuxInput          *input);
+static void        gimp_operation_tool_aux_input_free  (AuxInput          *input);
 
-static AuxInput *  gimp_operation_tool_aux_input_new             (GimpOperationTool *tool,
-                                                                  GeglNode          *operation,
-                                                                  const gchar       *input_pad,
-                                                                  const gchar       *label);
-static void        gimp_operation_tool_aux_input_detach          (AuxInput          *input);
-static void        gimp_operation_tool_aux_input_clear           (AuxInput          *input);
-static void        gimp_operation_tool_aux_input_free            (AuxInput          *input);
-
-static void        gimp_operation_tool_unlink_chains             (GimpOperationTool *op_tool);
-static void        gimp_operation_tool_relink_chains             (GimpOperationTool *op_tool);
+static void        gimp_operation_tool_unlink_chains   (GimpOperationTool *op_tool);
+static void        gimp_operation_tool_relink_chains   (GimpOperationTool *op_tool);
 
 
 G_DEFINE_TYPE (GimpOperationTool, gimp_operation_tool,
@@ -258,35 +254,27 @@ gimp_operation_tool_dialog (GimpFilterTool *filter_tool)
   GtkWidget         *options_sw;
   GtkWidget         *options_gui;
   GtkWidget         *options_box;
-  GtkWidget         *viewport;
 
   main_vbox = gimp_filter_tool_dialog_get_vbox (filter_tool);
 
   /*  The options scrolled window  */
   options_sw = gtk_scrolled_window_new (NULL, NULL);
   g_weak_ref_set (&op_tool->options_sw_ref, options_sw);
+  gtk_scrolled_window_set_overlay_scrolling (GTK_SCROLLED_WINDOW (options_sw),
+                                             FALSE);
   gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (options_sw),
                                        GTK_SHADOW_NONE);
   gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (options_sw),
-                                  GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+                                  GTK_POLICY_NEVER, GTK_POLICY_NEVER);
   gtk_box_pack_start (GTK_BOX (main_vbox), options_sw,
                       TRUE, TRUE, 0);
   gtk_widget_show (options_sw);
 
-  viewport = gtk_viewport_new (NULL, NULL);
-  gtk_viewport_set_shadow_type (GTK_VIEWPORT (viewport), GTK_SHADOW_NONE);
-  gtk_container_add (GTK_CONTAINER (options_sw), viewport);
-  gtk_widget_show (viewport);
-
   /*  The options vbox  */
   options_box = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
   g_weak_ref_set (&op_tool->options_box_ref, options_box);
-  gtk_container_add (GTK_CONTAINER (viewport), options_box);
+  gtk_container_add (GTK_CONTAINER (options_sw), options_box);
   gtk_widget_show (options_box);
-
-  g_signal_connect (options_box, "size-allocate",
-                    G_CALLBACK (gimp_operation_tool_options_box_size_allocate),
-                    op_tool);
 
   options_gui = g_weak_ref_get (&op_tool->options_gui_ref);
   if (options_gui)
@@ -305,7 +293,7 @@ gimp_operation_tool_reset (GimpFilterTool *filter_tool)
 
   GIMP_FILTER_TOOL_CLASS (parent_class)->reset (filter_tool);
 
-  if (filter_tool->config && GIMP_TOOL (op_tool)->drawable)
+  if (filter_tool->config && GIMP_TOOL (op_tool)->drawables)
     gimp_operation_tool_sync_op (op_tool, TRUE);
 
   gimp_operation_tool_relink_chains (op_tool);
@@ -321,7 +309,7 @@ gimp_operation_tool_set_config (GimpFilterTool *filter_tool,
 
   GIMP_FILTER_TOOL_CLASS (parent_class)->set_config (filter_tool, config);
 
-  if (filter_tool->config && GIMP_TOOL (op_tool)->drawable)
+  if (filter_tool->config && GIMP_TOOL (op_tool)->drawables)
     gimp_operation_tool_sync_op (op_tool, FALSE);
 
   gimp_operation_tool_relink_chains (op_tool);
@@ -352,7 +340,7 @@ gimp_operation_tool_color_picked (GimpFilterTool  *filter_tool,
                                   gdouble          x,
                                   gdouble          y,
                                   const Babl      *sample_format,
-                                  const GimpRGB   *color)
+                                  GeglColor       *color)
 {
   gchar **pspecs = g_strsplit (identifier, ":", 2);
 
@@ -437,54 +425,6 @@ gimp_operation_tool_color_picked (GimpFilterTool  *filter_tool,
 }
 
 static void
-gimp_operation_tool_options_box_size_allocate (GtkWidget         *options_box,
-                                               GdkRectangle      *allocation,
-                                               GimpOperationTool *op_tool)
-{
-  GimpTool       *tool = GIMP_TOOL (op_tool);
-  GtkWidget      *shell;
-  GtkWidget      *options_sw;
-  GdkRectangle    workarea;
-  GtkRequisition  minimum;
-  gint            maximum_height;
-
-  shell      = GTK_WIDGET (gimp_display_get_shell (tool->display));
-  options_sw = g_weak_ref_get (&op_tool->options_sw_ref);
-
-  g_return_if_fail (options_sw != NULL);
-
-  gdk_screen_get_monitor_workarea (gtk_widget_get_screen (shell),
-                                   gimp_widget_get_monitor (shell), &workarea);
-
-  maximum_height = workarea.height / 2;
-
-  gtk_widget_size_request (options_box, &minimum);
-
-  if (minimum.height > maximum_height)
-    {
-      GtkWidget *scrollbar;
-
-      minimum.height = maximum_height;
-
-      scrollbar = gtk_scrolled_window_get_vscrollbar (
-        GTK_SCROLLED_WINDOW (options_sw));
-
-      if (scrollbar)
-        {
-          GtkRequisition req;
-
-          gtk_widget_size_request (scrollbar, &req);
-
-          minimum.width += req.width;
-        }
-    }
-
-  gtk_widget_set_size_request (options_sw, minimum.width, minimum.height);
-
-  g_object_unref (options_sw);
-}
-
-static void
 gimp_operation_tool_halt (GimpOperationTool *op_tool)
 {
   /*  don't reset op_tool->operation and op_tool->description so the
@@ -555,20 +495,15 @@ gimp_operation_tool_sync_op (GimpOperationTool *op_tool,
         }
       else if (sync_colors)
         {
+          GeglColor *color = NULL;
+
           if (HAS_KEY (pspec, "role", "color-primary"))
-            {
-              GimpRGB color;
-
-              gimp_context_get_foreground (GIMP_CONTEXT (options), &color);
-              g_object_set (filter_tool->config, pspec->name, &color, NULL);
-            }
+            color = gimp_context_get_foreground (GIMP_CONTEXT (options));
           else if (sync_colors && HAS_KEY (pspec, "role", "color-secondary"))
-            {
-              GimpRGB color;
+            color = gimp_context_get_background (GIMP_CONTEXT (options));
 
-              gimp_context_get_background (GIMP_CONTEXT (options), &color);
-              g_object_set (filter_tool->config, pspec->name, &color, NULL);
-            }
+          if (color != NULL)
+            g_object_set (filter_tool->config, pspec->name, color, NULL);
         }
     }
 
@@ -615,15 +550,20 @@ gimp_operation_tool_create_gui (GimpOperationTool *op_tool)
 
           g_return_if_fail (regex != NULL);
 
-          /* Translators: don't translate "Aux" */
-          label = g_regex_replace (regex,
-                                   input_pads[i], -1, 0,
-                                   _("Aux\\1 Input"),
-                                   0, NULL);
+          label = g_strdup (gegl_node_get_pad_label (filter_tool->operation, input_pads[i]));
+
+          if (label == NULL)
+            label = g_regex_replace (regex,
+                                     input_pads[i], -1, 0,
+                                     /* Translators: don't translate "Aux" */
+                                     _("Aux\\1 Input"),
+                                     0, NULL);
 
           input = gimp_operation_tool_aux_input_new (op_tool,
                                                      filter_tool->operation,
-                                                     input_pads[i], label);
+                                                     input_pads[i], label,
+                                                     gegl_node_get_pad_description (filter_tool->operation,
+                                                                                    input_pads[i]));
 
           op_tool->aux_inputs = g_list_prepend (op_tool->aux_inputs, input);
 
@@ -639,14 +579,20 @@ gimp_operation_tool_create_gui (GimpOperationTool *op_tool)
 static void
 gimp_operation_tool_add_gui (GimpOperationTool *op_tool)
 {
-  GtkSizeGroup *size_group  = NULL;
-  GtkWidget    *options_gui;
-  GtkWidget    *options_box;
-  GList        *list;
+  GtkSizeGroup   *size_group  = NULL;
+  GtkWidget      *options_gui;
+  GtkWidget      *options_box;
+  GtkWidget      *options_sw;
+  GtkWidget      *shell;
+  GdkRectangle    workarea;
+  GtkRequisition  minimum;
+  GList          *list;
+  gboolean        scrolling;
 
   options_gui = g_weak_ref_get (&op_tool->options_gui_ref);
   options_box = g_weak_ref_get (&op_tool->options_box_ref);
-  g_return_if_fail (options_gui && options_box);
+  options_sw  = g_weak_ref_get (&op_tool->options_sw_ref);
+  g_return_if_fail (options_gui && options_box && options_sw);
 
   for (list = op_tool->aux_inputs; list; list = g_list_next (list))
     {
@@ -672,8 +618,25 @@ gimp_operation_tool_add_gui (GimpOperationTool *op_tool)
   gtk_box_pack_start (GTK_BOX (options_box), options_gui, TRUE, TRUE, 0);
   gtk_widget_show (options_gui);
 
+  shell = GTK_WIDGET (gimp_display_get_shell (GIMP_TOOL (op_tool)->display));
+  gdk_monitor_get_workarea (gimp_widget_get_monitor (shell), &workarea);
+  gtk_widget_get_preferred_size (options_box, &minimum, NULL);
+
+  scrolling = minimum.height > workarea.height / 2;
+
+  gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (options_sw),
+                                  GTK_POLICY_NEVER,
+                                  scrolling ?
+                                  GTK_POLICY_AUTOMATIC : GTK_POLICY_NEVER);
+
+  if (scrolling)
+    gtk_widget_set_size_request (options_sw, -1, workarea.height / 2);
+  else
+    gtk_widget_set_size_request (options_sw, -1, -1);
+
   g_object_unref (options_gui);
   g_object_unref (options_box);
+  g_object_unref (options_sw);
 }
 
 
@@ -700,7 +663,8 @@ static AuxInput *
 gimp_operation_tool_aux_input_new (GimpOperationTool *op_tool,
                                    GeglNode          *operation,
                                    const gchar       *input_pad,
-                                   const gchar       *label)
+                                   const gchar       *label,
+                                   const gchar       *description)
 {
   AuxInput    *input = g_slice_new (AuxInput);
   GimpContext *context;
@@ -711,12 +675,14 @@ gimp_operation_tool_aux_input_new (GimpOperationTool *op_tool,
                                      "operation", "gegl:buffer-source",
                                      NULL);
 
-  gegl_node_connect_to (input->node, "output",
-                        operation,   input_pad);
+  gegl_node_connect (input->node, "output",
+                     operation,   input_pad);
 
   context = GIMP_CONTEXT (GIMP_TOOL_GET_OPTIONS (op_tool));
 
   input->box = gimp_buffer_source_box_new (context, input->node, label);
+  if (description)
+    gtk_widget_set_tooltip_text (input->box, description);
 
   /* make AuxInput owner of the box */
   g_object_ref_sink (input->box);
@@ -848,13 +814,14 @@ gimp_operation_tool_relink_chains (GimpOperationTool *op_tool)
 /*  public functions  */
 
 void
-gimp_operation_tool_set_operation (GimpOperationTool *op_tool,
-                                   const gchar       *operation,
-                                   const gchar       *title,
-                                   const gchar       *description,
-                                   const gchar       *undo_desc,
-                                   const gchar       *icon_name,
-                                   const gchar       *help_id)
+gimp_operation_tool_set_operation (GimpOperationTool  *op_tool,
+                                   GimpDrawableFilter *filter,
+                                   const gchar        *operation,
+                                   const gchar        *title,
+                                   const gchar        *description,
+                                   const gchar        *undo_desc,
+                                   const gchar        *icon_name,
+                                   const gchar        *help_id)
 {
   GimpTool       *tool;
   GimpFilterTool *filter_tool;
@@ -893,9 +860,15 @@ gimp_operation_tool_set_operation (GimpOperationTool *op_tool,
   if (! operation)
     return;
 
-  gimp_filter_tool_get_operation (filter_tool);
+  gimp_filter_tool_get_operation (filter_tool, filter);
 
-  if (tool->drawable)
+  /* Update filter name for GeglOperation tool presets */
+  if (filter_tool->filter && description)
+    g_object_set (filter_tool->filter,
+                  "name", description,
+                  NULL);
+
+  if (tool->drawables)
     gimp_operation_tool_sync_op (op_tool, TRUE);
 
   if (filter_tool->config && tool->display)

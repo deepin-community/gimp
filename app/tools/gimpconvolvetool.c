@@ -69,7 +69,9 @@ gimp_convolve_tool_register (GimpToolRegisterCallback  callback,
   (* callback) (GIMP_TYPE_CONVOLVE_TOOL,
                 GIMP_TYPE_CONVOLVE_OPTIONS,
                 gimp_convolve_options_gui,
-                GIMP_PAINT_OPTIONS_CONTEXT_MASK,
+                GIMP_PAINT_OPTIONS_CONTEXT_MASK |
+                GIMP_CONTEXT_PROP_MASK_PATTERN  |
+                GIMP_CONTEXT_PROP_MASK_EXPAND,
                 "gimp-convolve-tool",
                 _("Blur / Sharpen"),
                 _("Blur / Sharpen Tool: Selective blurring or unblurring using a brush"),
@@ -216,15 +218,13 @@ gimp_convolve_options_gui (GimpToolOptions *tool_options)
   frame = gimp_prop_enum_radio_frame_new (config, "type",
                                           str, 0, 0);
   gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
 
   g_free (str);
 
   /*  the rate scale  */
-  scale = gimp_prop_spin_scale_new (config, "rate", NULL,
+  scale = gimp_prop_spin_scale_new (config, "rate",
                                     1.0, 10.0, 1);
   gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   return vbox;
 }

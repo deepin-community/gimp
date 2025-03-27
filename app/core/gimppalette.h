@@ -32,11 +32,8 @@
 
 struct _GimpPaletteEntry
 {
-  GimpRGB  color;
-  gchar   *name;
-
-  /* EEK */
-  gint     position;
+  GeglColor *color;
+  gchar     *name;
 };
 
 
@@ -46,15 +43,30 @@ struct _GimpPalette
 {
   GimpData  parent_instance;
 
-  GList    *colors;
-  gint      n_colors;
+  /* When set to an image, we store the image we connect to, so that we
+   * can correctly disconnect if parent GimpData's image changes (so the
+   * GimpPalette and GimpData's images may be unsynced for a tiny span of
+   * time).
+   */
+  GimpImage  *image;
 
-  gint      n_columns;
+  /* Palette colors can be restricted to a given format. If NULL, then the
+   * palette can be a mix of color models and color spaces.
+   */
+  const Babl *format;
+
+  GList      *colors;
+  gint        n_colors;
+
+  gint        n_columns;
 };
 
 struct _GimpPaletteClass
 {
   GimpDataClass  parent_class;
+
+  void (* entry_changed) (GimpPalette *palette,
+                          gint         index);
 };
 
 
@@ -63,6 +75,11 @@ GType              gimp_palette_get_type        (void) G_GNUC_CONST;
 GimpData         * gimp_palette_new             (GimpContext      *context,
                                                  const gchar      *name);
 GimpData         * gimp_palette_get_standard    (GimpContext      *context);
+
+void               gimp_palette_restrict_format (GimpPalette      *palette,
+                                                 const Babl       *format,
+                                                 gboolean          push_undo_if_image);
+const Babl       * gimp_palette_get_restriction (GimpPalette      *palette);
 
 GList            * gimp_palette_get_colors      (GimpPalette      *palette);
 gint               gimp_palette_get_n_colors    (GimpPalette      *palette);
@@ -74,30 +91,42 @@ void               gimp_palette_move_entry      (GimpPalette      *palette,
 GimpPaletteEntry * gimp_palette_add_entry       (GimpPalette      *palette,
                                                  gint              position,
                                                  const gchar      *name,
-                                                 const GimpRGB    *color);
+                                                 GeglColor        *color);
 void               gimp_palette_delete_entry    (GimpPalette      *palette,
                                                  GimpPaletteEntry *entry);
 
 gboolean           gimp_palette_set_entry       (GimpPalette      *palette,
                                                  gint              position,
                                                  const gchar      *name,
-                                                 const GimpRGB    *color);
+                                                 GeglColor        *color);
 gboolean           gimp_palette_set_entry_color (GimpPalette      *palette,
                                                  gint              position,
-                                                 const GimpRGB    *color);
+                                                 GeglColor        *color,
+                                                 gboolean          push_undo_if_image);
 gboolean           gimp_palette_set_entry_name  (GimpPalette      *palette,
                                                  gint              position,
                                                  const gchar      *name);
 GimpPaletteEntry * gimp_palette_get_entry       (GimpPalette      *palette,
                                                  gint              position);
+gint               gimp_palette_get_entry_position (GimpPalette   *palette,
+                                                 GimpPaletteEntry *entry);
 
 void               gimp_palette_set_columns     (GimpPalette      *palette,
                                                  gint              columns);
 gint               gimp_palette_get_columns     (GimpPalette      *palette);
 
 GimpPaletteEntry * gimp_palette_find_entry      (GimpPalette      *palette,
-                                                 const GimpRGB    *color,
+                                                 GeglColor        *color,
                                                  GimpPaletteEntry *start_from);
+
+guchar           * gimp_palette_get_colormap    (GimpPalette      *palette,
+                                                 const Babl       *format,
+                                                 gint             *n_colors);
+void               gimp_palette_set_colormap    (GimpPalette      *palette,
+                                                 const Babl       *format,
+                                                 const guchar     *colormap,
+                                                 gint              n_colors,
+                                                 gboolean          push_undo_if_image);
 
 
 #endif /* __GIMP_PALETTE_H__ */

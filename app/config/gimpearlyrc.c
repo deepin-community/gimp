@@ -2,7 +2,7 @@
  * Copyright (C) 1995 Spencer Kimball and Peter Mattis
  *
  * GimpEarlyRc: pre-parsing of gimprc suitable for use during early
- * initialization, when the gimp singleton is not constructed yet.
+ * initialization, when the gimp singleton is not constructed yet
  *
  * Copyright (C) 2017  Jehan <jehan@gimp.org>
  *
@@ -106,7 +106,7 @@ gimp_early_rc_class_init (GimpEarlyRcClass *klass)
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_WIN32_POINTER_INPUT_API,
                          "win32-pointer-input-api", NULL, NULL,
                          GIMP_TYPE_WIN32_POINTER_INPUT_API,
-                         GIMP_WIN32_POINTER_INPUT_API_WINTAB,
+                         GIMP_WIN32_POINTER_INPUT_API_WINDOWS_INK,
                          GIMP_PARAM_STATIC_STRINGS |
                          GIMP_CONFIG_PARAM_RESTART);
 #endif
@@ -127,8 +127,8 @@ gimp_early_rc_constructed (GObject *object)
     g_print ("Parsing '%s' for configuration data required during early initialization.\n",
              gimp_file_get_utf8_name (rc->system_gimprc));
 
-  if (! gimp_config_deserialize_gfile (GIMP_CONFIG (rc),
-                                       rc->system_gimprc, NULL, &error))
+  if (! gimp_config_deserialize_file (GIMP_CONFIG (rc),
+                                      rc->system_gimprc, NULL, &error))
     {
       if (error->code != GIMP_CONFIG_ERROR_OPEN_ENOENT)
         g_message ("%s", error->message);
@@ -140,8 +140,8 @@ gimp_early_rc_constructed (GObject *object)
     g_print ("Parsing '%s' for configuration data required during early initialization.\n",
              gimp_file_get_utf8_name (rc->user_gimprc));
 
-  if (! gimp_config_deserialize_gfile (GIMP_CONFIG (rc),
-                                       rc->user_gimprc, NULL, &error))
+  if (! gimp_config_deserialize_file (GIMP_CONFIG (rc),
+                                      rc->user_gimprc, NULL, &error))
     {
       if (error->code != GIMP_CONFIG_ERROR_OPEN_ENOENT)
         g_message ("%s", error->message);
@@ -286,7 +286,7 @@ gimp_early_rc_get_property (GObject    *object,
  * @verbose:       enable console messages about loading the preferences
  *
  * Creates a new GimpEarlyRc object which looks for some configuration
- * data required in the early initialization steps
+ * data required during early initialization steps
  *
  * Returns: the new #GimpEarlyRc.
  */
@@ -317,7 +317,7 @@ gimp_early_rc_new (GFile    *system_gimprc,
  *
  * This function looks up the language set in `gimprc`.
  *
- * Return value: a newly allocated string representing the language or
+ * Returns: a newly allocated string representing the language or
  *               %NULL if the key couldn't be found.
  **/
 gchar *

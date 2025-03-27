@@ -242,7 +242,7 @@ d_paint_spiral (GfigObject *obj)
   if (obj->style.paint_type == PAINT_BRUSH_TYPE)
     {
       gfig_paint (selvals.brshtype,
-                  gfig_context->drawable_id,
+                  gfig_context->drawable,
                   i, line_pnts);
     }
 
@@ -308,9 +308,10 @@ d_spiral_start (GdkPoint *pnt,
 }
 
 void
-d_spiral_end (GdkPoint *pnt,
+d_spiral_end (GimpGfig *gfig,
+              GdkPoint *pnt,
               gboolean  shift_down)
 {
-  add_to_all_obj (gfig_context->current_obj, obj_creating);
+  add_to_all_obj (gfig, gfig_context->current_obj, obj_creating);
   obj_creating = NULL;
 }

@@ -655,7 +655,7 @@ gimp_prop_eval_string_impl (GObject      *config,
       g_set_error (error, GIMP_PROP_EVAL_ERROR, GIMP_PROP_EVAL_FAILED,
                    "invalid expression");
 
-      g_free (result);
+      g_clear_pointer (&result, g_free);
     }
 
   g_free (t);
@@ -729,6 +729,10 @@ gimp_prop_eval_string_selection (GObject      *config,
             {
               match  = TRUE;
               result = value;
+            }
+          else
+            {
+              g_free (value);
             }
 
           if (! g_strcmp0 (*t, ","))

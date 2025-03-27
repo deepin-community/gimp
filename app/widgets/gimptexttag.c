@@ -28,7 +28,6 @@
 #include "widgets-types.h"
 
 #include "gimptexttag.h"
-#include "gimpwidgets-utils.h"
 
 
 gint
@@ -82,41 +81,39 @@ gimp_text_tag_get_font (GtkTextTag *tag)
 }
 
 gboolean
-gimp_text_tag_get_fg_color (GtkTextTag *tag,
-                            GimpRGB    *color)
+gimp_text_tag_get_fg_color (GtkTextTag  *tag,
+                            GeglColor  **color)
 {
-  GdkColor *gdk_color;
+  GdkRGBA  *rgba = NULL;
   gboolean  set;
 
   g_object_get (tag,
                 "foreground-set",             &set,
-                GIMP_TEXT_PROP_NAME_FG_COLOR, &gdk_color,
+                GIMP_TEXT_PROP_NAME_FG_COLOR, &rgba,
                 NULL);
 
-  if (set)
-    gimp_rgb_set_gdk_color (color, gdk_color);
-
-  gdk_color_free (gdk_color);
+  *color = gegl_color_new (NULL);
+  gegl_color_set_pixel (*color, babl_format ("R'G'B'A double"), rgba);
+  gdk_rgba_free (rgba);
 
   return set;
 }
 
 gboolean
-gimp_text_tag_get_bg_color (GtkTextTag *tag,
-                            GimpRGB    *color)
+gimp_text_tag_get_bg_color (GtkTextTag  *tag,
+                            GeglColor  **color)
 {
-  GdkColor *gdk_color;
+  GdkRGBA  *rgba;
   gboolean  set;
 
   g_object_get (tag,
                 "background-set",             &set,
-                GIMP_TEXT_PROP_NAME_BG_COLOR, &gdk_color,
+                GIMP_TEXT_PROP_NAME_BG_COLOR, &rgba,
                 NULL);
 
-  if (set)
-    gimp_rgb_set_gdk_color (color, gdk_color);
-
-  gdk_color_free (gdk_color);
+  *color = gegl_color_new (NULL);
+  gegl_color_set_pixel (*color, babl_format ("R'G'B'A double"), rgba);
+  gdk_rgba_free (rgba);
 
   return set;
 }

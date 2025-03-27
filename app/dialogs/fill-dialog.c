@@ -46,8 +46,8 @@ typedef struct _FillDialog FillDialog;
 
 struct _FillDialog
 {
-  GimpItem         *item;
-  GimpDrawable     *drawable;
+  GList            *items;
+  GList            *drawables;
   GimpContext      *context;
   GimpFillOptions  *options;
   GimpFillCallback  callback;
@@ -66,8 +66,8 @@ static void  fill_dialog_response (GtkWidget  *dialog,
 /*  public function  */
 
 GtkWidget *
-fill_dialog_new (GimpItem         *item,
-                 GimpDrawable     *drawable,
+fill_dialog_new (GList            *items,
+                 GList            *drawables,
                  GimpContext      *context,
                  const gchar      *title,
                  const gchar      *icon_name,
@@ -82,8 +82,8 @@ fill_dialog_new (GimpItem         *item,
   GtkWidget  *main_vbox;
   GtkWidget  *fill_editor;
 
-  g_return_val_if_fail (GIMP_IS_ITEM (item), NULL);
-  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
+  g_return_val_if_fail (items, NULL);
+  g_return_val_if_fail (drawables, NULL);
   g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
   g_return_val_if_fail (GIMP_IS_FILL_OPTIONS (options), NULL);
   g_return_val_if_fail (icon_name != NULL, NULL);
@@ -93,8 +93,8 @@ fill_dialog_new (GimpItem         *item,
 
   private = g_slice_new0 (FillDialog);
 
-  private->item      = item;
-  private->drawable  = drawable;
+  private->items     = g_list_copy (items);
+  private->drawables = g_list_copy (drawables);
   private->context   = context;
   private->options   = gimp_fill_options_new (context->gimp, context, TRUE);
   private->callback  = callback;
@@ -103,7 +103,7 @@ fill_dialog_new (GimpItem         *item,
   gimp_config_sync (G_OBJECT (options),
                     G_OBJECT (private->options), 0);
 
-  dialog = gimp_viewable_dialog_new (GIMP_VIEWABLE (item), context,
+  dialog = gimp_viewable_dialog_new (g_list_copy (items), context,
                                      title, "gimp-fill-options",
                                      icon_name,
                                      _("Choose Fill Style"),
@@ -117,7 +117,7 @@ fill_dialog_new (GimpItem         *item,
 
                                      NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            RESPONSE_RESET,
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
@@ -138,7 +138,7 @@ fill_dialog_new (GimpItem         *item,
                       main_vbox, TRUE, TRUE, 0);
   gtk_widget_show (main_vbox);
 
-  fill_editor = gimp_fill_editor_new (private->options, FALSE);
+  fill_editor = gimp_fill_editor_new (private->options, FALSE, FALSE);
   gtk_box_pack_start (GTK_BOX (main_vbox), fill_editor, FALSE, FALSE, 0);
   gtk_widget_show (fill_editor);
 
@@ -152,6 +152,8 @@ static void
 fill_dialog_free (FillDialog *private)
 {
   g_object_unref (private->options);
+  g_list_free (private->drawables);
+  g_list_free (private->items);
 
   g_slice_free (FillDialog, private);
 }
@@ -169,8 +171,8 @@ fill_dialog_response (GtkWidget  *dialog,
 
     case GTK_RESPONSE_OK:
       private->callback (dialog,
-                         private->item,
-                         private->drawable,
+                         private->items,
+                         private->drawables,
                          private->context,
                          private->options,
                          private->user_data);

@@ -29,6 +29,7 @@
 
 #include "../operations-types.h"
 
+#include "gimpcolor-legacy.h"
 #include "gimpoperationhsvvaluelegacy.h"
 
 
@@ -84,9 +85,9 @@ gimp_operation_hsv_value_legacy_process (GeglOperation       *op,
 
   while (samples--)
     {
-      GimpHSV layer_hsv, out_hsv;
-      GimpRGB layer_rgb = {layer[0], layer[1], layer[2]};
-      GimpRGB out_rgb   = {in[0], in[1], in[2]};
+      gdouble layer_hsv[4], out_hsv[4];
+      gdouble layer_rgb[4] = {layer[0], layer[1], layer[2], 1.0};
+      gdouble out_rgb[4]   = {in[0], in[1], in[2], 1.0};
       gfloat  comp_alpha, new_alpha;
 
       comp_alpha = MIN (in[ALPHA], layer[ALPHA]) * opacity;
@@ -98,32 +99,23 @@ gimp_operation_hsv_value_legacy_process (GeglOperation       *op,
       if (comp_alpha && new_alpha)
         {
           gint   b;
-          gfloat out_tmp[3];
           gfloat ratio = comp_alpha / new_alpha;
 
-          gimp_rgb_to_hsv (&layer_rgb, &layer_hsv);
-          gimp_rgb_to_hsv (&out_rgb, &out_hsv);
+          gimp_rgb_to_hsv_legacy (layer_rgb, layer_hsv);
+          gimp_rgb_to_hsv_legacy (out_rgb, out_hsv);
 
-          out_hsv.v = layer_hsv.v;
-          gimp_hsv_to_rgb (&out_hsv, &out_rgb);
-
-          out_tmp[0] = out_rgb.r;
-          out_tmp[1] = out_rgb.g;
-          out_tmp[2] = out_rgb.b;
+          out_hsv[2] = layer_hsv[2];
+          gimp_hsv_to_rgb_legacy (out_hsv, out_rgb);
 
           for (b = RED; b < ALPHA; b++)
-            {
-              out[b] = out_tmp[b] * ratio + in[b] * (1.0f - ratio);
-            }
+            out[b] = out_rgb[b] * ratio + in[b] * (1.0f - ratio);
         }
       else
         {
           gint b;
 
           for (b = RED; b < ALPHA; b++)
-            {
-              out[b] = in[b];
-            }
+            out[b] = in[b];
         }
 
       out[ALPHA] = in[ALPHA];

@@ -26,6 +26,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
 #include "libgimpmath/gimpmath.h"
 #include "libgimpconfig/gimpconfig.h"
@@ -35,21 +36,19 @@
 #include "gimp-memsize.h"
 #include "gimpcontainer.h"
 #include "gimpcontext.h"
-#include "gimpmarshal.h"
 #include "gimptempbuf.h"
 #include "gimpviewable.h"
-
-#include "icons/Color/gimp-core-pixbufs.c"
 
 
 enum
 {
   PROP_0,
-  PROP_STOCK_ID, /* compat */
   PROP_ICON_NAME,
   PROP_ICON_PIXBUF,
-  PROP_FROZEN
+  PROP_FROZEN,
+  N_PROPS
 };
+static GParamSpec *obj_props[N_PROPS] = { NULL, };
 
 enum
 {
@@ -153,8 +152,7 @@ gimp_viewable_class_init (GimpViewableClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpViewableClass, invalidate_preview),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   viewable_signals[SIZE_CHANGED] =
@@ -162,8 +160,7 @@ gimp_viewable_class_init (GimpViewableClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpViewableClass, size_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   viewable_signals[EXPANDED_CHANGED] =
@@ -171,8 +168,7 @@ gimp_viewable_class_init (GimpViewableClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpViewableClass, expanded_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   viewable_signals[ANCESTRY_CHANGED] =
@@ -180,8 +176,7 @@ gimp_viewable_class_init (GimpViewableClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpViewableClass, ancestry_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->finalize         = gimp_viewable_finalize;
@@ -190,7 +185,7 @@ gimp_viewable_class_init (GimpViewableClass *klass)
 
   gimp_object_class->get_memsize = gimp_viewable_get_memsize;
 
-  klass->default_icon_name       = "gimp-question";
+  klass->default_icon_name       = "gimp-image";
   klass->name_changed_signal     = "name-changed";
   klass->name_editable           = FALSE;
 
@@ -214,29 +209,22 @@ gimp_viewable_class_init (GimpViewableClass *klass)
   klass->set_expanded            = NULL;
   klass->get_expanded            = NULL;
 
-  /* compat property */
-  GIMP_CONFIG_PROP_STRING (object_class, PROP_STOCK_ID, "stock-id",
-                           NULL, NULL,
+  obj_props[PROP_ICON_NAME] =
+      g_param_spec_string ("icon-name", NULL, NULL,
                            NULL,
-                           GIMP_PARAM_STATIC_STRINGS);
+                           GIMP_CONFIG_PARAM_FLAGS);
 
-  GIMP_CONFIG_PROP_STRING (object_class, PROP_ICON_NAME, "icon-name",
-                           NULL, NULL,
-                           NULL,
-                           GIMP_PARAM_STATIC_STRINGS);
-
-  GIMP_CONFIG_PROP_OBJECT (object_class, PROP_ICON_PIXBUF,
-                           "icon-pixbuf",
-                           NULL, NULL,
+  obj_props[PROP_ICON_PIXBUF] =
+      g_param_spec_object ("icon-pixbuf", NULL, NULL,
                            GDK_TYPE_PIXBUF,
-                           G_PARAM_CONSTRUCT |
-                           GIMP_PARAM_STATIC_STRINGS);
+                           GIMP_CONFIG_PARAM_FLAGS);
 
-  g_object_class_install_property (object_class, PROP_FROZEN,
-                                   g_param_spec_boolean ("frozen",
-                                                         NULL, NULL,
-                                                         FALSE,
-                                                         GIMP_PARAM_READABLE));
+  obj_props[PROP_FROZEN] =
+      g_param_spec_boolean ("frozen", NULL, NULL,
+                            FALSE,
+                            GIMP_PARAM_READABLE);
+
+  g_object_class_install_properties (object_class, N_PROPS, obj_props);
 }
 
 static void
@@ -275,9 +263,6 @@ gimp_viewable_set_property (GObject      *object,
 
   switch (property_id)
     {
-    case PROP_STOCK_ID:
-      if (! g_value_get_string (value))
-        break;
     case PROP_ICON_NAME:
       gimp_viewable_set_icon_name (viewable, g_value_get_string (value));
       break;
@@ -307,7 +292,6 @@ gimp_viewable_get_property (GObject    *object,
 
   switch (property_id)
     {
-    case PROP_STOCK_ID:
     case PROP_ICON_NAME:
       g_value_set_string (value, gimp_viewable_get_icon_name (viewable));
       break;
@@ -471,9 +455,6 @@ gimp_viewable_serialize_property (GimpConfig       *config,
 
   switch (property_id)
     {
-    case PROP_STOCK_ID:
-      return TRUE;
-
     case PROP_ICON_NAME:
       if (private->icon_name)
         {
@@ -582,11 +563,10 @@ gimp_viewable_deserialize_property (GimpConfig *config,
 void
 gimp_viewable_invalidate_preview (GimpViewable *viewable)
 {
-  GimpViewablePrivate *private;
+  GimpViewablePrivate *private = GET_PRIVATE (viewable);
 
   g_return_if_fail (GIMP_IS_VIEWABLE (viewable));
 
-  private = GET_PRIVATE (viewable);
 
   if (private->freeze_count == 0)
     g_signal_emit (viewable, viewable_signals[INVALIDATE_PREVIEW], 0);
@@ -605,11 +585,9 @@ gimp_viewable_invalidate_preview (GimpViewable *viewable)
 void
 gimp_viewable_size_changed (GimpViewable *viewable)
 {
-  GimpViewablePrivate *private;
+  GimpViewablePrivate *private = GET_PRIVATE (viewable);
 
   g_return_if_fail (GIMP_IS_VIEWABLE (viewable));
-
-  private = GET_PRIVATE (viewable);
 
   if (private->freeze_count == 0)
     g_signal_emit (viewable, viewable_signals[SIZE_CHANGED], 0);
@@ -639,12 +617,12 @@ gimp_viewable_expanded_changed (GimpViewable *viewable)
  * @aspect_height:  unscaled height of the preview for an item.
  * @width:          maximum available width for scaled preview.
  * @height:         maximum available height for scaled preview.
- * @dot_for_dot:    if #TRUE, ignore any differences in axis resolution.
+ * @dot_for_dot:    if %TRUE, ignore any differences in axis resolution.
  * @xresolution:    resolution in the horizontal direction.
  * @yresolution:    resolution in the vertical direction.
  * @return_width:   place to return the calculated preview width.
  * @return_height:  place to return the calculated preview height.
- * @scaling_up:     returns #TRUE here if the calculated preview size
+ * @scaling_up:     returns %TRUE here if the calculated preview size
  *                  is larger than the viewable itself.
  *
  * A utility function, for calculating the dimensions of a preview
@@ -655,7 +633,7 @@ gimp_viewable_expanded_changed (GimpViewable *viewable)
  * preview is scaled to be as large as possible without exceeding
  * these constraints.
  *
- * If @dot_for_dot is #TRUE, and @xresolution and @yresolution are
+ * If @dot_for_dot is %TRUE, and @xresolution and @yresolution are
  * different, then these results are corrected for the difference in
  * resolution on the two axes, so that the requested aspect ratio
  * applies to the appearance of the display rather than to pixel
@@ -729,9 +707,9 @@ gimp_viewable_get_size (GimpViewable  *viewable,
  * @viewable:    the object for which to calculate the preview size.
  * @size:        requested size for preview.
  * @popup:       %TRUE if the preview is intended for a popup window.
- * @dot_for_dot: If #TRUE, ignore any differences in X and Y resolution.
- * @width:       return location for the the calculated width.
- * @height:      return location for the calculated height.
+ * @dot_for_dot: If %TRUE, ignore any differences in X and Y resolution.
+ * @width: (out) (optional):  return location for the the calculated width.
+ * @height: (out) (optional): return location for the calculated height.
  *
  * Retrieve the size of a viewable's preview.  By default, this
  * simply returns the value of the @size argument for both the @width
@@ -769,9 +747,11 @@ gimp_viewable_get_preview_size (GimpViewable *viewable,
  * @viewable:     the object for which to calculate the popup size.
  * @width:        the width of the preview from which the popup will be shown.
  * @height:       the height of the preview from which the popup will be shown.
- * @dot_for_dot:  If #TRUE, ignore any differences in X and Y resolution.
- * @popup_width:  return location for the calculated popup width.
- * @popup_height: return location for the calculated popup height.
+ * @dot_for_dot:  If %TRUE, ignore any differences in X and Y resolution.
+ * @popup_width: (out) (optional): return location for the calculated popup
+ *                                  width.
+ * @popup_height: (out) (optional): return location for the calculated popup
+ *                                  height.
  *
  * Calculate the size of a viewable's preview, for use in making a
  * popup. The arguments @width and @height specify the size of the
@@ -851,14 +831,14 @@ gimp_viewable_get_popup_size (GimpViewable *viewable,
  * Gets a preview for a viewable object, by running through a variety
  * of methods until it finds one that works.  First, if an
  * implementation exists of a "get_preview" method, it is tried, and
- * the result is returned if it is not #NULL.  Second, the function
+ * the result is returned if it is not %NULL.  Second, the function
  * checks to see whether there is a cached preview with the correct
  * dimensions; if so, it is returned.  If neither of these works, then
  * the function looks for an implementation of the "get_new_preview"
  * method, and executes it, caching the result.  If everything fails,
- * #NULL is returned.
+ * %NULL is returned.
  *
- * Returns: A #GimpTempBuf containing the preview image, or #NULL if
+ * Returns: (nullable): A #GimpTempBuf containing the preview image, or %NULL if
  *          none can be found or created.
  **/
 GimpTempBuf *
@@ -867,7 +847,7 @@ gimp_viewable_get_preview (GimpViewable *viewable,
                            gint          width,
                            gint          height)
 {
-  GimpViewablePrivate *private;
+  GimpViewablePrivate *private = GET_PRIVATE (viewable);
   GimpViewableClass   *viewable_class;
   GimpTempBuf         *temp_buf = NULL;
 
@@ -875,8 +855,6 @@ gimp_viewable_get_preview (GimpViewable *viewable,
   g_return_val_if_fail (context == NULL || GIMP_IS_CONTEXT (context), NULL);
   g_return_val_if_fail (width  > 0, NULL);
   g_return_val_if_fail (height > 0, NULL);
-
-  private = GET_PRIVATE (viewable);
 
   if (G_UNLIKELY (context == NULL))
     g_warning ("%s: context is NULL", G_STRFUNC);
@@ -921,7 +899,7 @@ gimp_viewable_get_preview (GimpViewable *viewable,
  * then if that fails for a "get_preview" method.  This function does
  * not look for a cached preview.
  *
- * Returns: A #GimpTempBuf containing the preview image, or #NULL if
+ * Returns: (nullable): A #GimpTempBuf containing the preview image, or %NULL if
  *          none can be found or created.
  **/
 GimpTempBuf *
@@ -1008,15 +986,15 @@ gimp_viewable_get_dummy_preview (GimpViewable *viewable,
  * Gets a preview for a viewable object, by running through a variety
  * of methods until it finds one that works.  First, if an
  * implementation exists of a "get_pixbuf" method, it is tried, and
- * the result is returned if it is not #NULL.  Second, the function
+ * the result is returned if it is not %NULL.  Second, the function
  * checks to see whether there is a cached preview with the correct
  * dimensions; if so, it is returned.  If neither of these works, then
  * the function looks for an implementation of the "get_new_pixbuf"
  * method, and executes it, caching the result.  If everything fails,
- * #NULL is returned.
+ * %NULL is returned.
  *
- * Returns: A #GdkPixbuf containing the preview pixbuf, or #NULL if none can
- *          be found or created.
+ * Returns: (nullable): A #GdkPixbuf containing the preview pixbuf,
+ *          or %NULL if none can be found or created.
  **/
 GdkPixbuf *
 gimp_viewable_get_pixbuf (GimpViewable *viewable,
@@ -1024,7 +1002,7 @@ gimp_viewable_get_pixbuf (GimpViewable *viewable,
                           gint          width,
                           gint          height)
 {
-  GimpViewablePrivate *private;
+  GimpViewablePrivate *private = GET_PRIVATE (viewable);
   GimpViewableClass   *viewable_class;
   GdkPixbuf           *pixbuf = NULL;
 
@@ -1032,8 +1010,6 @@ gimp_viewable_get_pixbuf (GimpViewable *viewable,
   g_return_val_if_fail (context == NULL || GIMP_IS_CONTEXT (context), NULL);
   g_return_val_if_fail (width  > 0, NULL);
   g_return_val_if_fail (height > 0, NULL);
-
-  private = GET_PRIVATE (viewable);
 
   if (G_UNLIKELY (context == NULL))
     g_warning ("%s: context is NULL", G_STRFUNC);
@@ -1078,8 +1054,8 @@ gimp_viewable_get_pixbuf (GimpViewable *viewable,
  * then if that fails for a "get_pixbuf" method.  This function does
  * not look for a cached pixbuf.
  *
- * Returns: A #GdkPixbuf containing the preview, or #NULL if none can
- *          be created.
+ * Returns: (nullable): A #GdkPixbuf containing the preview,
+ *          or %NULL if none can be created.
  **/
 GdkPixbuf *
 gimp_viewable_get_new_pixbuf (GimpViewable *viewable,
@@ -1148,7 +1124,7 @@ gimp_viewable_get_dummy_pixbuf (GimpViewable  *viewable,
   g_return_val_if_fail (width  > 0, NULL);
   g_return_val_if_fail (height > 0, NULL);
 
-  icon = gdk_pixbuf_new_from_resource ("/org/gimp/icons/64/gimp-question.png",
+  icon = gdk_pixbuf_new_from_resource ("/org/gimp/icons/64/dialog-question.png",
                                        &error);
   if (! icon)
     {
@@ -1183,7 +1159,8 @@ gimp_viewable_get_dummy_pixbuf (GimpViewable  *viewable,
 /**
  * gimp_viewable_get_description:
  * @viewable: viewable object for which to retrieve a description.
- * @tooltip:  return location for an optional tooltip string.
+ * @tooltip: (out) (optional) (nullable): return location for an optional
+ *                                        tooltip string.
  *
  * Retrieves a string containing a description of the viewable object,
  * By default, it simply returns the name of the object, but this can
@@ -1232,11 +1209,9 @@ gimp_viewable_is_name_editable (GimpViewable *viewable)
 const gchar *
 gimp_viewable_get_icon_name (GimpViewable *viewable)
 {
-  GimpViewablePrivate *private;
+  GimpViewablePrivate *private = GET_PRIVATE (viewable);
 
   g_return_val_if_fail (GIMP_IS_VIEWABLE (viewable), NULL);
-
-  private = GET_PRIVATE (viewable);
 
   if (private->icon_name)
     return (const gchar *) private->icon_name;
@@ -1249,20 +1224,18 @@ gimp_viewable_get_icon_name (GimpViewable *viewable)
  * @viewable: viewable object to assign the specified icon name.
  * @icon_name: string containing an icon name identifier.
  *
- * Seta the object's icon name, for use in constructing iconic smbols
- * of the object.  The contents of @icon_name are copied, so you can
+ * Set the object's icon name, for use in constructing iconic symbols
+ * of the object. The contents of @icon_name are copied, so you can
  * free it when you are done with it.
  **/
 void
 gimp_viewable_set_icon_name (GimpViewable *viewable,
                              const gchar  *icon_name)
 {
-  GimpViewablePrivate *private;
+  GimpViewablePrivate *private = GET_PRIVATE (viewable);
   GimpViewableClass   *viewable_class;
 
   g_return_if_fail (GIMP_IS_VIEWABLE (viewable));
-
-  private = GET_PRIVATE (viewable);
 
   g_clear_pointer (&private->icon_name, g_free);
 
@@ -1277,17 +1250,15 @@ gimp_viewable_set_icon_name (GimpViewable *viewable,
 
   gimp_viewable_invalidate_preview (viewable);
 
-  g_object_notify (G_OBJECT (viewable), "icon-name");
+  g_object_notify_by_pspec (G_OBJECT (viewable), obj_props[PROP_ICON_NAME]);
 }
 
 void
 gimp_viewable_preview_freeze (GimpViewable *viewable)
 {
-  GimpViewablePrivate *private;
+  GimpViewablePrivate *private = GET_PRIVATE (viewable);
 
   g_return_if_fail (GIMP_IS_VIEWABLE (viewable));
-
-  private = GET_PRIVATE (viewable);
 
   private->freeze_count++;
 
@@ -1296,19 +1267,16 @@ gimp_viewable_preview_freeze (GimpViewable *viewable)
       if (GIMP_VIEWABLE_GET_CLASS (viewable)->preview_freeze)
         GIMP_VIEWABLE_GET_CLASS (viewable)->preview_freeze (viewable);
 
-      g_object_notify (G_OBJECT (viewable), "frozen");
+      g_object_notify_by_pspec (G_OBJECT (viewable), obj_props[PROP_FROZEN]);
     }
 }
 
 void
 gimp_viewable_preview_thaw (GimpViewable *viewable)
 {
-  GimpViewablePrivate *private;
+  GimpViewablePrivate *private = GET_PRIVATE (viewable);
 
   g_return_if_fail (GIMP_IS_VIEWABLE (viewable));
-
-  private = GET_PRIVATE (viewable);
-
   g_return_if_fail (private->freeze_count > 0);
 
   private->freeze_count--;
@@ -1329,7 +1297,7 @@ gimp_viewable_preview_thaw (GimpViewable *viewable)
           gimp_viewable_invalidate_preview (viewable);
         }
 
-      g_object_notify (G_OBJECT (viewable), "frozen");
+      g_object_notify_by_pspec (G_OBJECT (viewable), obj_props[PROP_FROZEN]);
 
       if (GIMP_VIEWABLE_GET_CLASS (viewable)->preview_thaw)
         GIMP_VIEWABLE_GET_CLASS (viewable)->preview_thaw (viewable);
@@ -1356,12 +1324,10 @@ void
 gimp_viewable_set_parent (GimpViewable *viewable,
                           GimpViewable *parent)
 {
-  GimpViewablePrivate *private;
+  GimpViewablePrivate *private = GET_PRIVATE (viewable);
 
   g_return_if_fail (GIMP_IS_VIEWABLE (viewable));
   g_return_if_fail (parent == NULL || GIMP_IS_VIEWABLE (parent));
-
-  private = GET_PRIVATE (viewable);
 
   if (parent != private->parent)
     {

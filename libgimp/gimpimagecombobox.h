@@ -30,20 +30,22 @@ G_BEGIN_DECLS
 
 /* For information look into the C source or the html documentation */
 
+/**
+ * GimpImageConstraintFunc:
+ * @image:
+ * @data: (closure):
+ */
+typedef gboolean (* GimpImageConstraintFunc) (GimpImage *image,
+                                              gpointer   data);
+
 
 #define GIMP_TYPE_IMAGE_COMBO_BOX       (gimp_image_combo_box_get_type ())
-#define GIMP_IMAGE_COMBO_BOX(obj)       (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_IMAGE_COMBO_BOX, GimpImageComboBox))
-#define GIMP_IS_IMAGE_COMBO_BOX(obj)    (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_IMAGE_COMBO_BOX)
+G_DECLARE_FINAL_TYPE (GimpImageComboBox, gimp_image_combo_box, GIMP, IMAGE_COMBO_BOX, GimpIntComboBox)
 
-
-typedef gboolean (* GimpImageConstraintFunc) (gint32   image_id,
-                                              gpointer data);
-
-
-GType       gimp_image_combo_box_get_type (void) G_GNUC_CONST;
 
 GtkWidget * gimp_image_combo_box_new (GimpImageConstraintFunc  constraint,
-                                      gpointer                 data);
+                                      gpointer                 data,
+                                      GDestroyNotify           data_destroy);
 
 
 G_END_DECLS

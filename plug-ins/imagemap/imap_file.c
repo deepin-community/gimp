@@ -49,7 +49,7 @@ open_cb (GtkWidget *dialog,
           return;
         }
 
-      load (filename);
+      load (filename, data);
       g_free (filename);
     }
 
@@ -57,7 +57,9 @@ open_cb (GtkWidget *dialog,
 }
 
 void
-do_file_open_dialog (void)
+do_file_open_dialog (GSimpleAction *action,
+                     GVariant      *parameter,
+                     gpointer       user_data)
 {
   static GtkWidget *dialog;
 
@@ -74,7 +76,7 @@ do_file_open_dialog (void)
                                      NULL);
 
       gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                                GTK_RESPONSE_OK,
                                                GTK_RESPONSE_CANCEL,
                                                -1);
@@ -84,7 +86,7 @@ do_file_open_dialog (void)
                         &dialog);
       g_signal_connect (dialog, "response",
                         G_CALLBACK (open_cb),
-                        dialog);
+                        user_data);
     }
 
   gtk_window_present (GTK_WINDOW (dialog));
@@ -109,7 +111,9 @@ save_cb (GtkWidget *dialog,
 }
 
 void
-do_file_save_as_dialog (void)
+do_file_save_as_dialog (GSimpleAction *action,
+                        GVariant      *parameter,
+                        gpointer       user_data)
 {
   static GtkWidget *dialog;
 
@@ -127,7 +131,7 @@ do_file_save_as_dialog (void)
                                             NULL);
 
       gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                                GTK_RESPONSE_OK,
                                                GTK_RESPONSE_CANCEL,
                                                -1);

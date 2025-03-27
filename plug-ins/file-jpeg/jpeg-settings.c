@@ -61,21 +61,21 @@
 /**
  * jpeg_detect_original_settings:
  * @cinfo: a pointer to a JPEG decompressor info.
- * @image_ID: the image to which the parasite should be attached.
+ * @image: the image to which the parasite should be attached.
  *
  * Analyze the image being decompressed (@cinfo) and extract the
  * sampling factors, quantization tables and overall image quality.
- * Store this information in a parasite and attach it to @image_ID.
+ * Store this information in a parasite and attach it to @image.
  *
  * This function must be called after jpeg_read_header() so that
  * @cinfo contains the quantization tables and the sampling factors
  * for each component.
  *
- * Return Value: TRUE if a parasite has been attached to @image_ID.
+ * Returns: TRUE if a parasite has been attached to @image.
  */
 gboolean
 jpeg_detect_original_settings (struct jpeg_decompress_struct *cinfo,
-                               gint32                         image_ID)
+                               GimpImage                     *image)
 {
   guint         parasite_size;
   guchar       *parasite_data;
@@ -132,8 +132,9 @@ jpeg_detect_original_settings (struct jpeg_decompress_struct *cinfo,
                                 parasite_size,
                                 parasite_data);
   g_free (parasite_data);
-  gimp_image_attach_parasite (image_ID, parasite);
+  gimp_image_attach_parasite (image, parasite);
   gimp_parasite_free (parasite);
+
   return TRUE;
 }
 
@@ -143,35 +144,35 @@ jpeg_detect_original_settings (struct jpeg_decompress_struct *cinfo,
  * GIMP color space of the drawable to be saved.  If one of them is
  * grayscale and the other isn't, then the quality setting may be used
  * but the subsampling parameters and quantization tables should be
- * ignored.  The drawable_ID needs to be passed around because the
+ * ignored.  The drawable needs to be passed around because the
  * color space of the drawable may be different from that of the image
  * (e.g., when saving a mask or channel).
  */
 
 /**
  * jpeg_restore_original_settings:
- * @image_ID: the image that may contain original jpeg settings in a parasite.
+ * @image: the image that may contain original jpeg settings in a parasite.
  * @quality: where to store the original jpeg quality.
  * @subsmp: where to store the original subsampling type.
  * @num_quant_tables: where to store the number of quantization tables found.
  *
  * Retrieve the original JPEG settings (quality, type of subsampling
  * and number of quantization tables) from the parasite attached to
- * @image_ID.  If the number of quantization tables is greater than
+ * @image.  If the number of quantization tables is greater than
  * zero, then these tables can be retrieved from the parasite by
  * calling jpeg_restore_original_tables().
  *
- * Return Value: TRUE if a valid parasite was attached to the image
+ * Returns: TRUE if a valid parasite was attached to the image
  */
 gboolean
-jpeg_restore_original_settings (gint32           image_ID,
+jpeg_restore_original_settings (GimpImage       *image,
                                 gint            *quality,
                                 JpegSubsampling *subsmp,
                                 gint            *num_quant_tables)
 {
   GimpParasite *parasite;
   const guchar *src;
-  glong         src_size;
+  guint32       src_size;
   gint          color_space;
   gint          q;
   gint          num_components;
@@ -183,11 +184,10 @@ jpeg_restore_original_settings (gint32           image_ID,
   g_return_val_if_fail (subsmp != NULL, FALSE);
   g_return_val_if_fail (num_quant_tables != NULL, FALSE);
 
-  parasite = gimp_image_get_parasite (image_ID, "jpeg-settings");
+  parasite = gimp_image_get_parasite (image, "jpeg-settings");
   if (parasite)
     {
-      src = gimp_parasite_data (parasite);
-      src_size = gimp_parasite_data_size (parasite);
+      src = gimp_parasite_get_data (parasite, &src_size);
       if (src_size >= 4)
         {
           color_space      = *src++;
@@ -207,7 +207,7 @@ jpeg_restore_original_settings (gint32           image_ID,
                 *num_quant_tables = -1;
 
               /* the current plug-in can only use subsampling for YCbCr (3) */
-              *subsmp = -1;
+              *subsmp = JPEG_SUBSAMPLING_1x1_1x1_1x1;
               if (num_components == 3)
                 {
                   h[0] = *src++;
@@ -239,7 +239,7 @@ jpeg_restore_original_settings (gint32           image_ID,
     }
 
   *quality = -1;
-  *subsmp = -1;
+  *subsmp = JPEG_SUBSAMPLING_1x1_1x1_1x1;
   *num_quant_tables = 0;
 
   return FALSE;
@@ -248,11 +248,11 @@ jpeg_restore_original_settings (gint32           image_ID,
 
 /**
  * jpeg_restore_original_tables:
- * @image_ID: the image that may contain original jpeg settings in a parasite.
+ * @image: the image that may contain original jpeg settings in a parasite.
  * @num_quant_tables: the number of quantization tables to restore.
  *
  * Retrieve the original quantization tables from the parasite
- * attached to @image_ID.  Each table is an array of coefficients that
+ * attached to @image.  Each table is an array of coefficients that
  * can be associated with a component of a JPEG image when saving it.
  *
  * An array of newly allocated tables is returned if @num_quant_tables
@@ -264,28 +264,27 @@ jpeg_restore_original_settings (gint32           image_ID,
  * no parasite exists or if it cannot be used, this function returns
  * NULL.
  *
- * Return Value: an array of quantization tables, or NULL.
+ * Returns: (nullable): an array of quantization tables, or NULL.
  */
 guint **
-jpeg_restore_original_tables (gint32    image_ID,
-                              gint      num_quant_tables)
+jpeg_restore_original_tables (GimpImage *image,
+                              gint       num_quant_tables)
 {
   GimpParasite *parasite;
   const guchar *src;
-  glong         src_size;
+  guint32       src_size;
   gint          num_components;
   gint          num_tables;
   guint       **quant_tables;
   gint          t;
   gint          i;
 
-  parasite = gimp_image_get_parasite (image_ID, "jpeg-settings");
+  parasite = gimp_image_get_parasite (image, "jpeg-settings");
   if (parasite)
     {
-      src_size = gimp_parasite_data_size (parasite);
+      src = gimp_parasite_get_data (parasite, &src_size);
       if (src_size >= 4)
         {
-          src = gimp_parasite_data (parasite);
           num_components = src[2];
           num_tables     = src[3];
 
@@ -319,7 +318,7 @@ jpeg_restore_original_tables (gint32    image_ID,
 
 /**
  * jpeg_swap_original_settings:
- * @image_ID: the image that may contain original jpeg settings in a parasite.
+ * @image: the image that may contain original jpeg settings in a parasite.
  *
  * Swap the horizontal and vertical axis for the saved subsampling
  * parameters and quantization tables.  This should be done if the
@@ -327,11 +326,11 @@ jpeg_restore_original_tables (gint32    image_ID,
  * mirrored along its diagonal.
  */
 void
-jpeg_swap_original_settings (gint32 image_ID)
+jpeg_swap_original_settings (GimpImage *image)
 {
   GimpParasite *parasite;
   const guchar *src;
-  glong         src_size;
+  guint32       src_size;
   gint          num_components;
   gint          num_tables;
   guchar       *new_data;
@@ -340,13 +339,12 @@ jpeg_swap_original_settings (gint32 image_ID)
   gint          i;
   gint          j;
 
-  parasite = gimp_image_get_parasite (image_ID, "jpeg-settings");
+  parasite = gimp_image_get_parasite (image, "jpeg-settings");
   if (parasite)
     {
-      src_size = gimp_parasite_data_size (parasite);
+      src = gimp_parasite_get_data (parasite, &src_size);
       if (src_size >= 4)
         {
-          src = gimp_parasite_data (parasite);
           num_components = src[2];
           num_tables     = src[3];
 
@@ -389,7 +387,7 @@ jpeg_swap_original_settings (gint32 image_ID)
                                             src_size,
                                             new_data);
               g_free (new_data);
-              gimp_image_attach_parasite (image_ID, parasite);
+              gimp_image_attach_parasite (image, parasite);
             }
         }
       gimp_parasite_free (parasite);

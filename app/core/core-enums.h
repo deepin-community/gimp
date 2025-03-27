@@ -42,12 +42,9 @@ GType gimp_align_reference_type_get_type (void) G_GNUC_CONST;
 
 typedef enum  /*< pdb-skip >*/
 {
-  GIMP_ALIGN_REFERENCE_FIRST,          /*< desc="First item"     >*/
-  GIMP_ALIGN_REFERENCE_IMAGE,          /*< desc="Image"          >*/
-  GIMP_ALIGN_REFERENCE_SELECTION,      /*< desc="Selection"      >*/
-  GIMP_ALIGN_REFERENCE_ACTIVE_LAYER,   /*< desc="Active layer"   >*/
-  GIMP_ALIGN_REFERENCE_ACTIVE_CHANNEL, /*< desc="Active channel" >*/
-  GIMP_ALIGN_REFERENCE_ACTIVE_PATH     /*< desc="Active path"    >*/
+  GIMP_ALIGN_REFERENCE_IMAGE,          /*< desc="Image"                   >*/
+  GIMP_ALIGN_REFERENCE_SELECTION,      /*< desc="Selection"               >*/
+  GIMP_ALIGN_REFERENCE_PICK,           /*< desc="Picked reference object" >*/
 } GimpAlignReferenceType;
 
 
@@ -57,21 +54,37 @@ GType gimp_alignment_type_get_type (void) G_GNUC_CONST;
 
 typedef enum  /*< pdb-skip >*/
 {
-  GIMP_ALIGN_LEFT,
-  GIMP_ALIGN_HCENTER,
-  GIMP_ALIGN_RIGHT,
-  GIMP_ALIGN_TOP,
-  GIMP_ALIGN_VCENTER,
-  GIMP_ALIGN_BOTTOM,
-  GIMP_ARRANGE_LEFT,
-  GIMP_ARRANGE_HCENTER,
-  GIMP_ARRANGE_RIGHT,
-  GIMP_ARRANGE_TOP,
-  GIMP_ARRANGE_VCENTER,
-  GIMP_ARRANGE_BOTTOM,
-  GIMP_ARRANGE_HFILL,
-  GIMP_ARRANGE_VFILL
+  GIMP_ALIGN_LEFT,                     /*< desc="Align to the left"                                 >*/
+  GIMP_ALIGN_HCENTER,                  /*< desc="Center horizontally"                               >*/
+  GIMP_ALIGN_RIGHT,                    /*< desc="Align to the right"                                >*/
+  GIMP_ALIGN_TOP,                      /*< desc="Align to the top"                                  >*/
+  GIMP_ALIGN_VCENTER,                  /*< desc="Center vertically"                                 >*/
+  GIMP_ALIGN_BOTTOM,                   /*< desc="Align to the bottom"                               >*/
+  GIMP_ARRANGE_HFILL,                  /*< desc="Distribute anchor points horizontally evenly"      >*/
+  GIMP_ARRANGE_VFILL,                  /*< desc="Distribute anchor points vertically evenly"        >*/
+  GIMP_DISTRIBUTE_EVEN_HORIZONTAL_GAP, /*< desc="Distribute horizontally with even horizontal gaps" >*/
+  GIMP_DISTRIBUTE_EVEN_VERTICAL_GAP,   /*< desc="Distribute vertically with even vertical gaps"     >*/
 } GimpAlignmentType;
+
+
+/**
+ * GimpBucketFillMode:
+ * @GIMP_BUCKET_FILL_FG:      FG color fill
+ * @GIMP_BUCKET_FILL_BG:      BG color fill
+ * @GIMP_BUCKET_FILL_PATTERN: Pattern fill
+ *
+ * Bucket fill modes.
+ */
+#define GIMP_TYPE_BUCKET_FILL_MODE (gimp_bucket_fill_mode_get_type ())
+
+GType gimp_bucket_fill_mode_get_type (void) G_GNUC_CONST;
+
+typedef enum  /*< pdb-skip >*/
+{
+  GIMP_BUCKET_FILL_FG,      /*< desc="FG color fill" >*/
+  GIMP_BUCKET_FILL_BG,      /*< desc="BG color fill" >*/
+  GIMP_BUCKET_FILL_PATTERN  /*< desc="Pattern fill"  >*/
+} GimpBucketFillMode;
 
 
 #define GIMP_TYPE_CHANNEL_BORDER_STYLE (gimp_channel_border_style_get_type ())
@@ -99,6 +112,7 @@ typedef enum  /*< pdb-skip >*/
   GIMP_COLOR_PICK_MODE_PIXEL,       /*< desc="Pixel"        >*/
   GIMP_COLOR_PICK_MODE_RGB_PERCENT, /*< desc="RGB (%)"      >*/
   GIMP_COLOR_PICK_MODE_RGB_U8,      /*< desc="RGB (0..255)" >*/
+  GIMP_COLOR_PICK_MODE_GRAYSCALE,   /*< desc="Grayscale (%)">*/
   GIMP_COLOR_PICK_MODE_HSV,         /*< desc="HSV"          >*/
   GIMP_COLOR_PICK_MODE_LCH,         /*< desc="CIE LCh"      >*/
   GIMP_COLOR_PICK_MODE_LAB,         /*< desc="CIE LAB"      >*/
@@ -116,9 +130,10 @@ GType gimp_color_profile_policy_get_type (void) G_GNUC_CONST;
 
 typedef enum  /*< pdb-skip >*/
 {
-  GIMP_COLOR_PROFILE_POLICY_ASK,    /*< desc="Ask what to do"           >*/
-  GIMP_COLOR_PROFILE_POLICY_KEEP,   /*< desc="Keep embedded profile"    >*/
-  GIMP_COLOR_PROFILE_POLICY_CONVERT /*< desc="Convert to built-in sRGB or grayscale profile" >*/
+  GIMP_COLOR_PROFILE_POLICY_ASK,               /*< desc="Ask what to do"                                                          >*/
+  GIMP_COLOR_PROFILE_POLICY_KEEP,              /*< desc="Keep embedded profile"                                                   >*/
+  GIMP_COLOR_PROFILE_POLICY_CONVERT_BUILTIN,   /*< desc="Convert to built-in sRGB or grayscale profile"                           >*/
+  GIMP_COLOR_PROFILE_POLICY_CONVERT_PREFERRED, /*< desc="Convert to preferred RGB or grayscale profile (defaulting to built-in)" >*/
 } GimpColorProfilePolicy;
 
 
@@ -247,7 +262,7 @@ typedef enum  /*< pdb-skip >*/
   GIMP_DIRTY_ITEM            = 1 << 4,
   GIMP_DIRTY_ITEM_META       = 1 << 5,
   GIMP_DIRTY_DRAWABLE        = 1 << 6,
-  GIMP_DIRTY_VECTORS         = 1 << 7,
+  GIMP_DIRTY_PATH            = 1 << 7,
   GIMP_DIRTY_SELECTION       = 1 << 8,
   GIMP_DIRTY_ACTIVE_DRAWABLE = 1 << 9,
 
@@ -275,14 +290,25 @@ typedef enum  /*< pdb-skip >*/
 } GimpDynamicsOutputType;
 
 
+#define GIMP_TYPE_CUSTOM_STYLE (gimp_custom_style_get_type ())
+
+GType gimp_custom_style_get_type (void) G_GNUC_CONST;
+
+typedef enum  /*< pdb-skip >*/
+{
+  GIMP_CUSTOM_STYLE_SOLID_COLOR,  /*< desc="Solid color" >*/
+  GIMP_CUSTOM_STYLE_PATTERN       /*< desc="Pattern"          >*/
+} GimpCustomStyle;
+
 #define GIMP_TYPE_FILL_STYLE (gimp_fill_style_get_type ())
 
 GType gimp_fill_style_get_type (void) G_GNUC_CONST;
 
 typedef enum  /*< pdb-skip >*/
 {
-  GIMP_FILL_STYLE_SOLID,  /*< desc="Solid color" >*/
-  GIMP_FILL_STYLE_PATTERN /*< desc="Pattern"     >*/
+  GIMP_FILL_STYLE_FG_COLOR,  /*< desc="Foreground color" >*/
+  GIMP_FILL_STYLE_BG_COLOR,  /*< desc="Background color" >*/
+  GIMP_FILL_STYLE_PATTERN    /*< desc="Pattern"          >*/
 } GimpFillStyle;
 
 
@@ -370,7 +396,6 @@ typedef enum  /*< pdb-skip >*/
   GIMP_ITEM_SET_ALL,         /*< desc="All layers"         >*/
   GIMP_ITEM_SET_IMAGE_SIZED, /*< desc="Image-sized layers" >*/
   GIMP_ITEM_SET_VISIBLE,     /*< desc="All visible layers" >*/
-  GIMP_ITEM_SET_LINKED       /*< desc="All linked layers"  >*/
 } GimpItemSet;
 
 
@@ -399,6 +424,18 @@ typedef enum  /*< pdb-skip >*/
 } GimpMessageSeverity;
 
 
+#define GIMP_TYPE_METADATA_ROTATION_POLICY (gimp_metadata_rotation_policy_get_type ())
+
+GType gimp_metadata_rotation_policy_get_type (void) G_GNUC_CONST;
+
+typedef enum  /*< pdb-skip >*/
+{
+  GIMP_METADATA_ROTATION_POLICY_ASK,    /*< desc="Ask what to do"                         >*/
+  GIMP_METADATA_ROTATION_POLICY_KEEP,   /*< desc="Discard metadata without rotating"      >*/
+  GIMP_METADATA_ROTATION_POLICY_ROTATE  /*< desc="Rotate the image then discard metadata" >*/
+} GimpMetadataRotationPolicy;
+
+
 #define GIMP_TYPE_PASTE_TYPE (gimp_paste_type_get_type ())
 
 GType gimp_paste_type_get_type (void) G_GNUC_CONST;
@@ -410,7 +447,11 @@ typedef enum  /*< pdb-skip >*/
   GIMP_PASTE_TYPE_FLOATING_INTO,
   GIMP_PASTE_TYPE_FLOATING_INTO_IN_PLACE,
   GIMP_PASTE_TYPE_NEW_LAYER,
-  GIMP_PASTE_TYPE_NEW_LAYER_IN_PLACE
+  GIMP_PASTE_TYPE_NEW_LAYER_IN_PLACE,
+  GIMP_PASTE_TYPE_NEW_LAYER_OR_FLOATING,
+  GIMP_PASTE_TYPE_NEW_LAYER_OR_FLOATING_IN_PLACE,
+  GIMP_PASTE_TYPE_NEW_MERGED_LAYER_OR_FLOATING,
+  GIMP_PASTE_TYPE_NEW_MERGED_LAYER_OR_FLOATING_IN_PLACE,
 } GimpPasteType;
 
 
@@ -435,6 +476,18 @@ typedef enum  /*< pdb-skip >*/
   GIMP_THUMBNAIL_SIZE_NORMAL  = 128,  /*< desc="Normal (128x128)" >*/
   GIMP_THUMBNAIL_SIZE_LARGE   = 256   /*< desc="Large (256x256)"  >*/
 } GimpThumbnailSize;
+
+
+#define GIMP_TYPE_TRC_TYPE (gimp_trc_type_get_type ())
+
+GType gimp_trc_type_get_type (void) G_GNUC_CONST;
+
+typedef enum  /*< pdb-skip >*/
+{
+  GIMP_TRC_LINEAR,     /*< desc="Linear"     >*/
+  GIMP_TRC_NON_LINEAR, /*< desc="Non-Linear" >*/
+  GIMP_TRC_PERCEPTUAL  /*< desc="Perceptual" >*/
+} GimpTRCType;
 
 
 #define GIMP_TYPE_UNDO_EVENT (gimp_undo_event_get_type ())
@@ -488,23 +541,32 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_GROUP_IMAGE_ITEM_REMOVE,     /*< desc="Remove item"                    >*/
   GIMP_UNDO_GROUP_IMAGE_ITEM_REORDER,    /*< desc="Reorder item"                   >*/
   GIMP_UNDO_GROUP_IMAGE_LAYERS_MERGE,    /*< desc="Merge layers"                   >*/
-  GIMP_UNDO_GROUP_IMAGE_VECTORS_MERGE,   /*< desc="Merge paths"                    >*/
+  GIMP_UNDO_GROUP_IMAGE_PATHS_MERGE,     /*< desc="Merge paths"                    >*/
   GIMP_UNDO_GROUP_IMAGE_QUICK_MASK,      /*< desc="Quick Mask"                     >*/
   GIMP_UNDO_GROUP_IMAGE_GRID,            /*< desc="Grid"                           >*/
+  GIMP_UNDO_GROUP_IMAGE_COLORMAP_REMAP,  /*< desc="Colormap remapping"             >*/
   GIMP_UNDO_GROUP_GUIDE,                 /*< desc="Guide"                          >*/
   GIMP_UNDO_GROUP_SAMPLE_POINT,          /*< desc="Sample Point"                   >*/
   GIMP_UNDO_GROUP_DRAWABLE,              /*< desc="Layer/Channel"                  >*/
   GIMP_UNDO_GROUP_DRAWABLE_MOD,          /*< desc="Layer/Channel modification"     >*/
   GIMP_UNDO_GROUP_MASK,                  /*< desc="Selection mask"                 >*/
   GIMP_UNDO_GROUP_ITEM_VISIBILITY,       /*< desc="Item visibility"                >*/
-  GIMP_UNDO_GROUP_ITEM_LINKED,           /*< desc="Link/Unlink item"               >*/
+  GIMP_UNDO_GROUP_ITEM_LOCK_CONTENTS,    /*< desc="Lock/Unlock contents"           >*/
+  GIMP_UNDO_GROUP_ITEM_LOCK_POSITION,    /*< desc="Lock/Unlock position"           >*/
+  GIMP_UNDO_GROUP_ITEM_LOCK_VISIBILITY,  /*< desc="Lock/Unlock visibility"         >*/
   GIMP_UNDO_GROUP_ITEM_PROPERTIES,       /*< desc="Item properties"                >*/
   GIMP_UNDO_GROUP_ITEM_DISPLACE,         /*< desc="Move item"                      >*/
   GIMP_UNDO_GROUP_ITEM_SCALE,            /*< desc="Scale item"                     >*/
   GIMP_UNDO_GROUP_ITEM_RESIZE,           /*< desc="Resize item"                    >*/
   GIMP_UNDO_GROUP_LAYER_ADD,             /*< desc="Add layer"                      >*/
-  GIMP_UNDO_GROUP_LAYER_ADD_MASK,        /*< desc="Add layer mask"                 >*/
-  GIMP_UNDO_GROUP_LAYER_APPLY_MASK,      /*< desc="Apply layer mask"               >*/
+  GIMP_UNDO_GROUP_LAYER_ADD_ALPHA,       /*< desc="Add alpha channel"              >*/
+  GIMP_UNDO_GROUP_LAYER_ADD_MASK,        /*< desc="Add layer masks"                >*/
+  GIMP_UNDO_GROUP_LAYER_APPLY_MASK,      /*< desc="Apply layer masks"              >*/
+  GIMP_UNDO_GROUP_LAYER_REMOVE_ALPHA,    /*< desc="Remove alpha channel"           >*/
+  GIMP_UNDO_GROUP_LAYER_LOCK_ALPHA,      /*< desc="Lock/Unlock alpha channels"     >*/
+  GIMP_UNDO_GROUP_LAYER_OPACITY,         /*< desc="Set layers opacity"             >*/
+  GIMP_UNDO_GROUP_LAYER_MODE,            /*< desc="Set layers mode"                >*/
+  GIMP_UNDO_GROUP_CHANNEL_ADD,           /*< desc="Add channels"                   >*/
   GIMP_UNDO_GROUP_FS_TO_LAYER,           /*< desc="Floating selection to layer"    >*/
   GIMP_UNDO_GROUP_FS_FLOAT,              /*< desc="Float selection"                >*/
   GIMP_UNDO_GROUP_FS_ANCHOR,             /*< desc="Anchor floating selection"      >*/
@@ -515,7 +577,7 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_GROUP_PAINT,                 /*< desc="Paint"                          >*/
   GIMP_UNDO_GROUP_PARASITE_ATTACH,       /*< desc="Attach parasite"                >*/
   GIMP_UNDO_GROUP_PARASITE_REMOVE,       /*< desc="Remove parasite"                >*/
-  GIMP_UNDO_GROUP_VECTORS_IMPORT,        /*< desc="Import paths"                   >*/
+  GIMP_UNDO_GROUP_PATHS_IMPORT,          /*< desc="Import paths"                   >*/
   GIMP_UNDO_GROUP_MISC,                  /*< desc="Plug-In"                        >*/
 
   GIMP_UNDO_GROUP_LAST = GIMP_UNDO_GROUP_MISC, /*< skip >*/
@@ -529,20 +591,21 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_IMAGE_GRID,                  /*< desc="Grid"                           >*/
   GIMP_UNDO_IMAGE_METADATA,              /*< desc="Change metadata"                >*/
   GIMP_UNDO_IMAGE_COLORMAP,              /*< desc="Change indexed palette"         >*/
-  GIMP_UNDO_IMAGE_COLOR_MANAGED,         /*< desc="Change color managed state"     >*/
+  GIMP_UNDO_IMAGE_HIDDEN_PROFILE,        /*< desc="Hide/Unhide color profile"      >*/
   GIMP_UNDO_GUIDE,                       /*< desc="Guide"                          >*/
   GIMP_UNDO_SAMPLE_POINT,                /*< desc="Sample Point"                   >*/
   GIMP_UNDO_DRAWABLE,                    /*< desc="Layer/Channel"                  >*/
   GIMP_UNDO_DRAWABLE_MOD,                /*< desc="Layer/Channel modification"     >*/
+  GIMP_UNDO_DRAWABLE_FORMAT,             /*< desc="Layer/Channel format"           >*/
   GIMP_UNDO_MASK,                        /*< desc="Selection mask"                 >*/
   GIMP_UNDO_ITEM_REORDER,                /*< desc="Reorder item"                   >*/
   GIMP_UNDO_ITEM_RENAME,                 /*< desc="Rename item"                    >*/
   GIMP_UNDO_ITEM_DISPLACE,               /*< desc="Move item"                      >*/
   GIMP_UNDO_ITEM_VISIBILITY,             /*< desc="Item visibility"                >*/
-  GIMP_UNDO_ITEM_LINKED,                 /*< desc="Link/Unlink item"               >*/
   GIMP_UNDO_ITEM_COLOR_TAG,              /*< desc="Item color tag"                 >*/
   GIMP_UNDO_ITEM_LOCK_CONTENT,           /*< desc="Lock/Unlock content"            >*/
   GIMP_UNDO_ITEM_LOCK_POSITION,          /*< desc="Lock/Unlock position"           >*/
+  GIMP_UNDO_ITEM_LOCK_VISIBILITY,        /*< desc="Lock/Unlock visibility"         >*/
   GIMP_UNDO_LAYER_ADD,                   /*< desc="New layer"                      >*/
   GIMP_UNDO_LAYER_REMOVE,                /*< desc="Delete layer"                   >*/
   GIMP_UNDO_LAYER_MODE,                  /*< desc="Set layer mode"                 >*/
@@ -558,16 +621,16 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_TEXT_LAYER,                  /*< desc="Text layer"                     >*/
   GIMP_UNDO_TEXT_LAYER_MODIFIED,         /*< desc="Text layer modification"        >*/
   GIMP_UNDO_TEXT_LAYER_CONVERT,          /*< desc="Convert text layer"             >*/
-  GIMP_UNDO_LAYER_MASK_ADD,              /*< desc="Add layer mask"                 >*/
-  GIMP_UNDO_LAYER_MASK_REMOVE,           /*< desc="Delete layer mask"              >*/
-  GIMP_UNDO_LAYER_MASK_APPLY,            /*< desc="Apply layer mask"               >*/
-  GIMP_UNDO_LAYER_MASK_SHOW,             /*< desc="Show layer mask"                >*/
+  GIMP_UNDO_LAYER_MASK_ADD,              /*< desc="Add layer masks"                >*/
+  GIMP_UNDO_LAYER_MASK_REMOVE,           /*< desc="Delete layer masks"             >*/
+  GIMP_UNDO_LAYER_MASK_APPLY,            /*< desc="Apply layer masks"              >*/
+  GIMP_UNDO_LAYER_MASK_SHOW,             /*< desc="Show layer masks"               >*/
   GIMP_UNDO_CHANNEL_ADD,                 /*< desc="New channel"                    >*/
   GIMP_UNDO_CHANNEL_REMOVE,              /*< desc="Delete channel"                 >*/
   GIMP_UNDO_CHANNEL_COLOR,               /*< desc="Channel color"                  >*/
-  GIMP_UNDO_VECTORS_ADD,                 /*< desc="New path"                       >*/
-  GIMP_UNDO_VECTORS_REMOVE,              /*< desc="Delete path"                    >*/
-  GIMP_UNDO_VECTORS_MOD,                 /*< desc="Path modification"              >*/
+  GIMP_UNDO_PATH_ADD,                    /*< desc="New path"                       >*/
+  GIMP_UNDO_PATH_REMOVE,                 /*< desc="Delete path"                    >*/
+  GIMP_UNDO_PATH_MOD,                    /*< desc="Path modification"              >*/
   GIMP_UNDO_FS_TO_LAYER,                 /*< desc="Floating selection to layer"    >*/
   GIMP_UNDO_TRANSFORM_GRID,              /*< desc="Transform grid"                 >*/
   GIMP_UNDO_PAINT,                       /*< desc="Paint"                          >*/
@@ -575,6 +638,9 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_FOREGROUND_SELECT,           /*< desc="Select foreground"              >*/
   GIMP_UNDO_PARASITE_ATTACH,             /*< desc="Attach parasite"                >*/
   GIMP_UNDO_PARASITE_REMOVE,             /*< desc="Remove parasite"                >*/
+  GIMP_UNDO_FILTER_ADD,                  /*< desc="Add effect"                     >*/
+  GIMP_UNDO_FILTER_REMOVE,               /*< desc="Remove effect"                  >*/
+  GIMP_UNDO_FILTER_REORDER,              /*< desc="Reorder effect"                 >*/
 
   GIMP_UNDO_CANT                         /*< desc="Not undoable"                   >*/
 } GimpUndoType;
@@ -609,6 +675,17 @@ typedef enum  /*< pdb-skip >*/
 } GimpViewType;
 
 
+#define GIMP_TYPE_SELECT_METHOD (gimp_select_method_get_type ())
+
+GType gimp_select_method_get_type (void) G_GNUC_CONST;
+
+typedef enum /*< pdb-skip >*/
+{
+  GIMP_SELECT_PLAIN_TEXT,    /*< desc="Selection by basic text search"         >*/
+  GIMP_SELECT_REGEX_PATTERN, /*< desc="Selection by regular expression search" >*/
+  GIMP_SELECT_GLOB_PATTERN,  /*< desc="Selection by glob pattern search"       >*/
+} GimpSelectMethod;
+
 /*
  * non-registered enums; register them if needed
  */
@@ -637,6 +714,7 @@ typedef enum  /*< pdb-skip, skip >*/
   GIMP_CONTEXT_PROP_BUFFER      = 18,
   GIMP_CONTEXT_PROP_IMAGEFILE   = 19,
   GIMP_CONTEXT_PROP_TEMPLATE    = 20,
+  GIMP_CONTEXT_PROP_EXPAND      = 21,
 
   GIMP_CONTEXT_PROP_LAST        = GIMP_CONTEXT_PROP_TEMPLATE
 } GimpContextPropType;
@@ -663,6 +741,7 @@ typedef enum  /*< pdb-skip, skip >*/
   GIMP_CONTEXT_PROP_MASK_BUFFER      = 1 << 18,
   GIMP_CONTEXT_PROP_MASK_IMAGEFILE   = 1 << 19,
   GIMP_CONTEXT_PROP_MASK_TEMPLATE    = 1 << 20,
+  GIMP_CONTEXT_PROP_MASK_EXPAND      = 1 << 21,
 
   /*  aliases  */
   GIMP_CONTEXT_PROP_MASK_PAINT = (GIMP_CONTEXT_PROP_MASK_FOREGROUND |
@@ -672,7 +751,8 @@ typedef enum  /*< pdb-skip, skip >*/
                                   GIMP_CONTEXT_PROP_MASK_BRUSH      |
                                   GIMP_CONTEXT_PROP_MASK_DYNAMICS   |
                                   GIMP_CONTEXT_PROP_MASK_PATTERN    |
-                                  GIMP_CONTEXT_PROP_MASK_GRADIENT),
+                                  GIMP_CONTEXT_PROP_MASK_GRADIENT   |
+                                  GIMP_CONTEXT_PROP_MASK_EXPAND),
 
   GIMP_CONTEXT_PROP_MASK_ALL   = (GIMP_CONTEXT_PROP_MASK_IMAGE       |
                                   GIMP_CONTEXT_PROP_MASK_DISPLAY     |
@@ -701,11 +781,11 @@ typedef enum  /*< pdb-skip, skip >*/
 {
   GIMP_ITEM_TYPE_LAYERS   = 1 << 0,
   GIMP_ITEM_TYPE_CHANNELS = 1 << 1,
-  GIMP_ITEM_TYPE_VECTORS  = 1 << 2,
+  GIMP_ITEM_TYPE_PATHS    = 1 << 2,
 
   GIMP_ITEM_TYPE_ALL      = (GIMP_ITEM_TYPE_LAYERS   |
                              GIMP_ITEM_TYPE_CHANNELS |
-                             GIMP_ITEM_TYPE_VECTORS)
+                             GIMP_ITEM_TYPE_PATHS)
 } GimpItemTypeMask;
 
 

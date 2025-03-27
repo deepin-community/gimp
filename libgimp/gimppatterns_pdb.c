@@ -22,7 +22,7 @@
 
 #include "config.h"
 
-#include <string.h>
+#include "stamp-pdbgen.h"
 
 #include "gimp.h"
 
@@ -49,146 +49,60 @@
 gboolean
 gimp_patterns_refresh (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-patterns-refresh",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-patterns-refresh",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_patterns_get_list:
- * @filter: An optional regular expression used to filter the list.
- * @num_patterns: The number of patterns in the pattern list.
+ * @filter: (nullable): An optional regular expression used to filter the list.
  *
  * Retrieve a complete listing of the available patterns.
  *
  * This procedure returns a complete listing of available GIMP
- * patterns. Each name returned can be used as input to the
- * gimp_context_set_pattern().
+ * patterns.
+ * Each pattern returned can be used as input to
+ * [func@Gimp.context_set_pattern].
  *
- * Returns: The list of pattern names. The returned value must be freed
- * with g_strfreev().
+ * Returns: (element-type GimpPattern) (array zero-terminated=1) (transfer container):
+ *          The list of patterns.
+ *          The returned value must be freed with g_free().
  **/
-gchar **
-gimp_patterns_get_list (const gchar *filter,
-                        gint        *num_patterns)
+GimpPattern **
+gimp_patterns_get_list (const gchar *filter)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar **pattern_list = NULL;
-  gint i;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpPattern **pattern_list = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-patterns-get-list",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, filter,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, filter,
+                                          G_TYPE_NONE);
 
-  *num_patterns = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-patterns-get-list",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_patterns = return_vals[1].data.d_int32;
-      if (*num_patterns > 0)
-        {
-          pattern_list = g_new0 (gchar *, *num_patterns + 1);
-          for (i = 0; i < *num_patterns; i++)
-            pattern_list[i] = g_strdup (return_vals[2].data.d_stringarray[i]);
-        }
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    pattern_list = g_value_dup_boxed (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return pattern_list;
-}
-
-/**
- * gimp_patterns_get_pattern:
- * @width: The pattern width.
- * @height: The pattern height.
- *
- * Deprecated: Use gimp_context_get_pattern() instead.
- *
- * Returns: The pattern name.
- **/
-gchar *
-gimp_patterns_get_pattern (gint *width,
-                           gint *height)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *name = NULL;
-
-  return_vals = gimp_run_procedure ("gimp-patterns-get-pattern",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      name = g_strdup (return_vals[1].data.d_string);
-      *width = return_vals[2].data.d_int32;
-      *height = return_vals[3].data.d_int32;
-    }
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return name;
-}
-
-/**
- * gimp_patterns_get_pattern_data:
- * @name: The pattern name (\"\" means currently active pattern).
- * @width: The pattern width.
- * @height: The pattern height.
- * @mask_bpp: Pattern bytes per pixel.
- * @length: Length of pattern mask data.
- * @mask_data: The pattern mask data.
- *
- * Deprecated: Use gimp_pattern_get_pixels() instead.
- *
- * Returns: The pattern name.
- **/
-gchar *
-gimp_patterns_get_pattern_data (const gchar  *name,
-                                gint         *width,
-                                gint         *height,
-                                gint         *mask_bpp,
-                                gint         *length,
-                                guint8      **mask_data)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *actual_name = NULL;
-
-  return_vals = gimp_run_procedure ("gimp-patterns-get-pattern-data",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
-
-  *length = 0;
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      actual_name = g_strdup (return_vals[1].data.d_string);
-      *width = return_vals[2].data.d_int32;
-      *height = return_vals[3].data.d_int32;
-      *mask_bpp = return_vals[4].data.d_int32;
-      *length = return_vals[5].data.d_int32;
-      *mask_data = g_new (guint8, *length);
-      memcpy (*mask_data,
-              return_vals[6].data.d_int8array,
-              *length * sizeof (guint8));
-    }
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return actual_name;
 }

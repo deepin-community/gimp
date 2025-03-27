@@ -25,17 +25,23 @@
   (gimp-drawable-edit-clear dest-drawable)
   (gimp-selection-none dest-image)
   (gimp-selection-all source-image)
-  (gimp-edit-copy source-drawable)
-      (let ((floating-sel (car (gimp-edit-paste dest-drawable FALSE))))
-        (gimp-floating-sel-anchor floating-sel)))
-
-
-
-(define (script-fu-carve-it mask-img mask-drawable bg-layer carve-white)
+  (gimp-edit-copy (vector source-drawable))
   (let* (
-        (width (car (gimp-drawable-width mask-drawable)))
-        (height (car (gimp-drawable-height mask-drawable)))
-        (type (car (gimp-drawable-type bg-layer)))
+         (pasted (car (gimp-edit-paste dest-drawable FALSE)))
+         (floating-sel (vector-ref pasted (- (vector-length pasted) 1)))
+        )
+        (gimp-floating-sel-anchor floating-sel)
+  )
+)
+
+
+
+(define (script-fu-carve-it bg-img bg-layers mask-img mask-drawable carve-white)
+  (let* (
+        (src-layer (vector-ref bg-layers 0))
+        (width (car (gimp-drawable-get-width mask-drawable)))
+        (height (car (gimp-drawable-get-height mask-drawable)))
+        (type (car (gimp-drawable-type src-layer)))
         (img (car (gimp-image-new width height (cond ((= type RGB-IMAGE) RGB)
                                                      ((= type RGBA-IMAGE) RGB)
                                                      ((= type GRAY-IMAGE) GRAY)
@@ -47,10 +53,9 @@
         (offy (carve-scale size 0.25))
         (feather (carve-scale size 0.3))
         (brush-size (carve-scale size 0.3))
-        (brush-name (car (gimp-brush-new "Carve It")))
-        (mask-fs 0)
-        (mask (car (gimp-channel-new img width height "Engraving Mask" 50 '(0 0 0))))
-        (inset-gamma (calculate-inset-gamma (car (gimp-item-get-image bg-layer)) bg-layer))
+        (brush (car (gimp-brush-new "Carve It")))
+        (mask (car (gimp-channel-new img "Engraving Mask" width height 50 '(0 0 0))))
+        (inset-gamma (calculate-inset-gamma (car (gimp-item-get-image src-layer)) src-layer))
         (mask-fat 0)
         (mask-emboss 0)
         (mask-highlight 0)
@@ -61,11 +66,11 @@
         (csl-mask 0)
         (inset-layer 0)
         (il-mask 0)
-        (bg-width (car (gimp-drawable-width bg-layer)))
-        (bg-height (car (gimp-drawable-height bg-layer)))
-        (bg-type (car (gimp-drawable-type bg-layer)))
-        (bg-image (car (gimp-item-get-image bg-layer)))
-        (layer1 (car (gimp-layer-new img bg-width bg-height bg-type "Layer1" 100 LAYER-MODE-NORMAL)))
+        (bg-width (car (gimp-drawable-get-width src-layer)))
+        (bg-height (car (gimp-drawable-get-height src-layer)))
+        (bg-type (car (gimp-drawable-type src-layer)))
+        (bg-image (car (gimp-item-get-image src-layer)))
+        (layer1 (car (gimp-layer-new img "Layer1" bg-width bg-height bg-type 100 LAYER-MODE-NORMAL)))
         )
 
     (gimp-context-push)
@@ -78,14 +83,23 @@
     (gimp-selection-all img)
     (gimp-drawable-edit-clear layer1)
     (gimp-selection-none img)
-    (copy-layer-carve-it img layer1 bg-image bg-layer)
+    (copy-layer-carve-it img layer1 bg-image src-layer)
 
-    (gimp-edit-copy mask-drawable)
+    (gimp-edit-copy (vector mask-drawable))
     (gimp-image-insert-channel img mask -1 0)
 
-    (plug-in-tile RUN-NONINTERACTIVE img layer1 width height FALSE)
-    (set! mask-fs (car (gimp-edit-paste mask FALSE)))
-    (gimp-floating-sel-anchor mask-fs)
+    (plug-in-tile #:run-mode   RUN-NONINTERACTIVE
+                  #:image      img
+                  #:drawables  (vector layer1)
+                  #:new-width  width
+                  #:new-height height
+                  #:new-image  FALSE)
+    (let* (
+           (pasted (car (gimp-edit-paste mask FALSE)))
+           (floating-sel (vector-ref pasted(- (vector-length pasted) 1)))
+          )
+          (gimp-floating-sel-anchor floating-sel)
+    )
     (if (= carve-white FALSE)
         (gimp-drawable-invert mask FALSE))
 
@@ -93,15 +107,15 @@
     (gimp-image-insert-channel img mask-fat -1 0)
     (gimp-image-select-item img CHANNEL-OP-REPLACE mask-fat)
 
-    (gimp-brush-set-shape brush-name BRUSH-GENERATED-CIRCLE)
-    (gimp-brush-set-spikes brush-name 2)
-    (gimp-brush-set-hardness brush-name 1.0)
-    (gimp-brush-set-spacing brush-name 25)
-    (gimp-brush-set-aspect-ratio brush-name 1)
-    (gimp-brush-set-angle brush-name 0)
-    (cond (<= brush-size 17) (gimp-brush-set-radius brush-name (\ brush-size 2))
-	  (else gimp-brush-set-radius brush-name (\ 19 2)))
-    (gimp-context-set-brush brush-name)
+    (gimp-brush-set-shape brush BRUSH-GENERATED-CIRCLE)
+    (gimp-brush-set-spikes brush 2)
+    (gimp-brush-set-hardness brush 1.0)
+    (gimp-brush-set-spacing brush 25)
+    (gimp-brush-set-aspect-ratio brush 1)
+    (gimp-brush-set-angle brush 0)
+    (cond (<= brush-size 17) (gimp-brush-set-radius brush (\ brush-size 2))
+	  (else gimp-brush-set-radius brush (\ 19 2)))
+    (gimp-context-set-brush brush)
 
     (gimp-context-set-foreground '(255 255 255))
     (gimp-drawable-edit-stroke-selection mask-fat)
@@ -109,8 +123,8 @@
 
     (set! mask-emboss (car (gimp-channel-copy mask-fat)))
     (gimp-image-insert-channel img mask-emboss -1 0)
-    (plug-in-gauss-rle RUN-NONINTERACTIVE img mask-emboss feather TRUE TRUE)
-    (plug-in-emboss RUN-NONINTERACTIVE img mask-emboss 315.0 45.0 7 TRUE)
+    (gimp-drawable-merge-new-filter mask-emboss "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" (* 0.32 feather) "std-dev-y" (* 0.32 feather) "filter" "auto")
+    (gimp-drawable-merge-new-filter mask-emboss "gegl:emboss" 0 LAYER-MODE-REPLACE 1.0 "azimuth" 315.0 "elevation" 45.0 "depth" 7 "type" "emboss")
 
     (gimp-context-set-background '(180 180 180))
     (gimp-image-select-item img CHANNEL-OP-REPLACE mask-fat)
@@ -133,22 +147,38 @@
 			  1.0
 			  0.0 1.0 TRUE)
 
-    (gimp-edit-copy mask-shadow)
-    (set! shadow-layer (car (gimp-edit-paste layer1 FALSE)))
-    (gimp-floating-sel-to-layer shadow-layer)
+    (gimp-edit-copy (vector mask-shadow))
+    (let* (
+           (pasted (car (gimp-edit-paste layer1 FALSE)))
+           (floating-sel (vector-ref pasted (- (vector-length pasted) 1)))
+          )
+          (set! shadow-layer floating-sel)
+          (gimp-floating-sel-to-layer shadow-layer)
+    )
     (gimp-layer-set-mode shadow-layer LAYER-MODE-MULTIPLY)
 
-    (gimp-edit-copy mask-highlight)
-    (set! highlight-layer (car (gimp-edit-paste shadow-layer FALSE)))
-    (gimp-floating-sel-to-layer highlight-layer)
+    (gimp-edit-copy (vector mask-highlight))
+    (let* (
+           (pasted (car (gimp-edit-paste shadow-layer FALSE)))
+           (floating-sel (vector-ref pasted (- (vector-length pasted) 1)))
+          )
+          (set! highlight-layer floating-sel)
+          (gimp-floating-sel-to-layer highlight-layer)
+    )
     (gimp-layer-set-mode highlight-layer LAYER-MODE-SCREEN)
 
-    (gimp-edit-copy mask)
-    (set! cast-shadow-layer (car (gimp-edit-paste highlight-layer FALSE)))
-    (gimp-floating-sel-to-layer cast-shadow-layer)
+    (gimp-edit-copy (vector mask))
+    (let* (
+           (pasted (car (gimp-edit-paste highlight-layer FALSE)))
+           (floating-sel (vector-ref pasted (- (vector-length pasted) 1)))
+          )
+          (set! cast-shadow-layer floating-sel)
+          (gimp-floating-sel-to-layer cast-shadow-layer)
+    )
     (gimp-layer-set-mode cast-shadow-layer LAYER-MODE-MULTIPLY)
     (gimp-layer-set-opacity cast-shadow-layer 75)
-    (plug-in-gauss-rle RUN-NONINTERACTIVE img cast-shadow-layer feather TRUE TRUE)
+
+    (gimp-drawable-merge-new-filter cast-shadow-layer "gegl:gaussian-blur" 0 LAYER-MODE-REPLACE 1.0 "std-dev-x" (* 0.32 feather) "std-dev-y" (* 0.32 feather) "filter" "auto")
     (gimp-item-transform-translate cast-shadow-layer offx offy)
 
     (set! csl-mask (car (gimp-layer-create-mask cast-shadow-layer ADD-MASK-BLACK)))
@@ -157,7 +187,8 @@
     (gimp-context-set-background '(255 255 255))
     (gimp-drawable-edit-fill csl-mask FILL-BACKGROUND)
 
-    (set! inset-layer (car (gimp-layer-copy layer1 TRUE)))
+    (set! inset-layer (car (gimp-layer-copy layer1)))
+    (gimp-layer-add-alpha inset-layer)
     (gimp-image-insert-layer img inset-layer 0 1)
 
     (set! il-mask (car (gimp-layer-create-mask inset-layer ADD-MASK-BLACK)))
@@ -179,7 +210,7 @@
     (gimp-item-set-name cast-shadow-layer _"Cast Shadow")
     (gimp-item-set-name inset-layer _"Inset")
 
-    (gimp-brush-delete brush-name)
+    (gimp-resource-delete brush)
 
     (gimp-display-new img)
     (gimp-image-undo-enable img)
@@ -188,16 +219,16 @@
   )
 )
 
-(script-fu-register "script-fu-carve-it"
+(script-fu-register-filter "script-fu-carve-it"
     _"Stencil C_arve..."
     _"Use the specified drawable as a stencil to carve from the specified image."
     "Spencer Kimball"
     "Spencer Kimball"
     "1997"
     "GRAY"
+    SF-ONE-OR-MORE-DRAWABLE
     SF-IMAGE     "Mask image"        0
-    SF-DRAWABLE  "Mask drawable"     0
-    SF-DRAWABLE _"Image to carve"    0
+    SF-DRAWABLE _"Mask drawable"     0
     SF-TOGGLE   _"Carve white areas" TRUE
 )
 

@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -35,290 +37,140 @@
 
 
 /**
- * gimp_text_fontname:
- * @image_ID: The image.
- * @drawable_ID: The affected drawable: (-1 for a new text layer).
+ * gimp_text_font:
+ * @image: The image.
+ * @drawable: (nullable): The affected drawable: (%NULL for a new text layer).
  * @x: The x coordinate for the left of the text bounding box.
  * @y: The y coordinate for the top of the text bounding box.
  * @text: The text to generate (in UTF-8 encoding).
  * @border: The size of the border.
  * @antialias: Antialiasing.
- * @size: The size of text in either pixels or points.
- * @size_type: The units of specified size.
- * @fontname: The name of the font.
+ * @size: The size of text in pixels.
+ * @font: The font.
  *
  * Add text at the specified location as a floating selection or a new
  * layer.
  *
- * This tool requires a fontname matching an installed PangoFT2 font.
- * You can specify the fontsize in units of pixels or points, and the
- * appropriate metric is specified using the size_type argument. The x
- * and y parameters together control the placement of the new text by
- * specifying the upper left corner of the text bounding box. If the
- * specified drawable parameter is valid, the text will be created as a
- * floating selection attached to the drawable. If the drawable
- * parameter is not valid (-1), the text will appear as a new layer.
- * Finally, a border can be specified around the final rendered text.
- * The border is measured in pixels. Parameter size-type is not used
- * and is currently ignored. If you need to display a font in points,
- * divide the size in points by 72.0 and multiply it by the image's
- * vertical resolution.
+ * The x and y parameters together control the placement of the new
+ * text by specifying the upper left corner of the text bounding box.
+ * If the specified drawable parameter is valid, the text will be
+ * created as a floating selection attached to the drawable. If the
+ * drawable parameter is not valid (%NULL), the text will appear as a
+ * new layer. Finally, a border can be specified around the final
+ * rendered text. The border is measured in pixels.
+ * The size is always in pixels. If you need to display a font in
+ * points, divide the size in points by 72.0 and multiply it by the
+ * image's vertical resolution.
  *
- * Returns: The new text layer or -1 if no layer was created.
+ * Returns: (nullable) (transfer none):
+ *          The new text layer or %NULL if no layer was created.
  **/
-gint32
-gimp_text_fontname (gint32        image_ID,
-                    gint32        drawable_ID,
-                    gdouble       x,
-                    gdouble       y,
-                    const gchar  *text,
-                    gint          border,
-                    gboolean      antialias,
-                    gdouble       size,
-                    GimpSizeType  size_type,
-                    const gchar  *fontname)
+GimpLayer *
+gimp_text_font (GimpImage    *image,
+                GimpDrawable *drawable,
+                gdouble       x,
+                gdouble       y,
+                const gchar  *text,
+                gint          border,
+                gboolean      antialias,
+                gdouble       size,
+                GimpFont     *font)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 text_layer_ID = -1;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpLayer *text_layer = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-text-fontname",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_FLOAT, x,
-                                    GIMP_PDB_FLOAT, y,
-                                    GIMP_PDB_STRING, text,
-                                    GIMP_PDB_INT32, border,
-                                    GIMP_PDB_INT32, antialias,
-                                    GIMP_PDB_FLOAT, size,
-                                    GIMP_PDB_INT32, size_type,
-                                    GIMP_PDB_STRING, fontname,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_IMAGE, image,
+                                          GIMP_TYPE_DRAWABLE, drawable,
+                                          G_TYPE_DOUBLE, x,
+                                          G_TYPE_DOUBLE, y,
+                                          G_TYPE_STRING, text,
+                                          G_TYPE_INT, border,
+                                          G_TYPE_BOOLEAN, antialias,
+                                          G_TYPE_DOUBLE, size,
+                                          GIMP_TYPE_FONT, font,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    text_layer_ID = return_vals[1].data.d_layer;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-text-font",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    text_layer = GIMP_VALUES_GET_LAYER (return_vals, 1);
 
-  return text_layer_ID;
+  gimp_value_array_unref (return_vals);
+
+  return text_layer;
 }
 
 /**
- * gimp_text_get_extents_fontname:
+ * gimp_text_get_extents_font:
  * @text: The text to generate (in UTF-8 encoding).
  * @size: The size of text in either pixels or points.
- * @size_type: The units of specified size.
- * @fontname: The name of the font.
- * @width: The width of the specified font.
- * @height: The height of the specified font.
- * @ascent: The ascent of the specified font.
- * @descent: The descent of the specified font.
+ * @font: The name of the font.
+ * @width: (out): The width of the glyph extents.
+ * @height: (out): The height of the glyph extents.
+ * @ascent: (out): The ascent of the glyph extents.
+ * @descent: (out): The descent of the glyph extents.
  *
  * Get extents of the bounding box for the specified text.
  *
  * This tool returns the width and height of a bounding box for the
- * specified text string with the specified font information. Ascent
- * and descent for the specified font are returned as well. Parameter
- * size-type is not used and is currently ignored. If you need to
- * display a font in points, divide the size in points by 72.0 and
- * multiply it by the vertical resolution of the image you are taking
- * into account.
+ * specified text rendered with the specified font information. Ascent
+ * and descent of the glyph extents are returned as well.
+ * The ascent is the distance from the baseline to the highest point of
+ * the character. This is positive if the glyph ascends above the
+ * baseline. The descent is the distance from the baseline to the
+ * lowest point of the character. This is positive if the glyph
+ * descends below the baseline.
+ * The size is always in pixels. If you need to set a font in points,
+ * divide the size in points by 72.0 and multiply it by the vertical
+ * resolution of the image you are taking into account.
  *
  * Returns: TRUE on success.
  **/
 gboolean
-gimp_text_get_extents_fontname (const gchar  *text,
-                                gdouble       size,
-                                GimpSizeType  size_type,
-                                const gchar  *fontname,
-                                gint         *width,
-                                gint         *height,
-                                gint         *ascent,
-                                gint         *descent)
+gimp_text_get_extents_font (const gchar *text,
+                            gdouble      size,
+                            GimpFont    *font,
+                            gint        *width,
+                            gint        *height,
+                            gint        *ascent,
+                            gint        *descent)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-text-get-extents-fontname",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, text,
-                                    GIMP_PDB_FLOAT, size,
-                                    GIMP_PDB_INT32, size_type,
-                                    GIMP_PDB_STRING, fontname,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, text,
+                                          G_TYPE_DOUBLE, size,
+                                          GIMP_TYPE_FONT, font,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-text-get-extents-font",
+                                               args);
+  gimp_value_array_unref (args);
 
   *width = 0;
   *height = 0;
   *ascent = 0;
   *descent = 0;
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
   if (success)
     {
-      *width = return_vals[1].data.d_int32;
-      *height = return_vals[2].data.d_int32;
-      *ascent = return_vals[3].data.d_int32;
-      *descent = return_vals[4].data.d_int32;
+      *width = GIMP_VALUES_GET_INT (return_vals, 1);
+      *height = GIMP_VALUES_GET_INT (return_vals, 2);
+      *ascent = GIMP_VALUES_GET_INT (return_vals, 3);
+      *descent = GIMP_VALUES_GET_INT (return_vals, 4);
     }
 
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return success;
-}
-
-/**
- * gimp_text:
- * @image_ID: The image.
- * @drawable_ID: The affected drawable: (-1 for a new text layer).
- * @x: The x coordinate for the left of the text bounding box.
- * @y: The y coordinate for the top of the text bounding box.
- * @text: The text to generate (in UTF-8 encoding).
- * @border: The size of the border.
- * @antialias: Antialiasing.
- * @size: The size of text in either pixels or points.
- * @size_type: The units of specified size.
- * @foundry: The font foundry.
- * @family: The font family.
- * @weight: The font weight.
- * @slant: The font slant.
- * @set_width: The font set-width.
- * @spacing: The font spacing.
- * @registry: The font registry.
- * @encoding: The font encoding.
- *
- * Deprecated: Use gimp_text_fontname() instead.
- *
- * Returns: The new text layer or -1 if no layer was created.
- **/
-gint32
-gimp_text (gint32        image_ID,
-           gint32        drawable_ID,
-           gdouble       x,
-           gdouble       y,
-           const gchar  *text,
-           gint          border,
-           gboolean      antialias,
-           gdouble       size,
-           GimpSizeType  size_type,
-           const gchar  *foundry,
-           const gchar  *family,
-           const gchar  *weight,
-           const gchar  *slant,
-           const gchar  *set_width,
-           const gchar  *spacing,
-           const gchar  *registry,
-           const gchar  *encoding)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint32 text_layer_ID = -1;
-
-  return_vals = gimp_run_procedure ("gimp-text",
-                                    &nreturn_vals,
-                                    GIMP_PDB_IMAGE, image_ID,
-                                    GIMP_PDB_DRAWABLE, drawable_ID,
-                                    GIMP_PDB_FLOAT, x,
-                                    GIMP_PDB_FLOAT, y,
-                                    GIMP_PDB_STRING, text,
-                                    GIMP_PDB_INT32, border,
-                                    GIMP_PDB_INT32, antialias,
-                                    GIMP_PDB_FLOAT, size,
-                                    GIMP_PDB_INT32, size_type,
-                                    GIMP_PDB_STRING, foundry,
-                                    GIMP_PDB_STRING, family,
-                                    GIMP_PDB_STRING, weight,
-                                    GIMP_PDB_STRING, slant,
-                                    GIMP_PDB_STRING, set_width,
-                                    GIMP_PDB_STRING, spacing,
-                                    GIMP_PDB_STRING, registry,
-                                    GIMP_PDB_STRING, encoding,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    text_layer_ID = return_vals[1].data.d_layer;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return text_layer_ID;
-}
-
-/**
- * gimp_text_get_extents:
- * @text: The text to generate (in UTF-8 encoding).
- * @size: The size of text in either pixels or points.
- * @size_type: The units of specified size.
- * @foundry: The font foundry.
- * @family: The font family.
- * @weight: The font weight.
- * @slant: The font slant.
- * @set_width: The font set-width.
- * @spacing: The font spacing.
- * @registry: The font registry.
- * @encoding: The font encoding.
- * @width: The width of the specified font.
- * @height: The height of the specified font.
- * @ascent: The ascent of the specified font.
- * @descent: The descent of the specified font.
- *
- * Deprecated: Use gimp_text_get_extents_fontname() instead.
- *
- * Returns: TRUE on success.
- **/
-gboolean
-gimp_text_get_extents (const gchar  *text,
-                       gdouble       size,
-                       GimpSizeType  size_type,
-                       const gchar  *foundry,
-                       const gchar  *family,
-                       const gchar  *weight,
-                       const gchar  *slant,
-                       const gchar  *set_width,
-                       const gchar  *spacing,
-                       const gchar  *registry,
-                       const gchar  *encoding,
-                       gint         *width,
-                       gint         *height,
-                       gint         *ascent,
-                       gint         *descent)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
-
-  return_vals = gimp_run_procedure ("gimp-text-get-extents",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, text,
-                                    GIMP_PDB_FLOAT, size,
-                                    GIMP_PDB_INT32, size_type,
-                                    GIMP_PDB_STRING, foundry,
-                                    GIMP_PDB_STRING, family,
-                                    GIMP_PDB_STRING, weight,
-                                    GIMP_PDB_STRING, slant,
-                                    GIMP_PDB_STRING, set_width,
-                                    GIMP_PDB_STRING, spacing,
-                                    GIMP_PDB_STRING, registry,
-                                    GIMP_PDB_STRING, encoding,
-                                    GIMP_PDB_END);
-
-  *width = 0;
-  *height = 0;
-  *ascent = 0;
-  *descent = 0;
-
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
-
-  if (success)
-    {
-      *width = return_vals[1].data.d_int32;
-      *height = return_vals[2].data.d_int32;
-      *ascent = return_vals[3].data.d_int32;
-      *descent = return_vals[4].data.d_int32;
-    }
-
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

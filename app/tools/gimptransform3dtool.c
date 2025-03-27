@@ -33,7 +33,6 @@
 
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimppivotselector.h"
-#include "widgets/gimpspinscale.h"
 #include "widgets/gimpwidgets-utils.h"
 
 #include "display/gimpdisplay.h"
@@ -217,7 +216,7 @@ gimp_transform_3d_tool_dialog (GimpTransformGridTool *tg_tool)
   GtkWidget              *spinbutton;
   GtkWidget              *combo;
   GtkWidget              *scale;
-  GtkWidget              *table;
+  GtkWidget              *grid;
   GtkWidget              *button;
   GtkWidget              *selector;
   gint                    i;
@@ -251,10 +250,10 @@ gimp_transform_3d_tool_dialog (GimpTransformGridTool *tg_tool)
   gtk_widget_show (vbox2);
 
   /* vanishing-point size entry */
-  se = gimp_size_entry_new (1, GIMP_UNIT_PIXEL, "%a", TRUE, TRUE, FALSE, 6,
+  se = gimp_size_entry_new (1, gimp_unit_pixel (), "%a", TRUE, TRUE, FALSE, 6,
                             GIMP_SIZE_ENTRY_UPDATE_SIZE);
-  gtk_table_set_row_spacings (GTK_TABLE (se), 2);
-  gtk_table_set_col_spacings (GTK_TABLE (se), 2);
+  gtk_grid_set_row_spacing (GTK_GRID (se), 2);
+  gtk_grid_set_column_spacing (GTK_GRID (se), 2);
   gtk_box_pack_start (GTK_BOX (vbox2), se, FALSE, FALSE, 0);
   gtk_widget_show (se);
 
@@ -265,7 +264,7 @@ gimp_transform_3d_tool_dialog (GimpTransformGridTool *tg_tool)
   gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 6);
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (se),
                              GTK_SPIN_BUTTON (spinbutton), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (se), spinbutton, 1, 2, 0, 1);
+  gtk_grid_attach (GTK_GRID (se), spinbutton, 1, 0, 1, 1);
   gtk_widget_show (spinbutton);
 
   gimp_size_entry_attach_label (GIMP_SIZE_ENTRY (se), _("_X:"), 0, 0, 0.0);
@@ -299,9 +298,9 @@ gimp_transform_3d_tool_dialog (GimpTransformGridTool *tg_tool)
   gtk_widget_show (vbox2);
 
   /* focal-length size entry */
-  se = gimp_size_entry_new (1, GIMP_UNIT_PIXEL, "%a", TRUE, FALSE, FALSE, 6,
+  se = gimp_size_entry_new (1, gimp_unit_pixel (), "%a", TRUE, FALSE, FALSE, 6,
                             GIMP_SIZE_ENTRY_UPDATE_SIZE);
-  gtk_table_set_col_spacings (GTK_TABLE (se), 2);
+  gtk_grid_set_row_spacing (GTK_GRID (se), 2);
   gtk_box_pack_start (GTK_BOX (vbox2), se, FALSE, FALSE, 0);
 
   t3d->focal_length_se = se;
@@ -349,27 +348,27 @@ gimp_transform_3d_tool_dialog (GimpTransformGridTool *tg_tool)
   gtk_widget_show (vbox2);
 
   /* offset size entry */
-  se = gimp_size_entry_new (1, GIMP_UNIT_PIXEL, "%a", TRUE, TRUE, FALSE, 6,
+  se = gimp_size_entry_new (1, gimp_unit_pixel (), "%a", TRUE, TRUE, FALSE, 6,
                             GIMP_SIZE_ENTRY_UPDATE_SIZE);
-  gtk_table_set_row_spacings (GTK_TABLE (se), 2);
-  gtk_table_set_col_spacings (GTK_TABLE (se), 2);
+  gtk_grid_set_row_spacing (GTK_GRID (se), 2);
+  gtk_grid_set_column_spacing (GTK_GRID (se), 2);
   gtk_box_pack_start (GTK_BOX (vbox2), se, FALSE, FALSE, 0);
   gtk_widget_show (se);
 
   t3d->offset_se = se;
 
-  table = gtk_table_new (2, 2, FALSE);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 2);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 2);
-  gtk_table_attach_defaults (GTK_TABLE (se), table, 0, 2, 0, 1);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 2);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 2);
+  gtk_grid_attach (GTK_GRID (se), grid, 0, 0, 2, 1);
+  gtk_widget_show (grid);
 
   spinbutton = gimp_spin_button_new_with_range (0.0, 0.0, 1.0);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
   gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 6);
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (se),
                              GTK_SPIN_BUTTON (spinbutton), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (table), spinbutton, 1, 2, 1, 2);
+  gtk_grid_attach (GTK_GRID (grid), spinbutton, 1, 1, 1, 1);
   gtk_widget_show (spinbutton);
 
   spinbutton = gimp_spin_button_new_with_range (0.0, 0.0, 1.0);
@@ -377,25 +376,22 @@ gimp_transform_3d_tool_dialog (GimpTransformGridTool *tg_tool)
   gtk_entry_set_width_chars (GTK_ENTRY (spinbutton), 6);
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (se),
                              GTK_SPIN_BUTTON (spinbutton), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (table), spinbutton, 1, 2, 0, 1);
+  gtk_grid_attach (GTK_GRID (grid), spinbutton, 1, 0, 1, 1);
   gtk_widget_show (spinbutton);
 
   label = gtk_label_new_with_mnemonic (_("_X:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 0, 1,
-                    GTK_SHRINK, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 1, 1);
   gtk_widget_show (label);
 
   label = gtk_label_new_with_mnemonic (_("_Y:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 1, 2,
-                    GTK_SHRINK, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 1, 1, 1);
   gtk_widget_show (label);
 
   label = gtk_label_new_with_mnemonic (_("_Z:"));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach (GTK_TABLE (se), label, 0, 1, 1, 2,
-                    GTK_SHRINK, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (se), label, 0, 1, 1, 1);
   gtk_widget_show (label);
 
   gimp_size_entry_set_refval_boundaries (GIMP_SIZE_ENTRY (se), 0,
@@ -427,11 +423,11 @@ gimp_transform_3d_tool_dialog (GimpTransformGridTool *tg_tool)
   gtk_notebook_append_page (GTK_NOTEBOOK (notebook), frame, label);
   gtk_widget_show (frame);
 
-  table = gtk_table_new (3, 3, FALSE);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 2);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 2);
-  gtk_container_add (GTK_CONTAINER (frame), table);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 2);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 2);
+  gtk_container_add (GTK_CONTAINER (frame), grid);
+  gtk_widget_show (grid);
 
   for (i = 0; i < 3; i++)
     {
@@ -440,8 +436,7 @@ gimp_transform_3d_tool_dialog (GimpTransformGridTool *tg_tool)
       /* rotation-order button */
       button = gtk_button_new ();
       gimp_help_set_help_data (button, _("Rotation axis order"), NULL);
-      gtk_table_attach (GTK_TABLE (table), button, 0, 1, i, i + 1,
-                        GTK_SHRINK, GTK_FILL, 0, 0);
+      gtk_grid_attach (GTK_GRID (grid), button, 0, i, 1, 1);
       gtk_widget_show (button);
 
       t3d->rotation_order_buttons[i] = button;
@@ -455,9 +450,9 @@ gimp_transform_3d_tool_dialog (GimpTransformGridTool *tg_tool)
         gtk_adjustment_new (0, -180, 180, 1, 10, 0);
       scale = gimp_spin_scale_new (t3d->angle_adj[i],
                                    labels[i], 2);
+      gtk_widget_set_hexpand (GTK_WIDGET (scale), TRUE);
       gtk_spin_button_set_wrap (GTK_SPIN_BUTTON (scale), TRUE);
-      gtk_table_attach (GTK_TABLE (table), scale, 1, 2, i, i + 1,
-                        GTK_EXPAND | GTK_FILL, GTK_SHRINK, 0, 0);
+      gtk_grid_attach (GTK_GRID (grid), scale, 1, i, 1, 1);
       gtk_widget_show (scale);
 
       g_signal_connect (t3d->angle_adj[i], "value-changed",
@@ -467,8 +462,7 @@ gimp_transform_3d_tool_dialog (GimpTransformGridTool *tg_tool)
 
   /* pivot selector */
   selector = gimp_pivot_selector_new (0.0, 0.0, 0.0, 0.0);
-  gtk_table_attach (GTK_TABLE (table), selector, 2, 3, 0, 3,
-                        GTK_SHRINK, GTK_SHRINK, 0, 0);
+  gtk_grid_attach (GTK_GRID (grid), selector, 2, 0, 1, 3);
   gtk_widget_show (selector);
 
   t3d->pivot_selector = selector;
@@ -487,7 +481,7 @@ static void
 gimp_transform_3d_tool_dialog_update (GimpTransformGridTool *tg_tool)
 {
   GimpTransform3DTool     *t3d     = GIMP_TRANSFORM_3D_TOOL (tg_tool);
-  Gimp3DTrasnformLensMode  lens_mode;
+  Gimp3DTransformLensMode  lens_mode;
   gint                     permutation[3];
   gint                     i;
 

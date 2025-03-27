@@ -21,18 +21,23 @@
 #include <gegl.h>
 
 #include "libgimpbase/gimpbase.h"
+#include "libgimpconfig/gimpconfig.h"
 
 #include "core/core-types.h"
 
 #include "gegl/gimp-babl.h"
 
 #include "core/gimp.h"
+#include "core/gimpcontainer.h"
 #include "core/gimpdrawable.h"
 #include "core/gimpimage.h"
+#include "core/gimpimage-new.h"
+#include "core/gimpimage-resize.h"
 #include "core/gimplayer-new.h"
 #include "core/gimpparamspecs.h"
 #include "core/gimppattern.h"
 #include "core/gimppattern-load.h"
+#include "core/gimppickable.h"
 #include "core/gimptempbuf.h"
 
 #include "pdb/gimpprocedure.h"
@@ -44,11 +49,13 @@
 
 /*  local function prototypes  */
 
-static GimpImage   * file_pat_pattern_to_image (Gimp         *gimp,
-                                                GimpPattern  *pattern);
-static GimpPattern * file_pat_image_to_pattern (GimpImage    *image,
-                                                GimpDrawable *drawable,
-                                                const gchar  *name);
+static GimpImage   * file_pat_pattern_to_image (Gimp          *gimp,
+                                                GimpPattern   *pattern);
+static GimpPattern * file_pat_image_to_pattern (GimpImage     *image,
+                                                GimpContext   *context,
+                                                gint           n_drawables,
+                                                GimpDrawable **drawables,
+                                                const gchar   *name);
 
 
 /*  public functions  */
@@ -63,15 +70,13 @@ file_pat_load_invoker (GimpProcedure         *procedure,
 {
   GimpValueArray *return_vals;
   GimpImage      *image = NULL;
-  const gchar    *uri;
   GFile          *file;
   GInputStream   *input;
   GError         *my_error = NULL;
 
   gimp_set_busy (gimp);
 
-  uri  = g_value_get_string (gimp_value_array_index (args, 1));
-  file = g_file_new_for_uri (uri);
+  file = g_value_get_object (gimp_value_array_index (args, 1));
 
   input = G_INPUT_STREAM (g_file_read (file, NULL, &my_error));
 
@@ -98,13 +103,11 @@ file_pat_load_invoker (GimpProcedure         *procedure,
                                   gimp_file_get_utf8_name (file));
     }
 
-  g_object_unref (file);
-
   return_vals = gimp_procedure_get_return_values (procedure, image != NULL,
                                                   error ? *error : NULL);
 
   if (image)
-    gimp_value_set_image (gimp_value_array_index (return_vals, 1), image);
+    g_value_set_object (gimp_value_array_index (return_vals, 1), image);
 
   gimp_unset_busy (gimp);
 
@@ -119,32 +122,30 @@ file_pat_save_invoker (GimpProcedure         *procedure,
                        const GimpValueArray  *args,
                        GError               **error)
 {
-  GimpValueArray *return_vals;
-  GimpImage      *image;
-  GimpDrawable   *drawable;
-  GimpPattern    *pattern;
-  const gchar    *uri;
-  const gchar    *name;
-  GFile          *file;
-  gboolean        success;
+  GimpValueArray  *return_vals;
+  GimpImage       *image;
+  GimpPattern     *pattern;
+  const gchar     *name;
+  GFile           *file;
+  GimpDrawable   **drawables;
+  gint             n_drawables;
+  gboolean         success;
 
   gimp_set_busy (gimp);
 
-  image    = gimp_value_get_image (gimp_value_array_index (args, 1), gimp);
-  drawable = gimp_value_get_drawable (gimp_value_array_index (args, 2), gimp);
-  uri      = g_value_get_string (gimp_value_array_index (args, 3));
-  name     = g_value_get_string (gimp_value_array_index (args, 5));
+  image       = g_value_get_object (gimp_value_array_index (args, 1));
+  drawables   = (GimpDrawable **) g_value_get_boxed (gimp_value_array_index (args, 2));
+  n_drawables = gimp_core_object_array_get_length ((GObject **) drawables);
+  file        = g_value_get_object (gimp_value_array_index (args, 3));
+  name        = g_value_get_string (gimp_value_array_index (args, 4));
 
-  file = g_file_new_for_uri (uri);
-
-  pattern = file_pat_image_to_pattern (image, drawable, name);
+  pattern = file_pat_image_to_pattern (image, context, n_drawables, drawables, name);
 
   gimp_data_set_file (GIMP_DATA (pattern), file, TRUE, TRUE);
 
   success = gimp_data_save (GIMP_DATA (pattern), error);
 
   g_object_unref (pattern);
-  g_object_unref (file);
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
@@ -164,13 +165,14 @@ file_pat_pattern_to_image (Gimp        *gimp,
   GimpImage         *image;
   GimpLayer         *layer;
   const Babl        *format;
-  const gchar       *name;
   GimpImageBaseType  base_type;
   gboolean           alpha;
   gint               width;
   gint               height;
   GimpTempBuf       *mask   = gimp_pattern_get_mask (pattern);
   GeglBuffer        *buffer;
+  GString           *string;
+  GimpConfigWriter  *writer;
   GimpParasite      *parasite;
 
   format = gimp_temp_buf_get_format (mask);
@@ -201,22 +203,33 @@ file_pat_pattern_to_image (Gimp        *gimp,
       g_return_val_if_reached (NULL);
     }
 
-  name   = gimp_object_get_name (pattern);
   width  = gimp_temp_buf_get_width  (mask);
   height = gimp_temp_buf_get_height (mask);
 
   image = gimp_image_new (gimp, width, height, base_type,
-                          GIMP_PRECISION_U8_GAMMA);
+                          GIMP_PRECISION_U8_NON_LINEAR);
 
-  parasite = gimp_parasite_new ("gimp-pattern-name",
+  string = g_string_new (NULL);
+  writer = gimp_config_writer_new_from_string (string);
+
+  gimp_config_writer_open (writer, "description");
+  gimp_config_writer_string (writer, gimp_object_get_name (pattern));
+  gimp_config_writer_close (writer);
+
+  gimp_config_writer_finish (writer, NULL, NULL);
+
+  parasite = gimp_parasite_new ("GimpProcedureConfig-file-pat-save-last",
                                 GIMP_PARASITE_PERSISTENT,
-                                strlen (name) + 1, name);
+                                string->len + 1, string->str);
   gimp_image_parasite_attach (image, parasite, FALSE);
   gimp_parasite_free (parasite);
 
+  g_string_free (string, TRUE);
+
   format = gimp_image_get_layer_format (image, alpha);
 
-  layer = gimp_layer_new (image, width, height, format, name,
+  layer = gimp_layer_new (image, width, height, format,
+                          gimp_object_get_name (pattern),
                           1.0, GIMP_LAYER_MODE_NORMAL);
   gimp_image_add_layer (image, layer, NULL, 0, FALSE);
 
@@ -230,22 +243,50 @@ file_pat_pattern_to_image (Gimp        *gimp,
 }
 
 static GimpPattern *
-file_pat_image_to_pattern (GimpImage    *image,
-                           GimpDrawable *drawable,
-                           const gchar  *name)
+file_pat_image_to_pattern (GimpImage     *image,
+                           GimpContext   *context,
+                           gint           n_drawables,
+                           GimpDrawable **drawables,
+                           const gchar   *name)
 {
   GimpPattern *pattern;
+  GimpImage   *subimage = NULL;
   const Babl  *format;
   gint         width;
   gint         height;
 
-  format = gimp_babl_format (gimp_drawable_is_gray (drawable) ?
-                             GIMP_GRAY : GIMP_RGB,
-                             GIMP_PRECISION_U8_GAMMA,
-                             gimp_drawable_has_alpha (drawable));
+  g_return_val_if_fail (n_drawables > 0, NULL);
+  g_return_val_if_fail (drawables != NULL, NULL);
 
-  width  = gimp_item_get_width  (GIMP_ITEM (drawable));
-  height = gimp_item_get_height (GIMP_ITEM (drawable));
+  if (n_drawables > 1)
+    {
+      GList *drawable_list = NULL;
+
+      for (gint i = 0; i < n_drawables; i++)
+        drawable_list = g_list_prepend (drawable_list, drawables[i]);
+
+      subimage = gimp_image_new_from_drawables (image->gimp, drawable_list, FALSE, FALSE);
+      g_list_free (drawable_list);
+      gimp_container_remove (image->gimp->images, GIMP_OBJECT (subimage));
+      gimp_image_resize_to_layers (subimage, context,
+                                   NULL, NULL, NULL, NULL, NULL);
+      width  = gimp_image_get_width (subimage);
+      height = gimp_image_get_width (subimage);
+
+      gimp_pickable_flush (GIMP_PICKABLE (subimage));
+    }
+  else
+    {
+      width  = gimp_item_get_width  (GIMP_ITEM (drawables[0]));
+      height = gimp_item_get_height (GIMP_ITEM (drawables[0]));
+    }
+
+  format = gimp_babl_format (gimp_drawable_is_gray (drawables[0]) ?
+                             GIMP_GRAY : GIMP_RGB,
+                             GIMP_PRECISION_U8_NON_LINEAR,
+                             (subimage && gimp_image_has_alpha (subimage)) ||
+                             gimp_drawable_has_alpha (drawables[0]),
+                             NULL);
 
   pattern = g_object_new (GIMP_TYPE_PATTERN,
                           "name",      name,
@@ -254,10 +295,13 @@ file_pat_image_to_pattern (GimpImage    *image,
 
   pattern->mask = gimp_temp_buf_new (width, height, format);
 
-  gegl_buffer_get (gimp_drawable_get_buffer (drawable),
+  gegl_buffer_get (subimage != NULL ? gimp_pickable_get_buffer (GIMP_PICKABLE (subimage)) :
+                                      gimp_drawable_get_buffer (drawables[0]),
                    GEGL_RECTANGLE (0, 0, width, height), 1.0,
                    format, gimp_temp_buf_get_data (pattern->mask),
                    GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_NONE);
+
+  g_clear_object (&subimage);
 
   return pattern;
 }

@@ -23,6 +23,8 @@
 #include <gegl.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <pango/pangocairo.h>
+#include <pango/pangofc-fontmap.h>
+#include <fontconfig/fontconfig.h>
 
 #include "libgimpcolor/gimpcolor.h"
 
@@ -38,6 +40,7 @@
 #include "core/gimpimage-undo.h"
 #include "core/gimplayer-floating-selection.h"
 
+#include "gimpfont.h"
 #include "gimptext.h"
 #include "gimptext-compat.h"
 #include "gimptextlayer.h"
@@ -51,24 +54,22 @@ text_render (GimpImage    *image,
              GimpContext  *context,
              gint          text_x,
              gint          text_y,
-             const gchar  *fontname,
+             GimpFont     *font,
+             gdouble       font_size,
              const gchar  *text,
              gint          border,
              gboolean      antialias)
 {
-  PangoFontDescription *desc;
-  GimpText             *gtext;
-  GimpLayer            *layer;
-  GimpRGB               color;
-  gchar                *font;
-  gdouble               size;
+  GimpText  *gtext;
+  GimpLayer *layer;
+  GeglColor *color;
 
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (drawable == NULL || GIMP_IS_DRAWABLE (drawable), NULL);
   g_return_val_if_fail (drawable == NULL ||
                         gimp_item_is_attached (GIMP_ITEM (drawable)), NULL);
   g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
-  g_return_val_if_fail (fontname != NULL, NULL);
+  g_return_val_if_fail (GIMP_IS_FONT (font), NULL);
   g_return_val_if_fail (text != NULL, NULL);
 
   if (! gimp_data_factory_data_wait (image->gimp->font_factory))
@@ -77,26 +78,16 @@ text_render (GimpImage    *image,
   if (border < 0)
     border = 0;
 
-  desc = pango_font_description_from_string (fontname);
-  size = PANGO_PIXELS (pango_font_description_get_size (desc));
-
-  pango_font_description_unset_fields (desc, PANGO_FONT_MASK_SIZE);
-  font = pango_font_description_to_string (desc);
-
-  pango_font_description_free (desc);
-
-  gimp_context_get_foreground (context, &color);
+  color = gimp_context_get_foreground (context);
 
   gtext = g_object_new (GIMP_TYPE_TEXT,
                         "text",      text,
                         "font",      font,
-                        "font-size", size,
+                        "font-size", font_size,
                         "antialias", antialias,
                         "border",    border,
-                        "color",     &color,
+                        "color",     color,
                         NULL);
-
-  g_free (font);
 
   layer = gimp_text_layer_new (image, gtext);
 
@@ -138,7 +129,8 @@ text_render (GimpImage    *image,
 
 gboolean
 text_get_extents (Gimp        *gimp,
-                  const gchar *fontname,
+                  GimpFont    *font,
+                  gdouble      font_size,
                   const gchar *text,
                   gint        *width,
                   gint        *height,
@@ -150,9 +142,10 @@ text_get_extents (Gimp        *gimp,
   PangoLayout          *layout;
   PangoFontMap         *fontmap;
   PangoRectangle        rect;
+  gchar                *real_fontname;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), FALSE);
-  g_return_val_if_fail (fontname != NULL, FALSE);
+  g_return_val_if_fail (GIMP_IS_FONT (font), FALSE);
   g_return_val_if_fail (text != NULL, FALSE);
 
   if (! gimp_data_factory_data_wait (gimp->font_factory))
@@ -163,6 +156,11 @@ text_get_extents (Gimp        *gimp,
     g_error ("You are using a Pango that has been built against a cairo "
              "that lacks the Freetype font backend");
 
+  /* In case a font becomes missing mid-session and is chosen (or is already in use)
+   * pango substitutes EVERY font for the default font, to avoid this
+   * the FcConfig has to be set everytime a pango fontmap is created
+   */
+  pango_fc_font_map_set_config (PANGO_FC_FONT_MAP (fontmap), FcConfigGetCurrent ());
   pango_cairo_font_map_set_resolution (PANGO_CAIRO_FONT_MAP (fontmap),
                                        72.0); /* FIXME: resolution */
   context = pango_font_map_create_context (fontmap);
@@ -171,9 +169,11 @@ text_get_extents (Gimp        *gimp,
   layout = pango_layout_new (context);
   g_object_unref (context);
 
-  font_desc = pango_font_description_from_string (fontname);
+  real_fontname = g_strdup_printf ("%s %d", gimp_font_get_lookup_name (font), (gint) font_size);
+  font_desc = pango_font_description_from_string (real_fontname);
   pango_layout_set_font_description (layout, font_desc);
   pango_font_description_free (font_desc);
+  g_free (real_fontname);
 
   pango_layout_set_text (layout, text, -1);
 
@@ -198,7 +198,7 @@ text_get_extents (Gimp        *gimp,
       if (ascent)
         *ascent = PANGO_ASCENT (rect);
       if (descent)
-        *descent = - PANGO_DESCENT (rect);
+        *descent = PANGO_DESCENT (rect);
     }
 
   g_object_unref (layout);

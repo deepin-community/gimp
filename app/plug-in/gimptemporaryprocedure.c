@@ -49,7 +49,7 @@ static void        gimp_temporary_procedure_execute_async (GimpProcedure  *proce
                                                            GimpContext    *context,
                                                            GimpProgress   *progress,
                                                            GimpValueArray *args,
-                                                           GimpObject     *display);
+                                                           GimpDisplay    *display);
 
 static GFile     * gimp_temporary_procedure_get_file      (GimpPlugInProcedure *procedure);
 
@@ -78,7 +78,7 @@ gimp_temporary_procedure_class_init (GimpTemporaryProcedureClass *klass)
 static void
 gimp_temporary_procedure_init (GimpTemporaryProcedure *proc)
 {
-  GIMP_PROCEDURE (proc)->proc_type = GIMP_TEMPORARY;
+  GIMP_PROCEDURE (proc)->proc_type = GIMP_PDB_PROC_TYPE_TEMPORARY;
 }
 
 static void
@@ -109,7 +109,7 @@ gimp_temporary_procedure_execute_async (GimpProcedure  *procedure,
                                         GimpContext    *context,
                                         GimpProgress   *progress,
                                         GimpValueArray *args,
-                                        GimpObject     *display)
+                                        GimpDisplay    *display)
 {
   GimpTemporaryProcedure *temp_procedure = GIMP_TEMPORARY_PROCEDURE (procedure);
   GimpValueArray         *return_vals;

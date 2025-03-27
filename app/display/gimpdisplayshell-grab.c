@@ -24,41 +24,94 @@
 
 #include "display-types.h"
 
+#include "widgets/gimpdevices.h"
+
+#include "gimpdisplay.h"
 #include "gimpdisplayshell.h"
 #include "gimpdisplayshell-grab.h"
 
+
+#if 0
+static GdkDevice *
+get_associated_pointer (GdkDevice *device)
+{
+  switch (gdk_device_get_device_type (device))
+    {
+    case GDK_DEVICE_TYPE_SLAVE:
+      device = gdk_device_get_associated_device (device);
+      break;
+
+    case GDK_DEVICE_TYPE_FLOATING:
+      {
+        GdkDisplay *display = gdk_device_get_display (device);
+        GdkSeat    *seat    = gdk_display_get_default_seat (display);
+
+        return gdk_seat_get_pointer (seat);
+      }
+      break;
+
+    default:
+      break;
+    }
+
+  if (gdk_device_get_source (device) == GDK_SOURCE_KEYBOARD)
+    device = gdk_device_get_associated_device (device);
+
+  return device;
+}
+#endif
 
 gboolean
 gimp_display_shell_pointer_grab (GimpDisplayShell *shell,
                                  const GdkEvent   *event,
                                  GdkEventMask      event_mask)
 {
+  GdkDisplay    *display;
+  GdkSeat       *seat;
+  GdkDevice     *device;
+  GdkDevice     *source_device;
+  GdkGrabStatus  status;
+
   g_return_val_if_fail (GIMP_IS_DISPLAY_SHELL (shell), FALSE);
-  g_return_val_if_fail (shell->pointer_grabbed == FALSE, FALSE);
+  g_return_val_if_fail (event != NULL, FALSE);
+  g_return_val_if_fail (shell->grab_seat == NULL, FALSE);
 
-  if (event)
+  source_device = gimp_devices_get_from_event (shell->display->gimp,
+                                               event, &device);
+  display = gdk_device_get_display (device);
+  seat    = gdk_display_get_default_seat (display);
+
+  if (gdk_device_get_source (device) == GDK_SOURCE_KEYBOARD)
     {
-      GdkGrabStatus status;
-
-      status = gdk_pointer_grab (gtk_widget_get_window (shell->canvas),
-                                 FALSE, event_mask, NULL, NULL,
-                                 gdk_event_get_time (event));
-
-      if (status != GDK_GRAB_SUCCESS)
-        {
-          g_printerr ("%s: gdk_pointer_grab failed with status %d\n",
-                      G_STRFUNC, status);
-          return FALSE;
-        }
-
-      shell->pointer_grab_time = gdk_event_get_time (event);
+      /* When the source grab event was a keyboard, we want to accept
+       * pointer events from any pointing device. This is especially
+       * true on Wayland where each pointing device can be really
+       * independant whereas on X11, they all appear as "Virtual core
+       * pointer".
+       */
+      device        = NULL;
+      source_device = NULL;
     }
 
-  gtk_grab_add (shell->canvas);
+  status = gdk_seat_grab (seat,
+                          gtk_widget_get_window (shell->canvas),
+                          GDK_SEAT_CAPABILITY_ALL_POINTING,
+                          FALSE, NULL,
+                          event, NULL, NULL);
 
-  shell->pointer_grabbed = TRUE;
+  if (status == GDK_GRAB_SUCCESS)
+    {
+      shell->grab_seat           = seat;
+      shell->grab_pointer        = device;
+      shell->grab_pointer_source = source_device;
 
-  return TRUE;
+      return TRUE;
+    }
+
+  g_printerr ("%s: gdk_seat_grab(%s) failed with status %d\n",
+              G_STRFUNC, gdk_device_get_name (device), status);
+
+  return FALSE;
 }
 
 void
@@ -66,59 +119,12 @@ gimp_display_shell_pointer_ungrab (GimpDisplayShell *shell,
                                    const GdkEvent   *event)
 {
   g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
-  g_return_if_fail (shell->pointer_grabbed == TRUE);
-
-  gtk_grab_remove (shell->canvas);
-
-  if (event)
-    {
-      gdk_display_pointer_ungrab (gtk_widget_get_display (shell->canvas),
-                                  shell->pointer_grab_time);
-
-      shell->pointer_grab_time = 0;
-    }
-
-  shell->pointer_grabbed = FALSE;
-}
-
-gboolean
-gimp_display_shell_keyboard_grab (GimpDisplayShell *shell,
-                                  const GdkEvent   *event)
-{
-  GdkGrabStatus status;
-
-  g_return_val_if_fail (GIMP_IS_DISPLAY_SHELL (shell), FALSE);
-  g_return_val_if_fail (event != NULL, FALSE);
-  g_return_val_if_fail (shell->keyboard_grabbed == FALSE, FALSE);
-
-  status = gdk_keyboard_grab (gtk_widget_get_window (shell->canvas),
-                              FALSE,
-                              gdk_event_get_time (event));
-
-  if (status != GDK_GRAB_SUCCESS)
-    {
-      g_printerr ("%s: gdk_keyboard_grab failed with status %d\n",
-                  G_STRFUNC, status);
-      return FALSE;
-    }
-
-  shell->keyboard_grabbed   = TRUE;
-  shell->keyboard_grab_time = gdk_event_get_time (event);
-
-  return TRUE;
-}
-
-void
-gimp_display_shell_keyboard_ungrab (GimpDisplayShell *shell,
-                                    const GdkEvent   *event)
-{
-  g_return_if_fail (GIMP_IS_DISPLAY_SHELL (shell));
   g_return_if_fail (event != NULL);
-  g_return_if_fail (shell->keyboard_grabbed == TRUE);
+  g_return_if_fail (shell->grab_seat != NULL);
 
-  gdk_display_keyboard_ungrab (gtk_widget_get_display (shell->canvas),
-                               shell->keyboard_grab_time);
+  gdk_seat_ungrab (shell->grab_seat);
 
-  shell->keyboard_grabbed   = FALSE;
-  shell->keyboard_grab_time = 0;
+  shell->grab_seat           = NULL;
+  shell->grab_pointer        = NULL;
+  shell->grab_pointer_source = NULL;
 }

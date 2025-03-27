@@ -111,6 +111,9 @@ dashboard_log_record_cmd_callback (GimpAction *action,
           GtkWidget              *label;
           GtkWidget              *spinbutton;
           GtkWidget              *toggle;
+          GDateTime              *datetime;
+          gchar                  *timestamp;
+          gchar                  *default_filename;
 
           dialog = gtk_file_chooser_dialog_new (
             "Record Performance Log", NULL, GTK_FILE_CHOOSER_ACTION_SAVE,
@@ -122,10 +125,10 @@ dashboard_log_record_cmd_callback (GimpAction *action,
 
           gtk_dialog_set_default_response (GTK_DIALOG (dialog),
                                            GTK_RESPONSE_OK);
-          gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                                   GTK_RESPONSE_OK,
-                                                   GTK_RESPONSE_CANCEL,
-                                                   -1);
+          gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+                                                    GTK_RESPONSE_OK,
+                                                    GTK_RESPONSE_CANCEL,
+                                                    -1);
 
           gtk_window_set_screen (
             GTK_WINDOW (dialog),
@@ -168,8 +171,19 @@ dashboard_log_record_cmd_callback (GimpAction *action,
                 GTK_FILE_CHOOSER (dialog), info->folder, NULL);
             }
 
+          datetime  = g_date_time_new_now_local ();
+
+          /* Since Windows doesn't allow colons in filenames,
+           * we use ISO 8601 basic format for the timestamp */
+          timestamp = g_date_time_format (datetime, "%Y%m%dT%H%M%SZ");
+          default_filename = g_strdup_printf ("gimp-performance-%s.log",
+                                              timestamp);
+          g_date_time_unref (datetime);
+          g_free (timestamp);
+
           gtk_file_chooser_set_current_name (GTK_FILE_CHOOSER (dialog),
-                                             "gimp-performance.log");
+                                             default_filename);
+          g_free (default_filename);
 
           hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 8);
           gtk_file_chooser_set_extra_widget (GTK_FILE_CHOOSER (dialog), hbox);
@@ -248,8 +262,8 @@ dashboard_log_record_cmd_callback (GimpAction *action,
                             G_CALLBACK (gtk_true),
                             NULL);
 
-          gimp_help_connect (dialog, gimp_standard_help_func,
-                             GIMP_HELP_DASHBOARD_LOG_RECORD, NULL);
+          gimp_help_connect (dialog, NULL, gimp_standard_help_func,
+                             GIMP_HELP_DASHBOARD_LOG_RECORD, NULL, NULL);
 
           dialogs_attach_dialog (G_OBJECT (dashboard), LOG_RECORD_KEY, dialog);
 
@@ -297,7 +311,7 @@ dashboard_log_add_marker_cmd_callback (GimpAction *action,
         NULL,
         G_OBJECT (dashboard), "destroy",
         (GimpQueryStringCallback) dashboard_log_add_marker_response,
-        dashboard);
+        dashboard, NULL);
 
       dialogs_attach_dialog (G_OBJECT (dashboard), LOG_ADD_MARKER_KEY, dialog);
 

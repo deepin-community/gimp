@@ -30,19 +30,25 @@
 #include "config/gimpcoreconfig.h"
 
 #include "gegl/gimp-babl.h"
+#include "gegl/gimp-gegl-utils.h"
 
 #include "gimp.h"
 #include "gimpbuffer.h"
 #include "gimpchannel.h"
 #include "gimpcontext.h"
 #include "gimpdrawable-fill.h"
+#include "gimpdrawable-filters.h"
+#include "gimpdrawablefilter.h"
+#include "gimpgrouplayer.h"
 #include "gimpimage.h"
 #include "gimpimage-color-profile.h"
 #include "gimpimage-colormap.h"
+#include "gimpimage-metadata.h"
 #include "gimpimage-new.h"
 #include "gimpimage-undo.h"
 #include "gimplayer.h"
 #include "gimplayer-new.h"
+#include "gimplist.h"
 #include "gimptemplate.h"
 
 #include "gimp-intl.h"
@@ -96,17 +102,39 @@ gimp_image_new_set_last_template (Gimp         *gimp,
                     G_OBJECT (gimp->image_new_last_template), 0);
 }
 
+void
+gimp_image_new_add_creation_metadata (GimpImage *image)
+{
+  GimpMetadata *metadata;
+
+  metadata = gimp_image_get_metadata (image);
+  if (! metadata)
+    {
+      g_critical ("Metadata not found. Should not happen!");
+    }
+  else
+    {
+      GDateTime *datetime;
+
+      datetime = g_date_time_new_now_local ();
+      gimp_metadata_set_creation_date (metadata, datetime);
+      g_date_time_unref (datetime);
+    }
+}
+
 GimpImage *
 gimp_image_new_from_template (Gimp         *gimp,
                               GimpTemplate *template,
                               GimpContext  *context)
 {
-  GimpImage         *image;
-  GimpLayer         *layer;
-  GimpColorProfile  *profile;
-  gint               width, height;
-  gboolean           has_alpha;
-  const gchar       *comment;
+  GimpImage               *image;
+  GimpLayer               *layer;
+  GimpColorProfile        *profile;
+  GimpColorRenderingIntent intent;
+  gboolean                 bpc;
+  gint                     width, height;
+  gboolean                 has_alpha;
+  const gchar             *comment;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
   g_return_val_if_fail (GIMP_IS_TEMPLATE (template), NULL);
@@ -118,6 +146,7 @@ gimp_image_new_from_template (Gimp         *gimp,
                              gimp_template_get_base_type (template),
                              gimp_template_get_precision (template),
                              FALSE);
+  gimp_context_set_image (context, image);
 
   gimp_image_undo_disable (image);
 
@@ -140,13 +169,20 @@ gimp_image_new_from_template (Gimp         *gimp,
                              gimp_template_get_resolution_y (template));
   gimp_image_set_unit (image, gimp_template_get_resolution_unit (template));
 
-  gimp_image_set_is_color_managed (image,
-                                   gimp_template_get_color_managed (template),
-                                   FALSE);
   profile = gimp_template_get_color_profile (template);
   gimp_image_set_color_profile (image, profile, NULL);
   if (profile)
     g_object_unref (profile);
+
+  profile = gimp_template_get_simulation_profile (template);
+  gimp_image_set_simulation_profile (image, profile);
+  if (profile)
+    g_object_unref (profile);
+
+  intent = gimp_template_get_simulation_intent (template);
+  gimp_image_set_simulation_intent (image, intent);
+  bpc = gimp_template_get_simulation_bpc (template);
+  gimp_image_set_simulation_bpc (image, bpc);
 
   width  = gimp_image_get_width (image);
   height = gimp_image_get_height (image);
@@ -166,6 +202,8 @@ gimp_image_new_from_template (Gimp         *gimp,
                       context, gimp_template_get_fill_type (template));
 
   gimp_image_add_layer (image, layer, NULL, 0, FALSE);
+
+  gimp_image_new_add_creation_metadata (image);
 
   gimp_image_undo_enable (image);
   gimp_image_clean_all (image);
@@ -187,6 +225,7 @@ gimp_image_new_from_drawable (Gimp         *gimp,
   gdouble            xres;
   gdouble            yres;
   GimpColorProfile  *profile;
+  GimpContainer     *filters;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
   g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
@@ -205,18 +244,14 @@ gimp_image_new_from_drawable (Gimp         *gimp,
   gimp_image_undo_disable (new_image);
 
   if (type == GIMP_INDEXED)
-    gimp_image_set_colormap (new_image,
-                             gimp_image_get_colormap (image),
-                             gimp_image_get_colormap_size (image),
-                             FALSE);
+    gimp_image_set_colormap_palette (new_image,
+                                     gimp_image_get_colormap_palette (image),
+                                     FALSE);
 
   gimp_image_get_resolution (image, &xres, &yres);
   gimp_image_set_resolution (new_image, xres, yres);
   gimp_image_set_unit (new_image, gimp_image_get_unit (image));
 
-  gimp_image_set_is_color_managed (new_image,
-                                   gimp_image_get_is_color_managed (image),
-                                   FALSE);
   profile = gimp_color_managed_get_color_profile (GIMP_COLOR_MANAGED (drawable));
   gimp_image_set_color_profile (new_image, profile, NULL);
 
@@ -234,7 +269,6 @@ gimp_image_new_from_drawable (Gimp         *gimp,
   gimp_item_get_offset (GIMP_ITEM (new_layer), &off_x, &off_y);
   gimp_item_translate (GIMP_ITEM (new_layer), -off_x, -off_y, FALSE);
   gimp_item_set_visible (GIMP_ITEM (new_layer), TRUE, FALSE);
-  gimp_item_set_linked (GIMP_ITEM (new_layer), FALSE, FALSE);
   gimp_layer_set_mode (new_layer,
                        gimp_image_get_default_new_layer_mode (new_image),
                        FALSE);
@@ -242,7 +276,291 @@ gimp_image_new_from_drawable (Gimp         *gimp,
   if (gimp_layer_can_lock_alpha (new_layer))
     gimp_layer_set_lock_alpha (new_layer, FALSE, FALSE);
 
+  filters = gimp_drawable_get_filters (GIMP_DRAWABLE (drawable));
+  if (gimp_container_get_n_children (filters) > 0)
+    {
+      GList *filter_list;
+
+      for (filter_list = GIMP_LIST (filters)->queue->tail;
+           filter_list;
+           filter_list = g_list_previous (filter_list))
+        {
+          if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+            {
+              GimpDrawableFilter *old_filter = filter_list->data;
+              GimpDrawableFilter *filter;
+
+              filter =
+                gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_layer),
+                                                old_filter);
+
+              if (filter != NULL)
+                {
+                  gimp_drawable_filter_apply (filter, NULL);
+                  gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+
+                  gimp_drawable_filter_layer_mask_freeze (filter);
+                  g_object_unref (filter);
+                }
+            }
+        }
+    }
+
   gimp_image_add_layer (new_image, new_layer, NULL, 0, TRUE);
+
+  gimp_image_new_add_creation_metadata (new_image);
+
+  gimp_image_undo_enable (new_image);
+
+  return new_image;
+}
+
+/**
+ * gimp_image_new_copy_drawables:
+ * @image: the image where @drawables belong to.
+ * @drawables: the drawables to copy into @new_image.
+ * @new_image: the image to insert to.
+ * @tag_copies: tag copies of @drawable with "gimp-image-copied-layer".
+ * @copied_drawables:
+ * @tagged_drawables:
+ * @parent:
+ * @new_parent:
+ *
+ * This recursive function will create copies of all @drawables
+ * belonging to the same @image, and will insert them into @new_image
+ * with the same layer order and hierarchy (adding layer groups when
+ * needed).
+ * If a single drawable is selected, it will be copied visible, with
+ * full opacity and default layer mode. Otherwise, visibility, opacity
+ * and layer mode will be copied as-is, allowing proper compositing.
+ *
+ * The @copied_drawables, @tagged_drawables, @parent and @new_parent arguments
+ * are only used internally for recursive calls and must be set to NULL for the
+ * initial call.
+ */
+static void
+gimp_image_new_copy_drawables (GimpImage *image,
+                               GList     *drawables,
+                               GimpImage *new_image,
+                               gboolean   tag_copies,
+                               GList     *copied_drawables,
+                               GList     *tagged_drawables,
+                               GimpLayer *parent,
+                               GimpLayer *new_parent)
+{
+  GList *layers;
+  GList *iter;
+  gint   n_drawables;
+  gint   index;
+
+  n_drawables = g_list_length (drawables);
+  if (parent == NULL)
+    {
+      /* Root layers. */
+      layers = gimp_image_get_layer_iter (image);
+
+      copied_drawables = g_list_copy (drawables);
+      for (iter = copied_drawables; iter; iter = iter->next)
+        {
+          /* Tagged drawables are the explicitly copied drawables which have no
+           * explicitly copied descendant items.
+           */
+          GList *iter2;
+
+          for (iter2 = iter; iter2; iter2 = iter2->next)
+            if (gimp_viewable_is_ancestor (iter->data, iter2->data))
+              break;
+
+          if (iter2 == NULL)
+            tagged_drawables = g_list_prepend (tagged_drawables, iter->data);
+        }
+
+      /* Add any item parent. */
+      for (iter = copied_drawables; iter; iter = iter->next)
+        {
+          GimpItem *item = iter->data;
+          while ((item = gimp_item_get_parent (item)))
+            if (! g_list_find (copied_drawables, item))
+              copied_drawables = g_list_prepend (copied_drawables, item);
+        }
+    }
+  else
+    {
+      GimpContainer *container;
+
+      container = gimp_viewable_get_children (GIMP_VIEWABLE (parent));
+      layers = GIMP_LIST (container)->queue->head;
+    }
+
+  index = 0;
+  for (iter = layers; iter; iter = iter->next)
+    {
+      if (g_list_find (copied_drawables, iter->data))
+        {
+          GimpLayer     *new_layer;
+          GimpContainer *filters;
+          GType          new_type;
+          gboolean       is_group;
+          gboolean       is_tagged;
+
+          if (GIMP_IS_LAYER (iter->data))
+            new_type = G_TYPE_FROM_INSTANCE (iter->data);
+          else
+            new_type = GIMP_TYPE_LAYER;
+
+          is_group  = (gimp_viewable_get_children (iter->data) != NULL);
+          is_tagged = (g_list_find (tagged_drawables, iter->data) != NULL);
+
+          if (is_group && ! is_tagged)
+            new_layer = gimp_group_layer_new (new_image);
+          else
+            new_layer = GIMP_LAYER (gimp_item_convert (GIMP_ITEM (iter->data),
+                                                       new_image, new_type));
+
+          if (tag_copies && is_tagged)
+            g_object_set_data (G_OBJECT (new_layer),
+                               "gimp-image-copied-layer",
+                               GINT_TO_POINTER (TRUE));
+
+          gimp_object_set_name (GIMP_OBJECT (new_layer),
+                                gimp_object_get_name (iter->data));
+
+          /* Visibility, mode and opacity mimic the source image if
+           * multiple items are copied. Otherwise we just set them to
+           * defaults.
+           */
+          gimp_item_set_visible (GIMP_ITEM (new_layer),
+                                 n_drawables > 1 ?
+                                 gimp_item_get_visible (iter->data) : TRUE,
+                                 FALSE);
+          gimp_layer_set_mode (new_layer,
+                               n_drawables > 1 && GIMP_IS_LAYER (iter->data) ?
+                               gimp_layer_get_mode (iter->data) :
+                               gimp_image_get_default_new_layer_mode (new_image),
+                               FALSE);
+          gimp_layer_set_opacity (new_layer,
+                                  n_drawables > 1 && GIMP_IS_LAYER (iter->data) ?
+                                  gimp_layer_get_opacity (iter->data) : GIMP_OPACITY_OPAQUE, FALSE);
+
+          if (gimp_layer_can_lock_alpha (new_layer))
+            gimp_layer_set_lock_alpha (new_layer, FALSE, FALSE);
+
+          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (iter->data));
+          if (gimp_container_get_n_children (filters) > 0)
+            {
+              GList *filter_list;
+
+              for (filter_list = GIMP_LIST (filters)->queue->tail; filter_list;
+                   filter_list = g_list_previous (filter_list))
+                {
+                  if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+                    {
+                      GimpDrawableFilter *old_filter = filter_list->data;
+                      GimpDrawableFilter *filter;
+
+                      filter = gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_layer), old_filter);
+
+                      if (filter != NULL)
+                        {
+                          gimp_drawable_filter_apply (filter, NULL);
+                          gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
+
+                          gimp_drawable_filter_layer_mask_freeze (filter);
+                          g_object_unref (filter);
+                        }
+                    }
+                }
+            }
+
+          gimp_image_add_layer (new_image, new_layer, new_parent, index++, TRUE);
+
+          /* If a group, loop through children. */
+          if (is_group && ! is_tagged)
+            gimp_image_new_copy_drawables (image, drawables, new_image, tag_copies,
+                                           copied_drawables, tagged_drawables,
+                                           iter->data, new_layer);
+        }
+    }
+
+  if (parent == NULL)
+    {
+      g_list_free (copied_drawables);
+      g_list_free (tagged_drawables);
+    }
+}
+
+GimpImage *
+gimp_image_new_from_drawables (Gimp     *gimp,
+                               GList    *drawables,
+                               gboolean  copy_selection,
+                               gboolean  tag_copies)
+{
+  GimpImage         *image = NULL;
+  GimpImage         *new_image;
+  GList             *iter;
+  GimpImageBaseType  type;
+  GimpPrecision      precision;
+  gdouble            xres;
+  gdouble            yres;
+  GimpColorProfile  *profile = NULL;
+
+  g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
+  g_return_val_if_fail (drawables != NULL, NULL);
+
+  for (iter = drawables; iter; iter = iter->next)
+    {
+      g_return_val_if_fail (GIMP_IS_DRAWABLE (iter->data), NULL);
+
+      if (iter == drawables)
+        image = gimp_item_get_image (iter->data);
+      else
+        /* We only accept list of drawables for a same origin image. */
+        g_return_val_if_fail (gimp_item_get_image (iter->data) == image, NULL);
+    }
+
+  type      = gimp_drawable_get_base_type (drawables->data);
+  precision = gimp_drawable_get_precision (drawables->data);
+  profile   = gimp_color_managed_get_color_profile (GIMP_COLOR_MANAGED (drawables->data));
+
+  new_image = gimp_create_image (gimp,
+                                 gimp_image_get_width  (image),
+                                 gimp_image_get_height (image),
+                                 type, precision,
+                                 TRUE);
+  gimp_image_undo_disable (new_image);
+
+  if (type == GIMP_INDEXED)
+    gimp_image_set_colormap_palette (new_image,
+                                     gimp_image_get_colormap_palette (image),
+                                     FALSE);
+
+  gimp_image_get_resolution (image, &xres, &yres);
+  gimp_image_set_resolution (new_image, xres, yres);
+  gimp_image_set_unit (new_image, gimp_image_get_unit (image));
+  if (profile)
+    gimp_image_set_color_profile (new_image, profile, NULL);
+
+  if (copy_selection)
+    {
+      GimpChannel *selection;
+
+      selection = gimp_image_get_mask (image);
+      if (! gimp_channel_is_empty (selection))
+        {
+          GimpChannel *new_selection;
+          GeglBuffer  *buffer;
+
+          new_selection = gimp_image_get_mask (new_image);
+          buffer = gimp_gegl_buffer_dup (gimp_drawable_get_buffer (GIMP_DRAWABLE (selection)));
+          gimp_drawable_set_buffer (GIMP_DRAWABLE (new_selection),
+                                    FALSE, NULL, buffer);
+          g_object_unref (buffer);
+        }
+    }
+
+  gimp_image_new_copy_drawables (image, drawables, new_image, tag_copies, NULL, NULL, NULL, NULL);
+
+  gimp_image_new_add_creation_metadata (new_image);
 
   gimp_image_undo_enable (new_image);
 
@@ -289,6 +607,8 @@ gimp_image_new_from_component (Gimp            *gimp,
                          g_strdup_printf (_("%s Channel Copy"), desc));
 
   gimp_image_add_layer (new_image, layer, NULL, 0, TRUE);
+
+  gimp_image_new_add_creation_metadata (new_image);
 
   gimp_image_undo_enable (new_image);
 
@@ -339,6 +659,8 @@ gimp_image_new_from_buffer (Gimp       *gimp,
 
   gimp_image_add_layer (image, layer, NULL, 0, TRUE);
 
+  gimp_image_new_add_creation_metadata (image);
+
   gimp_image_undo_enable (image);
 
   return image;
@@ -377,7 +699,7 @@ gimp_image_new_from_pixbuf (Gimp        *gimp,
                                  gdk_pixbuf_get_width  (pixbuf),
                                  gdk_pixbuf_get_height (pixbuf),
                                  base_type,
-                                 GIMP_PRECISION_U8_GAMMA,
+                                 GIMP_PRECISION_U8_NON_LINEAR,
                                  FALSE);
 
   gimp_image_undo_disable (new_image);
@@ -385,7 +707,9 @@ gimp_image_new_from_pixbuf (Gimp        *gimp,
   icc_data = gimp_pixbuf_get_icc_profile (pixbuf, &icc_len);
   if (icc_data)
     {
-      gimp_image_set_icc_profile (new_image, icc_data, icc_len, NULL);
+      gimp_image_set_icc_profile (new_image, icc_data, icc_len,
+                                  GIMP_ICC_PROFILE_PARASITE_NAME,
+                                  NULL);
       g_free (icc_data);
     }
 
@@ -397,6 +721,8 @@ gimp_image_new_from_pixbuf (Gimp        *gimp,
                                       gimp_image_get_default_new_layer_mode (new_image));
 
   gimp_image_add_layer (new_image, layer, NULL, 0, TRUE);
+
+  gimp_image_new_add_creation_metadata (new_image);
 
   gimp_image_undo_enable (new_image);
 

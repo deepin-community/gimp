@@ -46,15 +46,19 @@ struct _GimpProcedure
 
   GimpPDBProcType   proc_type;      /* Type of procedure              */
 
-  gboolean          static_strings; /* Are the strings allocated?     */
-
-  gchar            *original_name;  /* Uncanonicalized procedure name */
+  gboolean          static_help;    /* Are the strings allocated?     */
   gchar            *blurb;          /* Short procedure description    */
   gchar            *help;           /* Detailed help instructions     */
-  gchar            *author;         /* Author field                   */
+  gchar            *help_id;        /* Help ID                        */
+
+  gboolean          static_attribution;
+  gchar            *authors;        /* Authors field                  */
   gchar            *copyright;      /* Copyright field                */
   gchar            *date;           /* Date field                     */
+
   gchar            *deprecated;     /* Replacement if deprecated      */
+
+  gchar            *label;          /* Cached label string            */
 
   gint32            num_args;       /* Number of procedure arguments  */
   GParamSpec      **args;           /* Array of procedure arguments   */
@@ -63,6 +67,8 @@ struct _GimpProcedure
   GParamSpec      **values;         /* Array of return values         */
 
   GimpMarshalFunc   marshal_func;   /* Marshaller for internal procs  */
+
+  gboolean          is_private;     /* Invisible procedure            */
 };
 
 struct _GimpProcedureClass
@@ -75,7 +81,7 @@ struct _GimpProcedureClass
   const gchar    * (* get_help_id)    (GimpProcedure   *procedure);
   gboolean         (* get_sensitive)  (GimpProcedure   *procedure,
                                        GimpObject      *object,
-                                       const gchar    **tooltip);
+                                       const gchar    **reason);
 
   GimpValueArray * (* execute)        (GimpProcedure   *procedure,
                                        Gimp            *gimp,
@@ -88,46 +94,53 @@ struct _GimpProcedureClass
                                        GimpContext     *context,
                                        GimpProgress    *progress,
                                        GimpValueArray  *args,
-                                       GimpObject      *display);
+                                       GimpDisplay     *display);
 };
 
 
 GType            gimp_procedure_get_type           (void) G_GNUC_CONST;
 
-GimpProcedure  * gimp_procedure_new                (GimpMarshalFunc   marshal_func);
+GimpProcedure  * gimp_procedure_new                (GimpMarshalFunc   marshal_func,
+                                                    gboolean          is_private);
 
-void             gimp_procedure_set_strings        (GimpProcedure    *procedure,
-                                                    const gchar      *original_name,
+void             gimp_procedure_set_help           (GimpProcedure    *procedure,
                                                     const gchar      *blurb,
                                                     const gchar      *help,
-                                                    const gchar      *author,
-                                                    const gchar      *copyright,
-                                                    const gchar      *date,
-                                                    const gchar      *deprecated);
-void             gimp_procedure_set_static_strings (GimpProcedure    *procedure,
-                                                    const gchar      *original_name,
+                                                    const gchar      *help_id);
+void             gimp_procedure_set_static_help    (GimpProcedure    *procedure,
                                                     const gchar      *blurb,
                                                     const gchar      *help,
-                                                    const gchar      *author,
-                                                    const gchar      *copyright,
-                                                    const gchar      *date,
-                                                    const gchar      *deprecated);
-void             gimp_procedure_take_strings       (GimpProcedure    *procedure,
-                                                    gchar            *original_name,
+                                                    const gchar      *help_id);
+void             gimp_procedure_take_help          (GimpProcedure    *procedure,
                                                     gchar            *blurb,
                                                     gchar            *help,
-                                                    gchar            *author,
+                                                    gchar            *help_id);
+
+void             gimp_procedure_set_attribution    (GimpProcedure    *procedure,
+                                                    const gchar      *authors,
+                                                    const gchar      *copyright,
+                                                    const gchar      *date);
+void             gimp_procedure_set_static_attribution
+                                                   (GimpProcedure    *procedure,
+                                                    const gchar      *authors,
+                                                    const gchar      *copyright,
+                                                    const gchar      *date);
+void             gimp_procedure_take_attribution   (GimpProcedure    *procedure,
+                                                    gchar            *authors,
                                                     gchar            *copyright,
-                                                    gchar            *date,
-                                                    gchar            *deprecated);
+                                                    gchar            *date);
+
+void             gimp_procedure_set_deprecated     (GimpProcedure    *procedure,
+                                                    const gchar      *deprecated);
 
 const gchar    * gimp_procedure_get_label          (GimpProcedure    *procedure);
 const gchar    * gimp_procedure_get_menu_label     (GimpProcedure    *procedure);
 const gchar    * gimp_procedure_get_blurb          (GimpProcedure    *procedure);
+const gchar    * gimp_procedure_get_help           (GimpProcedure    *procedure);
 const gchar    * gimp_procedure_get_help_id        (GimpProcedure    *procedure);
 gboolean         gimp_procedure_get_sensitive      (GimpProcedure    *procedure,
                                                     GimpObject       *object,
-                                                    const gchar     **tooltip);
+                                                    const gchar     **reason);
 
 void             gimp_procedure_add_argument       (GimpProcedure    *procedure,
                                                     GParamSpec       *pspec);
@@ -153,7 +166,7 @@ void             gimp_procedure_execute_async      (GimpProcedure    *procedure,
                                                     GimpContext      *context,
                                                     GimpProgress     *progress,
                                                     GimpValueArray   *args,
-                                                    GimpObject       *display,
+                                                    GimpDisplay      *display,
                                                     GError          **error);
 
 gint             gimp_procedure_name_compare       (GimpProcedure    *proc1,

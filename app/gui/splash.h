@@ -18,10 +18,10 @@
 #ifndef __SPLASH_H__
 #define __SPLASH_H__
 
-
-void   splash_create    (gboolean     be_verbose,
-                         GdkScreen   *screen,
-                         gint         monitor);
+void   splash_create    (Gimp         *gimp,
+                         gboolean      be_verbose,
+                         GdkMonitor   *monitor,
+                         GimpApp      *app);
 void   splash_destroy   (void);
 
 void   splash_update    (const gchar *label1,

@@ -28,7 +28,6 @@
 #include "display-types.h"
 
 #include "core/gimpcontext.h"
-#include "core/gimpmarshal.h"
 #include "core/gimptoolinfo.h"
 
 #include "widgets/gimpdialogfactory.h"
@@ -75,7 +74,7 @@ struct _GimpToolGuiPrivate
   gboolean          auto_overlay;
 
   GimpDisplayShell *shell;
-  GimpViewable     *viewable;
+  GList            *viewables;
 
   GtkWidget        *dialog;
   GtkWidget        *vbox;
@@ -88,8 +87,7 @@ static void            gimp_tool_gui_dispose           (GObject       *object);
 static void            gimp_tool_gui_finalize          (GObject       *object);
 
 static void            gimp_tool_gui_create_dialog     (GimpToolGui   *gui,
-                                                        GdkScreen     *screen,
-                                                        gint           monitor);
+                                                        GdkMonitor    *monitor);
 static void            gimp_tool_gui_add_dialog_button (GimpToolGui   *gui,
                                                         ResponseEntry *entry);
 static void            gimp_tool_gui_update_buttons    (GimpToolGui   *gui);
@@ -130,8 +128,7 @@ gimp_tool_gui_class_init (GimpToolGuiClass *klass)
                   G_OBJECT_CLASS_TYPE (klass),
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpToolGuiClass, response),
-                  NULL, NULL,
-                  gimp_marshal_VOID__INT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   G_TYPE_INT);
 }
@@ -158,8 +155,8 @@ gimp_tool_gui_dispose (GObject *object)
   if (private->shell)
     gimp_tool_gui_set_shell (GIMP_TOOL_GUI (object), NULL);
 
-  if (private->viewable)
-    gimp_tool_gui_set_viewable (GIMP_TOOL_GUI (object), NULL);
+  if (private->viewables)
+    gimp_tool_gui_set_viewables (GIMP_TOOL_GUI (object), NULL);
 
   g_clear_object (&private->vbox);
 
@@ -201,7 +198,7 @@ gimp_tool_gui_finalize (GObject *object)
 
 
 /**
- * gimp_tool_gui_new:
+ * gimp_tool_gui_new: (skip)
  * @tool_info:   a #GimpToolInfo
  * @description: a string to use in the gui header or %NULL to use the help
  *               field from #GimpToolInfo
@@ -211,7 +208,7 @@ gimp_tool_gui_finalize (GObject *object)
  * This function creates a #GimpToolGui using the information stored
  * in @tool_info.
  *
- * Return value: a new #GimpToolGui
+ * Returns: a new #GimpToolGui
  **/
 GimpToolGui *
 gimp_tool_gui_new (GimpToolInfo *tool_info,
@@ -219,8 +216,7 @@ gimp_tool_gui_new (GimpToolInfo *tool_info,
                    const gchar  *description,
                    const gchar  *icon_name,
                    const gchar  *help_id,
-                   GdkScreen    *screen,
-                   gint          monitor,
+                   GdkMonitor   *monitor,
                    gboolean      overlay,
                    ...)
 {
@@ -259,7 +255,7 @@ gimp_tool_gui_new (GimpToolInfo *tool_info,
 
   va_end (args);
 
-  gimp_tool_gui_create_dialog (gui, screen, monitor);
+  gimp_tool_gui_create_dialog (gui, monitor);
 
   return gui;
 }
@@ -381,53 +377,75 @@ gimp_tool_gui_set_shell (GimpToolGui      *gui,
     return;
 
   if (private->shell)
-    {
-      g_object_remove_weak_pointer (G_OBJECT (private->shell),
-                                    (gpointer) &private->shell);
-      g_signal_handlers_disconnect_by_func (private->shell->canvas,
-                                            gimp_tool_gui_canvas_resized,
-                                            gui);
-    }
+    g_signal_handlers_disconnect_by_func (private->shell->canvas,
+                                          gimp_tool_gui_canvas_resized,
+                                          gui);
 
-  private->shell = shell;
+  g_set_weak_pointer (&private->shell, shell);
 
   if (private->shell)
-    {
-      g_signal_connect (private->shell->canvas, "size-allocate",
-                        G_CALLBACK (gimp_tool_gui_canvas_resized),
-                        gui);
-      g_object_add_weak_pointer (G_OBJECT (private->shell),
-                                 (gpointer) &private->shell);
-    }
+    g_signal_connect (private->shell->canvas, "size-allocate",
+                      G_CALLBACK (gimp_tool_gui_canvas_resized),
+                      gui);
 
   gimp_tool_gui_update_shell (gui);
+}
+
+void
+gimp_tool_gui_set_viewables (GimpToolGui *gui,
+                             GList       *viewables)
+{
+  GimpToolGuiPrivate *private;
+  GList              *iter;
+
+  g_return_if_fail (GIMP_IS_TOOL_GUI (gui));
+
+  private = GET_PRIVATE (gui);
+
+  if (g_list_length (viewables) == g_list_length (private->viewables))
+    {
+      for (iter = private->viewables; iter; iter = iter->next)
+        {
+          g_return_if_fail (iter->data == NULL || GIMP_IS_VIEWABLE (iter->data));
+
+          if (! g_list_find (private->viewables, iter->data))
+            break;
+        }
+
+      if (iter == NULL)
+        /* Identical viewable list. */
+        return;
+    }
+
+  if (private->viewables)
+    {
+      for (iter = private->viewables; iter; iter = iter->next)
+        g_clear_weak_pointer (&iter->data);
+
+      g_list_free (private->viewables);
+    }
+
+  private->viewables = g_list_copy (viewables);
+
+  if (private->viewables)
+    {
+      for (iter = private->viewables; iter; iter = iter->next)
+        /* NOT g_set_weak_pointer() because the pointer is alrerady set */
+        g_object_add_weak_pointer (G_OBJECT (iter->data),
+                                   (gpointer) &iter->data);
+    }
+
+  gimp_tool_gui_update_viewable (gui);
 }
 
 void
 gimp_tool_gui_set_viewable (GimpToolGui  *gui,
                             GimpViewable *viewable)
 {
-  GimpToolGuiPrivate *private;
+  GList *viewables = g_list_prepend (NULL, viewable);
 
-  g_return_if_fail (GIMP_IS_TOOL_GUI (gui));
-  g_return_if_fail (viewable == NULL || GIMP_IS_VIEWABLE (viewable));
-
-  private = GET_PRIVATE (gui);
-
-  if (private->viewable == viewable)
-    return;
-
-  if (private->viewable)
-    g_object_remove_weak_pointer (G_OBJECT (private->viewable),
-                                  (gpointer) &private->viewable);
-
-  private->viewable = viewable;
-
-  if (private->viewable)
-    g_object_add_weak_pointer (G_OBJECT (private->viewable),
-                               (gpointer) &private->viewable);
-
-  gimp_tool_gui_update_viewable (gui);
+  gimp_tool_gui_set_viewables (gui, viewables);
+  g_list_free (viewables);
 }
 
 GtkWidget *
@@ -523,8 +541,7 @@ gimp_tool_gui_hide (GimpToolGui *gui)
 
 void
 gimp_tool_gui_set_overlay (GimpToolGui *gui,
-                           GdkScreen   *screen,
-                           gint         monitor,
+                           GdkMonitor  *monitor,
                            gboolean     overlay)
 {
   GimpToolGuiPrivate *private;
@@ -558,7 +575,7 @@ gimp_tool_gui_set_overlay (GimpToolGui *gui,
 
   private->overlay = overlay;
 
-  gimp_tool_gui_create_dialog (gui, screen, monitor);
+  gimp_tool_gui_create_dialog (gui, monitor);
 
   if (visible)
     gimp_tool_gui_show (gui);
@@ -762,8 +779,7 @@ gimp_tool_gui_set_alternative_button_order (GimpToolGui *gui,
 
 static void
 gimp_tool_gui_create_dialog (GimpToolGui *gui,
-                             GdkScreen   *screen,
-                             gint         monitor)
+                             GdkMonitor  *monitor)
 {
   GimpToolGuiPrivate *private = GET_PRIVATE (gui);
   GList              *list;
@@ -795,7 +811,7 @@ gimp_tool_gui_create_dialog (GimpToolGui *gui,
   else
     {
       private->dialog = gimp_tool_dialog_new (private->tool_info,
-                                              screen, monitor,
+                                              monitor,
                                               private->title,
                                               private->description,
                                               private->icon_name,
@@ -827,7 +843,7 @@ gimp_tool_gui_create_dialog (GimpToolGui *gui,
   if (private->shell)
     gimp_tool_gui_update_shell (gui);
 
-  if (private->viewable)
+  if (private->viewables)
     gimp_tool_gui_update_viewable (gui);
 
   g_signal_connect_object (private->dialog, "response",
@@ -903,8 +919,8 @@ gimp_tool_gui_update_buttons (GimpToolGui *gui)
         }
       else
         {
-          gtk_dialog_set_alternative_button_order_from_array (GTK_DIALOG (private->dialog),
-                                                              n_ids, ids);
+          gimp_dialog_set_alternative_button_order_from_array (GIMP_DIALOG (private->dialog),
+                                                               n_ids, ids);
         }
     }
 
@@ -945,8 +961,8 @@ gimp_tool_gui_update_viewable (GimpToolGui *gui)
       if (private->tool_info)
         context = GIMP_CONTEXT (private->tool_info->tool_options);
 
-      gimp_viewable_dialog_set_viewable (GIMP_VIEWABLE_DIALOG (private->dialog),
-                                         private->viewable, context);
+      gimp_viewable_dialog_set_viewables (GIMP_VIEWABLE_DIALOG (private->dialog),
+                                          g_list_copy (private->viewables), context);
     }
 }
 
@@ -959,7 +975,6 @@ gimp_tool_gui_dialog_response (GtkWidget   *dialog,
     {
       gimp_tool_gui_set_auto_overlay (gui, FALSE);
       gimp_tool_gui_set_overlay (gui,
-                                 gtk_widget_get_screen (dialog),
                                  gimp_widget_get_monitor (dialog),
                                  FALSE);
     }
@@ -983,7 +998,7 @@ gimp_tool_gui_canvas_resized (GtkWidget     *canvas,
       GtkAllocation  allocation;
       gboolean       overlay = FALSE;
 
-      gtk_widget_size_request (private->vbox, &requisition);
+      gtk_widget_get_preferred_size (private->vbox, &requisition, NULL);
       gtk_widget_get_allocation (canvas, &allocation);
 
       if (allocation.width  > 2 * requisition.width &&
@@ -993,7 +1008,6 @@ gimp_tool_gui_canvas_resized (GtkWidget     *canvas,
         }
 
       gimp_tool_gui_set_overlay (gui,
-                                 gtk_widget_get_screen (private->dialog),
                                  gimp_widget_get_monitor (private->dialog),
                                  overlay);
     }

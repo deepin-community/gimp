@@ -4,6 +4,7 @@
  * gimpscaleentry.h
  * Copyright (C) 2000 Michael Natterer <mitch@gimp.org>,
  *               2008 Bill Skaggs <weskaggs@primate.ucdavis.edu>
+ *               2020 Jehan
  *
  * This library is free software: you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -24,100 +25,52 @@
 #error "Only <libgimpwidgets/gimpwidgets.h> can be included directly."
 #endif
 
+#include <libgimpwidgets/gimplabelspin.h>
+
 #ifndef __GIMP_SCALE_ENTRY_H__
 #define __GIMP_SCALE_ENTRY_H__
 
 G_BEGIN_DECLS
 
+#define GIMP_TYPE_SCALE_ENTRY (gimp_scale_entry_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpScaleEntry, gimp_scale_entry, GIMP, SCALE_ENTRY, GimpLabelSpin)
 
-/**
- * GIMP_SCALE_ENTRY_LABEL:
- * @adj: The #GtkAdjustment returned by gimp_scale_entry_new().
- *
- * Returns: the scale_entry's #GtkLabel.
- **/
-#define GIMP_SCALE_ENTRY_LABEL(adj) \
-        (g_object_get_data (G_OBJECT (adj), "label"))
+struct _GimpScaleEntryClass
+{
+  GimpLabelSpinClass parent_class;
 
-/**
- * GIMP_SCALE_ENTRY_SCALE:
- * @adj: The #GtkAdjustment returned by gimp_scale_entry_new().
- *
- * Returns: the scale_entry's #GtkHScale.
- **/
-#define GIMP_SCALE_ENTRY_SCALE(adj) \
-        (g_object_get_data (G_OBJECT (adj), "scale"))
+  /*  Class methods  */
+  GtkWidget     * (* new_range_widget) (GtkAdjustment  *adjustment);
 
-/**
- * GIMP_SCALE_ENTRY_SCALE_ADJ:
- * @adj: The #GtkAdjustment returned by gimp_scale_entry_new().
- *
- * Returns: the #GtkAdjustment of the scale_entry's #GtkHScale.
- **/
-#define GIMP_SCALE_ENTRY_SCALE_ADJ(adj)     \
-        gtk_range_get_adjustment \
-        (GTK_RANGE (g_object_get_data (G_OBJECT (adj), "scale")))
+  /* Padding for future expansion */
+  void (* _gimp_reserved0) (void);
+  void (* _gimp_reserved1) (void);
+  void (* _gimp_reserved2) (void);
+  void (* _gimp_reserved3) (void);
+  void (* _gimp_reserved4) (void);
+  void (* _gimp_reserved5) (void);
+  void (* _gimp_reserved6) (void);
+  void (* _gimp_reserved7) (void);
+  void (* _gimp_reserved8) (void);
+  void (* _gimp_reserved9) (void);
+};
 
-/**
- * GIMP_SCALE_ENTRY_SPINBUTTON:
- * @adj: The #GtkAdjustment returned by gimp_scale_entry_new().
- *
- * Returns: the scale_entry's #GtkSpinButton.
- **/
-#define GIMP_SCALE_ENTRY_SPINBUTTON(adj) \
-        (g_object_get_data (G_OBJECT (adj), "spinbutton"))
+GtkWidget     * gimp_scale_entry_new             (const gchar *text,
+                                                  gdouble      value,
+                                                  gdouble      lower,
+                                                  gdouble      upper,
+                                                  guint        digits);
 
-/**
- * GIMP_SCALE_ENTRY_SPINBUTTON_ADJ:
- * @adj: The #GtkAdjustment returned by gimp_scale_entry_new().
- *
- * Returns: the #GtkAdjustment of the scale_entry's #GtkSpinButton.
- **/
-#define GIMP_SCALE_ENTRY_SPINBUTTON_ADJ(adj) \
-        gtk_spin_button_get_adjustment \
-        (GTK_SPIN_BUTTON (g_object_get_data (G_OBJECT (adj), "spinbutton")))
+GtkWidget     * gimp_scale_entry_get_range       (GimpScaleEntry *entry);
 
+void            gimp_scale_entry_set_bounds      (GimpScaleEntry *entry,
+                                                  gdouble         lower,
+                                                  gdouble         upper,
+                                                  gboolean        limit_scale);
 
-GtkObject * gimp_scale_entry_new             (GtkTable    *table,
-                                              gint         column,
-                                              gint         row,
-                                              const gchar *text,
-                                              gint         scale_width,
-                                              gint         spinbutton_width,
-                                              gdouble      value,
-                                              gdouble      lower,
-                                              gdouble      upper,
-                                              gdouble      step_increment,
-                                              gdouble      page_increment,
-                                              guint        digits,
-                                              gboolean     constrain,
-                                              gdouble      unconstrained_lower,
-                                              gdouble      unconstrained_upper,
-                                              const gchar *tooltip,
-                                              const gchar *help_id);
-
-GtkObject * gimp_color_scale_entry_new       (GtkTable    *table,
-                                              gint         column,
-                                              gint         row,
-                                              const gchar *text,
-                                              gint         scale_width,
-                                              gint         spinbutton_width,
-                                              gdouble      value,
-                                              gdouble      lower,
-                                              gdouble      upper,
-                                              gdouble      step_increment,
-                                              gdouble      page_increment,
-                                              guint        digits,
-                                              const gchar *tooltip,
-                                              const gchar *help_id);
-
-void        gimp_scale_entry_set_sensitive   (GtkObject   *adjustment,
-                                              gboolean     sensitive);
-
-void        gimp_scale_entry_set_logarithmic (GtkObject   *adjustment,
-                                              gboolean     logarithmic);
-gboolean    gimp_scale_entry_get_logarithmic (GtkObject   *adjustment);
-
+void            gimp_scale_entry_set_logarithmic (GimpScaleEntry *entry,
+                                                  gboolean        logarithmic);
+gboolean        gimp_scale_entry_get_logarithmic (GimpScaleEntry *entry);
 
 
 G_END_DECLS

@@ -1,6 +1,7 @@
 
 /* Generated data (by gimp-mkenums) */
 
+#include "stamp-tools-enums.h"
 #include "config.h"
 #include <gio/gio.h>
 #include "libgimpbase/gimpbase.h"
@@ -55,9 +56,9 @@ gimp_line_art_source_get_type (void)
   static const GimpEnumDesc descs[] =
   {
     { GIMP_LINE_ART_SOURCE_SAMPLE_MERGED, NC_("line-art-source", "All visible layers"), NULL },
-    { GIMP_LINE_ART_SOURCE_ACTIVE_LAYER, NC_("line-art-source", "Active layer"), NULL },
-    { GIMP_LINE_ART_SOURCE_LOWER_LAYER, NC_("line-art-source", "Layer below the active one"), NULL },
-    { GIMP_LINE_ART_SOURCE_UPPER_LAYER, NC_("line-art-source", "Layer above the active one"), NULL },
+    { GIMP_LINE_ART_SOURCE_ACTIVE_LAYER, NC_("line-art-source", "Selected layer"), NULL },
+    { GIMP_LINE_ART_SOURCE_LOWER_LAYER, NC_("line-art-source", "Layer below the selected one"), NULL },
+    { GIMP_LINE_ART_SOURCE_UPPER_LAYER, NC_("line-art-source", "Layer above the selected one"), NULL },
     { 0, NULL, NULL }
   };
 
@@ -274,15 +275,15 @@ gimp_transform_3d_lens_mode_get_type (void)
 
   static const GimpEnumDesc descs[] =
   {
-    { GIMP_TRANSFORM_3D_LENS_MODE_FOCAL_LENGTH, NC_("3-dtrasnform-lens-mode", "Focal length"), NULL },
-    { GIMP_TRANSFORM_3D_LENS_MODE_FOV_IMAGE, NC_("3-dtrasnform-lens-mode", "Field of view (relative to image)"), NULL },
+    { GIMP_TRANSFORM_3D_LENS_MODE_FOCAL_LENGTH, NC_("3-dtransform-lens-mode", "Focal length"), NULL },
+    { GIMP_TRANSFORM_3D_LENS_MODE_FOV_IMAGE, NC_("3-dtransform-lens-mode", "Field of view (relative to image)"), NULL },
     /* Translators: this is an abbreviated version of "Field of view (relative to image)".
        Keep it short. */
-    { GIMP_TRANSFORM_3D_LENS_MODE_FOV_IMAGE, NC_("3-dtrasnform-lens-mode", "FOV (image)"), NULL },
-    { GIMP_TRANSFORM_3D_LENS_MODE_FOV_ITEM, NC_("3-dtrasnform-lens-mode", "Field of view (relative to item)"), NULL },
+    { GIMP_TRANSFORM_3D_LENS_MODE_FOV_IMAGE, NC_("3-dtransform-lens-mode", "FOV (image)"), NULL },
+    { GIMP_TRANSFORM_3D_LENS_MODE_FOV_ITEM, NC_("3-dtransform-lens-mode", "Field of view (relative to item)"), NULL },
     /* Translators: this is an abbreviated version of "Field of view (relative to item)".
        Keep it short. */
-    { GIMP_TRANSFORM_3D_LENS_MODE_FOV_ITEM, NC_("3-dtrasnform-lens-mode", "FOV (item)"), NULL },
+    { GIMP_TRANSFORM_3D_LENS_MODE_FOV_ITEM, NC_("3-dtransform-lens-mode", "FOV (item)"), NULL },
     { 0, NULL, NULL }
   };
 
@@ -290,8 +291,8 @@ gimp_transform_3d_lens_mode_get_type (void)
 
   if (G_UNLIKELY (! type))
     {
-      type = g_enum_register_static ("Gimp3DTrasnformLensMode", values);
-      gimp_type_set_translation_context (type, "3-dtrasnform-lens-mode");
+      type = g_enum_register_static ("Gimp3DTransformLensMode", values);
+      gimp_type_set_translation_context (type, "3-dtransform-lens-mode");
       gimp_enum_set_value_descriptions (type, descs);
     }
 
@@ -331,6 +332,35 @@ gimp_warp_behavior_get_type (void)
     {
       type = g_enum_register_static ("GimpWarpBehavior", values);
       gimp_type_set_translation_context (type, "warp-behavior");
+      gimp_enum_set_value_descriptions (type, descs);
+    }
+
+  return type;
+}
+
+GType
+gimp_paint_select_mode_get_type (void)
+{
+  static const GEnumValue values[] =
+  {
+    { GIMP_PAINT_SELECT_MODE_ADD, "GIMP_PAINT_SELECT_MODE_ADD", "add" },
+    { GIMP_PAINT_SELECT_MODE_SUBTRACT, "GIMP_PAINT_SELECT_MODE_SUBTRACT", "subtract" },
+    { 0, NULL, NULL }
+  };
+
+  static const GimpEnumDesc descs[] =
+  {
+    { GIMP_PAINT_SELECT_MODE_ADD, NC_("paint-select-mode", "Add to selection"), NULL },
+    { GIMP_PAINT_SELECT_MODE_SUBTRACT, NC_("paint-select-mode", "Subtract from selection"), NULL },
+    { 0, NULL, NULL }
+  };
+
+  static GType type = 0;
+
+  if (G_UNLIKELY (! type))
+    {
+      type = g_enum_register_static ("GimpPaintSelectMode", values);
+      gimp_type_set_translation_context (type, "paint-select-mode");
       gimp_enum_set_value_descriptions (type, descs);
     }
 

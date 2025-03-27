@@ -40,328 +40,264 @@
 #include "libgimp/stdplugins-intl.h"
 
 
-#define SAVE_PROC      "file-gbr-save"
+#define EXPORT_PROC    "file-gbr-export"
 #define PLUG_IN_BINARY "file-gbr"
-#define PLUG_IN_ROLE   "gimp-file-gbr"
 
 
-typedef struct
+typedef struct _Gbr      Gbr;
+typedef struct _GbrClass GbrClass;
+
+struct _Gbr
 {
-  gchar description[256];
-  gint  spacing;
-} BrushInfo;
+  GimpPlugIn      parent_instance;
+};
 
-
-/*  local function prototypes  */
-
-static void       query          (void);
-static void       run            (const gchar      *name,
-                                  gint              nparams,
-                                  const GimpParam  *param,
-                                  gint             *nreturn_vals,
-                                  GimpParam       **return_vals);
-
-static gboolean   save_dialog    (void);
-static void       entry_callback (GtkWidget        *widget,
-                                  gpointer          data);
-
-
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _GbrClass
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
+  GimpPlugInClass parent_class;
 };
 
 
-/*  private variables  */
+#define GBR_TYPE  (gbr_get_type ())
+#define GBR(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), GBR_TYPE, Gbr))
 
-static BrushInfo info =
-{
-  "GIMP Brush",
-  10
-};
+GType                   gbr_get_type         (void) G_GNUC_CONST;
+
+static GList          * gbr_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * gbr_create_procedure (GimpPlugIn           *plug_in,
+                                              const gchar          *name);
+
+static GimpValueArray * gbr_export           (GimpProcedure        *procedure,
+                                              GimpRunMode           run_mode,
+                                              GimpImage            *image,
+                                              GFile                *file,
+                                              GimpExportOptions    *options,
+                                              GimpMetadata         *metadata,
+                                              GimpProcedureConfig  *config,
+                                              gpointer              run_data);
+
+static gboolean         save_dialog          (GimpProcedure        *procedure,
+                                              GObject              *config,
+                                              GimpImage            *image);
 
 
-MAIN ()
+G_DEFINE_TYPE (Gbr, gbr, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (GBR_TYPE)
+DEFINE_STD_SET_I18N
+
 
 static void
-query (void)
+gbr_class_init (GbrClass *klass)
 {
-  static const GimpParamDef save_args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode",    "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",       "Input image" },
-    { GIMP_PDB_DRAWABLE, "drawable",    "Drawable to export" },
-    { GIMP_PDB_STRING,   "uri",         "The URI of the file to export the image in" },
-    { GIMP_PDB_STRING,   "raw-uri",     "The URI of the file to export the image in" },
-    { GIMP_PDB_INT32,    "spacing",     "Spacing of the brush" },
-    { GIMP_PDB_STRING,   "description", "Short description of the brush" }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  gimp_install_procedure (SAVE_PROC,
-                          "Exports files in the GIMP brush file format",
-                          "Exports files in the GIMP brush file format",
-                          "Tim Newsome, Jens Lautenbacher, Sven Neumann",
-                          "Tim Newsome, Jens Lautenbacher, Sven Neumann",
-                          "1997-2000",
-                          N_("GIMP brush"),
-                          "RGB*, GRAY*, INDEXED*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (save_args), 0,
-                          save_args, NULL);
-
-  gimp_plugin_icon_register (SAVE_PROC, GIMP_ICON_TYPE_ICON_NAME,
-                             (const guint8 *) GIMP_ICON_BRUSH);
-  gimp_register_file_handler_mime (SAVE_PROC, "image/x-gimp-gbr");
-  gimp_register_file_handler_uri (SAVE_PROC);
-  gimp_register_save_handler (SAVE_PROC, "gbr", "");
+  plug_in_class->query_procedures = gbr_query_procedures;
+  plug_in_class->create_procedure = gbr_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+gbr_init (Gbr *gbr)
 {
-  static GimpParam   values[2];
-  GimpRunMode        run_mode;
+}
+
+static GList *
+gbr_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (EXPORT_PROC));
+}
+
+static GimpProcedure *
+gbr_create_procedure (GimpPlugIn  *plug_in,
+                      const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, EXPORT_PROC))
+    {
+      procedure = gimp_export_procedure_new (plug_in, name,
+                                             GIMP_PDB_PROC_TYPE_PLUGIN,
+                                             FALSE, gbr_export, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "*");
+
+      gimp_procedure_set_menu_label (procedure, _("GIMP brush"));
+      gimp_file_procedure_set_format_name (GIMP_FILE_PROCEDURE (procedure),
+                                           _("Brush"));
+      gimp_procedure_set_icon_name (procedure, GIMP_ICON_BRUSH);
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Exports files in the GIMP brush "
+                                          "file format"),
+                                        _("Exports files in the GIMP brush "
+                                          "file format"),
+                                        EXPORT_PROC);
+      gimp_procedure_set_attribution (procedure,
+                                      "Tim Newsome, Jens Lautenbacher, "
+                                      "Sven Neumann",
+                                      "Tim Newsome, Jens Lautenbacher, "
+                                      "Sven Neumann",
+                                      "1997-2000");
+
+      gimp_file_procedure_set_mime_types (GIMP_FILE_PROCEDURE (procedure),
+                                          "image/x-gimp-gbr");
+      gimp_file_procedure_set_extensions (GIMP_FILE_PROCEDURE (procedure),
+                                          "gbr");
+      gimp_file_procedure_set_handles_remote (GIMP_FILE_PROCEDURE (procedure),
+                                              TRUE);
+
+      gimp_export_procedure_set_capabilities (GIMP_EXPORT_PROCEDURE (procedure),
+                                              GIMP_EXPORT_CAN_HANDLE_GRAY    |
+                                              GIMP_EXPORT_CAN_HANDLE_RGB     |
+                                              GIMP_EXPORT_CAN_HANDLE_INDEXED |
+                                              GIMP_EXPORT_CAN_HANDLE_ALPHA,
+                                              NULL, NULL, NULL);
+
+      gimp_procedure_add_int_argument (procedure, "spacing",
+                                       _("Sp_acing"),
+                                       _("Spacing of the brush"),
+                                       1, 1000, 10,
+                                       GIMP_PARAM_READWRITE);
+
+      gimp_procedure_add_string_argument (procedure, "description",
+                                          _("_Description"),
+                                          _("Short description of the brush"),
+                                          _("GIMP Brush"),
+                                          GIMP_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+gbr_export (GimpProcedure        *procedure,
+            GimpRunMode           run_mode,
+            GimpImage            *image,
+            GFile                *file,
+            GimpExportOptions    *options,
+            GimpMetadata         *metadata,
+            GimpProcedureConfig  *config,
+            gpointer              run_data)
+{
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
-  gint32             image_ID;
-  gint32             drawable_ID;
-  GimpExportReturn   export = GIMP_EXPORT_CANCEL;
+  GimpExportReturn   export = GIMP_EXPORT_IGNORE;
+  GimpLayer        **layers;
+  gchar             *description;
   GError            *error  = NULL;
 
-  INIT_I18N ();
+  g_object_get (config,
+                "description", &description,
+                NULL);
 
-  run_mode = param[0].data.d_int32;
-
-  *nreturn_vals = 1;
-  *return_vals  = values;
-
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
-
-  if (strcmp (name, SAVE_PROC) == 0)
+  if (! description || ! strlen (description))
     {
-      GFile        *file;
-      GimpParasite *parasite;
-      gint32        orig_image_ID;
+      gchar *name = g_path_get_basename (gimp_file_get_utf8_name (file));
 
-      image_ID    = param[1].data.d_int32;
-      drawable_ID = param[2].data.d_int32;
-      file        = g_file_new_for_uri (param[3].data.d_string);
+      if (g_str_has_suffix (name, ".gbr"))
+        name[strlen (name) - 4] = '\0';
 
-      orig_image_ID = image_ID;
+      if (strlen (name))
+        g_object_set (config,
+                      "description", name,
+                      NULL);
 
-      switch (run_mode)
-        {
-        case GIMP_RUN_INTERACTIVE:
-        case GIMP_RUN_WITH_LAST_VALS:
-          gimp_ui_init (PLUG_IN_BINARY, FALSE);
-
-          export = gimp_export_image (&image_ID, &drawable_ID, "GBR",
-                                      GIMP_EXPORT_CAN_HANDLE_GRAY    |
-                                      GIMP_EXPORT_CAN_HANDLE_RGB     |
-                                      GIMP_EXPORT_CAN_HANDLE_INDEXED |
-                                      GIMP_EXPORT_CAN_HANDLE_ALPHA);
-
-          if (export == GIMP_EXPORT_CANCEL)
-            {
-              values[0].data.d_status = GIMP_PDB_CANCEL;
-              return;
-            }
-
-          /*  Possibly retrieve data  */
-          gimp_get_data (SAVE_PROC, &info);
-
-          parasite = gimp_image_get_parasite (orig_image_ID,
-                                              "gimp-brush-name");
-          if (parasite)
-            {
-              strncpy (info.description,
-                       gimp_parasite_data (parasite),
-                       MIN (sizeof (info.description),
-                            gimp_parasite_data_size (parasite)));
-              info.description[sizeof (info.description) - 1] = '\0';
-
-              gimp_parasite_free (parasite);
-            }
-          else
-            {
-              gchar *name = g_path_get_basename (gimp_file_get_utf8_name (file));
-
-              if (g_str_has_suffix (name, ".gbr"))
-                name[strlen (name) - 4] = '\0';
-
-              if (strlen (name))
-                {
-                  strncpy (info.description, name, sizeof (info.description));
-                  info.description[sizeof (info.description) - 1] = '\0';
-                }
-
-              g_free (name);
-            }
-          break;
-
-        default:
-          break;
-        }
-
-      switch (run_mode)
-        {
-        case GIMP_RUN_INTERACTIVE:
-          if (! save_dialog ())
-            status = GIMP_PDB_CANCEL;
-          break;
-
-        case GIMP_RUN_NONINTERACTIVE:
-          if (nparams != 7)
-            {
-              status = GIMP_PDB_CALLING_ERROR;
-            }
-          else
-            {
-              info.spacing = (param[5].data.d_int32);
-              strncpy (info.description, param[6].data.d_string,
-                       sizeof (info.description));
-              info.description[sizeof (info.description) - 1] = '\0';
-            }
-          break;
-
-        default:
-          break;
-        }
-
-      if (status == GIMP_PDB_SUCCESS)
-        {
-          GimpParam *save_retvals;
-          gint       n_save_retvals;
-
-          save_retvals =
-            gimp_run_procedure ("file-gbr-save-internal",
-                                &n_save_retvals,
-                                GIMP_PDB_INT32,    GIMP_RUN_NONINTERACTIVE,
-                                GIMP_PDB_IMAGE,    image_ID,
-                                GIMP_PDB_DRAWABLE, drawable_ID,
-                                GIMP_PDB_STRING,   param[3].data.d_string,
-                                GIMP_PDB_STRING,   param[4].data.d_string,
-                                GIMP_PDB_INT32,    info.spacing,
-                                GIMP_PDB_STRING,   info.description,
-                                GIMP_PDB_END);
-
-          if (save_retvals[0].data.d_status == GIMP_PDB_SUCCESS)
-            {
-              gimp_set_data (SAVE_PROC, &info, sizeof (info));
-            }
-          else
-            {
-              g_set_error (&error, 0, 0,
-                           "Running procedure 'file-gbr-save-internal' "
-                           "failed: %s",
-                           gimp_get_pdb_error ());
-
-              status = GIMP_PDB_EXECUTION_ERROR;
-            }
-
-          gimp_destroy_params (save_retvals, n_save_retvals);
-        }
-
-      if (export == GIMP_EXPORT_EXPORT)
-        gimp_image_delete (image_ID);
-
-      if (strlen (info.description))
-        {
-          GimpParasite *parasite;
-
-          parasite = gimp_parasite_new ("gimp-brush-name",
-                                        GIMP_PARASITE_PERSISTENT,
-                                        strlen (info.description) + 1,
-                                        info.description);
-          gimp_image_attach_parasite (orig_image_ID, parasite);
-          gimp_parasite_free (parasite);
-        }
-      else
-        {
-          gimp_image_detach_parasite (orig_image_ID, "gimp-brush-name");
-        }
-    }
-  else
-    {
-      status = GIMP_PDB_CALLING_ERROR;
+      g_free (name);
     }
 
-  if (status != GIMP_PDB_SUCCESS && error)
+  g_free (description);
+
+  if (run_mode == GIMP_RUN_INTERACTIVE)
     {
-      *nreturn_vals = 2;
-      values[1].type          = GIMP_PDB_STRING;
-      values[1].data.d_string = error->message;
+      gimp_ui_init (PLUG_IN_BINARY);
+
+      if (! save_dialog (procedure, G_OBJECT (config), image))
+        status = GIMP_PDB_CANCEL;
     }
 
-  values[0].data.d_status = status;
+  export = gimp_export_options_get_image (options, &image);
+  layers = gimp_image_get_layers (image);
+
+  if (status == GIMP_PDB_SUCCESS)
+    {
+      GimpProcedure   *procedure;
+      GimpValueArray  *save_retvals;
+      gint             spacing;
+
+      g_object_get (config,
+                    "description", &description,
+                    "spacing",     &spacing,
+                    NULL);
+
+      procedure    = gimp_pdb_lookup_procedure (gimp_get_pdb (),
+                                                "file-gbr-export-internal");
+      save_retvals = gimp_procedure_run (procedure,
+                                         "image",     image,
+                                         "drawables", (GimpDrawable **) layers,
+                                         "file",      file,
+                                         "spacing",   spacing,
+                                         "name",      description,
+                                         NULL);
+
+      g_free (description);
+
+      if (GIMP_VALUES_GET_ENUM (save_retvals, 0) != GIMP_PDB_SUCCESS)
+        {
+          g_set_error (&error, 0, 0,
+                       "Running procedure 'file-gbr-export-internal' "
+                       "failed: %s",
+                       gimp_pdb_get_last_error (gimp_get_pdb ()));
+
+          status = GIMP_PDB_EXECUTION_ERROR;
+        }
+
+      gimp_value_array_unref (save_retvals);
+    }
+
+  if (export == GIMP_EXPORT_EXPORT)
+    gimp_image_delete (image);
+
+  g_free (layers);
+  return gimp_procedure_new_return_values (procedure, status, error);
 }
 
 static gboolean
-save_dialog (void)
+save_dialog (GimpProcedure *procedure,
+             GObject       *config,
+             GimpImage     *image)
 {
-  GtkWidget     *dialog;
-  GtkWidget     *table;
-  GtkWidget     *entry;
-  GtkWidget     *spinbutton;
-  GtkAdjustment *adj;
-  gboolean       run;
+  GtkWidget *dialog;
+  GtkWidget *vbox;
+  GtkWidget *entry;
+  GtkWidget *real_entry;
+  gboolean   run;
 
-  dialog = gimp_export_dialog_new (_("Brush"), PLUG_IN_BINARY, SAVE_PROC);
+  dialog = gimp_export_procedure_dialog_new (GIMP_EXPORT_PROCEDURE (procedure),
+                                             GIMP_PROCEDURE_CONFIG (config),
+                                             image);
 
-  /* The main table */
-  table = gtk_table_new (2, 2, FALSE);
-  gtk_container_set_border_width (GTK_CONTAINER (table), 12);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_box_pack_start (GTK_BOX (gimp_export_dialog_get_content_area (dialog)),
-                      table, TRUE, TRUE, 0);
-  gtk_widget_show (table);
+  entry = gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                            "description", GIMP_TYPE_LABEL_ENTRY);
+  real_entry = gimp_label_entry_get_entry (GIMP_LABEL_ENTRY (entry));
+  gtk_entry_set_max_length (GTK_ENTRY (real_entry), 256);
+  gtk_entry_set_width_chars (GTK_ENTRY (real_entry), 20);
+  gtk_entry_set_activates_default (GTK_ENTRY (real_entry), TRUE);
 
-  entry = gtk_entry_new ();
-  gtk_entry_set_width_chars (GTK_ENTRY (entry), 20);
-  gtk_entry_set_activates_default (GTK_ENTRY (entry), TRUE);
-  gtk_entry_set_text (GTK_ENTRY (entry), info.description);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 0,
-                             _("_Description:"), 1.0, 0.5,
-                             entry, 1, FALSE);
+  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "spacing", 1.0);
 
-  g_signal_connect (entry, "changed",
-                    G_CALLBACK (entry_callback),
-                    info.description);
+  vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                         "gbr-vbox", "description", "spacing",
+                                         NULL);
+  gtk_container_set_border_width (GTK_CONTAINER (vbox), 12);
 
-  adj = (GtkAdjustment *) gtk_adjustment_new (info.spacing, 1, 1000, 1, 10, 0);
-  spinbutton = gimp_spin_button_new (adj, 1.0, 0);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinbutton), TRUE);
-  gtk_entry_set_activates_default (GTK_ENTRY (spinbutton), TRUE);
-  gimp_table_attach_aligned (GTK_TABLE (table), 0, 1,
-                             _("_Spacing:"), 1.0, 0.5,
-                             spinbutton, 1, TRUE);
-
-  g_signal_connect (adj, "value-changed",
-                    G_CALLBACK (gimp_int_adjustment_update),
-                    &info.spacing);
-
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog),
+                              "gbr-vbox", NULL);
   gtk_widget_show (dialog);
 
-  run = (gimp_dialog_run (GIMP_DIALOG (dialog)) == GTK_RESPONSE_OK);
+  run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
   gtk_widget_destroy (dialog);
 
   return run;
-}
-
-static void
-entry_callback (GtkWidget *widget,
-                gpointer   data)
-{
-  strncpy (info.description, gtk_entry_get_text (GTK_ENTRY (widget)),
-           sizeof (info.description));
-  info.description[sizeof (info.description) - 1] = '\0';
 }

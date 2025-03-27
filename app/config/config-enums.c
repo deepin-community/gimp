@@ -1,11 +1,12 @@
 
 /* Generated data (by gimp-mkenums) */
 
+#include "stamp-config-enums.h"
 #include "config.h"
 #include <gio/gio.h>
 #include "libgimpbase/gimpbase.h"
 #include "config-enums.h"
-#include"gimp-intl.h"
+#include "gimp-intl.h"
 
 /* enumerations from "config-enums.h" */
 GType
@@ -205,8 +206,6 @@ gimp_icon_size_get_type (void)
 {
   static const GEnumValue values[] =
   {
-    { GIMP_ICON_SIZE_AUTO, "GIMP_ICON_SIZE_AUTO", "auto" },
-    { GIMP_ICON_SIZE_THEME, "GIMP_ICON_SIZE_THEME", "theme" },
     { GIMP_ICON_SIZE_SMALL, "GIMP_ICON_SIZE_SMALL", "small" },
     { GIMP_ICON_SIZE_MEDIUM, "GIMP_ICON_SIZE_MEDIUM", "medium" },
     { GIMP_ICON_SIZE_LARGE, "GIMP_ICON_SIZE_LARGE", "large" },
@@ -216,8 +215,6 @@ gimp_icon_size_get_type (void)
 
   static const GimpEnumDesc descs[] =
   {
-    { GIMP_ICON_SIZE_AUTO, NC_("icon-size", "Guess ideal size"), NULL },
-    { GIMP_ICON_SIZE_THEME, NC_("icon-size", "Theme-set size"), NULL },
     { GIMP_ICON_SIZE_SMALL, NC_("icon-size", "Small size"), NULL },
     { GIMP_ICON_SIZE_MEDIUM, NC_("icon-size", "Medium size"), NULL },
     { GIMP_ICON_SIZE_LARGE, NC_("icon-size", "Large size"), NULL },
@@ -271,6 +268,35 @@ gimp_position_get_type (void)
 }
 
 GType
+gimp_drag_zoom_mode_get_type (void)
+{
+  static const GEnumValue values[] =
+  {
+    { PROP_DRAG_ZOOM_MODE_DISTANCE, "PROP_DRAG_ZOOM_MODE_DISTANCE", "distance" },
+    { PROP_DRAG_ZOOM_MODE_DURATION, "PROP_DRAG_ZOOM_MODE_DURATION", "duration" },
+    { 0, NULL, NULL }
+  };
+
+  static const GimpEnumDesc descs[] =
+  {
+    { PROP_DRAG_ZOOM_MODE_DISTANCE, NC_("drag-zoom-mode", "By distance"), NULL },
+    { PROP_DRAG_ZOOM_MODE_DURATION, NC_("drag-zoom-mode", "By duration"), NULL },
+    { 0, NULL, NULL }
+  };
+
+  static GType type = 0;
+
+  if (G_UNLIKELY (! type))
+    {
+      type = g_enum_register_static ("GimpDragZoomMode", values);
+      gimp_type_set_translation_context (type, "drag-zoom-mode");
+      gimp_enum_set_value_descriptions (type, descs);
+    }
+
+  return type;
+}
+
+GType
 gimp_space_bar_action_get_type (void)
 {
   static const GEnumValue values[] =
@@ -295,37 +321,6 @@ gimp_space_bar_action_get_type (void)
     {
       type = g_enum_register_static ("GimpSpaceBarAction", values);
       gimp_type_set_translation_context (type, "space-bar-action");
-      gimp_enum_set_value_descriptions (type, descs);
-    }
-
-  return type;
-}
-
-GType
-gimp_tool_group_menu_mode_get_type (void)
-{
-  static const GEnumValue values[] =
-  {
-    { GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_CLICK, "GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_CLICK", "click" },
-    { GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_HOVER, "GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_HOVER", "hover" },
-    { GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_HOVER_SINGLE_COLUMN, "GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_HOVER_SINGLE_COLUMN", "hover-single-column" },
-    { 0, NULL, NULL }
-  };
-
-  static const GimpEnumDesc descs[] =
-  {
-    { GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_CLICK, NC_("tool-group-menu-mode", "Show on click"), NULL },
-    { GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_HOVER, NC_("tool-group-menu-mode", "Show on hover"), NULL },
-    { GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_HOVER_SINGLE_COLUMN, NC_("tool-group-menu-mode", "Show on hover in single column"), NULL },
-    { 0, NULL, NULL }
-  };
-
-  static GType type = 0;
-
-  if (G_UNLIKELY (! type))
-    {
-      type = g_enum_register_static ("GimpToolGroupMenuMode", values);
-      gimp_type_set_translation_context (type, "tool-group-menu-mode");
       gimp_enum_set_value_descriptions (type, descs);
     }
 
@@ -386,6 +381,37 @@ gimp_zoom_quality_get_type (void)
     {
       type = g_enum_register_static ("GimpZoomQuality", values);
       gimp_type_set_translation_context (type, "zoom-quality");
+      gimp_enum_set_value_descriptions (type, descs);
+    }
+
+  return type;
+}
+
+GType
+gimp_theme_scheme_get_type (void)
+{
+  static const GEnumValue values[] =
+  {
+    { GIMP_THEME_LIGHT, "GIMP_THEME_LIGHT", "light" },
+    { GIMP_THEME_GRAY, "GIMP_THEME_GRAY", "gray" },
+    { GIMP_THEME_DARK, "GIMP_THEME_DARK", "dark" },
+    { 0, NULL, NULL }
+  };
+
+  static const GimpEnumDesc descs[] =
+  {
+    { GIMP_THEME_LIGHT, NC_("theme-scheme", "Light Colors"), NULL },
+    { GIMP_THEME_GRAY, NC_("theme-scheme", "Middle Gray"), NULL },
+    { GIMP_THEME_DARK, NC_("theme-scheme", "Dark Colors"), NULL },
+    { 0, NULL, NULL }
+  };
+
+  static GType type = 0;
+
+  if (G_UNLIKELY (! type))
+    {
+      type = g_enum_register_static ("GimpThemeScheme", values);
+      gimp_type_set_translation_context (type, "theme-scheme");
       gimp_enum_set_value_descriptions (type, descs);
     }
 

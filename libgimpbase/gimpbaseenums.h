@@ -36,21 +36,13 @@ G_BEGIN_DECLS
 
 /**
  * GimpAddMaskType:
- * @GIMP_ADD_MASK_WHITE:           White (full opacity)
- * @GIMP_ADD_MASK_BLACK:           Black (full transparency)
- * @GIMP_ADD_MASK_ALPHA:           Layer's alpha channel
- * @GIMP_ADD_MASK_ALPHA_TRANSFER:  Transfer layer's alpha channel
- * @GIMP_ADD_MASK_SELECTION:       Selection
- * @GIMP_ADD_MASK_COPY:            Grayscale copy of layer
- * @GIMP_ADD_MASK_CHANNEL:         Channel
- * @GIMP_ADD_WHITE_MASK:           Deprecated alias for @GIMP_ADD_MASK_WHITE
- * @GIMP_ADD_BLACK_MASK:           Deprecated alias for @GIMP_ADD_MASK_BLACK
- * @GIMP_ADD_ALPHA_MASK:           Deprecated alias for @GIMP_ADD_MASK_ALPHA
- * @GIMP_ADD_ALPHA_TRANSFER_MASK:  Deprecated alias for
- *                                 @GIMP_ADD_MASK_ALPHA_TRANSFER
- * @GIMP_ADD_SELECTION_MASK:       Deprecated alias for @GIMP_ADD_MASK_SELECTION
- * @GIMP_ADD_COPY_MASK:            Deprecated alias for @GIMP_ADD_MASK_COPY
- * @GIMP_ADD_CHANNEL_MASK:         Deprecated aliaa for @GIMP_ADD_MASK_CHANNEL
+ * @GIMP_ADD_MASK_WHITE:          White (full opacity)
+ * @GIMP_ADD_MASK_BLACK:          Black (full transparency)
+ * @GIMP_ADD_MASK_ALPHA:          Layer's alpha channel
+ * @GIMP_ADD_MASK_ALPHA_TRANSFER: Transfer layer's alpha channel
+ * @GIMP_ADD_MASK_SELECTION:      Selection
+ * @GIMP_ADD_MASK_COPY:           Grayscale copy of layer
+ * @GIMP_ADD_MASK_CHANNEL:        Channel
  *
  * Modes of initialising a layer mask.
  **/
@@ -66,51 +58,8 @@ typedef enum
   GIMP_ADD_MASK_ALPHA_TRANSFER, /*< desc="_Transfer layer's alpha channel" >*/
   GIMP_ADD_MASK_SELECTION,      /*< desc="_Selection"                      >*/
   GIMP_ADD_MASK_COPY,           /*< desc="_Grayscale copy of layer"        >*/
-  GIMP_ADD_MASK_CHANNEL,        /*< desc="C_hannel"                        >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_ADD_WHITE_MASK          = GIMP_ADD_MASK_WHITE,     /*< skip, pdb-skip >*/
-  GIMP_ADD_BLACK_MASK          = GIMP_ADD_MASK_BLACK,     /*< skip, pdb-skip >*/
-  GIMP_ADD_ALPHA_MASK          = GIMP_ADD_MASK_ALPHA,     /*< skip, pdb-skip >*/
-  GIMP_ADD_ALPHA_TRANSFER_MASK = GIMP_ADD_MASK_ALPHA_TRANSFER, /*< skip, pdb-skip >*/
-  GIMP_ADD_SELECTION_MASK      = GIMP_ADD_MASK_SELECTION, /*< skip, pdb-skip >*/
-  GIMP_ADD_COPY_MASK           = GIMP_ADD_MASK_COPY,      /*< skip, pdb-skip >*/
-  GIMP_ADD_CHANNEL_MASK        = GIMP_ADD_MASK_CHANNEL    /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
+  GIMP_ADD_MASK_CHANNEL         /*< desc="C_hannel"                        >*/
 } GimpAddMaskType;
-
-
-/**
- * GimpBlendMode:
- * @GIMP_BLEND_FG_BG_RGB:      FG to BG (RGB)
- * @GIMP_BLEND_FG_BG_HSV:      FG to BG (HSV)
- * @GIMP_BLEND_FG_TRANSPARENT: FG to transparent
- * @GIMP_BLEND_CUSTOM:         Custom gradient
- * @GIMP_FG_BG_RGB_MODE:       Deprecated alias for @GIMP_BLEND_FG_BG_RGB
- * @GIMP_FG_BG_HSV_MODE:       Deprecated alias for @GIMP_BLEND_FG_BG_HSV
- * @GIMP_FG_TRANSPARENT_MODE:  Deprecated alias for @GIMP_BLEND_FG_TRANSPARENT
- * @GIMP_CUSTOM_MODE:          Deprecated alias for @GIMP_BLEND_CUSTOM
- *
- * Types of gradients.
- **/
-#define GIMP_TYPE_BLEND_MODE (gimp_blend_mode_get_type ())
-
-GType gimp_blend_mode_get_type (void) G_GNUC_CONST;
-
-typedef enum
-{
-  GIMP_BLEND_FG_BG_RGB,      /*< desc="FG to BG (RGB)"    >*/
-  GIMP_BLEND_FG_BG_HSV,      /*< desc="FG to BG (HSV)"    >*/
-  GIMP_BLEND_FG_TRANSPARENT, /*< desc="FG to transparent" >*/
-  GIMP_BLEND_CUSTOM,         /*< desc="Custom gradient"   >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_FG_BG_RGB_MODE      = GIMP_BLEND_FG_BG_RGB,      /*< skip, pdb-skip >*/
-  GIMP_FG_BG_HSV_MODE      = GIMP_BLEND_FG_BG_HSV,      /*< skip, pdb-skip >*/
-  GIMP_FG_TRANSPARENT_MODE = GIMP_BLEND_FG_TRANSPARENT, /*< skip, pdb-skip >*/
-  GIMP_CUSTOM_MODE         = GIMP_BLEND_CUSTOM          /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
-} GimpBlendMode;
 
 
 /**
@@ -131,35 +80,6 @@ typedef enum
   GIMP_BRUSH_GENERATED_SQUARE,  /*< desc="Square"  >*/
   GIMP_BRUSH_GENERATED_DIAMOND  /*< desc="Diamond" >*/
 } GimpBrushGeneratedShape;
-
-
-/**
- * GimpBucketFillMode:
- * @GIMP_BUCKET_FILL_FG:      FG color fill
- * @GIMP_BUCKET_FILL_BG:      BG color fill
- * @GIMP_BUCKET_FILL_PATTERN: Pattern fill
- * @GIMP_FG_BUCKET_FILL:      Deprecated alias for @GIMP_BUCKET_FILL_FG
- * @GIMP_BG_BUCKET_FILL:      Deprecated alias for @GIMP_BUCKET_FILL_BG
- * @GIMP_PATTERN_BUCKET_FILL: Deprecated alias for @GIMP_BUCKET_FILL_PATTERN
- *
- * Bucket fill modes.
- */
-#define GIMP_TYPE_BUCKET_FILL_MODE (gimp_bucket_fill_mode_get_type ())
-
-GType gimp_bucket_fill_mode_get_type (void) G_GNUC_CONST;
-
-typedef enum
-{
-  GIMP_BUCKET_FILL_FG,      /*< desc="FG color fill" >*/
-  GIMP_BUCKET_FILL_BG,      /*< desc="BG color fill" >*/
-  GIMP_BUCKET_FILL_PATTERN, /*< desc="Pattern fill"  >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_FG_BUCKET_FILL      = GIMP_BUCKET_FILL_FG,     /*< skip, pdb-skip >*/
-  GIMP_BG_BUCKET_FILL      = GIMP_BUCKET_FILL_BG,     /*< skip, pdb-skip >*/
-  GIMP_PATTERN_BUCKET_FILL = GIMP_BUCKET_FILL_PATTERN /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
-} GimpBucketFillMode;
 
 
 /**
@@ -212,12 +132,6 @@ typedef enum
  * @GIMP_CHANNEL_GRAY:    Gray
  * @GIMP_CHANNEL_INDEXED: Indexed
  * @GIMP_CHANNEL_ALPHA:   Alpha
- * @GIMP_RED_CHANNEL:     Deprecated alias for @GIMP_CHANNEL_RED
- * @GIMP_GREEN_CHANNEL:   Deprecated alias for @GIMP_CHANNEL_GREEN
- * @GIMP_BLUE_CHANNEL:    Deprecated alias for @GIMP_CHANNEL_BLUE
- * @GIMP_GRAY_CHANNEL:    Deprecated alias for @GIMP_CHANNEL_GRAY
- * @GIMP_INDEXED_CHANNEL: Deprecated alias for @GIMP_CHANNEL_INDEXED
- * @GIMP_ALPHA_CHANNEL:   Deprecated alias for @GIMP_CHANNEL_ALPHA
  *
  * Channels (as in color components).
  **/
@@ -232,16 +146,7 @@ typedef enum
   GIMP_CHANNEL_BLUE,     /*< desc="Blue"    >*/
   GIMP_CHANNEL_GRAY,     /*< desc="Gray"    >*/
   GIMP_CHANNEL_INDEXED,  /*< desc="Indexed" >*/
-  GIMP_CHANNEL_ALPHA,    /*< desc="Alpha"   >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_RED_CHANNEL     = GIMP_CHANNEL_RED,     /*< skip, pdb-skip >*/
-  GIMP_GREEN_CHANNEL   = GIMP_CHANNEL_GREEN,   /*< skip, pdb-skip >*/
-  GIMP_BLUE_CHANNEL    = GIMP_CHANNEL_BLUE,    /*< skip, pdb-skip >*/
-  GIMP_GRAY_CHANNEL    = GIMP_CHANNEL_GRAY,    /*< skip, pdb-skip >*/
-  GIMP_INDEXED_CHANNEL = GIMP_CHANNEL_INDEXED, /*< skip, pdb-skip >*/
-  GIMP_ALPHA_CHANNEL   = GIMP_CHANNEL_ALPHA    /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
+  GIMP_CHANNEL_ALPHA     /*< desc="Alpha"   >*/
 } GimpChannelType;
 
 
@@ -273,6 +178,7 @@ typedef enum  /*< pdb-skip >*/
  * @GIMP_CHECK_TYPE_WHITE_ONLY:   White only
  * @GIMP_CHECK_TYPE_GRAY_ONLY:    Gray only
  * @GIMP_CHECK_TYPE_BLACK_ONLY:   Black only
+ * @GIMP_CHECK_TYPE_CUSTOM_CHECKS: Custom checks
  *
  * Color/Brightness of the checkerboard indicating transparency.
  **/
@@ -287,7 +193,8 @@ typedef enum  /*< pdb-skip >*/
   GIMP_CHECK_TYPE_DARK_CHECKS  = 2,  /*< desc="Dark checks"     >*/
   GIMP_CHECK_TYPE_WHITE_ONLY   = 3,  /*< desc="White only"      >*/
   GIMP_CHECK_TYPE_GRAY_ONLY    = 4,  /*< desc="Gray only"       >*/
-  GIMP_CHECK_TYPE_BLACK_ONLY   = 5   /*< desc="Black only"      >*/
+  GIMP_CHECK_TYPE_BLACK_ONLY   = 5,  /*< desc="Black only"      >*/
+  GIMP_CHECK_TYPE_CUSTOM_CHECKS = 6  /*< desc="Custom checks"   >*/
 } GimpCheckType;
 
 
@@ -295,8 +202,6 @@ typedef enum  /*< pdb-skip >*/
  * GimpCloneType:
  * @GIMP_CLONE_IMAGE:   Clone from an image/drawable source
  * @GIMP_CLONE_PATTERN: Clone from a pattern source
- * @GIMP_IMAGE_CLONE:   Deprecated alias for @GIMP_CLONE_IMAGE
- * @GIMP_PATTERN_CLONE: Deprecated alias for @GIMP_CLONE_PATTERN
  *
  * Clone sources.
  **/
@@ -307,12 +212,7 @@ GType gimp_clone_type_get_type (void) G_GNUC_CONST;
 typedef enum
 {
   GIMP_CLONE_IMAGE,    /*< desc="Image"   >*/
-  GIMP_CLONE_PATTERN,  /*< desc="Pattern" >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_IMAGE_CLONE   = GIMP_CLONE_IMAGE,  /*< skip, pdb-skip >*/
-  GIMP_PATTERN_CLONE = GIMP_CLONE_PATTERN /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
+  GIMP_CLONE_PATTERN   /*< desc="Pattern" >*/
 } GimpCloneType;
 
 
@@ -381,20 +281,9 @@ typedef enum
 /**
  * GimpConvertPaletteType:
  * @GIMP_CONVERT_PALETTE_GENERATE: Generate optimum palette
- * @GIMP_CONVERT_PALETTE_REUSE:    Don't use this one
  * @GIMP_CONVERT_PALETTE_WEB:      Use web-optimized palette
  * @GIMP_CONVERT_PALETTE_MONO:     Use black and white (1-bit) palette
  * @GIMP_CONVERT_PALETTE_CUSTOM:   Use custom palette
- * @GIMP_MAKE_PALETTE:             Deprecated alias for
- *                                 @GIMP_CONVERT_PALETTE_GENERATE
- * @GIMP_REUSE_PALETTE:            Deprecated alias for
- *                                 @GIMP_CONVERT_PALETTE_REUSE
- * @GIMP_WEB_PALETTE:              Deprecated alias for
- *                                 @GIMP_CONVERT_PALETTE_WEB
- * @GIMP_MONO_PALETTE:             Deprecated alias for
-                                   @GIMP_CONVERT_PALETTE_MONO
- * @GIMP_CUSTOM_PALETTE:           Deprecated alias for
- *                                 @GIMP_CONVERT_PALETTE_CUSTOM
  *
  * Types of palettes for indexed conversion.
  **/
@@ -405,18 +294,9 @@ GType gimp_convert_palette_type_get_type (void) G_GNUC_CONST;
 typedef enum
 {
   GIMP_CONVERT_PALETTE_GENERATE, /*< desc="Generate optimum palette"          >*/
-  GIMP_CONVERT_PALETTE_REUSE,    /*< skip >*/
   GIMP_CONVERT_PALETTE_WEB,      /*< desc="Use web-optimized palette"         >*/
   GIMP_CONVERT_PALETTE_MONO,     /*< desc="Use black and white (1-bit) palette" >*/
-  GIMP_CONVERT_PALETTE_CUSTOM,   /*< desc="Use custom palette"                >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_MAKE_PALETTE   = GIMP_CONVERT_PALETTE_GENERATE, /*< skip, pdb-skip >*/
-  GIMP_REUSE_PALETTE  = GIMP_CONVERT_PALETTE_REUSE,    /*< skip, pdb-skip >*/
-  GIMP_WEB_PALETTE    = GIMP_CONVERT_PALETTE_WEB,      /*< skip, pdb-skip >*/
-  GIMP_MONO_PALETTE   = GIMP_CONVERT_PALETTE_MONO,     /*< skip, pdb-skip >*/
-  GIMP_CUSTOM_PALETTE = GIMP_CONVERT_PALETTE_CUSTOM    /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
+  GIMP_CONVERT_PALETTE_CUSTOM    /*< desc="Use custom palette"                >*/
 } GimpConvertPaletteType;
 
 
@@ -424,8 +304,6 @@ typedef enum
  * GimpConvolveType:
  * @GIMP_CONVOLVE_BLUR:    Blur
  * @GIMP_CONVOLVE_SHARPEN: Sharpen
- * @GIMP_BLUR_CONVOLVE:    Deprecated alias for @GIMP_CONVOLVE_BLUR
- * @GIMP_SHARPEN_CONVOLVE: Deprecated alias for @GIMP_CONVOLVE_SHARPEN
  *
  * Types of convolutions.
  **/
@@ -436,12 +314,7 @@ GType gimp_convolve_type_get_type (void) G_GNUC_CONST;
 typedef enum
 {
   GIMP_CONVOLVE_BLUR,    /*< desc="Blur"    >*/
-  GIMP_CONVOLVE_SHARPEN, /*< desc="Sharpen" >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_BLUR_CONVOLVE    = GIMP_CONVOLVE_BLUR,   /*< skip, pdb-skip >*/
-  GIMP_SHARPEN_CONVOLVE = GIMP_CONVOLVE_SHARPEN /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
+  GIMP_CONVOLVE_SHARPEN  /*< desc="Sharpen" >*/
 } GimpConvolveType;
 
 
@@ -452,7 +325,6 @@ typedef enum
  * @GIMP_DESATURATE_AVERAGE:    Average (HSI Intensity)
  * @GIMP_DESATURATE_LUMINANCE:  Luminance
  * @GIMP_DESATURATE_VALUE:      Value (HSV)
- * @GIMP_DESATURATE_LUMINOSITY: Deprecated alias for @GIMP_DESATURATE_LUMA
  *
  * Grayscale conversion methods.
  **/
@@ -466,11 +338,7 @@ typedef enum
   GIMP_DESATURATE_LUMA,        /*< desc="Luma"                     >*/
   GIMP_DESATURATE_AVERAGE,     /*< desc="Average (HSI Intensity)"  >*/
   GIMP_DESATURATE_LUMINANCE,   /*< desc="Luminance"                >*/
-  GIMP_DESATURATE_VALUE,       /*< desc="Value (HSV)"              >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_DESATURATE_LUMINOSITY = GIMP_DESATURATE_LUMA /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
+  GIMP_DESATURATE_VALUE        /*< desc="Value (HSV)"              >*/
 } GimpDesaturateMode;
 
 
@@ -478,8 +346,6 @@ typedef enum
  * GimpDodgeBurnType:
  * @GIMP_DODGE_BURN_TYPE_DODGE: Dodge
  * @GIMP_DODGE_BURN_TYPE_BURN:  Burn
- * @GIMP_DODGE:                 Deprecated alias for @GIMP_DODGE_BURN_TYPE_DODGE
- * @GIMP_BURN:                  Deprecated alias for @GIMP_DODGE_BURN_TYPE_BURN
  *
  * Methods for the dodge/burn operation.
  **/
@@ -490,27 +356,18 @@ GType gimp_dodge_burn_type_get_type (void) G_GNUC_CONST;
 typedef enum
 {
   GIMP_DODGE_BURN_TYPE_DODGE,  /*< desc="Dodge" >*/
-  GIMP_DODGE_BURN_TYPE_BURN,   /*< desc="Burn"  >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_DODGE = GIMP_DODGE_BURN_TYPE_DODGE, /*< skip, pdb-skip >*/
-  GIMP_BURN  = GIMP_DODGE_BURN_TYPE_BURN   /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
+  GIMP_DODGE_BURN_TYPE_BURN    /*< desc="Burn"  >*/
 } GimpDodgeBurnType;
 
 
 /**
  * GimpFillType:
- * @GIMP_FILL_FOREGROUND:  Foreground color
- * @GIMP_FILL_BACKGROUND:  Background color
- * @GIMP_FILL_WHITE:       White
- * @GIMP_FILL_TRANSPARENT: Transparency
- * @GIMP_FILL_PATTERN:     Pattern
- * @GIMP_FOREGROUND_FILL:  Deprecated alias for @GIMP_FILL_FOREGROUND
- * @GIMP_BACKGROUND_FILL:  Deprecated alias for @GIMP_FILL_BACKGROUND
- * @GIMP_WHITE_FILL:       Deprecated alias for @GIMP_FILL_WHITE
- * @GIMP_TRANSPARENT_FILL: Deprecated alias for @GIMP_FILL_TRANSPARENT
- * @GIMP_PATTERN_FILL:     Deprecated alias for @GIMP_FILL_PATTERN
+ * @GIMP_FILL_FOREGROUND:         Foreground color
+ * @GIMP_FILL_BACKGROUND:         Background color
+ * @GIMP_FILL_CIELAB_MIDDLE_GRAY: Middle Gray (CIELAB)
+ * @GIMP_FILL_WHITE:              White
+ * @GIMP_FILL_TRANSPARENT:        Transparency
+ * @GIMP_FILL_PATTERN:            Pattern
  *
  * Types of filling.
  **/
@@ -520,28 +377,20 @@ GType gimp_fill_type_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_FILL_FOREGROUND,  /*< desc="Foreground color" >*/
-  GIMP_FILL_BACKGROUND,  /*< desc="Background color" >*/
-  GIMP_FILL_WHITE,       /*< desc="White"            >*/
-  GIMP_FILL_TRANSPARENT, /*< desc="Transparency"     >*/
-  GIMP_FILL_PATTERN,     /*< desc="Pattern"          >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_FOREGROUND_FILL  = GIMP_FILL_FOREGROUND,  /*< skip, pdb-skip >*/
-  GIMP_BACKGROUND_FILL  = GIMP_FILL_BACKGROUND,  /*< skip, pdb-skip >*/
-  GIMP_WHITE_FILL       = GIMP_FILL_WHITE,       /*< skip, pdb-skip >*/
-  GIMP_TRANSPARENT_FILL = GIMP_FILL_TRANSPARENT, /*< skip, pdb-skip >*/
-  GIMP_PATTERN_FILL     = GIMP_FILL_PATTERN      /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
+  GIMP_FILL_FOREGROUND,         /*< desc="Foreground color" >*/
+  GIMP_FILL_BACKGROUND,         /*< desc="Background color" >*/
+  GIMP_FILL_CIELAB_MIDDLE_GRAY, /*< desc="Middle Gray (CIELAB)" >*/
+  GIMP_FILL_WHITE,              /*< desc="White"            >*/
+  GIMP_FILL_TRANSPARENT,        /*< desc="Transparency"     >*/
+  GIMP_FILL_PATTERN             /*< desc="Pattern"          >*/
 } GimpFillType;
 
 
 /**
  * GimpForegroundExtractMode:
- * @GIMP_FOREGROUND_EXTRACT_SIOX:    Siox
  * @GIMP_FOREGROUND_EXTRACT_MATTING: Matting (Since 2.10)
  *
- * Foreground extraxt engines.
+ * Foreground extract engines.
  **/
 #define GIMP_TYPE_FOREGROUND_EXTRACT_MODE (gimp_foreground_extract_mode_get_type ())
 
@@ -549,7 +398,6 @@ GType gimp_foreground_extract_mode_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_FOREGROUND_EXTRACT_SIOX,
   GIMP_FOREGROUND_EXTRACT_MATTING
 } GimpForegroundExtractMode;
 
@@ -691,13 +539,6 @@ typedef enum
  * @GIMP_HUE_RANGE_CYAN:    Cyan hues
  * @GIMP_HUE_RANGE_BLUE:    Blue hues
  * @GIMP_HUE_RANGE_MAGENTA: Magenta hues
- * @GIMP_ALL_HUES:          Deprecated alias for @GIMP_HUE_RANGE_ALL
- * @GIMP_RED_HUES:          Deprecated alias for @GIMP_HUE_RANGE_RED
- * @GIMP_YELLOW_HUES:       Deprecated alias for @GIMP_HUE_RANGE_YELLOW
- * @GIMP_GREEN_HUES:        Deprecated alias for @GIMP_HUE_RANGE_GREEN
- * @GIMP_CYAN_HUES:         Deprecated alias for @GIMP_HUE_RANGE_CYAN
- * @GIMP_BLUE_HUES:         Deprecated alias for @GIMP_HUE_RANGE_BLUE
- * @GIMP_MAGENTA_HUES:      Deprecated alias for @GIMP_HUE_RANGE_MAGENTA
  *
  * Hue ranges.
  **/
@@ -713,28 +554,15 @@ typedef enum
   GIMP_HUE_RANGE_GREEN,
   GIMP_HUE_RANGE_CYAN,
   GIMP_HUE_RANGE_BLUE,
-  GIMP_HUE_RANGE_MAGENTA,
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_ALL_HUES     = GIMP_HUE_RANGE_ALL,    /*< skip, pdb-skip >*/
-  GIMP_RED_HUES     = GIMP_HUE_RANGE_RED,    /*< skip, pdb-skip >*/
-  GIMP_YELLOW_HUES  = GIMP_HUE_RANGE_YELLOW, /*< skip, pdb-skip >*/
-  GIMP_GREEN_HUES   = GIMP_HUE_RANGE_GREEN,  /*< skip, pdb-skip >*/
-  GIMP_CYAN_HUES    = GIMP_HUE_RANGE_CYAN,   /*< skip, pdb-skip >*/
-  GIMP_BLUE_HUES    = GIMP_HUE_RANGE_BLUE,   /*< skip, pdb-skip >*/
-  GIMP_MAGENTA_HUES = GIMP_HUE_RANGE_MAGENTA /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
+  GIMP_HUE_RANGE_MAGENTA
 } GimpHueRange;
 
 
 /**
  * GimpIconType:
- * @GIMP_ICON_TYPE_ICON_NAME:     Icon name
- * @GIMP_ICON_TYPE_INLINE_PIXBUF: Inline pixbuf
- * @GIMP_ICON_TYPE_IMAGE_FILE:    Image file
- * @GIMP_ICON_TYPE_STOCK_ID:      Deprecated alias for
- *                                @GIMP_ICON_TYPE_ICON_NAME, old stock IDs
- *                                are interpreted as icon names
+ * @GIMP_ICON_TYPE_ICON_NAME:  Icon name
+ * @GIMP_ICON_TYPE_PIXBUF:     Inline pixbuf
+ * @GIMP_ICON_TYPE_IMAGE_FILE: Image file
  *
  * Icon types for plug-ins to register.
  **/
@@ -744,13 +572,9 @@ GType gimp_icon_type_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_ICON_TYPE_ICON_NAME,     /*< desc="Icon name"     >*/
-  GIMP_ICON_TYPE_INLINE_PIXBUF, /*< desc="Inline pixbuf" >*/
-  GIMP_ICON_TYPE_IMAGE_FILE,    /*< desc="Image file"    >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_ICON_TYPE_STOCK_ID = GIMP_ICON_TYPE_ICON_NAME  /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
+  GIMP_ICON_TYPE_ICON_NAME,  /*< desc="Icon name"  >*/
+  GIMP_ICON_TYPE_PIXBUF,     /*< desc="Pixbuf"     >*/
+  GIMP_ICON_TYPE_IMAGE_FILE  /*< desc="Image file" >*/
 } GimpIconType;
 
 
@@ -822,12 +646,11 @@ typedef enum
 
 /**
  * GimpInterpolationType:
- * @GIMP_INTERPOLATION_NONE:    None
- * @GIMP_INTERPOLATION_LINEAR:  Linear
- * @GIMP_INTERPOLATION_CUBIC:   Cubic
- * @GIMP_INTERPOLATION_NOHALO:  NoHalo
- * @GIMP_INTERPOLATION_LOHALO:  LoHalo
- * @GIMP_INTERPOLATION_LANCZOS: Deprecated alias for @GIMP_INTERPOLATION_NOHALO
+ * @GIMP_INTERPOLATION_NONE:   None
+ * @GIMP_INTERPOLATION_LINEAR: Linear
+ * @GIMP_INTERPOLATION_CUBIC:  Cubic
+ * @GIMP_INTERPOLATION_NOHALO: NoHalo
+ * @GIMP_INTERPOLATION_LOHALO: LoHalo
  *
  * Interpolation types.
  **/
@@ -841,11 +664,7 @@ typedef enum
   GIMP_INTERPOLATION_LINEAR, /*< desc="Linear" >*/
   GIMP_INTERPOLATION_CUBIC,  /*< desc="Cubic"  >*/
   GIMP_INTERPOLATION_NOHALO, /*< desc="NoHalo" >*/
-  GIMP_INTERPOLATION_LOHALO, /*< desc="LoHalo" >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_INTERPOLATION_LANCZOS = GIMP_INTERPOLATION_NOHALO /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
+  GIMP_INTERPOLATION_LOHALO  /*< desc="LoHalo" >*/
 } GimpInterpolationType;
 
 
@@ -931,7 +750,7 @@ typedef enum
 
 /**
  * GimpOffsetType:
- * @GIMP_OFFSET_BACKGROUND:  Background
+ * @GIMP_OFFSET_COLOR:       Color
  * @GIMP_OFFSET_TRANSPARENT: Transparent
  * @GIMP_OFFSET_WRAP_AROUND: Wrap image around
  *
@@ -943,7 +762,7 @@ GType gimp_offset_type_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_OFFSET_BACKGROUND,
+  GIMP_OFFSET_COLOR,
   GIMP_OFFSET_TRANSPARENT,
   GIMP_OFFSET_WRAP_AROUND
 } GimpOffsetType;
@@ -988,75 +807,6 @@ typedef enum
 
 
 /**
- * GimpPDBArgType:
- * @GIMP_PDB_INT32:       32-bit integer
- * @GIMP_PDB_INT16:       16-bit integer
- * @GIMP_PDB_INT8:        8-bit integer
- * @GIMP_PDB_FLOAT:       Float
- * @GIMP_PDB_STRING:      String
- * @GIMP_PDB_INT32ARRAY:  Array of INT32
- * @GIMP_PDB_INT16ARRAY:  Array of INT16
- * @GIMP_PDB_INT8ARRAY:   Array of INT8
- * @GIMP_PDB_FLOATARRAY:  Array of floats
- * @GIMP_PDB_STRINGARRAY: Array of strings
- * @GIMP_PDB_COLOR:       Color
- * @GIMP_PDB_ITEM:        Item ID
- * @GIMP_PDB_DISPLAY:     Display ID
- * @GIMP_PDB_IMAGE:       Image ID
- * @GIMP_PDB_LAYER:       Layer ID
- * @GIMP_PDB_CHANNEL:     Channel ID
- * @GIMP_PDB_DRAWABLE:    Drawable ID
- * @GIMP_PDB_SELECTION:   Selection ID
- * @GIMP_PDB_COLORARRAY:  Array of colors
- * @GIMP_PDB_VECTORS:     Vectors (psath) ID
- * @GIMP_PDB_PARASITE:    Parasite
- * @GIMP_PDB_STATUS:      Procedure return status
- * @GIMP_PDB_END:         Marker for last enum value
- * @GIMP_PDB_PATH:        Deprecated alias for @GIMP_PDB_VECTORS
- * @GIMP_PDB_BOUNDARY:    Deprecated alias for @GIMP_PDB_COLORARRAY
- * @GIMP_PDB_REGION:      Deprecated alias for @GIMP_PDB_ITEM
- *
- * Parameter types of the PDB.
- **/
-#define GIMP_TYPE_PDB_ARG_TYPE (gimp_pdb_arg_type_get_type ())
-
-GType gimp_pdb_arg_type_get_type (void) G_GNUC_CONST;
-
-typedef enum
-{
-  GIMP_PDB_INT32,
-  GIMP_PDB_INT16,
-  GIMP_PDB_INT8,
-  GIMP_PDB_FLOAT,
-  GIMP_PDB_STRING,
-  GIMP_PDB_INT32ARRAY,
-  GIMP_PDB_INT16ARRAY,
-  GIMP_PDB_INT8ARRAY,
-  GIMP_PDB_FLOATARRAY,
-  GIMP_PDB_STRINGARRAY,
-  GIMP_PDB_COLOR,
-  GIMP_PDB_ITEM,
-  GIMP_PDB_DISPLAY,
-  GIMP_PDB_IMAGE,
-  GIMP_PDB_LAYER,
-  GIMP_PDB_CHANNEL,
-  GIMP_PDB_DRAWABLE,
-  GIMP_PDB_SELECTION,
-  GIMP_PDB_COLORARRAY,
-  GIMP_PDB_VECTORS,
-  GIMP_PDB_PARASITE,
-  GIMP_PDB_STATUS,
-  GIMP_PDB_END,
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_PDB_PATH     = GIMP_PDB_VECTORS,     /*< skip >*/
-  GIMP_PDB_BOUNDARY = GIMP_PDB_COLORARRAY,  /*< skip >*/
-  GIMP_PDB_REGION   = GIMP_PDB_ITEM         /*< skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
-} GimpPDBArgType;
-
-
-/**
  * GimpPDBErrorHandler:
  * @GIMP_PDB_ERROR_HANDLER_INTERNAL: Internal
  * @GIMP_PDB_ERROR_HANDLER_PLUGIN:   Plug-In
@@ -1076,10 +826,10 @@ typedef enum
 
 /**
  * GimpPDBProcType:
- * @GIMP_INTERNAL:  Internal GIMP procedure
- * @GIMP_PLUGIN:    GIMP Plug-In
- * @GIMP_EXTENSION: GIMP Extension
- * @GIMP_TEMPORARY: Temporary Procedure
+ * @GIMP_PDB_PROC_TYPE_INTERNAL:   Internal GIMP procedure
+ * @GIMP_PDB_PROC_TYPE_PLUGIN:     GIMP Plug-In
+ * @GIMP_PDB_PROC_TYPE_PERSISTENT: GIMP Persistent Plug-in
+ * @GIMP_PDB_PROC_TYPE_TEMPORARY:  Temporary Procedure
  *
  * Types of PDB procedures.
  **/
@@ -1089,10 +839,10 @@ GType gimp_pdb_proc_type_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_INTERNAL,   /*< desc="Internal GIMP procedure" >*/
-  GIMP_PLUGIN,     /*< desc="GIMP Plug-In" >*/
-  GIMP_EXTENSION,  /*< desc="GIMP Extension" >*/
-  GIMP_TEMPORARY   /*< desc="Temporary Procedure" >*/
+  GIMP_PDB_PROC_TYPE_INTERNAL,   /*< desc="Internal GIMP procedure" >*/
+  GIMP_PDB_PROC_TYPE_PLUGIN,     /*< desc="GIMP Plug-In" >*/
+  GIMP_PDB_PROC_TYPE_PERSISTENT, /*< desc="GIMP Persistent Plug-In" >*/
+  GIMP_PDB_PROC_TYPE_TEMPORARY   /*< desc="Temporary Procedure" >*/
 } GimpPDBProcType;
 
 
@@ -1122,18 +872,24 @@ typedef enum
 
 /**
  * GimpPrecision:
- * @GIMP_PRECISION_U8_LINEAR:     8-bit linear integer
- * @GIMP_PRECISION_U8_GAMMA:      8-bit gamma integer
- * @GIMP_PRECISION_U16_LINEAR:    16-bit linear integer
- * @GIMP_PRECISION_U16_GAMMA:     16-bit gamma integer
- * @GIMP_PRECISION_U32_LINEAR:    32-bit linear integer
- * @GIMP_PRECISION_U32_GAMMA:     32-bit gamma integer
- * @GIMP_PRECISION_HALF_LINEAR:   16-bit linear floating point
- * @GIMP_PRECISION_HALF_GAMMA:    16-bit gamma floating point
- * @GIMP_PRECISION_FLOAT_LINEAR:  32-bit linear floating point
- * @GIMP_PRECISION_FLOAT_GAMMA:   32-bit gamma floating point
- * @GIMP_PRECISION_DOUBLE_LINEAR: 64-bit linear floating point
- * @GIMP_PRECISION_DOUBLE_GAMMA:  64-bit gamma floating point
+ * @GIMP_PRECISION_U8_LINEAR:         8-bit linear integer
+ * @GIMP_PRECISION_U8_NON_LINEAR:     8-bit non-linear integer
+ * @GIMP_PRECISION_U8_PERCEPTUAL:     8-bit perceptual integer
+ * @GIMP_PRECISION_U16_LINEAR:        16-bit linear integer
+ * @GIMP_PRECISION_U16_NON_LINEAR:    16-bit non-linear integer
+ * @GIMP_PRECISION_U16_PERCEPTUAL:    16-bit perceptual integer
+ * @GIMP_PRECISION_U32_LINEAR:        32-bit linear integer
+ * @GIMP_PRECISION_U32_NON_LINEAR:    32-bit non-linear integer
+ * @GIMP_PRECISION_U32_PERCEPTUAL:    32-bit perceptual integer
+ * @GIMP_PRECISION_HALF_LINEAR:       16-bit linear floating point
+ * @GIMP_PRECISION_HALF_NON_LINEAR:   16-bit non-linear floating point
+ * @GIMP_PRECISION_HALF_PERCEPTUAL:   16-bit perceptual floating point
+ * @GIMP_PRECISION_FLOAT_LINEAR:      32-bit linear floating point
+ * @GIMP_PRECISION_FLOAT_NON_LINEAR:  32-bit non-linear floating point
+ * @GIMP_PRECISION_FLOAT_PERCEPTUAL:  32-bit perceptual floating point
+ * @GIMP_PRECISION_DOUBLE_LINEAR:     64-bit linear floating point
+ * @GIMP_PRECISION_DOUBLE_NON_LINEAR: 64-bit non-linear floating point
+ * @GIMP_PRECISION_DOUBLE_PERCEPTUAL: 64-bit perceptual floating point
  *
  * Precisions for pixel encoding.
  *
@@ -1145,19 +901,47 @@ GType gimp_precision_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_PRECISION_U8_LINEAR     = 100, /*< desc="8-bit linear integer"         >*/
-  GIMP_PRECISION_U8_GAMMA      = 150, /*< desc="8-bit gamma integer"          >*/
-  GIMP_PRECISION_U16_LINEAR    = 200, /*< desc="16-bit linear integer"        >*/
-  GIMP_PRECISION_U16_GAMMA     = 250, /*< desc="16-bit gamma integer"         >*/
-  GIMP_PRECISION_U32_LINEAR    = 300, /*< desc="32-bit linear integer"        >*/
-  GIMP_PRECISION_U32_GAMMA     = 350, /*< desc="32-bit gamma integer"         >*/
-  GIMP_PRECISION_HALF_LINEAR   = 500, /*< desc="16-bit linear floating point" >*/
-  GIMP_PRECISION_HALF_GAMMA    = 550, /*< desc="16-bit gamma floating point"  >*/
-  GIMP_PRECISION_FLOAT_LINEAR  = 600, /*< desc="32-bit linear floating point" >*/
-  GIMP_PRECISION_FLOAT_GAMMA   = 650, /*< desc="32-bit gamma floating point"  >*/
-  GIMP_PRECISION_DOUBLE_LINEAR = 700, /*< desc="64-bit linear floating point" >*/
-  GIMP_PRECISION_DOUBLE_GAMMA  = 750  /*< desc="64-bit gamma floating point"  >*/
+  GIMP_PRECISION_U8_LINEAR         = 100, /*< desc="8-bit linear integer"         >*/
+  GIMP_PRECISION_U8_NON_LINEAR     = 150, /*< desc="8-bit non-linear integer"          >*/
+  GIMP_PRECISION_U8_PERCEPTUAL     = 175, /*< desc="8-bit perceptual integer"          >*/
+  GIMP_PRECISION_U16_LINEAR        = 200, /*< desc="16-bit linear integer"        >*/
+  GIMP_PRECISION_U16_NON_LINEAR    = 250, /*< desc="16-bit non-linear integer"         >*/
+  GIMP_PRECISION_U16_PERCEPTUAL    = 275, /*< desc="16-bit perceptual integer"         >*/
+  GIMP_PRECISION_U32_LINEAR        = 300, /*< desc="32-bit linear integer"        >*/
+  GIMP_PRECISION_U32_NON_LINEAR    = 350, /*< desc="32-bit non-linear integer"         >*/
+  GIMP_PRECISION_U32_PERCEPTUAL    = 375, /*< desc="32-bit perceptual integer"         >*/
+  GIMP_PRECISION_HALF_LINEAR       = 500, /*< desc="16-bit linear floating point" >*/
+  GIMP_PRECISION_HALF_NON_LINEAR   = 550, /*< desc="16-bit non-linear floating point"  >*/
+  GIMP_PRECISION_HALF_PERCEPTUAL   = 575, /*< desc="16-bit perceptual floating point"  >*/
+  GIMP_PRECISION_FLOAT_LINEAR      = 600, /*< desc="32-bit linear floating point" >*/
+  GIMP_PRECISION_FLOAT_NON_LINEAR  = 650, /*< desc="32-bit non-linear floating point"  >*/
+  GIMP_PRECISION_FLOAT_PERCEPTUAL  = 675, /*< desc="32-bit perceptual floating point"  >*/
+  GIMP_PRECISION_DOUBLE_LINEAR     = 700, /*< desc="64-bit linear floating point" >*/
+  GIMP_PRECISION_DOUBLE_NON_LINEAR = 750, /*< desc="64-bit non-linear floating point"  >*/
+  GIMP_PRECISION_DOUBLE_PERCEPTUAL = 775, /*< desc="64-bit perceptual floating point"  >*/
 } GimpPrecision;
+
+
+/**
+ * GimpProcedureSensitivityMask:
+ * @GIMP_PROCEDURE_SENSITIVE_DRAWABLE:     Handles image with one selected drawable.
+ * @GIMP_PROCEDURE_SENSITIVE_DRAWABLES:    Handles image with several selected drawables.
+ * @GIMP_PROCEDURE_SENSITIVE_NO_DRAWABLES: Handles image with no selected drawables.
+ * @GIMP_PROCEDURE_SENSITIVE_NO_IMAGE:     Handles no image.
+ *
+ * The cases when a #GimpProcedure should be shown as sensitive.
+ **/
+#define GIMP_TYPE_PROCEDURE_SENSITIVITY_MASK (gimp_procedure_sensitivity_mask_get_type ())
+
+GType gimp_procedure_sensitivity_mask_get_type (void) G_GNUC_CONST;
+typedef enum  /*< pdb-skip >*/
+{
+  GIMP_PROCEDURE_SENSITIVE_DRAWABLE      = 1 << 0,
+  GIMP_PROCEDURE_SENSITIVE_DRAWABLES     = 1 << 2,
+  GIMP_PROCEDURE_SENSITIVE_NO_DRAWABLES  = 1 << 3,
+  GIMP_PROCEDURE_SENSITIVE_NO_IMAGE      = 1 << 4,
+  GIMP_PROCEDURE_SENSITIVE_ALWAYS        = G_MAXINT
+} GimpProcedureSensitivityMask;
 
 
 /**
@@ -1189,9 +973,9 @@ typedef enum
 /**
  * GimpRepeatMode:
  * @GIMP_REPEAT_NONE:       None (extend)
+ * @GIMP_REPEAT_TRUNCATE:   None (truncate)
  * @GIMP_REPEAT_SAWTOOTH:   Sawtooth wave
  * @GIMP_REPEAT_TRIANGULAR: Triangular wave
- * @GIMP_REPEAT_TRUNCATE:   Truncate
  *
  * Repeat modes for example for gradients.
  **/
@@ -1202,17 +986,17 @@ GType gimp_repeat_mode_get_type (void) G_GNUC_CONST;
 typedef enum
 {
   GIMP_REPEAT_NONE,       /*< desc="None (extend)"   >*/
+  GIMP_REPEAT_TRUNCATE,   /*< desc="None (truncate)" >*/
   GIMP_REPEAT_SAWTOOTH,   /*< desc="Sawtooth wave"   >*/
-  GIMP_REPEAT_TRIANGULAR, /*< desc="Triangular wave" >*/
-  GIMP_REPEAT_TRUNCATE    /*< desc="Truncate"        >*/
+  GIMP_REPEAT_TRIANGULAR  /*< desc="Triangular wave" >*/
 } GimpRepeatMode;
 
 
 /**
  * GimpRotationType:
- * @GIMP_ROTATE_90:  90 degrees
- * @GIMP_ROTATE_180: 180 degrees
- * @GIMP_ROTATE_270: 270 degrees
+ * @GIMP_ROTATE_DEGREES90:  90 degrees
+ * @GIMP_ROTATE_DEGREES180: 180 degrees
+ * @GIMP_ROTATE_DEGREES270: 270 degrees
  *
  * Types of simple rotations.
  **/
@@ -1220,11 +1004,14 @@ typedef enum
 
 GType gimp_rotation_type_get_type (void) G_GNUC_CONST;
 
+/* Due to GObject Introspection we can't have the last part of an identifier
+ * start with a digit, since that part will be used in Python as the
+ * identifier, and Python doesn't allow that to start with a digit. */
 typedef enum
 {
-  GIMP_ROTATE_90,
-  GIMP_ROTATE_180,
-  GIMP_ROTATE_270
+  GIMP_ROTATE_DEGREES90,
+  GIMP_ROTATE_DEGREES180,
+  GIMP_ROTATE_DEGREES270
 } GimpRotationType;
 
 
@@ -1250,17 +1037,17 @@ typedef enum
 
 /**
  * GimpSelectCriterion:
- * @GIMP_SELECT_CRITERION_COMPOSITE: Composite
- * @GIMP_SELECT_CRITERION_R:         Red
- * @GIMP_SELECT_CRITERION_G:         Green
- * @GIMP_SELECT_CRITERION_B:         Blue
- * @GIMP_SELECT_CRITERION_H:         HSV Hue
- * @GIMP_SELECT_CRITERION_S:         HSV Saturation
- * @GIMP_SELECT_CRITERION_V:         HSV Value
- * @GIMP_SELECT_CRITERION_A:         Alpha
- * @GIMP_SELECT_CRITERION_LCH_L:     LCh Lightness
- * @GIMP_SELECT_CRITERION_LCH_C:     LCh Chroma
- * @GIMP_SELECT_CRITERION_LCH_H:     LCh Hue
+ * @GIMP_SELECT_CRITERION_COMPOSITE:      Composite
+ * @GIMP_SELECT_CRITERION_RGB_RED:        Red
+ * @GIMP_SELECT_CRITERION_RGB_GREEN:      Green
+ * @GIMP_SELECT_CRITERION_RGB_BLUE:       Blue
+ * @GIMP_SELECT_CRITERION_HSV_HUE:        HSV Hue
+ * @GIMP_SELECT_CRITERION_HSV_SATURATION: HSV Saturation
+ * @GIMP_SELECT_CRITERION_HSV_VALUE:      HSV Value
+ * @GIMP_SELECT_CRITERION_LCH_LIGHTNESS:  LCh Lightness
+ * @GIMP_SELECT_CRITERION_LCH_CHROMA:     LCh Chroma
+ * @GIMP_SELECT_CRITERION_LCH_HUE:        LCh Hue
+ * @GIMP_SELECT_CRITERION_ALPHA:          Alpha
  *
  * Criterions for color similarity.
  **/
@@ -1270,17 +1057,17 @@ GType gimp_select_criterion_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_SELECT_CRITERION_COMPOSITE,  /*< desc="Composite"      >*/
-  GIMP_SELECT_CRITERION_R,          /*< desc="Red"            >*/
-  GIMP_SELECT_CRITERION_G,          /*< desc="Green"          >*/
-  GIMP_SELECT_CRITERION_B,          /*< desc="Blue"           >*/
-  GIMP_SELECT_CRITERION_H,          /*< desc="HSV Hue"        >*/
-  GIMP_SELECT_CRITERION_S,          /*< desc="HSV Saturation" >*/
-  GIMP_SELECT_CRITERION_V,          /*< desc="HSV Value"      >*/
-  GIMP_SELECT_CRITERION_A,          /*< desc="Alpha"          >*/
-  GIMP_SELECT_CRITERION_LCH_L,      /*< desc="LCh Lightness"  >*/
-  GIMP_SELECT_CRITERION_LCH_C,      /*< desc="LCh Chroma"     >*/
-  GIMP_SELECT_CRITERION_LCH_H,      /*< desc="LCh Hue"        >*/
+  GIMP_SELECT_CRITERION_COMPOSITE,      /*< desc="Composite"      >*/
+  GIMP_SELECT_CRITERION_RGB_RED,        /*< desc="Red"            >*/
+  GIMP_SELECT_CRITERION_RGB_GREEN,      /*< desc="Green"          >*/
+  GIMP_SELECT_CRITERION_RGB_BLUE,       /*< desc="Blue"           >*/
+  GIMP_SELECT_CRITERION_HSV_HUE,        /*< desc="HSV Hue"        >*/
+  GIMP_SELECT_CRITERION_HSV_SATURATION, /*< desc="HSV Saturation" >*/
+  GIMP_SELECT_CRITERION_HSV_VALUE,      /*< desc="HSV Value"      >*/
+  GIMP_SELECT_CRITERION_LCH_LIGHTNESS,  /*< desc="LCh Lightness"  >*/
+  GIMP_SELECT_CRITERION_LCH_CHROMA,     /*< desc="LCh Chroma"     >*/
+  GIMP_SELECT_CRITERION_LCH_HUE,        /*< desc="LCh Hue"        >*/
+  GIMP_SELECT_CRITERION_ALPHA,          /*< desc="Alpha"          >*/
 } GimpSelectCriterion;
 
 
@@ -1415,9 +1202,6 @@ typedef enum
  * @GIMP_TRANSFER_SHADOWS:    Shadows
  * @GIMP_TRANSFER_MIDTONES:   Midtones
  * @GIMP_TRANSFER_HIGHLIGHTS: Highlights
- * @GIMP_SHADOWS:             Deprecated alias for @GIMP_TRANSFER_SHADOWS
- * @GIMP_MIDTONES:            Deprecated alias for @GIMP_TRANSFER_MIDTONES
- * @GIMP_HIGHLIGHTS:          Deprecated alias for @GIMP_TRANSFER_HIGHLIGHTS
  *
  * For choosing which brightness ranges to transform.
  **/
@@ -1429,13 +1213,7 @@ typedef enum
 {
   GIMP_TRANSFER_SHADOWS,     /*< desc="Shadows"    >*/
   GIMP_TRANSFER_MIDTONES,    /*< desc="Midtones"   >*/
-  GIMP_TRANSFER_HIGHLIGHTS,  /*< desc="Highlights" >*/
-
-#ifndef GIMP_DISABLE_DEPRECATED
-  GIMP_SHADOWS    = GIMP_TRANSFER_SHADOWS,   /*< skip, pdb-skip >*/
-  GIMP_MIDTONES   = GIMP_TRANSFER_MIDTONES,  /*< skip, pdb-skip >*/
-  GIMP_HIGHLIGHTS = GIMP_TRANSFER_HIGHLIGHTS /*< skip, pdb-skip >*/
-#endif /* GIMP_DISABLE_DEPRECATED */
+  GIMP_TRANSFER_HIGHLIGHTS   /*< desc="Highlights" >*/
 } GimpTransferMode;
 
 
@@ -1480,7 +1258,7 @@ typedef enum
 
 
 /**
- * GimpUnit:
+ * GimpUnitID:
  * @GIMP_UNIT_PIXEL:   Pixels
  * @GIMP_UNIT_INCH:    Inches
  * @GIMP_UNIT_MM:      Millimeters
@@ -1489,7 +1267,9 @@ typedef enum
  * @GIMP_UNIT_END:     Marker for end-of-builtin-units
  * @GIMP_UNIT_PERCENT: Pseudo-unit percent
  *
- * Units used for dimensions in images.
+ * Integer IDs of built-in units used for dimensions in images. These
+ * IDs are meant to stay stable but user-created units IDs may change
+ * from one session to another.
  **/
 typedef enum /*< skip >*/
 {
@@ -1503,55 +1283,87 @@ typedef enum /*< skip >*/
   GIMP_UNIT_END     = 5,
 
   GIMP_UNIT_PERCENT = 65536 /*< pdb-skip >*/
-} GimpUnit;
-
-
-#ifndef GIMP_DISABLE_DEPRECATED
-/**
- * GimpUserDirectory:
- * @GIMP_USER_DIRECTORY_DESKTOP:      Deprecated
- * @GIMP_USER_DIRECTORY_DOCUMENTS:    Deprecated
- * @GIMP_USER_DIRECTORY_DOWNLOAD:     Deprecated
- * @GIMP_USER_DIRECTORY_MUSIC:        Deprecated
- * @GIMP_USER_DIRECTORY_PICTURES:     Deprecated
- * @GIMP_USER_DIRECTORY_PUBLIC_SHARE: Deprecated
- * @GIMP_USER_DIRECTORY_TEMPLATES:    Deprecated
- * @GIMP_USER_DIRECTORY_VIDEOS:       Deprecated
- *
- * Deprecated enum, don't use.
- **/
-#define GIMP_TYPE_USER_DIRECTORY (gimp_user_directory_get_type ())
-
-GType gimp_user_directory_get_type (void) G_GNUC_CONST;
-
-typedef enum
-{
-  GIMP_USER_DIRECTORY_DESKTOP,
-  GIMP_USER_DIRECTORY_DOCUMENTS,
-  GIMP_USER_DIRECTORY_DOWNLOAD,
-  GIMP_USER_DIRECTORY_MUSIC,
-  GIMP_USER_DIRECTORY_PICTURES,
-  GIMP_USER_DIRECTORY_PUBLIC_SHARE,
-  GIMP_USER_DIRECTORY_TEMPLATES,
-  GIMP_USER_DIRECTORY_VIDEOS
-} GimpUserDirectory;
-#endif /* !GIMP_DISABLE_DEPRECATED */
+} GimpUnitID;
 
 
 /**
- * GimpVectorsStrokeType:
- * @GIMP_VECTORS_STROKE_TYPE_BEZIER: A bezier stroke
+ * GimpPathStrokeType:
+ * @GIMP_PATH_STROKE_TYPE_BEZIER: A bezier stroke
  *
- * Possible type of strokes in vectors objects.
+ * Possible type of strokes in path objects.
  **/
-#define GIMP_TYPE_VECTORS_STROKE_TYPE (gimp_vectors_stroke_type_get_type ())
+#define GIMP_TYPE_PATH_STROKE_TYPE (gimp_path_stroke_type_get_type ())
 
-GType gimp_vectors_stroke_type_get_type (void) G_GNUC_CONST;
+GType gimp_path_stroke_type_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_VECTORS_STROKE_TYPE_BEZIER
-} GimpVectorsStrokeType;
+  GIMP_PATH_STROKE_TYPE_BEZIER
+} GimpPathStrokeType;
+
+
+/**
+ * GimpExportCapabilities:
+ * @GIMP_EXPORT_CAN_HANDLE_RGB:                 Handles RGB images
+ * @GIMP_EXPORT_CAN_HANDLE_GRAY:                Handles grayscale images
+ * @GIMP_EXPORT_CAN_HANDLE_INDEXED:             Handles indexed images
+ * @GIMP_EXPORT_CAN_HANDLE_BITMAP:              Handles two-color indexed images
+ * @GIMP_EXPORT_CAN_HANDLE_ALPHA:               Handles alpha channels
+ * @GIMP_EXPORT_CAN_HANDLE_LAYERS:              Handles layers
+ * @GIMP_EXPORT_CAN_HANDLE_LAYERS_AS_ANIMATION: Handles animation of layers
+ * @GIMP_EXPORT_CAN_HANDLE_LAYER_EFFECTS:       Handles layer effects
+ * @GIMP_EXPORT_CAN_HANDLE_LAYER_MASKS:         Handles layer masks
+ * @GIMP_EXPORT_NEEDS_ALPHA:                    Needs alpha channels
+ * @GIMP_EXPORT_NEEDS_CROP:                     Needs to crop content to image bounds
+ *
+ * The types of images and layers an export procedure can handle
+ **/
+#define GIMP_TYPE_EXPORT_CAPABILITIES (gimp_export_capabilities_get_type ())
+
+GType gimp_export_capabilities_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+  GIMP_EXPORT_CAN_HANDLE_RGB                 = 1 << 0,
+  GIMP_EXPORT_CAN_HANDLE_GRAY                = 1 << 1,
+  GIMP_EXPORT_CAN_HANDLE_INDEXED             = 1 << 2,
+  GIMP_EXPORT_CAN_HANDLE_BITMAP              = 1 << 3,
+  GIMP_EXPORT_CAN_HANDLE_ALPHA               = 1 << 4,
+  GIMP_EXPORT_CAN_HANDLE_LAYERS              = 1 << 5,
+  GIMP_EXPORT_CAN_HANDLE_LAYERS_AS_ANIMATION = 1 << 6,
+  GIMP_EXPORT_CAN_HANDLE_LAYER_MASKS         = 1 << 7,
+  GIMP_EXPORT_CAN_HANDLE_LAYER_EFFECTS       = 1 << 8,
+  GIMP_EXPORT_NEEDS_ALPHA                    = 1 << 9,
+  GIMP_EXPORT_NEEDS_CROP                     = 1 << 10
+} GimpExportCapabilities;
+
+
+/**
+ * GimpFileChooserAction:
+ * @GIMP_FILE_CHOOSER_ACTION_ANY:           No restriction.
+ * @GIMP_FILE_CHOOSER_ACTION_OPEN:          Opens an existing file.
+ * @GIMP_FILE_CHOOSER_ACTION_SAVE:          Saves a file (over a new file or an existing one.
+ * @GIMP_FILE_CHOOSER_ACTION_SELECT_FOLDER: Picks an existing folder.
+ * @GIMP_FILE_CHOOSER_ACTION_CREATE_FOLDER: Picks an existing or new folder.
+ *
+ * A type of file to choose from when actions are expected to choose a
+ * file. This is basically a mapping to %GtkFileChooserAction except for
+ * [enum@Gimp.FileChooserAction.ANY] which should not be used for any
+ * GUI functions since we can't know what you are looking for.
+ **/
+#define GIMP_TYPE_FILE_CHOOSER_ACTION (gimp_file_chooser_action_get_type ())
+
+GType gimp_file_chooser_action_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+  GIMP_FILE_CHOOSER_ACTION_ANY           = -1,
+  GIMP_FILE_CHOOSER_ACTION_OPEN          = 0,
+  GIMP_FILE_CHOOSER_ACTION_SAVE          = 1,
+  GIMP_FILE_CHOOSER_ACTION_SELECT_FOLDER = 2,
+  GIMP_FILE_CHOOSER_ACTION_CREATE_FOLDER = 3,
+} GimpFileChooserAction;
+
 
 G_END_DECLS
 

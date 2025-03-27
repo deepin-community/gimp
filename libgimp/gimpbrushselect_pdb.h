@@ -32,18 +32,13 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-gboolean gimp_brushes_popup       (const gchar   *brush_callback,
-                                   const gchar   *popup_title,
-                                   const gchar   *initial_brush,
-                                   gdouble        opacity,
-                                   gint           spacing,
-                                   GimpLayerMode  paint_mode);
-gboolean gimp_brushes_close_popup (const gchar   *brush_callback);
-gboolean gimp_brushes_set_popup   (const gchar   *brush_callback,
-                                   const gchar   *brush_name,
-                                   gdouble        opacity,
-                                   gint           spacing,
-                                   GimpLayerMode  paint_mode);
+gboolean gimp_brushes_popup       (const gchar *brush_callback,
+                                   const gchar *popup_title,
+                                   GimpBrush   *initial_brush,
+                                   GBytes      *parent_window);
+gboolean gimp_brushes_close_popup (const gchar *brush_callback);
+gboolean gimp_brushes_set_popup   (const gchar *brush_callback,
+                                   GimpBrush   *brush);
 
 
 G_END_DECLS

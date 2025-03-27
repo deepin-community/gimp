@@ -34,11 +34,15 @@
 #include <math.h>
 #include <glib.h>
 
+#include <libgimp/gimp.h>
+
+#include "bc7.h"
 #include "dds.h"
 #include "dxt.h"
 #include "endian_rw.h"
-#include "mipmap.h"
 #include "imath.h"
+#include "mipmap.h"
+#include "misc.h"
 #include "vec.h"
 
 #include "dxt_tables.h"
@@ -105,6 +109,9 @@ extract_block (const unsigned char *src,
     }
 }
 
+#if 0
+/* Currently unused, hidden to avoid compilation warnings. */
+
 /* pack BGR8 to RGB565 */
 static inline unsigned short
 pack_rgb565 (const unsigned char *c)
@@ -113,6 +120,7 @@ pack_rgb565 (const unsigned char *c)
          (mul8bit(c[1], 63) <<  5) |
          (mul8bit(c[0], 31)      );
 }
+#endif
 
 /* unpack RGB565 to BGR */
 static void
@@ -757,181 +765,6 @@ encode_color_block (unsigned char *dst,
   PUTL32(dst + 4, indices);
 }
 
-static void
-get_min_max_YCoCg (const unsigned char *block,
-                   unsigned char       *mincolor,
-                   unsigned char       *maxcolor)
-{
-  int i;
-
-  mincolor[2] = mincolor[1] = 255;
-  maxcolor[2] = maxcolor[1] = 0;
-
-  for (i = 0; i < 16; ++i)
-    {
-      if (block[4 * i + 2] < mincolor[2]) mincolor[2] = block[4 * i + 2];
-      if (block[4 * i + 1] < mincolor[1]) mincolor[1] = block[4 * i + 1];
-      if (block[4 * i + 2] > maxcolor[2]) maxcolor[2] = block[4 * i + 2];
-      if (block[4 * i + 1] > maxcolor[1]) maxcolor[1] = block[4 * i + 1];
-    }
-}
-
-static void
-scale_YCoCg (unsigned char *block,
-             unsigned char *mincolor,
-             unsigned char *maxcolor)
-{
-  const int s0 = 128 / 2 - 1;
-  const int s1 = 128 / 4 - 1;
-  int m0, m1, m2, m3;
-  int mask0, mask1, scale;
-  int i;
-
-  m0 = abs(mincolor[2] - 128);
-  m1 = abs(mincolor[1] - 128);
-  m2 = abs(maxcolor[2] - 128);
-  m3 = abs(maxcolor[1] - 128);
-
-  if (m1 > m0) m0 = m1;
-  if (m3 > m2) m2 = m3;
-  if (m2 > m0) m0 = m2;
-
-  mask0 = -(m0 <= s0);
-  mask1 = -(m0 <= s1);
-  scale = 1 + (1 & mask0) + (2 & mask1);
-
-  mincolor[2] = (mincolor[2] - 128) * scale + 128;
-  mincolor[1] = (mincolor[1] - 128) * scale + 128;
-  mincolor[0] = (scale - 1) << 3;
-
-  maxcolor[2] = (maxcolor[2] - 128) * scale + 128;
-  maxcolor[1] = (maxcolor[1] - 128) * scale + 128;
-  maxcolor[0] = (scale - 1) << 3;
-
-  for (i = 0; i < 16; ++i)
-    {
-      block[i * 4 + 2] = (block[i * 4 + 2] - 128) * scale + 128;
-      block[i * 4 + 1] = (block[i * 4 + 1] - 128) * scale + 128;
-    }
-}
-
-#define INSET_SHIFT  4
-
-static void
-inset_bbox_YCoCg (unsigned char *mincolor,
-                  unsigned char *maxcolor)
-{
-  int inset[4], mini[4], maxi[4];
-
-  inset[2] = (maxcolor[2] - mincolor[2]) - ((1 << (INSET_SHIFT - 1)) - 1);
-  inset[1] = (maxcolor[1] - mincolor[1]) - ((1 << (INSET_SHIFT - 1)) - 1);
-
-  mini[2] = ((mincolor[2] << INSET_SHIFT) + inset[2]) >> INSET_SHIFT;
-  mini[1] = ((mincolor[1] << INSET_SHIFT) + inset[1]) >> INSET_SHIFT;
-
-  maxi[2] = ((maxcolor[2] << INSET_SHIFT) - inset[2]) >> INSET_SHIFT;
-  maxi[1] = ((maxcolor[1] << INSET_SHIFT) - inset[1]) >> INSET_SHIFT;
-
-  mini[2] = (mini[2] >= 0) ? mini[2] : 0;
-  mini[1] = (mini[1] >= 0) ? mini[1] : 0;
-
-  maxi[2] = (maxi[2] <= 255) ? maxi[2] : 255;
-  maxi[1] = (maxi[1] <= 255) ? maxi[1] : 255;
-
-  mincolor[2] = (mini[2] & 0xf8) | (mini[2] >> 5);
-  mincolor[1] = (mini[1] & 0xfc) | (mini[1] >> 6);
-
-  maxcolor[2] = (maxi[2] & 0xf8) | (maxi[2] >> 5);
-  maxcolor[1] = (maxi[1] & 0xfc) | (maxi[1] >> 6);
-}
-
-static void
-select_diagonal_YCoCg (const unsigned char *block,
-                       unsigned char       *mincolor,
-                       unsigned char       *maxcolor)
-{
-  unsigned char mid0, mid1, side, mask, b0, b1, c0, c1;
-  int i;
-
-  mid0 = ((int)mincolor[2] + maxcolor[2] + 1) >> 1;
-  mid1 = ((int)mincolor[1] + maxcolor[1] + 1) >> 1;
-
-  side = 0;
-  for (i = 0; i < 16; ++i)
-    {
-      b0 = block[i * 4 + 2] >= mid0;
-      b1 = block[i * 4 + 1] >= mid1;
-      side += (b0 ^ b1);
-    }
-
-  mask = -(side > 8);
-  mask &= -(mincolor[2] != maxcolor[2]);
-
-  c0 = mincolor[1];
-  c1 = maxcolor[1];
-
-  c0 ^= c1;
-  c1 ^= c0 & mask;
-  c0 ^= c1;
-
-  mincolor[1] = c0;
-  maxcolor[1] = c1;
-}
-
-static void
-encode_YCoCg_block (unsigned char *dst,
-                    unsigned char *block)
-{
-  unsigned char colors[4][3], *maxcolor, *mincolor;
-  unsigned int mask;
-  int c0, c1, d0, d1, d2, d3;
-  int b0, b1, b2, b3, b4;
-  int x0, x1, x2;
-  int i, idx;
-
-  maxcolor = &colors[0][0];
-  mincolor = &colors[1][0];
-
-  get_min_max_YCoCg(block, mincolor, maxcolor);
-  scale_YCoCg(block, mincolor, maxcolor);
-  inset_bbox_YCoCg(mincolor, maxcolor);
-  select_diagonal_YCoCg(block, mincolor, maxcolor);
-
-  lerp_rgb13(&colors[2][0], maxcolor, mincolor);
-  lerp_rgb13(&colors[3][0], mincolor, maxcolor);
-
-  mask = 0;
-
-  for (i = 0; i < 16; ++i)
-    {
-      c0 = block[4 * i + 2];
-      c1 = block[4 * i + 1];
-
-      d0 = abs(colors[0][2] - c0) + abs(colors[0][1] - c1);
-      d1 = abs(colors[1][2] - c0) + abs(colors[1][1] - c1);
-      d2 = abs(colors[2][2] - c0) + abs(colors[2][1] - c1);
-      d3 = abs(colors[3][2] - c0) + abs(colors[3][1] - c1);
-
-      b0 = d0 > d3;
-      b1 = d1 > d2;
-      b2 = d0 > d2;
-      b3 = d1 > d3;
-      b4 = d2 > d3;
-
-      x0 = b1 & b2;
-      x1 = b0 & b3;
-      x2 = b0 & b4;
-
-      idx = (x2 | ((x0 | x1) << 1));
-
-      mask |= idx << (2 * i);
-    }
-
-  PUTL16(dst + 0, pack_rgb565(maxcolor));
-  PUTL16(dst + 2, pack_rgb565(mincolor));
-  PUTL32(dst + 4, mask);
-}
-
 /* write DXT3 alpha block */
 static void
 encode_alpha_block_BC2 (unsigned char       *dst,
@@ -1288,33 +1121,35 @@ dxt_compress (unsigned char *dst,
 }
 
 static void
-decode_color_block (unsigned char *block,
-                    unsigned char *src,
-                    int            format)
+decode_color_block (guchar *block,
+                    guchar *src,
+                    gint    format)
 {
-  int i, x, y;
-  unsigned char *d = block;
-  unsigned int indices, idx;
-  unsigned char colors[4][3];
-  unsigned short c0, c1;
+  guchar  *d = block;
+  guint    indices, idx;
+  guchar   colors[4][3];
+  gushort  c0, c1;
+  gint     i, x, y;
 
-  c0 = GETL16(&src[0]);
-  c1 = GETL16(&src[2]);
+  c0 = GETL16 (&src[0]);
+  c1 = GETL16 (&src[2]);
 
-  unpack_rgb565(colors[0], c0);
-  unpack_rgb565(colors[1], c1);
+  unpack_rgb565 (colors[0], c0);
+  unpack_rgb565 (colors[1], c1);
 
   if ((c0 > c1) || (format == DDS_COMPRESS_BC3))
     {
-      lerp_rgb13(colors[2], colors[0], colors[1]);
-      lerp_rgb13(colors[3], colors[1], colors[0]);
+      /* Four-color mode */
+      lerp_rgb13 (colors[2], colors[0], colors[1]);
+      lerp_rgb13 (colors[3], colors[1], colors[0]);
     }
   else
     {
+      /* Three-color mode */
       for (i = 0; i < 3; ++i)
         {
           colors[2][i] = (colors[0][i] + colors[1][i] + 1) >> 1;
-          colors[3][i] = 255;
+          colors[3][i] = 0;  /* Three-color mode index 11 is always black */
         }
     }
 
@@ -1512,6 +1347,11 @@ dxt_decompress (unsigned char *dst,
             {
               decode_alpha_block_BC3(block, s, width);
               decode_alpha_block_BC3(block + 1, s + 8, width);
+              s += 16;
+            }
+          else if (format == DDS_COMPRESS_BC7)
+            {
+              bc7_decompress (s, size, block);
               s += 16;
             }
 

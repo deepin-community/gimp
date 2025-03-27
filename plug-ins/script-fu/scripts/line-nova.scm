@@ -4,6 +4,16 @@
 ;;; Version 0.7
 
 (define (script-fu-line-nova img drw num-of-lines corn-deg offset variation)
+
+  ; fmod and nth were globally defined before GIMP 3
+
+  ; floating point remainder
+  (define (fmod a b)
+    (- a (* (truncate (/ a b)) b)))
+
+  (define (nth k list)
+    (list-ref list k))
+
   (let* (
         (*points* (cons-array (* 3 2) 'double))
         (modulo fmod)                        ; in R4RS way
@@ -16,9 +26,10 @@
         (2pi (* 2 *pi*))
         (rad/deg (/ 2pi 360))
         (variation/2 (/ variation 2))
-        (drw-width (car (gimp-drawable-width drw)))
-        (drw-height (car (gimp-drawable-height drw)))
-        (drw-offsets (gimp-drawable-offsets drw))
+        (drw (vector-ref (car (gimp-image-get-selected-drawables img)) 0))
+        (drw-width (car (gimp-drawable-get-width drw)))
+        (drw-height (car (gimp-drawable-get-height drw)))
+        (drw-offsets (gimp-drawable-get-offsets drw))
         (old-selection FALSE)
         (radius (max drw-height drw-width))
         (index 0)
@@ -32,8 +43,8 @@
     (define (draw-vector beg-x beg-y direction)
 
       (define (set-point! index x y)
-            (aset *points* (* 2 index) x)
-            (aset *points* (+ (* 2 index) 1) y)
+            (vector-set! *points* (* 2 index) x)
+            (vector-set! *points* (+ (* 2 index) 1) y)
       )
       (define (deg->rad rad)
             (* (modulo rad 360) rad/deg)
@@ -57,7 +68,7 @@
 
       (let (
            (dir0 (deg->rad direction))
-           (off (+ offset (- (modulo (rand) variation) variation/2)))
+           (off (+ offset (- (modulo (msrg-rand) variation) variation/2)))
            )
 
         (set-point! 0
@@ -65,7 +76,7 @@
                     (+ beg-y (* off (sin dir0)))
         )
         (set-marginal-point beg-x beg-y direction)
-        (gimp-image-select-polygon img CHANNEL-OP-ADD 6 *points*)
+        (gimp-image-select-polygon img CHANNEL-OP-ADD *points*)
       )
     )
 
@@ -92,8 +103,6 @@
     (if old-selection
       (begin
         (gimp-image-select-item img CHANNEL-OP-REPLACE old-selection)
-        ;; (gimp-image-set-active-layer img drw)
-        ;; delete extra channel by Sven Neumann <neumanns@uni-duesseldorf.de>
         (gimp-image-remove-channel img old-selection)
       )
     )
@@ -104,19 +113,18 @@
   )
 )
 
-(script-fu-register "script-fu-line-nova"
+(script-fu-register-filter "script-fu-line-nova"
   _"Line _Nova..."
   _"Fill a layer with rays emanating outward from its center using the foreground color"
   "Shuji Narazaki <narazaki@gimp.org>"
   "Shuji Narazaki"
   "1997,1998"
   "*"
-  SF-IMAGE       "Image"               0
-  SF-DRAWABLE    "Drawable"            0
-  SF-ADJUSTMENT _"Number of lines"     '(200 40 1000 1 1 0 1)
-  SF-ADJUSTMENT _"Sharpness (degrees)" '(1.0 0.0 10.0 0.1 1 1 1)
-  SF-ADJUSTMENT _"Offset radius"       '(100 0 2000 1 1 0 1)
-  SF-ADJUSTMENT _"Randomness"          '(30 1 2000 1 1 0 1)
+  SF-ONE-DRAWABLE
+  SF-ADJUSTMENT _"_Number of lines"     '(200 40 1000 1 1 0 1)
+  SF-ADJUSTMENT _"S_harpness (degrees)" '(1.0 0.0 10.0 0.1 1 1 1)
+  SF-ADJUSTMENT _"O_ffset radius"       '(100 0 2000 1 1 0 1)
+  SF-ADJUSTMENT _"Ran_domness"          '(30 1 2000 1 1 0 1)
 )
 
 (script-fu-menu-register "script-fu-line-nova"

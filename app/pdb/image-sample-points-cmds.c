@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <gegl.h>
 
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -52,11 +54,11 @@ image_add_sample_point_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 position_x;
-  gint32 position_y;
-  gint32 sample_point = 0;
+  gint position_x;
+  gint position_y;
+  guint sample_point = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   position_x = g_value_get_int (gimp_value_array_index (args, 1));
   position_y = g_value_get_int (gimp_value_array_index (args, 2));
 
@@ -69,7 +71,7 @@ image_add_sample_point_invoker (GimpProcedure         *procedure,
 
           sp = gimp_image_add_sample_point_at_pos (image, position_x, position_y,
                                                    TRUE);
-          sample_point = gimp_aux_item_get_ID (GIMP_AUX_ITEM (sp));
+          sample_point = gimp_aux_item_get_id (GIMP_AUX_ITEM (sp));
         }
       else
         success = FALSE;
@@ -94,9 +96,9 @@ image_delete_sample_point_invoker (GimpProcedure         *procedure,
 {
   gboolean success = TRUE;
   GimpImage *image;
-  gint32 sample_point;
+  guint sample_point;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   sample_point = g_value_get_uint (gimp_value_array_index (args, 1));
 
   if (success)
@@ -125,10 +127,10 @@ image_find_next_sample_point_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 sample_point;
-  gint32 next_sample_point = 0;
+  guint sample_point;
+  guint next_sample_point = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   sample_point = g_value_get_uint (gimp_value_array_index (args, 1));
 
   if (success)
@@ -137,13 +139,13 @@ image_find_next_sample_point_invoker (GimpProcedure         *procedure,
                                                               &success);
 
       if (sp)
-        next_sample_point = gimp_aux_item_get_ID (GIMP_AUX_ITEM (sp));
+        next_sample_point = gimp_aux_item_get_id (GIMP_AUX_ITEM (sp));
 
       if (! success)
         g_set_error (error, GIMP_PDB_ERROR, GIMP_PDB_ERROR_INVALID_ARGUMENT,
                      _("Image '%s' (%d) does not contain sample point with ID %d"),
                      gimp_image_get_display_name (image),
-                     gimp_image_get_ID (image),
+                     gimp_image_get_id (image),
                      sample_point);
     }
 
@@ -167,11 +169,11 @@ image_get_sample_point_position_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   GimpImage *image;
-  gint32 sample_point;
-  gint32 position_x = 0;
-  gint32 position_y = 0;
+  guint sample_point;
+  gint position_x = 0;
+  gint position_y = 0;
 
-  image = gimp_value_get_image (gimp_value_array_index (args, 0), gimp);
+  image = g_value_get_object (gimp_value_array_index (args, 0));
   sample_point = g_value_get_uint (gimp_value_array_index (args, 1));
 
   if (success)
@@ -205,35 +207,35 @@ register_image_sample_points_procs (GimpPDB *pdb)
   /*
    * gimp-image-add-sample-point
    */
-  procedure = gimp_procedure_new (image_add_sample_point_invoker);
+  procedure = gimp_procedure_new (image_add_sample_point_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-add-sample-point");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-add-sample-point",
-                                     "Add a sample point to an image.",
-                                     "This procedure adds a sample point to an image. It takes the input image and the position of the new sample points as parameters. It returns the sample point ID of the new sample point.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2016",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Add a sample point to an image.",
+                                  "This procedure adds a sample point to an image. It takes the input image and the position of the new sample points as parameters. It returns the sample point ID of the new sample point.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2016");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
-  gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("position-x",
-                                                      "position x",
-                                                      "The guide'sample points x-offset from left of image",
-                                                      0, G_MAXINT32, 0,
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
                                                       GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_int32 ("position-y",
-                                                      "position y",
-                                                      "The guide'sample points y-offset from top of image",
-                                                      0, G_MAXINT32, 0,
-                                                      GIMP_PARAM_READWRITE));
+                               g_param_spec_int ("position-x",
+                                                 "position x",
+                                                 "The sample point's x-offset from left of image",
+                                                 0, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
+  gimp_procedure_add_argument (procedure,
+                               g_param_spec_int ("position-y",
+                                                 "position y",
+                                                 "The sample point's y-offset from top of image",
+                                                 0, G_MAXINT32, 0,
+                                                 GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
                                    g_param_spec_uint ("sample-point",
                                                       "sample point",
@@ -246,23 +248,23 @@ register_image_sample_points_procs (GimpPDB *pdb)
   /*
    * gimp-image-delete-sample-point
    */
-  procedure = gimp_procedure_new (image_delete_sample_point_invoker);
+  procedure = gimp_procedure_new (image_delete_sample_point_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-delete-sample-point");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-delete-sample-point",
-                                     "Deletes a sample point from an image.",
-                                     "This procedure takes an image and a sample point ID as input and removes the specified sample point from the specified image.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2016",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Deletes a sample point from an image.",
+                                  "This procedure takes an image and a sample point ID as input and removes the specified sample point from the specified image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2016");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_uint ("sample-point",
                                                   "sample point",
@@ -275,23 +277,23 @@ register_image_sample_points_procs (GimpPDB *pdb)
   /*
    * gimp-image-find-next-sample-point
    */
-  procedure = gimp_procedure_new (image_find_next_sample_point_invoker);
+  procedure = gimp_procedure_new (image_find_next_sample_point_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-find-next-sample-point");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-find-next-sample-point",
-                                     "Find next sample point on an image.",
-                                     "This procedure takes an image and a sample point ID as input and finds the sample point ID of the successor of the given sample point ID in the image's sample point list. If the supplied sample point ID is 0, the procedure will return the first sample point. The procedure will return 0 if given the final sample point ID as an argument or the image has no sample points.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2016",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Find next sample point on an image.",
+                                  "This procedure takes an image and a sample point ID as input and finds the sample point ID of the successor of the given sample point ID in the image's sample point list. If the supplied sample point ID is 0, the procedure will return the first sample point. The procedure will return 0 if given the final sample point ID as an argument or the image has no sample points.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2016");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_uint ("sample-point",
                                                   "sample point",
@@ -310,23 +312,23 @@ register_image_sample_points_procs (GimpPDB *pdb)
   /*
    * gimp-image-get-sample-point-position
    */
-  procedure = gimp_procedure_new (image_get_sample_point_position_invoker);
+  procedure = gimp_procedure_new (image_get_sample_point_position_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-image-get-sample-point-position");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-image-get-sample-point-position",
-                                     "Get position of a sample point on an image.",
-                                     "This procedure takes an image and a sample point ID as input and returns the position of the sample point relative to the top and left of the image.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2016",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Get position of a sample point on an image.",
+                                  "This procedure takes an image and a sample point ID as input and returns the position of the sample point relative to the top and left of the image.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2016");
   gimp_procedure_add_argument (procedure,
-                               gimp_param_spec_image_id ("image",
-                                                         "image",
-                                                         "The image",
-                                                         pdb->gimp, FALSE,
-                                                         GIMP_PARAM_READWRITE));
+                               gimp_param_spec_image ("image",
+                                                      "image",
+                                                      "The image",
+                                                      FALSE,
+                                                      GIMP_PARAM_READWRITE));
   gimp_procedure_add_argument (procedure,
                                g_param_spec_uint ("sample-point",
                                                   "sample point",
@@ -334,17 +336,17 @@ register_image_sample_points_procs (GimpPDB *pdb)
                                                   1, G_MAXUINT32, 1,
                                                   GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("position-x",
-                                                          "position x",
-                                                          "The sample points's position relative to top of image",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("position-x",
+                                                     "position x",
+                                                     "The sample point's x-offset relative to left of image",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("position-y",
-                                                          "position y",
-                                                          "The sample points's position relative to top of image",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("position-y",
+                                                     "position y",
+                                                     "The sample point's y-offset relative to top of image",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 }

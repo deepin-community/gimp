@@ -24,8 +24,10 @@
 #include <gegl.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 #include "libgimpcolor/gimpcolor.h"
+#include "libgimpcolor/gimpcolor-private.h"
 
 #include "core-types.h"
 
@@ -56,11 +58,11 @@ enum
 
 struct _GimpHistogramPrivate
 {
-  gboolean   linear;
-  gint       n_channels;
-  gint       n_bins;
-  gdouble   *values;
-  GimpAsync *calculate_async;
+  GimpTRCType  trc;
+  gint         n_channels;
+  gint         n_bins;
+  gdouble     *values;
+  GimpAsync   *calculate_async;
 };
 
 typedef struct
@@ -230,11 +232,11 @@ gimp_histogram_get_memsize (GimpObject *object,
 /*  public functions  */
 
 GimpHistogram *
-gimp_histogram_new (gboolean linear)
+gimp_histogram_new (GimpTRCType trc)
 {
   GimpHistogram *histogram = g_object_new (GIMP_TYPE_HISTOGRAM, NULL);
 
-  histogram->priv->linear = linear;
+  histogram->priv->trc = trc;
 
   return histogram;
 }
@@ -246,7 +248,7 @@ gimp_histogram_new (gboolean linear)
  * Creates a duplicate of @histogram. The duplicate has a reference
  * count of 1 and contains the values from @histogram.
  *
- * Return value: a newly allocated %GimpHistogram
+ * Returns: a newly allocated %GimpHistogram
  **/
 GimpHistogram *
 gimp_histogram_duplicate (GimpHistogram *histogram)
@@ -258,14 +260,14 @@ gimp_histogram_duplicate (GimpHistogram *histogram)
   if (histogram->priv->calculate_async)
     gimp_waitable_wait (GIMP_WAITABLE (histogram->priv->calculate_async));
 
-  dup = gimp_histogram_new (histogram->priv->linear);
+  dup = gimp_histogram_new (histogram->priv->trc);
 
   dup->priv->n_channels = histogram->priv->n_channels;
   dup->priv->n_bins     = histogram->priv->n_bins;
-  dup->priv->values     = g_memdup (histogram->priv->values,
-                                    sizeof (gdouble) *
-                                    dup->priv->n_channels *
-                                    dup->priv->n_bins);
+  dup->priv->values     = g_memdup2 (histogram->priv->values,
+                                     sizeof (gdouble) *
+                                     dup->priv->n_channels *
+                                     dup->priv->n_bins);
 
   return dup;
 }
@@ -883,76 +885,42 @@ gimp_histogram_calculate_internal (GimpAsync        *async,
   CalculateData         data;
   GimpHistogramPrivate *priv;
   const Babl           *format;
+  const Babl           *space;
 
   priv = context->histogram->priv;
 
   format = gegl_buffer_get_format (context->buffer);
+  space  = babl_format_get_space (format);
 
   if (babl_format_get_type (format, 0) == babl_type ("u8"))
     context->n_bins = 256;
   else
     context->n_bins = 1024;
 
-  if (babl_format_is_palette (format))
+  switch (gimp_babl_format_get_base_type (format))
     {
-      if (babl_format_has_alpha (format))
-        {
-          if (priv->linear)
-            format = babl_format ("RGB float");
-          else
-            format = babl_format ("R'G'B' float");
-        }
-      else
-        {
-          if (priv->linear)
-            format = babl_format ("RGBA float");
-          else
-            format = babl_format ("R'G'B'A float");
-        }
-    }
-  else
-    {
-      const Babl *model = babl_format_get_model (format);
+    case GIMP_RGB:
+    case GIMP_INDEXED:
+      format = gimp_babl_format (GIMP_RGB,
+                                 gimp_babl_precision (GIMP_COMPONENT_TYPE_FLOAT,
+                                                      priv->trc),
+                                 babl_format_has_alpha (format),
+                                 space);
+      break;
 
-      if (model == babl_model ("Y") ||
-          model == babl_model ("Y'"))
-        {
-          if (priv->linear)
-            format = babl_format ("Y float");
-          else
-            format = babl_format ("Y' float");
-        }
-      else if (model == babl_model ("YA") ||
-               model == babl_model ("Y'A"))
-        {
-          if (priv->linear)
-            format = babl_format ("YA float");
-          else
-            format = babl_format ("Y'A float");
-        }
-      else if (model == babl_model ("RGB") ||
-               model == babl_model ("R'G'B'"))
-        {
-          if (priv->linear)
-            format = babl_format ("RGB float");
-          else
-            format = babl_format ("R'G'B' float");
-        }
-      else if (model == babl_model ("RGBA") ||
-               model == babl_model ("R'G'B'A"))
-        {
-          if (priv->linear)
-            format = babl_format ("RGBA float");
-          else
-            format = babl_format ("R'G'B'A float");
-        }
-      else
-        {
-          if (async)
-            gimp_async_abort (async);
+    case GIMP_GRAY:
+      format = gimp_babl_format (GIMP_GRAY,
+                                 gimp_babl_precision (GIMP_COMPONENT_TYPE_FLOAT,
+                                                      priv->trc),
+                                 babl_format_has_alpha (format),
+                                 space);
+      break;
 
-          g_return_if_reached ();
-        }
+    default:
+      if (async)
+        gimp_async_abort (async);
+
+      g_return_if_reached ();
     }
 
   context->n_components = babl_format_get_n_components (format);
@@ -1016,6 +984,7 @@ gimp_histogram_calculate_area (const GeglRectangle *area,
   GimpAsync            *async;
   CalculateContext     *context;
   GeglBufferIterator   *iter;
+  const Babl           *fish;
   gdouble              *values;
   gint                  n_components;
   gint                  n_bins;
@@ -1027,6 +996,8 @@ gimp_histogram_calculate_area (const GeglRectangle *area,
 
   n_bins       = context->n_bins;
   n_components = context->n_components;
+
+  fish = babl_fish (data->format, babl_format ("Y float"));
 
   values = g_new0 (gdouble, (n_components + N_DERIVED_CHANNELS) * n_bins);
   gimp_atomic_slist_push_head (&data->values_list, values);
@@ -1125,7 +1096,7 @@ gimp_histogram_calculate_area (const GeglRectangle *area,
                   max = MAX (data[2], max);
                   VALUE (0, max) += masked;
 
-                  luminance = GIMP_RGB_LUMINANCE (data[0], data[1], data[2]);
+                  babl_process (fish, data, &luminance, 1);
                   VALUE (4, luminance) += masked;
 
                   data += n_components;
@@ -1150,7 +1121,7 @@ gimp_histogram_calculate_area (const GeglRectangle *area,
                   max = MAX (data[2], max);
                   VALUE (0, max) += weight * masked;
 
-                  luminance = GIMP_RGB_LUMINANCE (data[0], data[1], data[2]);
+                  babl_process (fish, data, &luminance, 1);
                   VALUE (5, luminance) += weight * masked;
 
                   data += n_components;
@@ -1201,7 +1172,7 @@ gimp_histogram_calculate_area (const GeglRectangle *area,
                   max = MAX (data[2], max);
                   VALUE (0, max) += 1.0;
 
-                  luminance = GIMP_RGB_LUMINANCE (data[0], data[1], data[2]);
+                  babl_process (fish, data, &luminance, 1);
                   VALUE (4, luminance) += 1.0;
 
                   data += n_components;
@@ -1224,7 +1195,7 @@ gimp_histogram_calculate_area (const GeglRectangle *area,
                   max = MAX (data[2], max);
                   VALUE (0, max) += weight;
 
-                  luminance = GIMP_RGB_LUMINANCE (data[0], data[1], data[2]);
+                  babl_process (fish, data, &luminance, 1);
                   VALUE (5, luminance) += weight;
 
                   data += n_components;

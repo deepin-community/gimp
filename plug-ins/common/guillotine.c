@@ -31,111 +31,153 @@
 #define PLUG_IN_PROC "plug-in-guillotine"
 
 
-/* Declare local functions.
- */
-static void    query      (void);
-static void    run        (const gchar      *name,
-                           gint              nparams,
-                           const GimpParam  *param,
-                           gint             *nreturn_vals,
-                           GimpParam       **return_vals);
+typedef struct _Guillotine      Guillotine;
+typedef struct _GuillotineClass GuillotineClass;
 
-static GList * guillotine (gint32            image_ID,
-                           gboolean          interactive);
-
-
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _Guillotine
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
+  GimpPlugIn      parent_instance;
+};
+
+struct _GuillotineClass
+{
+  GimpPlugInClass parent_class;
 };
 
 
-MAIN ()
+#define GUILLOTINE_TYPE  (guillotine_get_type ())
+#define GUILLOTINE(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), GUILLOTINE_TYPE, Guillotine))
+
+GType                   guillotine_get_type         (void) G_GNUC_CONST;
+
+static GList          * guillotine_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * guillotine_create_procedure (GimpPlugIn           *plug_in,
+                                                     const gchar          *name);
+
+static GimpValueArray * guillotine_run              (GimpProcedure        *procedure,
+                                                     GimpRunMode           run_mode,
+                                                     GimpImage            *image,
+                                                     GimpDrawable        **drawables,
+                                                     GimpProcedureConfig  *config,
+                                                     gpointer              run_data);
+static GList          * guillotine                  (GimpImage            *image,
+                                                     gboolean              interactive);
+
+
+G_DEFINE_TYPE (Guillotine, guillotine, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (GUILLOTINE_TYPE)
+DEFINE_STD_SET_I18N
 
 static void
-query (void)
+guillotine_class_init (GuillotineClass *klass)
 {
-  static const GimpParamDef args[] =
-  {
-    { GIMP_PDB_INT32,      "run-mode", "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,      "image",    "Input image"             },
-    { GIMP_PDB_DRAWABLE,   "drawable", "Input drawable (unused)" }
-  };
-  static const GimpParamDef return_vals[] =
-  {
-    { GIMP_PDB_INT32,      "image-count", "Number of images created" },
-    { GIMP_PDB_INT32ARRAY, "image-ids",   "Output images"            }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  gimp_install_procedure (PLUG_IN_PROC,
-                          N_("Slice the image into subimages using guides"),
-                          "This function takes an image and slices it along "
-                          "its guides, creating new images. The original "
-                          "image is not modified.",
-                          "Adam D. Moss (adam@foxbox.org)",
-                          "Adam D. Moss (adam@foxbox.org)",
-                          "1998",
-                          N_("Slice Using G_uides"),
-                          "RGB*, INDEXED*, GRAY*",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args), G_N_ELEMENTS (return_vals),
-                          args, return_vals);
-
-  gimp_plugin_menu_register (PLUG_IN_PROC, "<Image>/Image/Crop");
+  plug_in_class->query_procedures = guillotine_query_procedures;
+  plug_in_class->create_procedure = guillotine_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+guillotine_init (Guillotine *film)
 {
-  static GimpParam  values[3];
-  GimpRunMode       run_mode = param[0].data.d_int32;
-  GimpPDBStatusType status   = GIMP_PDB_SUCCESS;
+}
 
-  *nreturn_vals = 3;
-  *return_vals  = values;
+static GList *
+guillotine_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (PLUG_IN_PROC));
+}
 
-  values[0].type              = GIMP_PDB_STATUS;
-  values[0].data.d_status     = status;
-  values[1].type              = GIMP_PDB_INT32;
-  values[1].data.d_int32      = 0;
-  values[2].type              = GIMP_PDB_INT32ARRAY;
-  values[2].data.d_int32array = NULL;
+static GimpProcedure *
+guillotine_create_procedure (GimpPlugIn  *plug_in,
+                             const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
 
-  INIT_I18N();
+  if (! strcmp (name, PLUG_IN_PROC))
+    {
+      procedure = gimp_image_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            guillotine_run, NULL, NULL);
 
+      gimp_procedure_set_image_types (procedure, "*");
+      gimp_procedure_set_sensitivity_mask (procedure,
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLE  |
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLES |
+                                           GIMP_PROCEDURE_SENSITIVE_NO_DRAWABLES);
+
+      gimp_procedure_set_menu_label (procedure, _("Slice Using G_uides"));
+      gimp_procedure_add_menu_path (procedure, "<Image>/Image/[Crop]");
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Slice the image into subimages "
+                                          "using guides"),
+                                        "This function takes an image and "
+                                        "slices it along its guides, creating "
+                                        "new images. The original image is "
+                                        "not modified.",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Adam D. Moss (adam@foxbox.org)",
+                                      "Adam D. Moss (adam@foxbox.org)",
+                                      "1998");
+
+      gimp_procedure_add_core_object_array_return_value (procedure, "images",
+                                                         "Output images",
+                                                         "Output images",
+                                                         GIMP_TYPE_IMAGE,
+                                                         G_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+guillotine_run (GimpProcedure        *procedure,
+                GimpRunMode           run_mode,
+                GimpImage            *image,
+                GimpDrawable        **drawables,
+                GimpProcedureConfig  *config,
+                gpointer              run_data)
+{
+  GimpValueArray    *return_vals = NULL;
+  GimpPDBStatusType  status      = GIMP_PDB_SUCCESS;
+
+  return_vals = gimp_procedure_new_return_values (procedure, status,
+                                                  NULL);
   if (status == GIMP_PDB_SUCCESS)
     {
-      GList *images;
-      GList *list;
-      gint   i;
+      GList      *image_list;
+      GList      *list;
+      GimpImage **images;
+      gint        num_images;
+      gint        i;
 
       gimp_progress_init (_("Guillotine"));
 
-      images = guillotine (param[1].data.d_image,
-                           run_mode == GIMP_RUN_INTERACTIVE);
+      image_list = guillotine (image, run_mode == GIMP_RUN_INTERACTIVE);
 
-      values[1].data.d_int32      = g_list_length (images);
-      values[2].data.d_int32array = g_new (gint32, values[1].data.d_int32);
+      num_images = g_list_length (image_list);
+      images     = g_new0 (GimpImage *, num_images + 1);
 
-      for (list = images, i = 0; list; list = g_list_next (list), i++)
+      for (list = image_list, i = 0;
+           list;
+           list = g_list_next (list), i++)
         {
-          values[2].data.d_int32array[i] = GPOINTER_TO_INT (list->data);
+          images[i] = list->data;
         }
 
-      g_list_free (images);
+      g_list_free (image_list);
+
+      GIMP_VALUES_TAKE_CORE_OBJECT_ARRAY (return_vals, 1, images);
 
       if (run_mode == GIMP_RUN_INTERACTIVE)
         gimp_displays_flush ();
     }
 
-  values[0].data.d_status = status;
+  return return_vals;
 }
 
 
@@ -147,8 +189,8 @@ guide_sort_func (gconstpointer a,
 }
 
 static GList *
-guillotine (gint32   image_ID,
-            gboolean interactive)
+guillotine (GimpImage *image,
+            gboolean   interactive)
 {
   GList    *images = NULL;
   gint      guide;
@@ -158,8 +200,8 @@ guillotine (gint32   image_ID,
   GList    *hguides, *hg;
   GList    *vguides, *vg;
 
-  image_width  = gimp_image_width (image_ID);
-  image_height = gimp_image_height (image_ID);
+  image_width  = gimp_image_get_width (image);
+  image_height = gimp_image_get_height (image);
 
   hguides = g_list_append (NULL,    GINT_TO_POINTER (0));
   hguides = g_list_append (hguides, GINT_TO_POINTER (image_height));
@@ -167,13 +209,13 @@ guillotine (gint32   image_ID,
   vguides = g_list_append (NULL,    GINT_TO_POINTER (0));
   vguides = g_list_append (vguides, GINT_TO_POINTER (image_width));
 
-  for (guide = gimp_image_find_next_guide (image_ID, 0);
+  for (guide = gimp_image_find_next_guide (image, 0);
        guide > 0;
-       guide = gimp_image_find_next_guide (image_ID, guide))
+       guide = gimp_image_find_next_guide (image, guide))
     {
-      gint position = gimp_image_get_guide_position (image_ID, guide);
+      gint position = gimp_image_get_guide_position (image, guide);
 
-      switch (gimp_image_get_guide_orientation (image_ID, guide))
+      switch (gimp_image_get_guide_orientation (image, guide))
         {
         case GIMP_ORIENTATION_HORIZONTAL:
           if (! g_list_find (hguides, GINT_TO_POINTER (position)))
@@ -203,16 +245,16 @@ guillotine (gint32   image_ID,
 
   if (guides_found)
     {
-      gchar *filename;
+      GFile *file;
       gint   h, v, hpad, vpad;
       gint   x, y;
       gchar *hformat;
       gchar *format;
 
-      filename = gimp_image_get_filename (image_ID);
+      file = gimp_image_get_file (image);
 
-      if (! filename)
-        filename = g_strdup (_("Untitled"));
+      if (! file)
+        file = g_file_new_for_uri (_("Untitled"));
 
       /* get the number horizontal and vertical slices */
       h = g_list_length (hguides);
@@ -233,14 +275,13 @@ guillotine (gint32   image_ID,
         {
           for (x = 0, vg = vguides; vg && vg->next; x++, vg = vg->next)
             {
-              gint32   new_image = gimp_image_duplicate (image_ID);
-              GString *new_filename;
-              gchar   *fileextension;
-              gchar   *fileindex;
-              gchar   *fileindex_with_xcf_extension;
-              gint     pos;
+              GimpImage *new_image = gimp_image_duplicate (image);
+              GString   *new_uri;
+              GFile     *new_file;
+              gchar     *fileextension;
+              gchar     *fileindex;
 
-              if (new_image == -1)
+              if (! new_image)
                 {
                   g_warning ("Couldn't create new image.");
                   g_free (hformat);
@@ -259,27 +300,33 @@ guillotine (gint32   image_ID,
                                GPOINTER_TO_INT (hg->data));
 
 
-              new_filename = g_string_new (filename);
+              new_uri = g_string_new (g_file_get_uri (file));
 
               /* show the rough coordinates of the image in the title */
               fileindex    = g_strdup_printf (format, x, y);
 
-              /* preparation to replace original image extension with GIMP default
-                 see issue #8581 for details */
-              fileindex_with_xcf_extension  = g_strdup_printf ("%s.xcf", fileindex);
-              g_free (fileindex);
-
               /* get the position of the file extension - last . in filename */
-              fileextension = strrchr (new_filename->str, '.');
-              pos           = fileextension - new_filename->str;
+              fileextension = strrchr (new_uri->str, '.');
+              if (fileextension)
+                {
+                  gint pos;
+
+                  /* Truncate the extension. */
+                  pos = fileextension - new_uri->str;
+                  g_string_truncate (new_uri, pos);
+                }
 
               /* insert the coordinates before the extension */
-              g_string_truncate (new_filename, pos);
-              g_string_insert (new_filename, pos, fileindex_with_xcf_extension);
-              g_free (fileindex_with_xcf_extension);
+              g_string_append (new_uri, fileindex);
+              g_free (fileindex);
 
-              gimp_image_set_filename (new_image, new_filename->str);
-              g_string_free (new_filename, TRUE);
+              g_string_append (new_uri, ".xcf");
+
+              new_file = g_file_new_for_uri (new_uri->str);
+              g_string_free (new_uri, TRUE);
+
+              gimp_image_set_file (new_image, new_file);
+              g_object_unref (new_file);
 
               while ((guide = gimp_image_find_next_guide (new_image, 0)))
                 gimp_image_delete_guide (new_image, guide);
@@ -293,7 +340,7 @@ guillotine (gint32   image_ID,
             }
         }
 
-      g_free (filename);
+      g_object_unref (file);
       g_free (hformat);
       g_free (format);
     }

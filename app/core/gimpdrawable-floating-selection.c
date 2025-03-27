@@ -28,6 +28,7 @@
 #include "gegl/gimpapplicator.h"
 
 #include "gimpchannel.h"
+#include "gimpcontainer.h"
 #include "gimpdrawable-floating-selection.h"
 #include "gimpdrawable-filters.h"
 #include "gimpdrawable-private.h"
@@ -176,7 +177,7 @@ gimp_drawable_get_floating_sel_filter (GimpDrawable *drawable)
   g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
   g_return_val_if_fail (gimp_drawable_get_floating_sel (drawable) != NULL, NULL);
 
-  /* Ensure that the graph is construced before the filter is used.
+  /* Ensure that the graph is constructed before the filter is used.
    * Otherwise, we rely on the projection to cause the graph to be
    * constructed, which fails for images that aren't displayed.
    */
@@ -192,10 +193,13 @@ void
 _gimp_drawable_add_floating_sel_filter (GimpDrawable *drawable)
 {
   GimpDrawablePrivate *private = drawable->private;
+  GimpContainer       *filters = gimp_drawable_get_filters (drawable);
   GimpImage           *image   = gimp_item_get_image (GIMP_ITEM (drawable));
   GimpLayer           *fs      = gimp_drawable_get_floating_sel (drawable);
   GeglNode            *node;
   GeglNode            *fs_source;
+  gint                 end_index;
+  gint                 index;
 
   if (! private->source_node)
     return;
@@ -228,12 +232,20 @@ _gimp_drawable_add_floating_sel_filter (GimpDrawable *drawable)
                                                "operation", "gegl:nop",
                                                NULL);
 
-  gegl_node_connect_to (fs_source,             "output",
-                        private->fs_crop_node, "input");
-  gegl_node_connect_to (private->fs_crop_node, "output",
-                        node,                  "aux");
+  gegl_node_link (fs_source, private->fs_crop_node);
+  gegl_node_connect (private->fs_crop_node, "output",
+                     node,                  "aux");
 
   gimp_drawable_add_filter (drawable, private->fs_filter);
+
+  /* Move the floating selection below any non-destructive filters that
+   * may be active, so that it's directly affect the raw pixels. */
+  end_index = gimp_container_get_n_children (filters) - 1;
+  index     =
+    gimp_container_get_child_index (filters, GIMP_OBJECT (private->fs_filter));
+  if (end_index > 0 && index != end_index)
+    gimp_container_reorder (filters, GIMP_OBJECT (private->fs_filter),
+                            end_index);
 
   g_signal_connect (fs, "notify",
                     G_CALLBACK (gimp_drawable_fs_notify),
@@ -307,8 +319,7 @@ gimp_drawable_remove_fs_filter (GimpDrawable *drawable)
         {
           gegl_node_add_child (gimp_filter_get_node (GIMP_FILTER (fs)),
                                fs_source);
-          gegl_node_connect_to (fs_source,             "output",
-                                fs->layer_offset_node, "input");
+          gegl_node_link (fs_source, fs->layer_offset_node);
         }
 
       g_clear_object (&private->fs_filter);

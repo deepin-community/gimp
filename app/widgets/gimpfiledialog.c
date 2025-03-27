@@ -86,6 +86,10 @@ static gboolean gimp_file_dialog_delete_event            (GtkWidget           *w
                                                           GdkEventAny         *event);
 static void     gimp_file_dialog_response                (GtkDialog           *dialog,
                                                           gint                 response_id);
+#ifdef G_OS_WIN32
+static void     gimp_file_dialog_realize                 (GimpFileDialog      *dialog,
+                                                          gpointer             data);
+#endif
 static GFile  * gimp_file_dialog_real_get_default_folder (GimpFileDialog      *dialog);
 static void     gimp_file_dialog_real_save_state         (GimpFileDialog      *dialog,
                                                           const gchar         *state_name);
@@ -104,7 +108,7 @@ static void     gimp_file_dialog_progress_set_value      (GimpProgress        *p
                                                           gdouble              percentage);
 static gdouble  gimp_file_dialog_progress_get_value      (GimpProgress        *progress);
 static void     gimp_file_dialog_progress_pulse          (GimpProgress        *progress);
-static guint32  gimp_file_dialog_progress_get_window_id  (GimpProgress        *progress);
+static GBytes * gimp_file_dialog_progress_get_window_id  (GimpProgress        *progress);
 
 static void     gimp_file_dialog_add_user_dir            (GimpFileDialog      *dialog,
                                                           GUserDirectory       directory);
@@ -121,8 +125,6 @@ static void     gimp_file_dialog_proc_changed            (GimpFileProcView    *v
 
 static void     gimp_file_dialog_help_func               (const gchar         *help_id,
                                                           gpointer             help_data);
-static void     gimp_file_dialog_help_clicked            (GtkWidget           *widget,
-                                                          gpointer             dialog);
 
 static GimpFileDialogState
               * gimp_file_dialog_get_state               (GimpFileDialog      *dialog);
@@ -220,11 +222,18 @@ gimp_file_dialog_class_init (GimpFileDialogClass *klass)
                                    g_param_spec_boolean ("show-all-files",
                                                          NULL, NULL, FALSE,
                                                          GIMP_PARAM_READWRITE));
+
+  gtk_widget_class_set_css_name (widget_class, "GimpFileDialog");
 }
 
 static void
 gimp_file_dialog_init (GimpFileDialog *dialog)
 {
+#ifdef G_OS_WIN32
+  g_signal_connect (dialog, "realize",
+                    G_CALLBACK (gimp_file_dialog_realize),
+                    NULL);
+#endif
 }
 
 static void
@@ -329,7 +338,7 @@ gimp_file_dialog_constructed (GObject *object)
                           NULL);
 
   gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
                                            -1);
@@ -340,31 +349,15 @@ gimp_file_dialog_constructed (GObject *object)
 
   if (dialog->help_id)
     {
-      gimp_help_connect (GTK_WIDGET (dialog),
-                         gimp_file_dialog_help_func, dialog->help_id, dialog);
+      gimp_help_connect (GTK_WIDGET (dialog), NULL,
+                         gimp_file_dialog_help_func, dialog->help_id,
+                         dialog, NULL);
 
       if (GIMP_GUI_CONFIG (dialog->gimp->config)->show_help_button)
         {
-          GtkWidget *action_area;
-          GtkWidget *button;
-
-          action_area = gtk_dialog_get_action_area (GTK_DIALOG (dialog));
-
-          button = gtk_button_new_with_mnemonic (_("_Help"));
-          gtk_box_pack_end (GTK_BOX (action_area), button, FALSE, TRUE, 0);
-          gtk_button_box_set_child_secondary (GTK_BUTTON_BOX (action_area),
-                                              button, TRUE);
-          gtk_widget_show (button);
-
-          g_object_set_data_full (G_OBJECT (dialog), "gimp-dialog-help-id",
-                                  g_strdup (dialog->help_id),
-                                  (GDestroyNotify) g_free);
-
-          g_signal_connect (button, "clicked",
-                            G_CALLBACK (gimp_file_dialog_help_clicked),
-                            dialog);
-
-          g_object_set_data (G_OBJECT (dialog), "gimp-dialog-help-button", button);
+          gtk_dialog_add_buttons (GTK_DIALOG (dialog),
+                                  _("_Help"), GTK_RESPONSE_HELP,
+                                  NULL);
         }
     }
 
@@ -384,6 +377,8 @@ gimp_file_dialog_constructed (GObject *object)
   dialog->progress = gimp_progress_box_new ();
   gtk_box_pack_end (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
                     dialog->progress, FALSE, FALSE, 0);
+
+  gimp_widget_set_native_handle (GTK_WIDGET (dialog), &dialog->window_handle);
 }
 
 static void
@@ -400,6 +395,8 @@ gimp_file_dialog_dispose (GObject *object)
   g_clear_pointer (&dialog->automatic_help_id, g_free);
   g_clear_pointer (&dialog->automatic_label,   g_free);
   g_clear_pointer (&dialog->file_filter_label, g_free);
+
+  gimp_widget_free_native_handle (GTK_WIDGET (dialog), &dialog->window_handle);
 }
 
 static gboolean
@@ -415,6 +412,12 @@ gimp_file_dialog_response (GtkDialog *dialog,
 {
   GimpFileDialog *file_dialog = GIMP_FILE_DIALOG (dialog);
 
+  if (response_id == GTK_RESPONSE_HELP)
+    {
+      gimp_standard_help_func (file_dialog->help_id, NULL);
+      return;
+    }
+
   if (response_id != GTK_RESPONSE_OK && file_dialog->busy)
     {
       file_dialog->canceled = TRUE;
@@ -427,6 +430,15 @@ gimp_file_dialog_response (GtkDialog *dialog,
         }
     }
 }
+
+#ifdef G_OS_WIN32
+static void
+gimp_file_dialog_realize (GimpFileDialog *dialog,
+                          gpointer        data)
+{
+  gimp_window_set_title_bar_theme (dialog->gimp, GTK_WIDGET (dialog));
+}
+#endif
 
 static GFile *
 gimp_file_dialog_real_get_default_folder (GimpFileDialog *dialog)
@@ -585,12 +597,15 @@ gimp_file_dialog_progress_pulse (GimpProgress *progress)
     gimp_progress_pulse (GIMP_PROGRESS (dialog->progress));
 }
 
-static guint32
+static GBytes *
 gimp_file_dialog_progress_get_window_id (GimpProgress *progress)
 {
   GimpFileDialog *dialog = GIMP_FILE_DIALOG (progress);
 
-  return gimp_window_get_native_id (GTK_WINDOW (dialog));
+  if (dialog && dialog->window_handle)
+    return g_bytes_ref (dialog->window_handle);
+
+  return NULL;
 }
 
 
@@ -734,9 +749,9 @@ gimp_file_dialog_add_proc_selection (GimpFileDialog *dialog)
   gtk_widget_show (box);
 
   dialog->proc_expander = gtk_expander_new_with_mnemonic (NULL);
-  gimp_file_dialog_add_extra_widget (dialog,
-                                     dialog->proc_expander,
-                                     TRUE, TRUE, 0);
+  gtk_expander_set_resize_toplevel (GTK_EXPANDER (dialog->proc_expander), FALSE);
+  gtk_widget_set_hexpand (GTK_WIDGET (dialog->proc_expander), TRUE);
+  gtk_box_pack_end (GTK_BOX (box), dialog->proc_expander, FALSE, FALSE, 1);
   gtk_widget_show (dialog->proc_expander);
 
   /* The list of file formats. */
@@ -768,7 +783,6 @@ gimp_file_dialog_add_proc_selection (GimpFileDialog *dialog)
                                          "show-all-files",
                                          _("Show _All Files"));
   gtk_box_pack_end (GTK_BOX (box), checkbox, FALSE, FALSE, 1);
-  gtk_widget_show (checkbox);
 }
 
 static void
@@ -919,14 +933,6 @@ gimp_file_dialog_help_func (const gchar *help_id,
     {
       gimp_standard_help_func (help_id, NULL);
     }
-}
-
-static void
-gimp_file_dialog_help_clicked (GtkWidget *widget,
-                               gpointer   dialog)
-{
-  gimp_standard_help_func (g_object_get_data (dialog, "gimp-dialog-help-id"),
-                           NULL);
 }
 
 static GimpFileDialogState *

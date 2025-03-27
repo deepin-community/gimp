@@ -22,6 +22,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "libgimpmath/gimpmath.h"
@@ -44,17 +45,17 @@ enum
 
 /*  local function prototypes  */
 
-static void      gimp_color_bar_set_property (GObject        *object,
-                                              guint           property_id,
-                                              const GValue   *value,
-                                              GParamSpec     *pspec);
-static void      gimp_color_bar_get_property (GObject        *object,
-                                              guint           property_id,
-                                              GValue         *value,
-                                              GParamSpec     *pspec);
+static void      gimp_color_bar_set_property (GObject      *object,
+                                              guint         property_id,
+                                              const GValue *value,
+                                              GParamSpec   *pspec);
+static void      gimp_color_bar_get_property (GObject      *object,
+                                              guint         property_id,
+                                              GValue       *value,
+                                              GParamSpec   *pspec);
 
-static gboolean  gimp_color_bar_expose       (GtkWidget      *widget,
-                                              GdkEventExpose *event);
+static gboolean  gimp_color_bar_draw         (GtkWidget    *widget,
+                                              cairo_t      *cr);
 
 
 G_DEFINE_TYPE (GimpColorBar, gimp_color_bar, GTK_TYPE_EVENT_BOX)
@@ -67,12 +68,11 @@ gimp_color_bar_class_init (GimpColorBarClass *klass)
 {
   GObjectClass   *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
-  GimpRGB         white        = { 1.0, 1.0, 1.0, 1.0 };
 
   object_class->set_property = gimp_color_bar_set_property;
   object_class->get_property = gimp_color_bar_get_property;
 
-  widget_class->expose_event = gimp_color_bar_expose;
+  widget_class->draw         = gimp_color_bar_draw;
 
   g_object_class_install_property (object_class, PROP_ORIENTATION,
                                    g_param_spec_enum ("orientation",
@@ -83,11 +83,11 @@ gimp_color_bar_class_init (GimpColorBarClass *klass)
                                                       G_PARAM_CONSTRUCT_ONLY));
 
   g_object_class_install_property (object_class, PROP_COLOR,
-                                   gimp_param_spec_rgb ("color",
-                                                        NULL, NULL,
-                                                        FALSE, &white,
-                                                        GIMP_PARAM_WRITABLE |
-                                                        G_PARAM_CONSTRUCT));
+                                   gimp_param_spec_color_from_string ("color",
+                                                                      NULL, NULL,
+                                                                      FALSE, "white",
+                                                                      GIMP_PARAM_WRITABLE |
+                                                                      G_PARAM_CONSTRUCT));
 
   g_object_class_install_property (object_class, PROP_CHANNEL,
                                    g_param_spec_enum ("histogram-channel",
@@ -100,11 +100,16 @@ gimp_color_bar_class_init (GimpColorBarClass *klass)
 static void
 gimp_color_bar_init (GimpColorBar *bar)
 {
+  guchar *buf;
+  gint    i;
+
   gtk_event_box_set_visible_window (GTK_EVENT_BOX (bar), FALSE);
 
   bar->orientation = GTK_ORIENTATION_HORIZONTAL;
-}
 
+  for (i = 0, buf = bar->buf; i < 256; i++, buf += 3)
+    buf[0] = buf[1] = buf[2] = ROUND ((gdouble) i);
+}
 
 static void
 gimp_color_bar_set_property (GObject      *object,
@@ -120,7 +125,7 @@ gimp_color_bar_set_property (GObject      *object,
       bar->orientation = g_value_get_enum (value);
       break;
     case PROP_COLOR:
-      gimp_color_bar_set_color (bar, g_value_get_boxed (value));
+      gimp_color_bar_set_color (bar, g_value_get_object (value));
       break;
     case PROP_CHANNEL:
       gimp_color_bar_set_channel (bar, g_value_get_enum (value));
@@ -153,11 +158,10 @@ gimp_color_bar_get_property (GObject    *object,
 }
 
 static gboolean
-gimp_color_bar_expose (GtkWidget      *widget,
-                       GdkEventExpose *event)
+gimp_color_bar_draw (GtkWidget *widget,
+                     cairo_t   *cr)
 {
   GimpColorBar    *bar = GIMP_COLOR_BAR (widget);
-  cairo_t         *cr;
   GtkAllocation    allocation;
   cairo_surface_t *surface;
   cairo_pattern_t *pattern;
@@ -166,11 +170,6 @@ gimp_color_bar_expose (GtkWidget      *widget,
   gint             x, y;
   gint             width, height;
   gint             i;
-
-  cr = gdk_cairo_create (event->window);
-
-  gdk_cairo_region (cr, event->region);
-  cairo_clip (cr);
 
   gtk_widget_get_allocation (widget, &allocation);
 
@@ -182,7 +181,7 @@ gimp_color_bar_expose (GtkWidget      *widget,
   if (width < 1 || height < 1)
     return TRUE;
 
-  cairo_translate (cr, allocation.x + x, allocation.y + y);
+  cairo_translate (cr, x, y);
   cairo_rectangle (cr, 0, 0, width, height);
   cairo_clip (cr);
 
@@ -217,8 +216,6 @@ gimp_color_bar_expose (GtkWidget      *widget,
 
   cairo_paint (cr);
 
-  cairo_destroy (cr);
-
   return TRUE;
 }
 
@@ -232,7 +229,7 @@ gimp_color_bar_expose (GtkWidget      *widget,
  *
  * Creates a new #GimpColorBar widget.
  *
- * Return value: The new #GimpColorBar widget.
+ * Returns: The new #GimpColorBar widget.
  **/
 GtkWidget *
 gimp_color_bar_new (GtkOrientation  orientation)
@@ -245,26 +242,31 @@ gimp_color_bar_new (GtkOrientation  orientation)
 /**
  * gimp_color_bar_set_color:
  * @bar:   a #GimpColorBar widget
- * @color: a #GimpRGB color
+ * @color: a #GeglColor
  *
  * Makes the @bar display a gradient from black (on the left or the
  * bottom), to the given @color (on the right or at the top).
  **/
 void
 gimp_color_bar_set_color (GimpColorBar  *bar,
-                          const GimpRGB *color)
+                          GeglColor     *color)
 {
-  guchar *buf;
-  gint    i;
+  guchar  *buf;
+  gdouble  rgb[3];
+  gint     i;
 
   g_return_if_fail (GIMP_IS_COLOR_BAR (bar));
-  g_return_if_fail (color != NULL);
+  g_return_if_fail (GEGL_IS_COLOR (color));
 
+  /* TODO: the whole widget is not really space aware. I am just getting the
+   * color in sRGB for the time being.
+   */
+  gegl_color_get_pixel (color, babl_format ("R'G'B' double"), rgb);
   for (i = 0, buf = bar->buf; i < 256; i++, buf += 3)
     {
-      buf[0] = ROUND (color->r * (gdouble) i);
-      buf[1] = ROUND (color->g * (gdouble) i);
-      buf[2] = ROUND (color->b * (gdouble) i);
+      buf[0] = ROUND (rgb[0] * (gdouble) i);
+      buf[1] = ROUND (rgb[1] * (gdouble) i);
+      buf[2] = ROUND (rgb[2] * (gdouble) i);
     }
 
   gtk_widget_queue_draw (GTK_WIDGET (bar));
@@ -282,7 +284,7 @@ void
 gimp_color_bar_set_channel (GimpColorBar         *bar,
                             GimpHistogramChannel  channel)
 {
-  GimpRGB  color = { 1.0, 1.0, 1.0, 1.0 };
+  GeglColor *color = NULL;
 
   g_return_if_fail (GIMP_IS_COLOR_BAR (bar));
 
@@ -292,20 +294,22 @@ gimp_color_bar_set_channel (GimpColorBar         *bar,
     case GIMP_HISTOGRAM_LUMINANCE:
     case GIMP_HISTOGRAM_ALPHA:
     case GIMP_HISTOGRAM_RGB:
-      gimp_rgb_set (&color, 1.0, 1.0, 1.0);
+      color = gegl_color_new ("white");
       break;
     case GIMP_HISTOGRAM_RED:
-      gimp_rgb_set (&color, 1.0, 0.0, 0.0);
+      color = gegl_color_new ("red");
       break;
     case GIMP_HISTOGRAM_GREEN:
-      gimp_rgb_set (&color, 0.0, 1.0, 0.0);
+      color = gegl_color_new ("lime");
       break;
     case GIMP_HISTOGRAM_BLUE:
-      gimp_rgb_set (&color, 0.0, 0.0, 1.0);
+      color = gegl_color_new ("blue");
       break;
     }
 
-  gimp_color_bar_set_color (bar, &color);
+  g_return_if_fail (color != NULL);
+
+  gimp_color_bar_set_color (bar, color);
 }
 
 /**

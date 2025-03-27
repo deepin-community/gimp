@@ -31,6 +31,7 @@
 #include "gegl/gimp-gegl-apply-operation.h"
 #include "gegl/gimp-gegl-loops.h"
 #include "gegl/gimp-gegl-utils.h"
+#include "gegl/gimptilehandlervalidate.h"
 
 #include "gimp-memsize.h"
 #include "gimp-utils.h"
@@ -38,15 +39,18 @@
 #include "gimpcontext.h"
 #include "gimpdrawable-combine.h"
 #include "gimpdrawable-fill.h"
+#include "gimpdrawable-filters.h"
 #include "gimpdrawable-floating-selection.h"
 #include "gimpdrawable-preview.h"
 #include "gimpdrawable-private.h"
 #include "gimpdrawable-shadow.h"
 #include "gimpdrawable-transform.h"
+#include "gimpdrawablefilter.h"
 #include "gimpfilterstack.h"
 #include "gimpimage.h"
 #include "gimpimage-colormap.h"
 #include "gimpimage-undo-push.h"
+#include "gimplayer.h"
 #include "gimpmarshal.h"
 #include "gimppickable.h"
 #include "gimpprogress.h"
@@ -66,6 +70,7 @@ enum
   FORMAT_CHANGED,
   ALPHA_CHANGED,
   BOUNDING_BOX_CHANGED,
+  FILTERS_CHANGED,
   LAST_SIGNAL
 };
 
@@ -162,6 +167,7 @@ static void       gimp_drawable_real_update        (GimpDrawable      *drawable,
                                                     gint               width,
                                                     gint               height);
 
+static void    gimp_drawable_real_filters_changed  (GimpDrawable      *drawable);
 static gint64  gimp_drawable_real_estimate_memsize (GimpDrawable      *drawable,
                                                     GimpComponentType  component_type,
                                                     gint               width,
@@ -178,6 +184,7 @@ static gboolean   gimp_drawable_real_supports_alpha
 static void       gimp_drawable_real_convert_type  (GimpDrawable      *drawable,
                                                     GimpImage         *dest_image,
                                                     const Babl        *new_format,
+                                                    GimpColorProfile  *src_profile,
                                                     GimpColorProfile  *dest_profile,
                                                     GeglDitherMethod   layer_dither_type,
                                                     GeglDitherMethod   mask_dither_type,
@@ -250,8 +257,7 @@ gimp_drawable_class_init (GimpDrawableClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpDrawableClass, format_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   gimp_drawable_signals[ALPHA_CHANGED] =
@@ -259,8 +265,7 @@ gimp_drawable_class_init (GimpDrawableClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpDrawableClass, alpha_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   gimp_drawable_signals[BOUNDING_BOX_CHANGED] =
@@ -268,8 +273,15 @@ gimp_drawable_class_init (GimpDrawableClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpDrawableClass, bounding_box_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
+                  G_TYPE_NONE, 0);
+
+  gimp_drawable_signals[FILTERS_CHANGED] =
+    g_signal_new ("filters-changed",
+                  G_TYPE_FROM_CLASS (klass),
+                  G_SIGNAL_RUN_FIRST,
+                  G_STRUCT_OFFSET (GimpDrawableClass, filters_changed),
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->dispose           = gimp_drawable_dispose;
@@ -299,6 +311,7 @@ gimp_drawable_class_init (GimpDrawableClass *klass)
   klass->format_changed           = NULL;
   klass->alpha_changed            = NULL;
   klass->bounding_box_changed     = NULL;
+  klass->filters_changed          = gimp_drawable_real_filters_changed;
   klass->estimate_memsize         = gimp_drawable_real_estimate_memsize;
   klass->update_all               = gimp_drawable_real_update_all;
   klass->invalidate_boundary      = NULL;
@@ -338,12 +351,13 @@ gimp_color_managed_iface_init (GimpColorManagedInterface *iface)
 static void
 gimp_pickable_iface_init (GimpPickableInterface *iface)
 {
-  iface->get_image             = (GimpImage     * (*) (GimpPickable *pickable)) gimp_item_get_image;
-  iface->get_format            = (const Babl    * (*) (GimpPickable *pickable)) gimp_drawable_get_format;
-  iface->get_format_with_alpha = (const Babl    * (*) (GimpPickable *pickable)) gimp_drawable_get_format_with_alpha;
-  iface->get_buffer            = (GeglBuffer    * (*) (GimpPickable *pickable)) gimp_drawable_get_buffer;
-  iface->get_pixel_at          = gimp_drawable_get_pixel_at;
-  iface->get_pixel_average     = gimp_drawable_get_pixel_average;
+  iface->get_image               = (GimpImage     * (*) (GimpPickable *pickable)) gimp_item_get_image;
+  iface->get_format              = (const Babl    * (*) (GimpPickable *pickable)) gimp_drawable_get_format;
+  iface->get_format_with_alpha   = (const Babl    * (*) (GimpPickable *pickable)) gimp_drawable_get_format_with_alpha;
+  iface->get_buffer              = (GeglBuffer    * (*) (GimpPickable *pickable)) gimp_drawable_get_buffer;
+  iface->get_buffer_with_effects = (GeglBuffer    * (*) (GimpPickable *pickable)) gimp_drawable_get_buffer_with_effects;
+  iface->get_pixel_at            = gimp_drawable_get_pixel_at;
+  iface->get_pixel_average       = gimp_drawable_get_pixel_average;
 }
 
 static void
@@ -366,6 +380,7 @@ gimp_drawable_finalize (GObject *object)
     gimp_drawable_end_paint (drawable);
 
   g_clear_object (&drawable->private->buffer);
+  g_clear_object (&drawable->private->format_profile);
 
   gimp_drawable_free_shadow_buffer (drawable);
 
@@ -482,10 +497,8 @@ gimp_drawable_get_node (GimpFilter *filter)
   input  = gegl_node_get_input_proxy  (node, "input");
   output = gegl_node_get_output_proxy (node, "output");
 
-  gegl_node_connect_to (input,                        "output",
-                        drawable->private->mode_node, "input");
-  gegl_node_connect_to (drawable->private->mode_node, "output",
-                        output,                       "input");
+  gegl_node_link (input, drawable->private->mode_node);
+  gegl_node_link (drawable->private->mode_node, output);
 
   return node;
 }
@@ -557,6 +570,30 @@ gimp_drawable_scale (GimpItem              *item,
                                                  0,            0),
                                  TRUE);
   g_object_unref (new_buffer);
+
+  if (GIMP_IS_LAYER (drawable))
+    {
+      GList *list;
+
+      for (list = GIMP_LIST (drawable->private->filter_stack)->queue->tail;
+           list; list = g_list_previous (list))
+        {
+          if (GIMP_IS_DRAWABLE_FILTER (list->data))
+            {
+              GimpDrawableFilter *filter = list->data;
+              GimpChannel        *mask   = GIMP_CHANNEL (gimp_drawable_filter_get_mask (filter));
+              GeglRectangle      *rect   = GEGL_RECTANGLE (0, 0,
+                                                           new_width,
+                                                           new_height);
+
+              /* Don't resize partial layer effects */
+              if (gimp_channel_is_empty (mask))
+                gimp_drawable_filter_refresh_crop (filter, rect);
+            }
+        }
+      if (list)
+        g_list_free (list);
+    }
 }
 
 static void
@@ -609,12 +646,14 @@ gimp_drawable_resize (GimpItem     *item,
     {
       /*  Clear the new buffer if needed  */
 
-      GimpRGB      color;
+      GeglColor   *color;
       GimpPattern *pattern;
 
-      gimp_get_fill_params (context, fill_type, &color, &pattern, NULL);
-      gimp_drawable_fill_buffer (drawable, new_buffer,
-                                 &color, pattern, 0, 0);
+      if (gimp_get_fill_params (context, fill_type, &color, &pattern, NULL))
+        gimp_drawable_fill_buffer (drawable, new_buffer,
+                                   color, pattern, 0, 0);
+
+      g_clear_object (&color);
     }
 
   if (intersect && copy_width && copy_height)
@@ -631,12 +670,37 @@ gimp_drawable_resize (GimpItem     *item,
                         copy_y - new_offset_y, 0, 0));
     }
 
-  gimp_drawable_set_buffer_full (drawable, gimp_item_is_attached (item), NULL,
+  gimp_drawable_set_buffer_full (drawable,
+                                 gimp_item_is_attached (item) &&
+                                 drawable->private->push_resize_undo,
+                                 NULL,
                                  new_buffer,
                                  GEGL_RECTANGLE (new_offset_x, new_offset_y,
                                                  0,            0),
                                  TRUE);
   g_object_unref (new_buffer);
+
+  if (GIMP_IS_LAYER (drawable))
+    {
+      GList *list;
+
+      for (list = GIMP_LIST (drawable->private->filter_stack)->queue->tail;
+           list; list = g_list_previous (list))
+        {
+          if (GIMP_IS_DRAWABLE_FILTER (list->data))
+            {
+              GimpDrawableFilter *filter = list->data;
+              GimpChannel        *mask   = GIMP_CHANNEL (gimp_drawable_filter_get_mask (filter));
+              GeglRectangle       rect   = {0, 0, new_width, new_height};
+
+              /* Don't resize partial layer effects */
+              if (gimp_channel_is_empty (mask))
+                gimp_drawable_filter_refresh_crop (filter, &rect);
+            }
+        }
+      if (list)
+        g_list_free (list);
+    }
 }
 
 static void
@@ -749,9 +813,14 @@ gimp_drawable_get_icc_profile (GimpColorManaged *managed,
 static GimpColorProfile *
 gimp_drawable_get_color_profile (GimpColorManaged *managed)
 {
-  const Babl *format = gimp_drawable_get_format (GIMP_DRAWABLE (managed));
+  GimpDrawable *drawable = GIMP_DRAWABLE (managed);
+  const Babl   *format   = gimp_drawable_get_format (drawable);
 
-  return gimp_babl_format_get_color_profile (format);
+  if (! drawable->private->format_profile)
+    drawable->private->format_profile =
+      gimp_babl_format_get_color_profile (format);
+
+  return drawable->private->format_profile;
 }
 
 static void
@@ -803,20 +872,27 @@ gimp_drawable_real_update (GimpDrawable *drawable,
   gimp_viewable_invalidate_preview (GIMP_VIEWABLE (drawable));
 }
 
+static void
+gimp_drawable_real_filters_changed (GimpDrawable *drawable)
+{
+  gimp_drawable_update_bounding_box (drawable);
+}
+
 static gint64
 gimp_drawable_real_estimate_memsize (GimpDrawable      *drawable,
                                      GimpComponentType  component_type,
                                      gint               width,
                                      gint               height)
 {
-  GimpImage  *image  = gimp_item_get_image (GIMP_ITEM (drawable));
-  gboolean    linear = gimp_drawable_get_linear (drawable);
-  const Babl *format;
+  GimpImage   *image = gimp_item_get_image (GIMP_ITEM (drawable));
+  GimpTRCType  trc   = gimp_drawable_get_trc (drawable);
+  const Babl  *format;
 
   format = gimp_image_get_format (image,
                                   gimp_drawable_get_base_type (drawable),
-                                  gimp_babl_precision (component_type, linear),
-                                  gimp_drawable_has_alpha (drawable));
+                                  gimp_babl_precision (component_type, trc),
+                                  gimp_drawable_has_alpha (drawable),
+                                  NULL);
 
   return (gint64) babl_format_get_bytes_per_pixel (format) * width * height;
 }
@@ -848,6 +924,7 @@ static void
 gimp_drawable_real_convert_type (GimpDrawable      *drawable,
                                  GimpImage         *dest_image,
                                  const Babl        *new_format,
+                                 GimpColorProfile  *src_profile,
                                  GimpColorProfile  *dest_profile,
                                  GeglDitherMethod   layer_dither_type,
                                  GeglDitherMethod   mask_dither_type,
@@ -862,9 +939,9 @@ gimp_drawable_real_convert_type (GimpDrawable      *drawable,
                                      gimp_item_get_height (GIMP_ITEM (drawable))),
                      new_format);
 
-  gimp_gegl_buffer_copy (
-    gimp_drawable_get_buffer (drawable), NULL, GEGL_ABYSS_NONE,
-    dest_buffer, NULL);
+  gimp_gegl_buffer_copy (gimp_drawable_get_buffer (drawable), NULL,
+                         GEGL_ABYSS_NONE,
+                         dest_buffer, NULL);
 
   gimp_drawable_set_buffer (drawable, push_undo, NULL, dest_buffer);
   g_object_unref (dest_buffer);
@@ -902,6 +979,11 @@ gimp_drawable_real_set_buffer (GimpDrawable        *drawable,
     }
 
   g_set_object (&drawable->private->buffer, buffer);
+
+  if (gimp_drawable_is_painting (drawable))
+    g_set_object (&drawable->private->paint_buffer, buffer);
+
+  g_clear_object (&drawable->private->format_profile);
 
   if (drawable->private->buffer_source_node)
     gegl_node_set (drawable->private->buffer_source_node,
@@ -1066,6 +1148,8 @@ gimp_drawable_new (GType          type,
 
   gimp_drawable_set_buffer (drawable, FALSE, NULL, buffer);
   g_object_unref (buffer);
+
+  gimp_drawable_enable_resize_undo (drawable);
 
   return drawable;
 }
@@ -1246,16 +1330,18 @@ gimp_drawable_convert_type (GimpDrawable      *drawable,
                             GimpImageBaseType  new_base_type,
                             GimpPrecision      new_precision,
                             gboolean           new_has_alpha,
+                            GimpColorProfile  *src_profile,
                             GimpColorProfile  *dest_profile,
                             GeglDitherMethod   layer_dither_type,
                             GeglDitherMethod   mask_dither_type,
                             gboolean           push_undo,
                             GimpProgress      *progress)
 {
-  const Babl *old_format;
-  const Babl *new_format;
-  gint        old_bits;
-  gint        new_bits;
+  const Babl    *old_format;
+  const Babl    *new_format;
+  gint           old_bits;
+  gint           new_bits;
+  GimpContainer *filters;
 
   g_return_if_fail (GIMP_IS_DRAWABLE (drawable));
   g_return_if_fail (GIMP_IS_IMAGE (dest_image));
@@ -1263,6 +1349,7 @@ gimp_drawable_convert_type (GimpDrawable      *drawable,
                     new_precision != gimp_drawable_get_precision (drawable) ||
                     new_has_alpha != gimp_drawable_has_alpha (drawable)     ||
                     dest_profile);
+  g_return_if_fail (src_profile == NULL || GIMP_IS_COLOR_PROFILE (src_profile));
   g_return_if_fail (dest_profile == NULL || GIMP_IS_COLOR_PROFILE (dest_profile));
   g_return_if_fail (progress == NULL || GIMP_IS_PROGRESS (progress));
 
@@ -1273,7 +1360,8 @@ gimp_drawable_convert_type (GimpDrawable      *drawable,
   new_format = gimp_image_get_format (dest_image,
                                       new_base_type,
                                       new_precision,
-                                      new_has_alpha);
+                                      new_has_alpha,
+                                      NULL /* handled by layer */);
 
   old_bits = (babl_format_get_bytes_per_pixel (old_format) * 8 /
               babl_format_get_n_components (old_format));
@@ -1292,11 +1380,50 @@ gimp_drawable_convert_type (GimpDrawable      *drawable,
 
   GIMP_DRAWABLE_GET_CLASS (drawable)->convert_type (drawable, dest_image,
                                                     new_format,
+                                                    src_profile,
                                                     dest_profile,
                                                     layer_dither_type,
                                                     mask_dither_type,
                                                     push_undo,
                                                     progress);
+
+  /* Update the masks of any filters */
+  /* TODO: Move to gimp_drawable_real_convert_type () once it's updated
+   * to run for all GimpDrawable child classes */
+  filters = gimp_drawable_get_filters (drawable);
+  if (gimp_container_get_n_children (filters) > 0)
+    {
+      const Babl    *mask_format;
+      GList         *filter_list;
+      GimpPrecision  new_mask_precision;
+
+      mask_format        = gimp_image_get_mask_format (dest_image);
+      new_mask_precision = gimp_babl_format_get_precision (mask_format);
+
+      for (filter_list = GIMP_LIST (filters)->queue->tail;
+           filter_list;
+           filter_list = g_list_previous (filter_list))
+        {
+          if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
+            {
+              GimpDrawableFilter     *filter = filter_list->data;
+              GimpDrawableFilterMask *mask;
+
+              mask = gimp_drawable_filter_get_mask (filter);
+
+              if (new_mask_precision == gimp_drawable_get_precision (GIMP_DRAWABLE (mask)))
+                /* The only change which may happen for masks is the bit-depth. */
+                break;
+
+              gimp_drawable_convert_type (GIMP_DRAWABLE (mask), dest_image,
+                                          GIMP_GRAY, new_mask_precision,
+                                          FALSE,
+                                          NULL, NULL,
+                                          layer_dither_type, mask_dither_type,
+                                          push_undo, progress);
+            }
+        }
+    }
 
   if (progress)
     gimp_progress_set_value (progress, 1.0);
@@ -1421,6 +1548,55 @@ gimp_drawable_set_buffer_full (GimpDrawable        *drawable,
     gimp_drawable_update (drawable, 0, 0, -1, -1);
 }
 
+GeglBuffer *
+gimp_drawable_get_buffer_with_effects (GimpDrawable *drawable)
+{
+  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
+
+  if (drawable->private->paint_count == 0)
+    {
+      if (gimp_drawable_has_visible_filters (drawable))
+        {
+          GeglNode                *source = NULL;
+          GeglBuffer              *buffer;
+          GimpTileHandlerValidate *validate;
+
+          source = gimp_drawable_get_source_node (drawable);
+          buffer = GIMP_DRAWABLE_GET_CLASS (drawable)->get_buffer (drawable);
+
+          if (source)
+            {
+              buffer = gegl_buffer_new (gegl_buffer_get_extent (buffer),
+                                        gegl_buffer_get_format (buffer));
+
+              validate =
+                GIMP_TILE_HANDLER_VALIDATE (gimp_tile_handler_validate_new (source));
+
+              gimp_tile_handler_validate_assign (validate, buffer);
+
+              g_object_unref (validate);
+
+              gimp_tile_handler_validate_invalidate (validate,
+                                                     gegl_buffer_get_extent (buffer));
+
+              return buffer;
+            }
+          else
+            {
+              return g_object_ref (buffer);
+            }
+        }
+      else
+        {
+          return g_object_ref (GIMP_DRAWABLE_GET_CLASS (drawable)->get_buffer (drawable));
+        }
+    }
+  else
+    {
+      return g_object_ref (drawable->private->paint_buffer);
+    }
+}
+
 void
 gimp_drawable_steal_buffer (GimpDrawable *drawable,
                             GimpDrawable *src_drawable)
@@ -1444,6 +1620,55 @@ gimp_drawable_steal_buffer (GimpDrawable *drawable,
   gimp_drawable_set_buffer (drawable,     FALSE, NULL, buffer);
 
   g_object_unref (replacement_buffer);
+  g_object_unref (buffer);
+}
+
+void
+gimp_drawable_set_format (GimpDrawable *drawable,
+                          const Babl   *format,
+                          gboolean      copy_buffer,
+                          gboolean      push_undo)
+{
+  GimpItem   *item;
+  GeglBuffer *buffer;
+
+  g_return_if_fail (GIMP_IS_DRAWABLE (drawable));
+  g_return_if_fail (format != NULL);
+  g_return_if_fail (format != gimp_drawable_get_format (drawable));
+  g_return_if_fail (gimp_babl_format_get_base_type (format) ==
+                    gimp_drawable_get_base_type (drawable));
+  g_return_if_fail (gimp_babl_format_get_component_type (format) ==
+                    gimp_drawable_get_component_type (drawable));
+  g_return_if_fail (babl_format_has_alpha (format) ==
+                    gimp_drawable_has_alpha (drawable));
+  g_return_if_fail (push_undo == FALSE || copy_buffer == TRUE);
+
+  item = GIMP_ITEM (drawable);
+
+  if (! gimp_item_is_attached (item))
+    push_undo = FALSE;
+
+  if (push_undo)
+    gimp_image_undo_push_drawable_format (gimp_item_get_image (item),
+                                          NULL, drawable);
+
+  buffer = gegl_buffer_new (GEGL_RECTANGLE (0, 0,
+                                            gimp_item_get_width  (item),
+                                            gimp_item_get_height (item)),
+                            format);
+
+  if (copy_buffer)
+    {
+      gegl_buffer_set_format (buffer, gimp_drawable_get_format (drawable));
+
+      gimp_gegl_buffer_copy (gimp_drawable_get_buffer (drawable),
+                             NULL, GEGL_ABYSS_NONE,
+                             buffer, NULL);
+
+      gegl_buffer_set_format (buffer, NULL);
+    }
+
+  gimp_drawable_set_buffer (drawable, FALSE, NULL, buffer);
   g_object_unref (buffer);
 }
 
@@ -1472,21 +1697,18 @@ gimp_drawable_get_source_node (GimpDrawable *drawable)
 
   if (gegl_node_has_pad (source, "input"))
     {
-      gegl_node_connect_to (input,  "output",
-                            source, "input");
+      gegl_node_link (input, source);
     }
 
   filter = gimp_filter_stack_get_graph (GIMP_FILTER_STACK (drawable->private->filter_stack));
 
   gegl_node_add_child (drawable->private->source_node, filter);
 
-  gegl_node_connect_to (source, "output",
-                        filter, "input");
+  gegl_node_link (source, filter);
 
   output = gegl_node_get_output_proxy (drawable->private->source_node, "output");
 
-  gegl_node_connect_to (filter, "output",
-                        output, "input");
+  gegl_node_link (filter, output);
 
   if (gimp_drawable_get_floating_sel (drawable))
     _gimp_drawable_add_floating_sel_filter (drawable);
@@ -1617,6 +1839,30 @@ gimp_drawable_push_undo (GimpDrawable *drawable,
                                                  x, y, width, height);
 }
 
+void
+gimp_drawable_disable_resize_undo (GimpDrawable *drawable)
+{
+  g_return_if_fail (GIMP_IS_DRAWABLE (drawable));
+
+  drawable->private->push_resize_undo = FALSE;
+}
+
+void
+gimp_drawable_enable_resize_undo (GimpDrawable *drawable)
+{
+  g_return_if_fail (GIMP_IS_DRAWABLE (drawable));
+
+  drawable->private->push_resize_undo = TRUE;
+}
+
+const Babl *
+gimp_drawable_get_space (GimpDrawable *drawable)
+{
+  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
+
+  return babl_format_get_space (gimp_drawable_get_format (drawable));
+}
+
 const Babl *
 gimp_drawable_get_format (GimpDrawable *drawable)
 {
@@ -1633,7 +1879,8 @@ gimp_drawable_get_format_with_alpha (GimpDrawable *drawable)
   return gimp_image_get_format (gimp_item_get_image (GIMP_ITEM (drawable)),
                                 gimp_drawable_get_base_type (drawable),
                                 gimp_drawable_get_precision (drawable),
-                                TRUE);
+                                TRUE,
+                                gimp_drawable_get_space (drawable));
 }
 
 const Babl *
@@ -1644,11 +1891,12 @@ gimp_drawable_get_format_without_alpha (GimpDrawable *drawable)
   return gimp_image_get_format (gimp_item_get_image (GIMP_ITEM (drawable)),
                                 gimp_drawable_get_base_type (drawable),
                                 gimp_drawable_get_precision (drawable),
-                                FALSE);
+                                FALSE,
+                                gimp_drawable_get_space (drawable));
 }
 
-gboolean
-gimp_drawable_get_linear (GimpDrawable *drawable)
+GimpTRCType
+gimp_drawable_get_trc (GimpDrawable *drawable)
 {
   const Babl *format;
 
@@ -1656,7 +1904,7 @@ gimp_drawable_get_linear (GimpDrawable *drawable)
 
   format = gegl_buffer_get_format (drawable->private->buffer);
 
-  return gimp_babl_format_get_linear (format);
+  return gimp_babl_format_get_trc (format);
 }
 
 gboolean
@@ -1797,18 +2045,6 @@ gimp_drawable_get_component_index (GimpDrawable    *drawable,
   return -1;
 }
 
-const guchar *
-gimp_drawable_get_colormap (GimpDrawable *drawable)
-{
-  GimpImage *image;
-
-  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
-
-  image = gimp_item_get_image (GIMP_ITEM (drawable));
-
-  return image ? gimp_image_get_colormap (image) : NULL;
-}
-
 void
 gimp_drawable_start_paint (GimpDrawable *drawable)
 {
@@ -1845,6 +2081,16 @@ gimp_drawable_end_paint (GimpDrawable *drawable)
     }
 
   drawable->private->paint_count--;
+
+  /* Refresh filters after painting */
+  if (gimp_drawable_has_visible_filters (drawable) &&
+      drawable->private->paint_count == 0)
+    {
+      gimp_item_set_visible (GIMP_ITEM (drawable), FALSE, FALSE);
+      gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
+      gimp_item_set_visible (GIMP_ITEM (drawable),TRUE, FALSE);
+      gimp_image_flush (gimp_item_get_image (GIMP_ITEM (drawable)));
+    }
 
   return result;
 }
@@ -1913,4 +2159,10 @@ gimp_drawable_is_painting (GimpDrawable *drawable)
   g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), FALSE);
 
   return drawable->private->paint_count > 0;
+}
+
+void
+gimp_drawable_filters_changed (GimpDrawable *drawable)
+{
+  g_signal_emit (drawable, gimp_drawable_signals[FILTERS_CHANGED], 0);
 }

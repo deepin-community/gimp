@@ -107,8 +107,9 @@ image_new_dialog_new (GimpContext *context)
                      _("_OK"),     GTK_RESPONSE_OK,
 
                      NULL);
+  gtk_dialog_set_default_response (GTK_DIALOG (dialog), GTK_RESPONSE_OK);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            RESPONSE_RESET,
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
@@ -120,9 +121,9 @@ image_new_dialog_new (GimpContext *context)
                           "gimp-image-new-dialog", private,
                           (GDestroyNotify) image_new_dialog_free);
 
-  g_signal_connect (dialog, "response",
-                    G_CALLBACK (image_new_dialog_response),
-                    private);
+  g_signal_connect_after (dialog, "response",
+                          G_CALLBACK (image_new_dialog_response),
+                          private);
 
   main_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
   gtk_container_set_border_width (GTK_CONTAINER (main_vbox), 12);
@@ -327,7 +328,7 @@ image_new_confirm_dialog (ImageNewDialog *private)
 
                                       NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (private->confirm_dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (private->confirm_dialog),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
                                            -1);
@@ -368,8 +369,7 @@ image_new_create_image (ImageNewDialog *private)
   image = gimp_image_new_from_template (gimp, template,
                                         gimp_get_user_context (gimp));
   gimp_create_display (gimp, image, gimp_template_get_unit (template), 1.0,
-                       G_OBJECT (gtk_widget_get_screen (private->dialog)),
-                       gimp_widget_get_monitor (private->dialog));
+                       G_OBJECT (gimp_widget_get_monitor (private->dialog)));
   g_object_unref (image);
 
   gtk_widget_destroy (private->dialog);

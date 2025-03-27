@@ -46,6 +46,7 @@ gimp_ink_options_gui (GimpToolOptions *tool_options)
   GtkWidget      *frame;
   GtkWidget      *vbox2;
   GtkWidget      *scale;
+  GtkWidget      *combo_box;
   GtkWidget      *blob_box;
   GtkWidget      *hbox;
   GtkWidget      *editor;
@@ -61,16 +62,14 @@ gimp_ink_options_gui (GimpToolOptions *tool_options)
   gtk_widget_show (vbox2);
 
   /*  size slider  */
-  scale = gimp_prop_spin_scale_new (config, "size", NULL,
+  scale = gimp_prop_spin_scale_new (config, "size",
                                     1.0, 2.0, 1);
   gtk_box_pack_start (GTK_BOX (vbox2), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   /* angle adjust slider */
-  scale = gimp_prop_spin_scale_new (config, "tilt-angle", NULL,
+  scale = gimp_prop_spin_scale_new (config, "tilt-angle",
                                     1.0, 10.0, 1);
   gtk_box_pack_start (GTK_BOX (vbox2), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   /* sens sliders */
   frame = gimp_frame_new (_("Sensitivity"));
@@ -82,22 +81,19 @@ gimp_ink_options_gui (GimpToolOptions *tool_options)
   gtk_widget_show (vbox2);
 
   /* size sens slider */
-  scale = gimp_prop_spin_scale_new (config, "size-sensitivity", NULL,
+  scale = gimp_prop_spin_scale_new (config, "size-sensitivity",
                                     0.01, 0.1, 2);
   gtk_box_pack_start (GTK_BOX (vbox2), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   /* tilt sens slider */
-  scale = gimp_prop_spin_scale_new (config, "tilt-sensitivity", NULL,
+  scale = gimp_prop_spin_scale_new (config, "tilt-sensitivity",
                                     0.01, 0.1, 2);
   gtk_box_pack_start (GTK_BOX (vbox2), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   /* velocity sens slider */
-  scale = gimp_prop_spin_scale_new (config, "vel-sensitivity", NULL,
+  scale = gimp_prop_spin_scale_new (config, "vel-sensitivity",
                                     0.01, 0.1, 2);
   gtk_box_pack_start (GTK_BOX (vbox2), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   /* Blob shape widgets */
   frame = gimp_frame_new (_("Shape"));
@@ -116,7 +112,6 @@ gimp_ink_options_gui (GimpToolOptions *tool_options)
   gtk_orientable_set_orientation (GTK_ORIENTABLE (blob_box),
                                   GTK_ORIENTATION_VERTICAL);
   gtk_box_pack_start (GTK_BOX (hbox), blob_box, FALSE, FALSE, 0);
-  gtk_widget_show (blob_box);
 
   gtk_size_group_add_widget (size_group, blob_box);
   g_object_unref (size_group);
@@ -134,6 +129,28 @@ gimp_ink_options_gui (GimpToolOptions *tool_options)
                                  ink_options->blob_angle);
   gtk_container_add (GTK_CONTAINER (frame), editor);
   gtk_widget_show (editor);
+
+  /* Expand layer options */
+  vbox2 = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
+
+  scale = gimp_prop_spin_scale_new (config, "expand-amount",
+                                    1, 10, 2);
+  gimp_spin_scale_set_constrain_drag (GIMP_SPIN_SCALE (scale), TRUE);
+  gimp_spin_scale_set_scale_limits (GIMP_SPIN_SCALE (scale), 1.0, 1000.0);
+  gimp_spin_scale_set_gamma (GIMP_SPIN_SCALE (scale), 1.0);
+  gtk_box_pack_start (GTK_BOX (vbox2), scale, FALSE, FALSE, 0);
+
+  combo_box = gimp_prop_enum_combo_box_new (config, "expand-fill-type", 0, 0);
+  gtk_box_pack_start (GTK_BOX (vbox2), combo_box, FALSE, FALSE, 0);
+
+  frame = gimp_prop_enum_radio_frame_new (config, "expand-mask-fill-type",
+                                          _("Fill Layer Mask With"), 0, 1);
+  gtk_box_pack_start (GTK_BOX (vbox2), frame, FALSE, FALSE, 0);
+
+  frame = gimp_prop_expanding_frame_new (config, "expand-use", NULL,
+                                         vbox2, NULL);
+  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
+  gtk_widget_show (frame);
 
   gimp_config_connect (config, G_OBJECT (editor), "blob-type");
   gimp_config_connect (config, G_OBJECT (editor), "blob-aspect");

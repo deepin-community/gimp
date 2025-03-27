@@ -110,9 +110,7 @@ gimp_generic_transform_tool_dialog (GimpTransformGridTool *tg_tool)
   label = generic->matrix_label = gtk_label_new (" ");
   gtk_size_group_add_widget (size_group, label);
   gtk_box_pack_start (GTK_BOX (vbox), label, TRUE, TRUE, 0);
-  gimp_label_set_attributes (GTK_LABEL (label),
-                             PANGO_ATTR_SCALE, PANGO_SCALE_SMALL,
-                             -1);
+  gimp_label_set_attributes (GTK_LABEL (label), PANGO_ATTR_SCALE, PANGO_SCALE_SMALL, -1);
   gtk_label_set_selectable (GTK_LABEL (label), TRUE);
   gtk_widget_show (label);
 

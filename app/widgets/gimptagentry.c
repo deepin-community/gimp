@@ -113,8 +113,8 @@ static gboolean gimp_tag_entry_auto_complete             (GimpTagEntry     *entr
 
 static void     gimp_tag_entry_toggle_desc               (GimpTagEntry     *widget,
                                                           gboolean          show);
-static gboolean gimp_tag_entry_expose                    (GtkWidget        *widget,
-                                                          GdkEventExpose   *event);
+static gboolean gimp_tag_entry_draw                      (GtkWidget        *widget,
+                                                          cairo_t          *cr);
 static void     gimp_tag_entry_commit_region             (GString          *tags,
                                                           GString          *mask);
 static void     gimp_tag_entry_commit_tags               (GimpTagEntry     *entry);
@@ -210,8 +210,8 @@ gimp_tag_entry_init (GimpTagEntry *entry)
   g_signal_connect (entry, "focus-out-event",
                     G_CALLBACK (gimp_tag_entry_focus_out),
                     NULL);
-  g_signal_connect_after (entry, "expose-event",
-                          G_CALLBACK (gimp_tag_entry_expose),
+  g_signal_connect_after (entry, "draw",
+                          G_CALLBACK (gimp_tag_entry_draw),
                           NULL);
 }
 
@@ -322,7 +322,7 @@ gimp_tag_entry_get_property (GObject    *object,
  * tags selected. When operating in assignment mode, tags are assigned to
  * objects selected and visible in @container.
  *
- * Return value: a new GimpTagEntry widget.
+ * Returns: a new GimpTagEntry widget.
  **/
 GtkWidget *
 gimp_tag_entry_new (GimpTaggedContainer *container,
@@ -824,7 +824,7 @@ gimp_tag_entry_assign_tags (GimpTagEntry *tag_entry)
  * valid as they are fixed when necessary. Only valid tags are
  * returned.
  *
- * Return value: a newly allocated NULL terminated list of strings. It
+ * Returns: a newly allocated NULL terminated list of strings. It
  *               should be freed using g_strfreev().
  **/
 gchar **
@@ -1289,26 +1289,24 @@ gimp_tag_entry_toggle_desc (GimpTagEntry *tag_entry,
 }
 
 static gboolean
-gimp_tag_entry_expose (GtkWidget      *widget,
-                       GdkEventExpose *event)
+gimp_tag_entry_draw (GtkWidget *widget,
+                     cairo_t   *cr)
 {
-  GimpTagEntry   *tag_entry = GIMP_TAG_ENTRY (widget);
-  PangoLayout    *layout;
-  PangoAttrList  *attr_list;
-  PangoAttribute *attribute;
-  gint            layout_width;
-  gint            layout_height;
-  gint            window_width;
-  gint            window_height;
-  gint            offset;
-  const char     *display_text;
-
-  /* eeeeeek */
-  if (event->window != gtk_entry_get_text_window (GTK_ENTRY (widget)))
-    return FALSE;
+  GimpTagEntry    *tag_entry = GIMP_TAG_ENTRY (widget);
+  GtkStyleContext *style     = gtk_widget_get_style_context (widget);
+  GdkRectangle     text_area;
+  PangoLayout     *layout;
+  PangoAttrList   *attr_list;
+  PangoAttribute  *attribute;
+  gint             layout_width;
+  gint             layout_height;
+  gint             offset;
+  const char      *display_text;
 
   if (! GIMP_TAG_ENTRY (widget)->description_shown)
     return FALSE;
+
+  gtk_entry_get_text_area (GTK_ENTRY (widget), &text_area);
 
   if (tag_entry->mode == GIMP_TAG_ENTRY_MODE_QUERY)
     {
@@ -1328,24 +1326,21 @@ gimp_tag_entry_expose (GtkWidget      *widget,
   pango_layout_set_attributes (layout, attr_list);
   pango_attr_list_unref (attr_list);
 
-  window_width  = gdk_window_get_width (event->window);
-  window_height = gdk_window_get_height (event->window);
-  pango_layout_get_size (layout,
-                         &layout_width, &layout_height);
-  offset = (window_height - PANGO_PIXELS (layout_height)) / 2;
+  pango_layout_get_pixel_size (layout, &layout_width, &layout_height);
+  offset = (text_area.height - layout_height) / 2;
 
-  gtk_paint_layout (gtk_widget_get_style (widget),
-                    event->window,
-                    GTK_STATE_INSENSITIVE,
-                    TRUE,
-                    &event->area,
-                    widget,
-                    NULL,
-                    (gtk_widget_get_direction (widget) == GTK_TEXT_DIR_RTL) ?
-                    window_width - PANGO_PIXELS (layout_width) - offset :
-                    offset,
-                    offset,
-                    layout);
+  gtk_style_context_save (style);
+
+  gtk_style_context_set_state (style, GTK_STATE_FLAG_INSENSITIVE);
+
+  gtk_render_layout (style, cr,
+                     (gtk_widget_get_direction (widget) == GTK_TEXT_DIR_RTL) ?
+                     text_area.width - layout_width - offset :
+                     text_area.x + offset,
+                     text_area.y + offset,
+                     layout);
+
+  gtk_style_context_restore (style);
 
   g_object_unref (layout);
 
@@ -1744,7 +1739,7 @@ gimp_tag_entry_add_to_recent (GimpTagEntry *entry,
  * Tag separator is a single Unicode terminal punctuation
  * character.
  *
- * Return value: returns locale dependent tag separator.
+ * Returns: returns locale dependent tag separator.
  **/
 const gchar *
 gimp_tag_entry_get_separator (void)

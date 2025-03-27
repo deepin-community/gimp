@@ -22,6 +22,7 @@
 #ifndef __GIMP_MODULE_H__
 #define __GIMP_MODULE_H__
 
+#include <gio/gio.h>
 #include <gmodule.h>
 
 #define __GIMP_MODULE_H_INSIDE__
@@ -51,7 +52,7 @@ G_BEGIN_DECLS
  *  - one of the classes implemented by modules (currently #GimpColorDisplay,
  *    #GimpColorSelector and #GimpController).
  **/
-#define GIMP_MODULE_ABI_VERSION 0x0004
+#define GIMP_MODULE_ABI_VERSION 0x0005
 
 
 /**
@@ -115,31 +116,32 @@ struct _GimpModuleInfo
 
 /**
  * GimpModuleQueryFunc:
- * @module:  The #GimpModule responsible for this loadable module.
- * @Returns: The #GimpModuleInfo struct describing the module.
+ * @module:  The module responsible for this loadable module.
  *
  * The signature of the query function a loadable GIMP module must
- * implement.  In the module, the function must be called
- * gimp_module_query().
+ * implement. In the module, the function must be called [func@Module.query].
  *
- * #GimpModule will copy the returned #GimpModuleInfo struct, so the
+ * [class@Module] will copy the returned [struct@ModuleInfo], so the
  * module doesn't need to keep these values around (however in most
  * cases the module will just return a pointer to a constant
  * structure).
+ *
+ * Returns: The info struct describing the module.
  **/
 typedef const GimpModuleInfo * (* GimpModuleQueryFunc)    (GTypeModule *module);
 
 /**
  * GimpModuleRegisterFunc:
- * @module:  The #GimpModule responsible for this loadable module.
- * @Returns: %TRUE on success, %FALSE otherwise.
+ * @module:  The module responsible for this loadable module.
  *
  * The signature of the register function a loadable GIMP module must
  * implement.  In the module, the function must be called
- * gimp_module_register().
+ * [func@Module.register].
  *
  * When this function is called, the module should register all the types
  * it implements with the passed @module.
+ *
+ * Returns: Whether the registration was succesfull
  **/
 typedef gboolean               (* GimpModuleRegisterFunc) (GTypeModule *module);
 
@@ -149,55 +151,8 @@ G_MODULE_EXPORT const GimpModuleInfo * gimp_module_query    (GTypeModule *module
 G_MODULE_EXPORT gboolean               gimp_module_register (GTypeModule *module);
 
 
-#define GIMP_TYPE_MODULE            (gimp_module_get_type ())
-#define GIMP_MODULE(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_MODULE, GimpModule))
-#define GIMP_MODULE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_MODULE, GimpModuleClass))
-#define GIMP_IS_MODULE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_MODULE))
-#define GIMP_IS_MODULE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_MODULE))
-#define GIMP_MODULE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_MODULE, GimpModuleClass))
-
-
-typedef struct _GimpModuleClass GimpModuleClass;
-
-/**
- * GimpModule:
- * @filename:
- * @verbose:
- * @state:
- * @on_disk:
- * @load_inhibit:
- * @info:
- * @last_module_error:
- *
- * #GimpModule is a generic mechanism to dynamically load modules into
- * GIMP.  It is a #GTypeModule subclass, implementing module loading
- * using #GModule.  #GimpModule does not know which functionality is
- * implemented by the modules, it just provides a framework to get
- * arbitrary #GType implementations loaded from disk.
- **/
-struct _GimpModule
-{
-  GTypeModule      parent_instance;
-
-  /*< public >*/
-  gchar           *filename;     /* path to the module                       */
-  gboolean         verbose;      /* verbose error reporting                  */
-  GimpModuleState  state;        /* what's happened to the module            */
-  gboolean         on_disk;      /* TRUE if file still exists                */
-  gboolean         load_inhibit; /* user requests not to load at boot time   */
-
-  /* stuff from now on may be NULL depending on the state the module is in   */
-  /*< private >*/
-  GModule         *module;       /* handle on the module                     */
-
-  /*< public >*/
-  GimpModuleInfo  *info;         /* returned values from module_query        */
-  gchar           *last_module_error;
-
-  /*< private >*/
-  GimpModuleQueryFunc     query_module;
-  GimpModuleRegisterFunc  register_module;
-};
+#define GIMP_TYPE_MODULE (gimp_module_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpModule, gimp_module, GIMP, MODULE, GTypeModule)
 
 struct _GimpModuleClass
 {
@@ -206,43 +161,37 @@ struct _GimpModuleClass
   void (* modified) (GimpModule *module);
 
   /* Padding for future expansion */
+  void (* _gimp_reserved0) (void);
   void (* _gimp_reserved1) (void);
   void (* _gimp_reserved2) (void);
   void (* _gimp_reserved3) (void);
   void (* _gimp_reserved4) (void);
+  void (* _gimp_reserved5) (void);
+  void (* _gimp_reserved6) (void);
+  void (* _gimp_reserved7) (void);
+  void (* _gimp_reserved8) (void);
+  void (* _gimp_reserved9) (void);
 };
 
 
-GType         gimp_module_get_type         (void) G_GNUC_CONST;
+GimpModule           * gimp_module_new            (GFile           *file,
+                                                   gboolean         auto_load,
+                                                   gboolean         verbose);
 
-GimpModule  * gimp_module_new              (const gchar     *filename,
-                                            gboolean         load_inhibit,
-                                            gboolean         verbose);
+GFile                * gimp_module_get_file       (GimpModule      *module);
 
-gboolean      gimp_module_query_module     (GimpModule      *module);
+void                   gimp_module_set_auto_load  (GimpModule      *module,
+                                                   gboolean         auto_load);
+gboolean               gimp_module_get_auto_load  (GimpModule      *module);
 
-void          gimp_module_modified         (GimpModule      *module);
-void          gimp_module_set_load_inhibit (GimpModule      *module,
-                                            gboolean         load_inhibit);
+gboolean               gimp_module_is_on_disk     (GimpModule      *module);
+gboolean               gimp_module_is_loaded      (GimpModule      *module);
 
-const gchar * gimp_module_state_name       (GimpModuleState  state);
+const GimpModuleInfo * gimp_module_get_info       (GimpModule      *module);
+GimpModuleState        gimp_module_get_state      (GimpModule      *module);
+const gchar          * gimp_module_get_last_error (GimpModule      *module);
 
-GIMP_DEPRECATED_FOR(g_type_module_register_enum)
-GType         gimp_module_register_enum    (GTypeModule      *module,
-                                            const gchar      *name,
-                                            const GEnumValue *const_static_values);
-
-
-/*  GimpModuleInfo functions  */
-
-GimpModuleInfo * gimp_module_info_new  (guint32               abi_version,
-                                        const gchar          *purpose,
-                                        const gchar          *author,
-                                        const gchar          *version,
-                                        const gchar          *copyright,
-                                        const gchar          *date);
-GimpModuleInfo * gimp_module_info_copy (const GimpModuleInfo *info);
-void             gimp_module_info_free (GimpModuleInfo       *info);
+gboolean               gimp_module_query_module   (GimpModule      *module);
 
 
 G_END_DECLS

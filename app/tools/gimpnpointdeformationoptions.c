@@ -22,13 +22,13 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "tools-types.h"
 
 #include "widgets/gimppropwidgets.h"
-#include "widgets/gimpspinscale.h"
 
 #include "gimpnpointdeformationoptions.h"
 #include "gimptooloptions-gui.h"
@@ -208,22 +208,19 @@ gimp_n_point_deformation_options_gui (GimpToolOptions *tool_options)
   npd_options->check_mesh_visible = widget;
   gtk_box_pack_start (GTK_BOX (vbox), widget, FALSE, FALSE, 0);
   gtk_widget_set_can_focus (widget, FALSE);
-  gtk_widget_show (widget);
 
-  widget = gimp_prop_spin_scale_new (config, "square-size", NULL,
+  widget = gimp_prop_spin_scale_new (config, "square-size",
                                      1.0, 10.0, 0);
   npd_options->scale_square_size = widget;
   gimp_spin_scale_set_scale_limits (GIMP_SPIN_SCALE (widget), 10.0, 100.0);
   gtk_box_pack_start (GTK_BOX (vbox), widget, FALSE, FALSE, 0);
   gtk_widget_set_can_focus (widget, FALSE);
-  gtk_widget_show (widget);
 
-  widget = gimp_prop_spin_scale_new (config, "rigidity", NULL,
+  widget = gimp_prop_spin_scale_new (config, "rigidity",
                                      1.0, 10.0, 0);
   gimp_spin_scale_set_scale_limits (GIMP_SPIN_SCALE (widget), 1.0, 2000.0);
   gtk_box_pack_start (GTK_BOX (vbox), widget, FALSE, FALSE, 0);
   gtk_widget_set_can_focus (widget, FALSE);
-  gtk_widget_show (widget);
 
   widget = gimp_prop_boolean_radio_frame_new (config, "asap-deformation",
                                               NULL,
@@ -231,19 +228,16 @@ gimp_n_point_deformation_options_gui (GimpToolOptions *tool_options)
                                               _("Rigid (Rubber)"));
   gtk_box_pack_start (GTK_BOX (vbox), widget, FALSE, FALSE, 0);
   gtk_widget_set_can_focus (widget, FALSE);
-  gtk_widget_show (widget);
 
   widget = gimp_prop_check_button_new (config, "mls-weights", NULL);
   gtk_box_pack_start (GTK_BOX (vbox), widget, FALSE, FALSE, 0);
   gtk_widget_set_can_focus (widget, FALSE);
-  gtk_widget_show (widget);
 
-  widget = gimp_prop_spin_scale_new (config, "mls-weights-alpha", NULL,
+  widget = gimp_prop_spin_scale_new (config, "mls-weights-alpha",
                                      0.1, 0.1, 1);
   gimp_spin_scale_set_scale_limits (GIMP_SPIN_SCALE (widget), 0.1, 2.0);
   gtk_box_pack_start (GTK_BOX (vbox), widget, FALSE, FALSE, 0);
   gtk_widget_set_can_focus (widget, FALSE);
-  gtk_widget_show (widget);
 
   g_object_bind_property (config, "mls-weights",
                           widget, "sensitive",

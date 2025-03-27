@@ -29,8 +29,6 @@
 
 #include "widgets-types.h"
 
-#include "core/gimpmarshal.h"
-
 #include "gimppivotselector.h"
 
 
@@ -95,7 +93,7 @@ static void        gimp_pivot_selector_button_to_position   (GimpPivotSelector *
 static void        gimp_pivot_selector_update_active_button (GimpPivotSelector *selector);
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpPivotSelector, gimp_pivot_selector, GTK_TYPE_TABLE)
+G_DEFINE_TYPE_WITH_PRIVATE (GimpPivotSelector, gimp_pivot_selector, GTK_TYPE_GRID)
 
 #define parent_class gimp_pivot_selector_parent_class
 
@@ -115,8 +113,7 @@ gimp_pivot_selector_class_init (GimpPivotSelectorClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpPivotSelectorClass, changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->get_property = gimp_pivot_selector_get_property;
@@ -180,13 +177,17 @@ gimp_pivot_selector_class_init (GimpPivotSelectorClass *klass)
 static void
 gimp_pivot_selector_init (GimpPivotSelector *selector)
 {
-  GtkTable *table = GTK_TABLE (selector);
-  gint      i;
+  GtkWidget *widget = GTK_WIDGET (selector);
+  GtkGrid   *grid   = GTK_GRID (selector);
+  gint       i;
 
   selector->priv = gimp_pivot_selector_get_instance_private (selector);
 
-  gtk_table_resize (table, 3, 3);
-  gtk_table_set_homogeneous (table, TRUE);
+  gtk_widget_set_halign (widget, GTK_ALIGN_CENTER);
+  gtk_widget_set_valign (widget, GTK_ALIGN_CENTER);
+
+  gtk_grid_set_row_homogeneous    (grid, TRUE);
+  gtk_grid_set_column_homogeneous (grid, TRUE);
 
   for (i = 0; i < 9; i++)
     {
@@ -214,8 +215,7 @@ gimp_pivot_selector_init (GimpPivotSelector *selector)
       button = gtk_toggle_button_new ();
       gtk_widget_set_can_focus (button, FALSE);
       gtk_button_set_relief (GTK_BUTTON (button), GTK_RELIEF_NONE);
-      gtk_table_attach_defaults (table, button,
-                                 x, x + 1, y, y + 1);
+      gtk_grid_attach (grid, button, x, y, 1, 1);
       gtk_widget_show (button);
 
       selector->priv->buttons[i] = button;

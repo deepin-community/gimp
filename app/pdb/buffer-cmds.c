@@ -19,6 +19,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include <string.h>
 
 #include <gegl.h>
@@ -43,17 +45,16 @@
 
 
 static GimpValueArray *
-buffers_get_list_invoker (GimpProcedure         *procedure,
-                          Gimp                  *gimp,
-                          GimpContext           *context,
-                          GimpProgress          *progress,
-                          const GimpValueArray  *args,
-                          GError               **error)
+buffers_get_name_list_invoker (GimpProcedure         *procedure,
+                               Gimp                  *gimp,
+                               GimpContext           *context,
+                               GimpProgress          *progress,
+                               const GimpValueArray  *args,
+                               GError               **error)
 {
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   const gchar *filter;
-  gint32 num_buffers = 0;
   gchar **buffer_list = NULL;
 
   filter = g_value_get_string (gimp_value_array_index (args, 0));
@@ -61,17 +62,14 @@ buffers_get_list_invoker (GimpProcedure         *procedure,
   if (success)
     {
       buffer_list = gimp_container_get_filtered_name_array (gimp->named_buffers,
-                                                            filter, &num_buffers);
+                                                            filter);
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
                                                   error ? *error : NULL);
 
   if (success)
-    {
-      g_value_set_int (gimp_value_array_index (return_vals, 1), num_buffers);
-      gimp_value_take_stringarray (gimp_value_array_index (return_vals, 2), buffer_list, num_buffers);
-    }
+    g_value_take_boxed (gimp_value_array_index (return_vals, 1), buffer_list);
 
   return return_vals;
 }
@@ -153,7 +151,7 @@ buffer_get_width_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   const gchar *buffer_name;
-  gint32 width = 0;
+  gint width = 0;
 
   buffer_name = g_value_get_string (gimp_value_array_index (args, 0));
 
@@ -187,7 +185,7 @@ buffer_get_height_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   const gchar *buffer_name;
-  gint32 height = 0;
+  gint height = 0;
 
   buffer_name = g_value_get_string (gimp_value_array_index (args, 0));
 
@@ -221,7 +219,7 @@ buffer_get_bytes_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   const gchar *buffer_name;
-  gint32 bytes = 0;
+  gint bytes = 0;
 
   buffer_name = g_value_get_string (gimp_value_array_index (args, 0));
 
@@ -259,7 +257,7 @@ buffer_get_image_type_invoker (GimpProcedure         *procedure,
   gboolean success = TRUE;
   GimpValueArray *return_vals;
   const gchar *buffer_name;
-  gint32 image_type = 0;
+  gint image_type = 0;
 
   buffer_name = g_value_get_string (gimp_value_array_index (args, 0));
 
@@ -288,19 +286,19 @@ register_buffer_procs (GimpPDB *pdb)
   GimpProcedure *procedure;
 
   /*
-   * gimp-buffers-get-list
+   * gimp-buffers-get-name-list
    */
-  procedure = gimp_procedure_new (buffers_get_list_invoker);
+  procedure = gimp_procedure_new (buffers_get_name_list_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-buffers-get-list");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-buffers-get-list",
-                                     "Retrieve a complete listing of the available buffers.",
-                                     "This procedure returns a complete listing of available named buffers.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2005",
-                                     NULL);
+                               "gimp-buffers-get-name-list");
+  gimp_procedure_set_static_help (procedure,
+                                  "Retrieve a complete listing of the available buffers.",
+                                  "This procedure returns a complete listing of available named buffers.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2005");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("filter",
                                                        "filter",
@@ -309,33 +307,28 @@ register_buffer_procs (GimpPDB *pdb)
                                                        NULL,
                                                        GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("num-buffers",
-                                                          "num buffers",
-                                                          "The number of buffers",
-                                                          0, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
-  gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_string_array ("buffer-list",
-                                                                 "buffer list",
-                                                                 "The list of buffer names",
-                                                                 GIMP_PARAM_READWRITE));
+                                   g_param_spec_boxed ("buffer-list",
+                                                       "buffer list",
+                                                       "The list of buffer names",
+                                                       G_TYPE_STRV,
+                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-buffer-rename
    */
-  procedure = gimp_procedure_new (buffer_rename_invoker);
+  procedure = gimp_procedure_new (buffer_rename_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-buffer-rename");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-buffer-rename",
-                                     "Renames a named buffer.",
-                                     "This procedure renames a named buffer.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2005",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Renames a named buffer.",
+                                  "This procedure renames a named buffer.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2005");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("buffer-name",
                                                        "buffer name",
@@ -363,17 +356,17 @@ register_buffer_procs (GimpPDB *pdb)
   /*
    * gimp-buffer-delete
    */
-  procedure = gimp_procedure_new (buffer_delete_invoker);
+  procedure = gimp_procedure_new (buffer_delete_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-buffer-delete");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-buffer-delete",
-                                     "Deletes a named buffer.",
-                                     "This procedure deletes a named buffer.",
-                                     "David Gowers <neota@softhome.net>",
-                                     "David Gowers <neota@softhome.net>",
-                                     "2005",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Deletes a named buffer.",
+                                  "This procedure deletes a named buffer.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "David Gowers <neota@softhome.net>",
+                                         "David Gowers <neota@softhome.net>",
+                                         "2005");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("buffer-name",
                                                        "buffer name",
@@ -387,17 +380,17 @@ register_buffer_procs (GimpPDB *pdb)
   /*
    * gimp-buffer-get-width
    */
-  procedure = gimp_procedure_new (buffer_get_width_invoker);
+  procedure = gimp_procedure_new (buffer_get_width_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-buffer-get-width");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-buffer-get-width",
-                                     "Retrieves the specified buffer's width.",
-                                     "This procedure retrieves the specified named buffer's width.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2005",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Retrieves the specified buffer's width.",
+                                  "This procedure retrieves the specified named buffer's width.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2005");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("buffer-name",
                                                        "buffer name",
@@ -406,28 +399,28 @@ register_buffer_procs (GimpPDB *pdb)
                                                        NULL,
                                                        GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("width",
-                                                          "width",
-                                                          "The buffer width",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("width",
+                                                     "width",
+                                                     "The buffer width",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-buffer-get-height
    */
-  procedure = gimp_procedure_new (buffer_get_height_invoker);
+  procedure = gimp_procedure_new (buffer_get_height_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-buffer-get-height");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-buffer-get-height",
-                                     "Retrieves the specified buffer's height.",
-                                     "This procedure retrieves the specified named buffer's height.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2005",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Retrieves the specified buffer's height.",
+                                  "This procedure retrieves the specified named buffer's height.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2005");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("buffer-name",
                                                        "buffer name",
@@ -436,28 +429,28 @@ register_buffer_procs (GimpPDB *pdb)
                                                        NULL,
                                                        GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("height",
-                                                          "height",
-                                                          "The buffer height",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("height",
+                                                     "height",
+                                                     "The buffer height",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-buffer-get-bytes
    */
-  procedure = gimp_procedure_new (buffer_get_bytes_invoker);
+  procedure = gimp_procedure_new (buffer_get_bytes_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-buffer-get-bytes");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-buffer-get-bytes",
-                                     "Retrieves the specified buffer's bytes.",
-                                     "This procedure retrieves the specified named buffer's bytes.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2005",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Retrieves the specified buffer's bytes.",
+                                  "This procedure retrieves the specified named buffer's bytes.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2005");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("buffer-name",
                                                        "buffer name",
@@ -466,28 +459,28 @@ register_buffer_procs (GimpPDB *pdb)
                                                        NULL,
                                                        GIMP_PARAM_READWRITE));
   gimp_procedure_add_return_value (procedure,
-                                   gimp_param_spec_int32 ("bytes",
-                                                          "bytes",
-                                                          "The buffer bpp",
-                                                          G_MININT32, G_MAXINT32, 0,
-                                                          GIMP_PARAM_READWRITE));
+                                   g_param_spec_int ("bytes",
+                                                     "bytes",
+                                                     "The buffer bpp",
+                                                     G_MININT32, G_MAXINT32, 0,
+                                                     GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);
 
   /*
    * gimp-buffer-get-image-type
    */
-  procedure = gimp_procedure_new (buffer_get_image_type_invoker);
+  procedure = gimp_procedure_new (buffer_get_image_type_invoker, FALSE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
                                "gimp-buffer-get-image-type");
-  gimp_procedure_set_static_strings (procedure,
-                                     "gimp-buffer-get-image-type",
-                                     "Retrieves the specified buffer's image type.",
-                                     "This procedure retrieves the specified named buffer's image type.",
-                                     "Michael Natterer <mitch@gimp.org>",
-                                     "Michael Natterer",
-                                     "2005",
-                                     NULL);
+  gimp_procedure_set_static_help (procedure,
+                                  "Retrieves the specified buffer's image type.",
+                                  "This procedure retrieves the specified named buffer's image type.",
+                                  NULL);
+  gimp_procedure_set_static_attribution (procedure,
+                                         "Michael Natterer <mitch@gimp.org>",
+                                         "Michael Natterer",
+                                         "2005");
   gimp_procedure_add_argument (procedure,
                                gimp_param_spec_string ("buffer-name",
                                                        "buffer name",
@@ -499,8 +492,8 @@ register_buffer_procs (GimpPDB *pdb)
                                    g_param_spec_enum ("image-type",
                                                       "image type",
                                                       "The buffer image type",
-                                                      GIMP_TYPE_IMAGE_BASE_TYPE,
-                                                      GIMP_RGB,
+                                                      GIMP_TYPE_IMAGE_TYPE,
+                                                      GIMP_RGB_IMAGE,
                                                       GIMP_PARAM_READWRITE));
   gimp_pdb_register_procedure (pdb, procedure);
   g_object_unref (procedure);

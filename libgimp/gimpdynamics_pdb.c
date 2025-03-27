@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -50,64 +52,60 @@
 gboolean
 gimp_dynamics_refresh (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-dynamics-refresh",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-dynamics-refresh",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_dynamics_get_list:
- * @filter: An optional regular expression used to filter the list.
- * @num_dynamics: The number of available paint dynamics.
+ * gimp_dynamics_get_name_list:
+ * @filter: (nullable): An optional regular expression used to filter the list.
  *
  * Retrieve the list of loaded paint dynamics.
  *
  * This procedure returns a list of the paint dynamics that are
  * currently available.
  *
- * Returns: The list of paint dynamics names. The returned value must
- * be freed with g_strfreev().
+ * Returns: (array zero-terminated=1) (transfer full):
+ *          The list of paint dynamics names.
+ *          The returned value must be freed with g_strfreev().
  *
  * Since: 2.8
  **/
 gchar **
-gimp_dynamics_get_list (const gchar *filter,
-                        gint        *num_dynamics)
+gimp_dynamics_get_name_list (const gchar *filter)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar **dynamics_list = NULL;
-  gint i;
 
-  return_vals = gimp_run_procedure ("gimp-dynamics-get-list",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, filter,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, filter,
+                                          G_TYPE_NONE);
 
-  *num_dynamics = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-dynamics-get-name-list",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    {
-      *num_dynamics = return_vals[1].data.d_int32;
-      if (*num_dynamics > 0)
-        {
-          dynamics_list = g_new0 (gchar *, *num_dynamics + 1);
-          for (i = 0; i < *num_dynamics; i++)
-            dynamics_list[i] = g_strdup (return_vals[2].data.d_stringarray[i]);
-        }
-    }
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    dynamics_list = GIMP_VALUES_DUP_STRV (return_vals, 1);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return dynamics_list;
 }

@@ -51,8 +51,7 @@ dockable_add_tab_cmd_callback (GimpAction *action,
   GimpDockbook *dockbook = GIMP_DOCKBOOK (data);
 
   gimp_dockbook_add_from_dialog_factory (dockbook,
-                                         g_variant_get_string (value, NULL),
-                                         -1);
+                                         g_variant_get_string (value, NULL));
 }
 
 void
@@ -64,12 +63,8 @@ dockable_close_tab_cmd_callback (GimpAction *action,
   GimpDockable *dockable = dockable_get_current (dockbook);
 
   if (dockable)
-    {
-      g_object_ref (dockable);
-      gimp_dockbook_remove (dockbook, dockable);
-      gtk_widget_destroy (GTK_WIDGET (dockable));
-      g_object_unref (dockable);
-    }
+    gtk_container_remove (GTK_CONTAINER (dockbook),
+                          GTK_WIDGET (dockable));
 }
 
 void
@@ -179,7 +174,7 @@ dockable_toggle_view_cmd_callback (GimpAction *action,
                   gboolean    show;
 
                   gimp_dockable_set_locked (GIMP_DOCKABLE (new_dockable),
-                                            gimp_dockable_is_locked (dockable));
+                                            gimp_dockable_get_locked (dockable));
 
                   old = GIMP_DOCKED (gtk_bin_get_child (GTK_BIN (dockable)));
                   new = GIMP_DOCKED (gtk_bin_get_child (GTK_BIN (new_dockable)));
@@ -193,17 +188,17 @@ dockable_toggle_view_cmd_callback (GimpAction *action,
                    */
                   if (! gimp_dockable_get_dockbook (GIMP_DOCKABLE (new_dockable)))
                     {
-                      gimp_dockbook_add (dockbook, GIMP_DOCKABLE (new_dockable),
-                                         page_num);
+                      gtk_notebook_insert_page (GTK_NOTEBOOK (dockbook),
+                                                new_dockable, NULL,
+                                                page_num);
+                      gtk_widget_show (new_dockable);
 
-                      g_object_ref (dockable);
-                      gimp_dockbook_remove (dockbook, dockable);
-                      gtk_widget_destroy (GTK_WIDGET (dockable));
-                      g_object_unref (dockable);
+                      gtk_container_remove (GTK_CONTAINER (dockbook),
+                                            GTK_WIDGET (dockable));
 
                       gtk_notebook_set_current_page (GTK_NOTEBOOK (dockbook),
                                                      page_num);
-                    }
+                   }
                 }
             }
 

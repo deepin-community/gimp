@@ -22,6 +22,7 @@
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
+#include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "actions-types.h"
@@ -135,12 +136,12 @@ static void   image_resize_callback            (GtkWidget              *dialog,
                                                 GimpContext            *context,
                                                 gint                    width,
                                                 gint                    height,
-                                                GimpUnit                unit,
+                                                GimpUnit               *unit,
                                                 gint                    offset_x,
                                                 gint                    offset_y,
                                                 gdouble                 xres,
                                                 gdouble                 yres,
-                                                GimpUnit                res_unit,
+                                                GimpUnit               *res_unit,
                                                 GimpFillType            fill_type,
                                                 GimpItemSet             layer_set,
                                                 gboolean                resize_text_layers,
@@ -150,18 +151,18 @@ static void   image_print_size_callback        (GtkWidget              *dialog,
                                                 GimpImage              *image,
                                                 gdouble                 xresolution,
                                                 gdouble                 yresolution,
-                                                GimpUnit                resolution_unit,
+                                                GimpUnit               *resolution_unit,
                                                 gpointer                user_data);
 
 static void   image_scale_callback             (GtkWidget              *dialog,
                                                 GimpViewable           *viewable,
                                                 gint                    width,
                                                 gint                    height,
-                                                GimpUnit                unit,
+                                                GimpUnit               *unit,
                                                 GimpInterpolationType   interpolation,
                                                 gdouble                 xresolution,
                                                 gdouble                 yresolution,
-                                                GimpUnit                resolution_unit,
+                                                GimpUnit               *resolution_unit,
                                                 gpointer                user_data);
 
 static void   image_merge_layers_callback      (GtkWidget              *dialog,
@@ -172,11 +173,20 @@ static void   image_merge_layers_callback      (GtkWidget              *dialog,
                                                 gboolean                discard_invisible,
                                                 gpointer                user_data);
 
+static void   image_softproof_profile_callback  (GtkWidget                *dialog,
+                                                 GimpImage                *image,
+                                                 GimpColorProfile         *new_profile,
+                                                 GFile                    *new_file,
+                                                 GimpColorRenderingIntent  intent,
+                                                 gboolean                  bpc,
+                                                 gpointer                  user_data);
+
+
 
 /*  private variables  */
 
-static GimpUnit               image_resize_unit  = GIMP_UNIT_PIXEL;
-static GimpUnit               image_scale_unit   = GIMP_UNIT_PIXEL;
+static GimpUnit              *image_resize_unit  = NULL;
+static GimpUnit              *image_scale_unit   = NULL;
 static GimpInterpolationType  image_scale_interp = -1;
 static GimpPalette           *image_convert_indexed_custom_palette = NULL;
 
@@ -193,9 +203,9 @@ image_new_cmd_callback (GimpAction *action,
   return_if_no_widget (widget, data);
 
   dialog = gimp_dialog_factory_dialog_new (gimp_dialog_factory_get_singleton (),
-                                           gtk_widget_get_screen (widget),
                                            gimp_widget_get_monitor (widget),
                                            NULL /*ui_manager*/,
+                                           widget,
                                            "gimp-image-new-dialog", -1, FALSE);
 
   if (dialog)
@@ -226,8 +236,7 @@ image_duplicate_cmd_callback (GimpAction *action,
 
   gimp_create_display (new_image->gimp, new_image, shell->unit,
                        gimp_zoom_model_get_factor (shell->zoom),
-                       G_OBJECT (gtk_widget_get_screen (GTK_WIDGET (shell))),
-                       gimp_widget_get_monitor (GTK_WIDGET (shell)));
+                       G_OBJECT (gimp_widget_get_monitor (GTK_WIDGET (shell))));
 
   g_object_unref (new_image);
 }
@@ -275,30 +284,28 @@ image_convert_base_type_cmd_callback (GimpAction *action,
           GimpColorProfileCallback  callback;
           GimpColorProfile         *current_profile;
           GimpColorProfile         *default_profile;
-          const Babl               *format;
+          GimpTRCType               trc;
 
           current_profile =
             gimp_color_managed_get_color_profile (GIMP_COLOR_MANAGED (image));
+
+          trc = gimp_babl_trc (gimp_image_get_precision (image));
 
           if (base_type == GIMP_RGB)
             {
               dialog_type = COLOR_PROFILE_DIALOG_CONVERT_TO_RGB;
               callback    = image_convert_rgb_callback;
 
-              format = gimp_babl_format (GIMP_RGB,
-                                         gimp_image_get_precision (image),
-                                         TRUE);
-              default_profile = gimp_babl_format_get_color_profile (format);
+              default_profile = gimp_babl_get_builtin_color_profile (GIMP_RGB,
+                                                                     trc);
             }
           else
             {
               dialog_type = COLOR_PROFILE_DIALOG_CONVERT_TO_GRAY;
               callback    = image_convert_gray_callback;
 
-              format = gimp_babl_format (GIMP_GRAY,
-                                         gimp_image_get_precision (image),
-                                         TRUE);
-              default_profile = gimp_babl_format_get_color_profile (format);
+              default_profile = gimp_babl_get_builtin_color_profile (GIMP_GRAY,
+                                                                     trc);
             }
 
           dialog = color_profile_dialog_new (dialog_type,
@@ -401,25 +408,25 @@ image_convert_precision_cmd_callback (GimpAction *action,
 }
 
 void
-image_convert_gamma_cmd_callback (GimpAction *action,
-                                  GVariant   *value,
-                                  gpointer    data)
+image_convert_trc_cmd_callback (GimpAction *action,
+                                GVariant   *value,
+                                gpointer    data)
 {
   GimpImage     *image;
   GimpDisplay   *display;
-  gboolean       linear;
+  GimpTRCType    trc_type;
   GimpPrecision  precision;
   return_if_no_image (image, data);
   return_if_no_display (display, data);
 
-  linear = (gboolean) g_variant_get_int32 (value);
+  trc_type = (GimpTRCType) g_variant_get_int32 (value);
 
-  if (linear == gimp_babl_format_get_linear (gimp_image_get_layer_format (image,
+  if (trc_type == gimp_babl_format_get_trc (gimp_image_get_layer_format (image,
                                                                          FALSE)))
     return;
 
   precision = gimp_babl_precision (gimp_image_get_component_type (image),
-                                   linear);
+                                   trc_type);
 
   gimp_image_convert_precision (image, precision,
                                 GEGL_DITHER_NONE,
@@ -430,19 +437,19 @@ image_convert_gamma_cmd_callback (GimpAction *action,
 }
 
 void
-image_color_management_enabled_cmd_callback (GimpAction *action,
-                                             GVariant   *value,
-                                             gpointer    data)
+image_color_profile_use_srgb_cmd_callback (GimpAction *action,
+                                           GVariant   *value,
+                                           gpointer    data)
 {
   GimpImage *image;
-  gboolean   enabled;
+  gboolean   use_srgb;
   return_if_no_image (image, data);
 
-  enabled = g_variant_get_boolean (value);
+  use_srgb = g_variant_get_boolean (value);
 
-  if (enabled != gimp_image_get_is_color_managed (image))
+  if (use_srgb != gimp_image_get_use_srgb_profile (image, NULL))
     {
-      gimp_image_set_is_color_managed (image, enabled, TRUE);
+      gimp_image_set_use_srgb_profile (image, use_srgb);
       gimp_image_flush (image);
     }
 }
@@ -541,7 +548,7 @@ image_color_profile_discard_cmd_callback (GimpAction *action,
   GimpImage *image;
   return_if_no_image (image, data);
 
-  gimp_image_set_color_profile (image, NULL, NULL);
+  gimp_image_assign_color_profile (image, NULL, NULL, NULL);
   gimp_image_flush (image);
 }
 
@@ -650,7 +657,7 @@ image_resize_cmd_callback (GimpAction *action,
     {
       GimpDialogConfig *config = GIMP_DIALOG_CONFIG (image->gimp->config);
 
-      if (image_resize_unit != GIMP_UNIT_PERCENT)
+      if (image_resize_unit != gimp_unit_percent ())
         image_resize_unit = gimp_display_get_shell (display)->unit;
 
       dialog = resize_dialog_new (GIMP_VIEWABLE (image),
@@ -779,7 +786,7 @@ image_scale_cmd_callback (GimpAction *action,
 
   if (! dialog)
     {
-      if (image_scale_unit != GIMP_UNIT_PERCENT)
+      if (image_scale_unit != gimp_unit_percent ())
         image_scale_unit = gimp_display_get_shell (display)->unit;
 
       if (image_scale_interp == -1)
@@ -1170,15 +1177,7 @@ image_convert_indexed_callback (GtkWidget              *dialog,
                 "image-convert-indexed-dither-text-layers", dither_text_layers,
                 NULL);
 
-  if (image_convert_indexed_custom_palette)
-    g_object_remove_weak_pointer (G_OBJECT (image_convert_indexed_custom_palette),
-                                  (gpointer) &image_convert_indexed_custom_palette);
-
-  image_convert_indexed_custom_palette = custom_palette;
-
-  if (image_convert_indexed_custom_palette)
-    g_object_add_weak_pointer (G_OBJECT (image_convert_indexed_custom_palette),
-                               (gpointer) &image_convert_indexed_custom_palette);
+  g_set_weak_pointer (&image_convert_indexed_custom_palette, custom_palette);
 
   progress = gimp_progress_start (GIMP_PROGRESS (display), FALSE,
                                   _("Converting to indexed colors"));
@@ -1247,7 +1246,7 @@ image_convert_precision_callback (GtkWidget        *dialog,
 
   /* random formats with the right precision */
   old_format = gimp_image_get_layer_format (image, FALSE);
-  new_format = gimp_babl_format (GIMP_RGB, precision, FALSE);
+  new_format = gimp_babl_format (GIMP_RGB, precision, FALSE, NULL);
 
   old_bits = (babl_format_get_bytes_per_pixel (old_format) * 8 /
               babl_format_get_n_components (old_format));
@@ -1298,29 +1297,15 @@ image_profile_assign_callback (GtkWidget                *dialog,
 {
   GError *error = NULL;
 
-  gimp_image_undo_group_start (image,
-                               GIMP_UNDO_GROUP_PARASITE_ATTACH,
-                               _("Assign color profile"));
-
-  if (! gimp_image_set_color_profile (image, new_profile, &error))
+  if (! gimp_image_assign_color_profile (image, new_profile, NULL, &error))
     {
       gimp_message (image->gimp, G_OBJECT (dialog),
                     GIMP_MESSAGE_ERROR,
                     "%s", error->message);
       g_clear_error (&error);
 
-      gimp_image_undo_group_end (image);
-      gimp_image_undo (image);
-
       return;
     }
-
-  gimp_image_set_is_color_managed (image, TRUE, TRUE);
-
-  /*  omg...  */
-  gimp_image_parasite_detach (image, "icc-profile-name", TRUE);
-
-  gimp_image_undo_group_end (image);
 
   gimp_image_flush (image);
 
@@ -1379,12 +1364,12 @@ image_resize_callback (GtkWidget    *dialog,
                        GimpContext  *context,
                        gint          width,
                        gint          height,
-                       GimpUnit      unit,
+                       GimpUnit     *unit,
                        gint          offset_x,
                        gint          offset_y,
                        gdouble       xres,
                        gdouble       yres,
-                       GimpUnit      res_unit,
+                       GimpUnit     *res_unit,
                        GimpFillType  fill_type,
                        GimpItemSet   layer_set,
                        gboolean      resize_text_layers,
@@ -1401,7 +1386,7 @@ image_resize_callback (GtkWidget    *dialog,
       GimpProgress     *progress;
       gdouble           old_xres;
       gdouble           old_yres;
-      GimpUnit          old_res_unit;
+      GimpUnit         *old_res_unit;
       gboolean          update_resolution;
 
       g_object_set (config,
@@ -1437,7 +1422,8 @@ image_resize_callback (GtkWidget    *dialog,
 
       gimp_image_resize_with_layers (image,
                                      context, fill_type,
-                                     width, height, offset_x, offset_y,
+                                     width, height,
+                                     offset_x, offset_y,
                                      layer_set,
                                      resize_text_layers,
                                      progress);
@@ -1462,7 +1448,7 @@ image_print_size_callback (GtkWidget *dialog,
                            GimpImage *image,
                            gdouble    xresolution,
                            gdouble    yresolution,
-                           GimpUnit   resolution_unit,
+                           GimpUnit  *resolution_unit,
                            gpointer   data)
 {
   gdouble xres;
@@ -1493,11 +1479,11 @@ image_scale_callback (GtkWidget              *dialog,
                       GimpViewable           *viewable,
                       gint                    width,
                       gint                    height,
-                      GimpUnit                unit,
+                      GimpUnit               *unit,
                       GimpInterpolationType   interpolation,
                       gdouble                 xresolution,
                       gdouble                 yresolution,
-                      GimpUnit                resolution_unit,
+                      GimpUnit               *resolution_unit,
                       gpointer                user_data)
 {
   GimpProgress *progress = user_data;
@@ -1577,5 +1563,103 @@ image_merge_layers_callback (GtkWidget     *dialog,
 
   gimp_image_flush (image);
 
+  g_clear_pointer (&dialog, gtk_widget_destroy);
+}
+
+void
+image_softproof_profile_cmd_callback (GimpAction *action,
+                                      GVariant   *value,
+                                      gpointer    data)
+{
+  GimpImage        *image;
+  GimpDisplayShell *shell;
+  GtkWidget        *dialog;
+  return_if_no_image (image, data);
+  return_if_no_shell (shell, data);
+
+#define SOFTPROOF_PROFILE_DIALOG_KEY "gimp-softproof-profile-dialog"
+
+  dialog = dialogs_get_dialog (G_OBJECT (shell), SOFTPROOF_PROFILE_DIALOG_KEY);
+
+  if (! dialog)
+    {
+      GimpColorProfile *current_profile;
+
+      current_profile = gimp_image_get_simulation_profile (image);
+
+      dialog = color_profile_dialog_new (COLOR_PROFILE_DIALOG_SELECT_SOFTPROOF_PROFILE,
+                                         image,
+                                         action_data_get_context (data),
+                                         GTK_WIDGET (shell),
+                                         current_profile,
+                                         NULL,
+                                         0, 0,
+                                         image_softproof_profile_callback,
+                                         shell);
+
+      dialogs_attach_dialog (G_OBJECT (shell),
+                             SOFTPROOF_PROFILE_DIALOG_KEY, dialog);
+    }
+
+  gtk_window_present (GTK_WINDOW (dialog));
+}
+
+static void
+image_softproof_profile_callback (GtkWidget                *dialog,
+                                  GimpImage                *image,
+                                  GimpColorProfile         *new_profile,
+                                  GFile                    *new_file,
+                                  GimpColorRenderingIntent  intent,
+                                  gboolean                  bpc,
+                                  gpointer                  user_data)
+{
+  GimpDisplayShell *shell = user_data;
+
+  /* Update image's simulation profile */
+  gimp_image_set_simulation_profile (image, new_profile);
+  gimp_color_managed_simulation_profile_changed (GIMP_COLOR_MANAGED (shell));
+
   gtk_widget_destroy (dialog);
+}
+
+void
+image_softproof_intent_cmd_callback (GimpAction *action,
+                                     GVariant   *value,
+                                     gpointer    data)
+{
+  GimpImage                 *image;
+  GimpDisplayShell          *shell;
+  GimpColorRenderingIntent   intent;
+  return_if_no_image (image, data);
+  return_if_no_shell (shell, data);
+
+  intent = (GimpColorRenderingIntent) g_variant_get_int32 (value);
+
+  if (intent != gimp_image_get_simulation_intent (image))
+    {
+      gimp_image_set_simulation_intent (image, intent);
+      shell->color_config_set = TRUE;
+      gimp_color_managed_simulation_intent_changed (GIMP_COLOR_MANAGED (shell));
+    }
+}
+
+void
+image_softproof_bpc_cmd_callback (GimpAction *action,
+                                  GVariant   *value,
+                                  gpointer    data)
+{
+  GimpImage                 *image;
+  GimpDisplayShell          *shell;
+  gboolean                   bpc;
+  return_if_no_image (image, data);
+  return_if_no_shell (shell, data);
+
+  bpc = g_variant_get_boolean (value);
+
+  if (bpc != gimp_image_get_simulation_bpc (image))
+    {
+      gimp_image_set_simulation_bpc (image, bpc);
+      shell->color_config_set = TRUE;
+      gimp_color_managed_simulation_bpc_changed (GIMP_COLOR_MANAGED (shell));
+    }
 }

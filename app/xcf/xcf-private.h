@@ -22,6 +22,7 @@
 #define XCF_TILE_WIDTH                  64
 #define XCF_TILE_HEIGHT                 64
 #define XCF_TILE_MAX_DATA_LENGTH_FACTOR 1.5
+#define XCF_TILE_SAVE_BATCH_SIZE        128
 
 typedef enum
 {
@@ -65,6 +66,13 @@ typedef enum
   PROP_BLEND_SPACE        = 37,
   PROP_FLOAT_COLOR        = 38,
   PROP_SAMPLE_POINTS      = 39,
+  PROP_ITEM_SET           = 40,
+  PROP_ITEM_SET_ITEM      = 41,
+  PROP_LOCK_VISIBILITY    = 42,
+  PROP_SELECTED_PATH      = 43,
+  PROP_FILTER_REGION      = 44,
+  PROP_FILTER_ARGUMENT    = 45,
+  PROP_FILTER_CLIP        = 46
 } PropType;
 
 typedef enum
@@ -92,6 +100,19 @@ typedef enum
   XCF_GROUP_ITEM_EXPANDED      = 1
 } XcfGroupItemFlagsType;
 
+typedef enum
+{
+  FILTER_PROP_UNKNOWN = 0,
+  FILTER_PROP_INT     = 1,
+  FILTER_PROP_BOOL    = 2,
+  FILTER_PROP_FLOAT   = 3,
+  FILTER_PROP_STRING  = 4,
+  FILTER_PROP_ENUM    = 5,
+  FILTER_PROP_CONFIG  = 6,
+  FILTER_PROP_UINT    = 7,
+  FILTER_PROP_COLOR   = 8,
+} FilterPropType;
+
 typedef struct _XcfInfo  XcfInfo;
 
 struct _XcfInfo
@@ -105,8 +126,21 @@ struct _XcfInfo
   gint                bytes_per_offset;
   GFile              *file;
   GimpTattoo          tattoo_state;
-  GimpLayer          *active_layer;
-  GimpChannel        *active_channel;
+  GList              *selected_layers;
+  GList              *selected_channels;
+  GList              *selected_vectors;
+
+  /* Old deprecated "linked" concept which we keep in the XcfInfo
+   * probably forever to transform these tags into named stored item
+   * sets instead.
+   */
+  GList              *linked_layers;
+  GList              *linked_channels;
+  GList              *linked_paths;
+
+  GList              *layer_sets;
+  GList              *channel_sets;
+
   GimpDrawable       *floating_sel_drawable;
   GimpLayer          *floating_sel;
   goffset             floating_sel_offset;

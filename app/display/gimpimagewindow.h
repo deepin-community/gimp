@@ -48,11 +48,9 @@ GType              gimp_image_window_get_type             (void) G_GNUC_CONST;
 GimpImageWindow  * gimp_image_window_new                  (Gimp              *gimp,
                                                            GimpImage         *image,
                                                            GimpDialogFactory *dialog_factory,
-                                                           GdkScreen         *screen,
-                                                           gint               monitor);
+                                                           GdkMonitor        *monitor);
 void               gimp_image_window_destroy              (GimpImageWindow   *window);
 
-GimpUIManager    * gimp_image_window_get_ui_manager       (GimpImageWindow  *window);
 GimpDockColumns  * gimp_image_window_get_left_docks       (GimpImageWindow  *window);
 GimpDockColumns  * gimp_image_window_get_right_docks      (GimpImageWindow  *window);
 
@@ -68,6 +66,8 @@ gint               gimp_image_window_get_n_shells         (GimpImageWindow  *win
 void               gimp_image_window_set_active_shell     (GimpImageWindow  *window,
                                                            GimpDisplayShell *shell);
 GimpDisplayShell * gimp_image_window_get_active_shell     (GimpImageWindow  *window);
+
+GimpMenuModel    * gimp_image_window_get_menubar_model    (GimpImageWindow  *window);
 
 void               gimp_image_window_set_fullscreen       (GimpImageWindow  *window,
                                                            gboolean          fullscreen);

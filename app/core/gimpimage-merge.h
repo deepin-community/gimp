@@ -19,14 +19,14 @@
 #define __GIMP_IMAGE_MERGE_H__
 
 
-GimpLayer   * gimp_image_merge_visible_layers  (GimpImage      *image,
+GList       * gimp_image_merge_visible_layers  (GimpImage      *image,
                                                 GimpContext    *context,
                                                 GimpMergeType   merge_type,
                                                 gboolean        merge_active_group,
                                                 gboolean        discard_invisible,
                                                 GimpProgress   *progress);
-GimpLayer   * gimp_image_merge_down            (GimpImage      *image,
-                                                GimpLayer      *current_layer,
+GList       * gimp_image_merge_down            (GimpImage      *image,
+                                                GList          *layers,
                                                 GimpContext    *context,
                                                 GimpMergeType   merge_type,
                                                 GimpProgress   *progress,
@@ -39,7 +39,7 @@ GimpLayer   * gimp_image_flatten               (GimpImage      *image,
                                                 GimpProgress   *progress,
                                                 GError        **error);
 
-GimpVectors * gimp_image_merge_visible_vectors (GimpImage      *image,
+GimpPath    * gimp_image_merge_visible_paths   (GimpImage      *image,
                                                 GError        **error);
 
 

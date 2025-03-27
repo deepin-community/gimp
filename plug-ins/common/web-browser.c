@@ -43,87 +43,124 @@
 #define PLUG_IN_ROLE   "gimp-web-browser"
 
 
-static void     query            (void);
-static void     run              (const gchar      *name,
-                                  gint              nparams,
-                                  const GimpParam  *param,
-                                  gint             *nreturn_vals,
-                                  GimpParam       **return_vals);
-static gboolean browser_open_url (const gchar      *url,
-                                  GError          **error);
+typedef struct _Browser      Browser;
+typedef struct _BrowserClass BrowserClass;
 
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _Browser
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run    /* run_proc   */
+  GimpPlugIn parent_instance;
+};
+
+struct _BrowserClass
+{
+  GimpPlugInClass parent_class;
 };
 
 
-MAIN ()
+#define BROWSER_TYPE  (browser_get_type ())
+#define BROWSER(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), BROWSER_TYPE, Browser))
+
+GType                   browser_get_type         (void) G_GNUC_CONST;
+
+static GList          * browser_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * browser_create_procedure (GimpPlugIn           *plug_in,
+                                                  const gchar          *name);
+
+static GimpValueArray * browser_run              (GimpProcedure        *procedure,
+                                                  GimpProcedureConfig  *config,
+                                                  gpointer              run_data);
+
+static gboolean         browser_open_url         (GtkWindow            *window,
+                                                  const gchar          *url,
+                                                  GError              **error);
+
+
+G_DEFINE_TYPE (Browser, browser, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (BROWSER_TYPE)
+DEFINE_STD_SET_I18N
+
 
 static void
-query (void)
+browser_class_init (BrowserClass *klass)
 {
-  static const GimpParamDef args[] =
-  {
-    { GIMP_PDB_STRING, "url", "URL to open" }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  gimp_install_procedure (PLUG_IN_PROC,
-                          "Open an URL in the user specified web browser",
-                          "Opens the given URL in the user specified web browser.",
-                          "Henrik Brix Andersen <brix@gimp.org>",
-                          "2003",
-                          "2003/09/16",
-                          NULL, NULL,
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args), 0,
-                          args, NULL);
+  plug_in_class->query_procedures = browser_query_procedures;
+  plug_in_class->create_procedure = browser_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint             nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+browser_init (Browser *browser)
 {
-  static GimpParam   values[2];
-  GimpPDBStatusType  status;
-  GError            *error = NULL;
+}
 
-  *nreturn_vals = 1;
-  *return_vals  = values;
+static GList *
+browser_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (PLUG_IN_PROC));
+}
 
-  status   = GIMP_PDB_SUCCESS;
+static GimpProcedure *
+browser_create_procedure (GimpPlugIn  *plug_in,
+                          const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
 
-  INIT_I18N ();
-
-  if (nparams == 1 &&
-      param[0].data.d_string != NULL &&
-      strlen (param[0].data.d_string))
+  if (! strcmp (name, PLUG_IN_PROC))
     {
-      if (! browser_open_url (param[0].data.d_string, &error))
-        {
-          status                  = GIMP_PDB_EXECUTION_ERROR;
-          *nreturn_vals           = 2;
-          values[1].type          = GIMP_PDB_STRING;
-          values[1].data.d_string = error->message;
-        }
-    }
-  else
-    {
-      status = GIMP_PDB_CALLING_ERROR;
+      procedure = gimp_procedure_new (plug_in, name,
+                                      GIMP_PDB_PROC_TYPE_PLUGIN,
+                                      browser_run, NULL, NULL);
+
+      gimp_procedure_set_documentation (procedure,
+                                        "Open an URL in the user specified "
+                                        "web browser",
+                                        "Opens the given URL in the user "
+                                        "specified web browser.",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Henrik Brix Andersen <brix@gimp.org>",
+                                      "2003",
+                                      "2003/09/16");
+
+      gimp_procedure_add_string_argument (procedure, "url",
+                                          "URL",
+                                         "URL to open",
+                                         "https://www.gimp.org/",
+                                         G_PARAM_READWRITE);
     }
 
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
+  return procedure;
+}
+
+static GimpValueArray *
+browser_run (GimpProcedure        *procedure,
+             GimpProcedureConfig  *config,
+             gpointer              run_data)
+{
+  GError *error = NULL;
+  gchar  *url   = NULL;
+
+  g_object_get (config, "url", &url, NULL);
+  if (! browser_open_url (NULL, url, &error))
+    {
+      g_free (url);
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_EXECUTION_ERROR,
+                                               error);
+    }
+
+  g_free (url);
+  return gimp_procedure_new_return_values (procedure,
+                                           GIMP_PDB_SUCCESS,
+                                           NULL);
 }
 
 static gboolean
-browser_open_url (const gchar  *url,
+browser_open_url (GtkWindow    *window,
+                  const gchar  *url,
                   GError      **error)
 {
 #ifdef G_OS_WIN32
@@ -131,11 +168,11 @@ browser_open_url (const gchar  *url,
   HINSTANCE hinst = ShellExecute (GetDesktopWindow(),
                                   "open", url, NULL, NULL, SW_SHOW);
 
-  if ((gint) hinst <= 32)
+  if ((intptr_t) hinst <= 32)
     {
       const gchar *err;
 
-      switch ((gint) hinst)
+      switch ((intptr_t) hinst)
         {
           case 0 :
             err = _("The operating system is out of memory or resources.");
@@ -192,23 +229,22 @@ browser_open_url (const gchar  *url,
   NSURL    *ns_url;
   gboolean  retval;
 
-  NSAutoreleasePool *arp = [NSAutoreleasePool new];
+  @autoreleasepool
     {
       ns_url = [NSURL URLWithString: [NSString stringWithUTF8String: url]];
       retval = [[NSWorkspace sharedWorkspace] openURL: ns_url];
     }
-  [arp release];
 
   return retval;
 
 #else
 
-  gimp_ui_init (PLUG_IN_BINARY, FALSE);
+  gimp_ui_init (PLUG_IN_BINARY);
 
-  return gtk_show_uri (gdk_screen_get_default (),
-                       url,
-                       gtk_get_current_event_time(),
-                       error);
+  return gtk_show_uri_on_window (window,
+                                 url,
+                                 GDK_CURRENT_TIME,
+                                 error);
 
 #endif
 }

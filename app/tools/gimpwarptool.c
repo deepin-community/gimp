@@ -24,6 +24,7 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkkeysyms.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
@@ -36,6 +37,8 @@
 
 #include "core/gimp.h"
 #include "core/gimpchannel.h"
+#include "core/gimpcontainer.h"
+#include "core/gimpdrawable-filters.h"
 #include "core/gimpdrawablefilter.h"
 #include "core/gimpimage.h"
 #include "core/gimplayer.h"
@@ -225,10 +228,13 @@ gimp_warp_tool_init (GimpWarpTool *self)
                                          GIMP_CURSOR_PRECISION_SUBPIXEL);
   gimp_tool_control_set_tool_cursor     (tool->control,
                                          GIMP_TOOL_CURSOR_WARP);
-  gimp_tool_control_set_action_size     (tool->control,
-                                         "tools/tools-warp-effect-size-set");
-  gimp_tool_control_set_action_hardness (tool->control,
-                                         "tools/tools-warp-effect-hardness-set");
+
+  gimp_tool_control_set_action_pixel_size (tool->control,
+                                           "tools-warp-effect-pixel-size-set");
+  gimp_tool_control_set_action_size       (tool->control,
+                                           "tools-warp-effect-size-set");
+  gimp_tool_control_set_action_hardness   (tool->control,
+                                           "tools-warp-effect-hardness-set");
 
   self->show_cursor = TRUE;
   self->draw_brush  = TRUE;
@@ -311,6 +317,8 @@ gimp_warp_tool_button_press (GimpTool            *tool,
   if (! gimp_warp_tool_can_stroke (wt, display, TRUE))
     return;
 
+  g_return_if_fail (g_list_length (tool->drawables) == 1);
+
   wt->current_stroke = gegl_path_new ();
 
   wt->last_pos.x = coords->x;
@@ -334,7 +342,7 @@ gimp_warp_tool_button_press (GimpTool            *tool,
   gimp_warp_tool_add_op (wt, new_op);
   g_object_unref (new_op);
 
-  gimp_item_get_offset (GIMP_ITEM (tool->drawable), &off_x, &off_y);
+  gimp_item_get_offset (GIMP_ITEM (tool->drawables->data), &off_x, &off_y);
 
   gimp_warp_tool_stroke_append (wt,
                                 'M', wt->last_pos.x - off_x,
@@ -447,7 +455,7 @@ gimp_warp_tool_motion (GimpTool         *tool,
               gimp_draw_tool_pause (GIMP_DRAW_TOOL (tool));
             }
 
-          gimp_item_get_offset (GIMP_ITEM (tool->drawable), &off_x, &off_y);
+          gimp_item_get_offset (GIMP_ITEM (tool->drawables->data), &off_x, &off_y);
 
           gimp_warp_tool_stroke_append (wt,
                                         'L', wt->last_pos.x - off_x,
@@ -629,8 +637,8 @@ gimp_warp_tool_undo (GimpTool    *tool,
    */
   prev_node = gegl_node_get_producer (to_delete, "input", NULL);
 
-  gegl_node_connect_to (prev_node,       "output",
-                        wt->render_node, "aux");
+  gegl_node_connect (prev_node,       "output",
+                     wt->render_node, "aux");
 
   gimp_warp_tool_update_bounds (wt);
   gimp_warp_tool_update_stroke (wt, to_delete);
@@ -647,8 +655,8 @@ gimp_warp_tool_redo (GimpTool    *tool,
 
   to_add = wt->redo_stack->data;
 
-  gegl_node_connect_to (to_add,          "output",
-                        wt->render_node, "aux");
+  gegl_node_connect (to_add,          "output",
+                     wt->render_node, "aux");
 
   wt->redo_stack = g_list_remove_link (wt->redo_stack, wt->redo_stack);
 
@@ -755,11 +763,33 @@ gimp_warp_tool_can_stroke (GimpWarpTool *wt,
                            GimpDisplay  *display,
                            gboolean      show_message)
 {
-  GimpTool        *tool     = GIMP_TOOL (wt);
-  GimpWarpOptions *options  = GIMP_WARP_TOOL_GET_OPTIONS (wt);
-  GimpGuiConfig   *config   = GIMP_GUI_CONFIG (display->gimp->config);
-  GimpImage       *image    = gimp_display_get_image (display);
-  GimpDrawable    *drawable = gimp_image_get_active_drawable (image);
+  GimpTool        *tool        = GIMP_TOOL (wt);
+  GimpWarpOptions *options     = GIMP_WARP_TOOL_GET_OPTIONS (wt);
+  GimpGuiConfig   *config      = GIMP_GUI_CONFIG (display->gimp->config);
+  GimpImage       *image       = gimp_display_get_image (display);
+  GimpItem        *locked_item = NULL;
+  GList           *drawables   = gimp_image_get_selected_drawables (image);
+  GimpDrawable    *drawable;
+
+  if (g_list_length (drawables) != 1)
+    {
+      if (show_message)
+        {
+          if (g_list_length (drawables) > 1)
+            gimp_tool_message_literal (tool, display,
+                                       _("Cannot warp multiple layers. Select only one layer."));
+          else
+            gimp_tool_message_literal (tool, display,
+                                       _("No active drawables."));
+        }
+
+      g_list_free (drawables);
+
+      return FALSE;
+    }
+
+  drawable = drawables->data;
+  g_list_free (drawables);
 
   if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)))
     {
@@ -772,14 +802,14 @@ gimp_warp_tool_can_stroke (GimpWarpTool *wt,
       return FALSE;
     }
 
-  if (gimp_item_is_content_locked (GIMP_ITEM (drawable)))
+  if (gimp_item_is_content_locked (GIMP_ITEM (drawable), &locked_item))
     {
       if (show_message)
         {
           gimp_tool_message_literal (tool, display,
-                                     _("The active layer's pixels are locked."));
+                                     _("The selected item's pixels are locked."));
 
-          gimp_tools_blink_lock_box (display->gimp, GIMP_ITEM (drawable));
+          gimp_tools_blink_lock_box (display->gimp, locked_item);
         }
 
       return FALSE;
@@ -791,7 +821,7 @@ gimp_warp_tool_can_stroke (GimpWarpTool *wt,
       if (show_message)
         {
           gimp_tool_message_literal (tool, display,
-                                     _("The active layer is not visible."));
+                                     _("The selected item is not visible."));
         }
 
       return FALSE;
@@ -805,6 +835,7 @@ gimp_warp_tool_can_stroke (GimpWarpTool *wt,
           gimp_tool_message_literal (tool, display,
                                      _("No stroke events selected."));
 
+          gimp_tools_show_tool_options (display->gimp);
           gimp_widget_blink (options->stroke_frame);
         }
 
@@ -839,6 +870,7 @@ gimp_warp_tool_can_stroke (GimpWarpTool *wt,
             {
               gimp_tool_message_literal (tool, display, message);
 
+              gimp_tools_show_tool_options (display->gimp);
               gimp_widget_blink (options->behavior_combo);
             }
 
@@ -856,15 +888,18 @@ gimp_warp_tool_start (GimpWarpTool *wt,
   GimpTool        *tool     = GIMP_TOOL (wt);
   GimpWarpOptions *options  = GIMP_WARP_TOOL_GET_OPTIONS (wt);
   GimpImage       *image    = gimp_display_get_image (display);
-  GimpDrawable    *drawable = gimp_image_get_active_drawable (image);
+  GimpDrawable    *drawable;
   const Babl      *format;
   GeglRectangle    bbox;
 
   if (! gimp_warp_tool_can_stroke (wt, display, TRUE))
     return FALSE;
 
-  tool->display  = display;
-  tool->drawable = drawable;
+  tool->display   = display;
+  g_list_free (tool->drawables);
+  tool->drawables = gimp_image_get_selected_drawables (image);
+
+  drawable = tool->drawables->data;
 
   /* Create the coords buffer, with the size of the selection */
   format = babl_format_n (babl_type ("float"), 2);
@@ -921,8 +956,9 @@ gimp_warp_tool_halt (GimpWarpTool *wt)
       wt->redo_stack = NULL;
     }
 
-  tool->display  = NULL;
-  tool->drawable = NULL;
+  tool->display   = NULL;
+  g_list_free (tool->drawables);
+  tool->drawables = NULL;
 
   if (gimp_draw_tool_is_active (GIMP_DRAW_TOOL (wt)))
     gimp_draw_tool_stop (GIMP_DRAW_TOOL (wt));
@@ -949,7 +985,8 @@ gimp_warp_tool_commit (GimpWarpTool *wt)
 
       gimp_warp_tool_set_sampler (wt, /* commit = */ TRUE);
 
-      gimp_drawable_filter_commit (wt->filter, GIMP_PROGRESS (tool), FALSE);
+      gimp_drawable_filter_commit (wt->filter, FALSE,
+                                   GIMP_PROGRESS (tool), FALSE);
       g_clear_object (&wt->filter);
 
       gimp_tool_control_pop_preserve (tool->control);
@@ -995,7 +1032,9 @@ gimp_warp_tool_stroke_timer (GimpWarpTool *wt)
   GimpTool *tool = GIMP_TOOL (wt);
   gint      off_x, off_y;
 
-  gimp_item_get_offset (GIMP_ITEM (tool->drawable), &off_x, &off_y);
+  g_return_val_if_fail (g_list_length (tool->drawables) == 1, FALSE);
+
+  gimp_item_get_offset (GIMP_ITEM (tool->drawables->data), &off_x, &off_y);
 
   gimp_warp_tool_stroke_append (wt,
                                 'L', wt->last_pos.x - off_x,
@@ -1030,14 +1069,10 @@ gimp_warp_tool_create_graph (GimpWarpTool *wt)
                                 "abyss-policy", options->abyss_policy,
                                 NULL);
 
-  gegl_node_connect_to (input,  "output",
-                        render, "input");
+  gegl_node_link_many (input, render, output, NULL);
+  gegl_node_connect (coords, "output",
+                     render, "aux");
 
-  gegl_node_connect_to (coords, "output",
-                        render, "aux");
-
-  gegl_node_connect_to (render, "output",
-                        output, "input");
 
   wt->graph       = graph;
   wt->render_node = render;
@@ -1215,12 +1250,29 @@ gimp_warp_tool_update_area (GimpWarpTool        *wt,
                             const GeglRectangle *area,
                             gboolean             synchronous)
 {
-  GeglRectangle rect;
+  GeglRectangle  rect;
+  GimpContainer *filters;
 
   if (! wt->filter)
     return;
 
   rect = gimp_warp_tool_get_invalidated_by_change (wt, area);
+
+  /* Move this operation below any non-destructive filters that
+   * may be active, so that it's directly affect the raw pixels. */
+  filters =
+    gimp_drawable_get_filters (gimp_drawable_filter_get_drawable (wt->filter));
+
+  if (gimp_container_have (filters, GIMP_OBJECT (wt->filter)))
+  {
+    gint end_index = gimp_container_get_n_children (filters) - 1;
+    gint index     = gimp_container_get_child_index (filters,
+                                                     GIMP_OBJECT (wt->filter));
+
+    if (end_index > 0 && index != end_index)
+      gimp_container_reorder (filters, GIMP_OBJECT (wt->filter),
+                              end_index);
+  }
 
   if (synchronous)
     {
@@ -1338,10 +1390,9 @@ gimp_warp_tool_add_op (GimpWarpTool *wt,
   last_op = gegl_node_get_producer (wt->render_node, "aux", NULL);
 
   gegl_node_disconnect (wt->render_node, "aux");
-  gegl_node_connect_to (last_op,         "output",
-                        op    ,          "input");
-  gegl_node_connect_to (op,              "output",
-                        wt->render_node, "aux");
+  gegl_node_link (last_op, op);
+  gegl_node_connect (op,              "output",
+                     wt->render_node, "aux");
 }
 
 static void
@@ -1355,8 +1406,8 @@ gimp_warp_tool_remove_op (GimpWarpTool *wt,
   previous = gegl_node_get_producer (op, "input", NULL);
 
   gegl_node_disconnect (op,              "input");
-  gegl_node_connect_to (previous,        "output",
-                        wt->render_node, "aux");
+  gegl_node_connect (previous,        "output",
+                     wt->render_node, "aux");
 
   gegl_node_remove_child (wt->graph, op);
 }
@@ -1387,6 +1438,8 @@ gimp_warp_tool_animate (GimpWarpTool *wt)
   GtkWidget       *widget;
   gint             i;
 
+  g_return_if_fail (g_list_length (tool->drawables) == 1);
+
   if (! gimp_warp_tool_can_undo (tool, tool->display))
     {
       gimp_tool_message_literal (tool, tool->display,
@@ -1406,17 +1459,17 @@ gimp_warp_tool_animate (GimpWarpTool *wt)
   gimp_progress_start (GIMP_PROGRESS (tool), FALSE,
                        _("Rendering Frame %d"), 1);
 
-  orig_image = gimp_item_get_image (GIMP_ITEM (tool->drawable));
+  orig_image = gimp_item_get_image (GIMP_ITEM (tool->drawables->data));
 
   image = gimp_create_image (orig_image->gimp,
-                             gimp_item_get_width  (GIMP_ITEM (tool->drawable)),
-                             gimp_item_get_height (GIMP_ITEM (tool->drawable)),
-                             gimp_drawable_get_base_type (tool->drawable),
-                             gimp_drawable_get_precision (tool->drawable),
+                             gimp_item_get_width  (GIMP_ITEM (tool->drawables->data)),
+                             gimp_item_get_height (GIMP_ITEM (tool->drawables->data)),
+                             gimp_drawable_get_base_type (tool->drawables->data),
+                             gimp_drawable_get_precision (tool->drawables->data),
                              TRUE);
 
   /*  the first frame is always the unwarped image  */
-  layer = GIMP_LAYER (gimp_item_convert (GIMP_ITEM (tool->drawable), image,
+  layer = GIMP_LAYER (gimp_item_convert (GIMP_ITEM (tool->drawables->data), image,
                                          GIMP_TYPE_LAYER));
   gimp_object_take_name (GIMP_OBJECT (layer),
                          g_strdup_printf (_("Frame %d"), 1));
@@ -1473,12 +1526,11 @@ gimp_warp_tool_animate (GimpWarpTool *wt)
   gimp_progress_end (GIMP_PROGRESS (tool));
 
   /*  recreate the image map  */
-  gimp_warp_tool_create_filter (wt, tool->drawable);
+  gimp_warp_tool_create_filter (wt, tool->drawables->data);
   gimp_warp_tool_update_stroke (wt, NULL);
 
   widget = GTK_WIDGET (gimp_display_get_shell (tool->display));
-  gimp_create_display (orig_image->gimp, image, GIMP_UNIT_PIXEL, 1.0,
-                       G_OBJECT (gtk_widget_get_screen (widget)),
-                       gimp_widget_get_monitor (widget));
+  gimp_create_display (orig_image->gimp, image, gimp_unit_pixel (), 1.0,
+                       G_OBJECT (gimp_widget_get_monitor (widget)));
   g_object_unref (image);
 }

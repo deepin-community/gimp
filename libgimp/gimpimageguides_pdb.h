@@ -32,18 +32,18 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-gint32              gimp_image_add_hguide            (gint32 image_ID,
-                                                      gint   yposition);
-gint32              gimp_image_add_vguide            (gint32 image_ID,
-                                                      gint   xposition);
-gboolean            gimp_image_delete_guide          (gint32 image_ID,
-                                                      gint32 guide_ID);
-gint32              gimp_image_find_next_guide       (gint32 image_ID,
-                                                      gint32 guide_ID);
-GimpOrientationType gimp_image_get_guide_orientation (gint32 image_ID,
-                                                      gint32 guide_ID);
-gint                gimp_image_get_guide_position    (gint32 image_ID,
-                                                      gint32 guide_ID);
+guint               gimp_image_add_hguide            (GimpImage *image,
+                                                      gint       yposition);
+guint               gimp_image_add_vguide            (GimpImage *image,
+                                                      gint       xposition);
+gboolean            gimp_image_delete_guide          (GimpImage *image,
+                                                      guint      guide);
+guint               gimp_image_find_next_guide       (GimpImage *image,
+                                                      gint       guide);
+GimpOrientationType gimp_image_get_guide_orientation (GimpImage *image,
+                                                      guint      guide);
+gint                gimp_image_get_guide_position    (GimpImage *image,
+                                                      guint      guide);
 
 
 G_END_DECLS

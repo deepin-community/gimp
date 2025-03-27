@@ -23,12 +23,12 @@
 #include <gtk/gtk.h>
 
 #include "libgimpconfig/gimpconfig.h"
+#include "libgimpwidgets/gimpwidgets.h"
 
 #include "tools-types.h"
 
 #include "core/gimp.h"
-#include "core/gimpcontext.h"
-#include "core/gimplist.h"
+#include "core/gimpcontainer.h"
 #include "core/gimpimage.h"
 #include "core/gimptoolgroup.h"
 #include "core/gimptoolinfo.h"
@@ -39,8 +39,10 @@
 
 #include "widgets/gimpcairo-wilber.h"
 
+#include "gimpgegltool.h"
 #include "gimptool.h"
 #include "gimptoolcontrol.h"
+#include "gimptransformgridtool.h"
 #include "tool_manager.h"
 
 
@@ -55,6 +57,8 @@ struct _GimpToolManager
 
   GimpToolGroup *active_tool_group;
 
+  GimpImage     *image;
+
   GQuark         image_clean_handler_id;
   GQuark         image_dirty_handler_id;
   GQuark         image_saving_handler_id;
@@ -63,8 +67,6 @@ struct _GimpToolManager
 
 /*  local function prototypes  */
 
-static void              tool_manager_set                       (Gimp            *gimp,
-                                                                 GimpToolManager *tool_manager);
 static GimpToolManager * tool_manager_get                       (Gimp            *gimp);
 
 static void              tool_manager_select_tool               (GimpToolManager *tool_manager,
@@ -88,8 +90,18 @@ static void              tool_manager_tool_ancestry_changed     (GimpToolInfo   
                                                                  GimpToolManager *tool_manager);
 static void              tool_manager_group_active_tool_changed (GimpToolGroup   *tool_group,
                                                                  GimpToolManager *tool_manager);
+static void              tool_manager_image_changed             (GimpContext     *context,
+                                                                 GimpImage       *image,
+                                                                 GimpToolManager *tool_manager);
+static void              tool_manager_selected_layers_changed   (GimpImage       *image,
+                                                                 GimpToolManager *tool_manager);
+static void              tool_manager_active_tool_deactivated   (GimpContext     *context,
+                                                                 GimpToolManager *tool_manager);
 
 static void              tool_manager_cast_spell                (GimpToolInfo    *tool_info);
+
+
+static GQuark tool_manager_quark = 0;
 
 
 /*  public functions  */
@@ -101,18 +113,15 @@ tool_manager_init (Gimp *gimp)
   GimpContext     *user_context;
 
   g_return_if_fail (GIMP_IS_GIMP (gimp));
+  g_return_if_fail (tool_manager_quark == 0);
+
+  tool_manager_quark = g_quark_from_static_string ("gimp-tool-manager");
 
   tool_manager = g_slice_new0 (GimpToolManager);
 
-  tool_manager->gimp                    = gimp;
-  tool_manager->active_tool             = NULL;
-  tool_manager->tool_stack              = NULL;
-  tool_manager->active_tool_group       = NULL;
-  tool_manager->image_clean_handler_id  = 0;
-  tool_manager->image_dirty_handler_id  = 0;
-  tool_manager->image_saving_handler_id = 0;
+  tool_manager->gimp = gimp;
 
-  tool_manager_set (gimp, tool_manager);
+  g_object_set_qdata (G_OBJECT (gimp), tool_manager_quark, tool_manager);
 
   tool_manager->image_clean_handler_id =
     gimp_container_add_handler (gimp->images, "clean",
@@ -137,6 +146,15 @@ tool_manager_init (Gimp *gimp)
   g_signal_connect (user_context, "tool-preset-changed",
                     G_CALLBACK (tool_manager_preset_changed),
                     tool_manager);
+  g_signal_connect (user_context, "image-changed",
+                    G_CALLBACK (tool_manager_image_changed),
+                    tool_manager);
+
+  tool_manager_image_changed (user_context,
+                              gimp_context_get_image (user_context),
+                              tool_manager);
+  tool_manager_selected_layers_changed (gimp_context_get_image (user_context),
+                                        tool_manager);
 
   tool_manager_tool_changed (user_context,
                              gimp_context_get_tool (user_context),
@@ -152,7 +170,8 @@ tool_manager_exit (Gimp *gimp)
   g_return_if_fail (GIMP_IS_GIMP (gimp));
 
   tool_manager = tool_manager_get (gimp);
-  tool_manager_set (gimp, NULL);
+
+  g_return_if_fail (tool_manager != NULL);
 
   user_context = gimp_get_user_context (gimp);
 
@@ -162,6 +181,14 @@ tool_manager_exit (Gimp *gimp)
   g_signal_handlers_disconnect_by_func (user_context,
                                         tool_manager_preset_changed,
                                         tool_manager);
+  g_signal_handlers_disconnect_by_func (user_context,
+                                        tool_manager_image_changed,
+                                        tool_manager);
+
+  if (tool_manager->image)
+    g_signal_handlers_disconnect_by_func (tool_manager->image,
+                                          tool_manager_selected_layers_changed,
+                                          tool_manager);
 
   gimp_container_remove_handler (gimp->images,
                                  tool_manager->image_clean_handler_id);
@@ -183,6 +210,8 @@ tool_manager_exit (Gimp *gimp)
   tool_manager_set_active_tool_group (tool_manager, NULL);
 
   g_slice_free (GimpToolManager, tool_manager);
+
+  g_object_set_qdata (G_OBJECT (gimp), tool_manager_quark, NULL);
 }
 
 GimpTool *
@@ -266,7 +295,8 @@ tool_manager_initialize_active (Gimp        *gimp,
         {
           GimpImage *image = gimp_display_get_image (display);
 
-          tool->drawable = gimp_image_get_active_drawable (image);
+          g_list_free (tool->drawables);
+          tool->drawables = gimp_image_get_selected_drawables (image);
 
           return TRUE;
         }
@@ -611,24 +641,9 @@ tool_manager_get_popup_active (Gimp             *gimp,
 
 /*  private functions  */
 
-static GQuark tool_manager_quark = 0;
-
-static void
-tool_manager_set (Gimp            *gimp,
-                  GimpToolManager *tool_manager)
-{
-  if (! tool_manager_quark)
-    tool_manager_quark = g_quark_from_static_string ("gimp-tool-manager");
-
-  g_object_set_qdata (G_OBJECT (gimp), tool_manager_quark, tool_manager);
-}
-
 static GimpToolManager *
 tool_manager_get (Gimp *gimp)
 {
-  if (! tool_manager_quark)
-    tool_manager_quark = g_quark_from_static_string ("gimp-tool-manager");
-
   return g_object_get_qdata (G_OBJECT (gimp), tool_manager_quark);
 }
 
@@ -706,14 +721,14 @@ tool_manager_tool_changed (GimpContext     *user_context,
   /* FIXME: gimp_busy HACK */
   if (user_context->gimp->busy)
     {
-      /*  there may be contexts waiting for the user_context's "tool-changed"
-       *  signal, so stop emitting it.
-       */
-      g_signal_stop_emission_by_name (user_context, "tool-changed");
-
       if (G_TYPE_FROM_INSTANCE (tool_manager->active_tool) !=
           tool_info->tool_type)
         {
+          /*  there may be contexts waiting for the user_context's "tool-changed"
+           *  signal, so stop emitting it.
+           */
+          g_signal_stop_emission_by_name (user_context, "tool-changed");
+
           g_signal_handlers_block_by_func (user_context,
                                            tool_manager_tool_changed,
                                            tool_manager);
@@ -734,23 +749,7 @@ tool_manager_tool_changed (GimpContext     *user_context,
 
   if (tool_manager->active_tool)
     {
-      GimpTool    *active_tool = tool_manager->active_tool;
-      GimpDisplay *display;
-
-      /*  NULL image returns any display (if there is any)  */
-      display = gimp_tool_has_image (active_tool, NULL);
-
-      /*  commit the old tool's operation before creating the new tool
-       *  because creating a tool might mess with the old tool's
-       *  options (old and new tool might be the same)
-       */
-      if (display)
-        tool_manager_control_active (user_context->gimp, GIMP_TOOL_ACTION_COMMIT,
-                                     display);
-
-      g_signal_handlers_disconnect_by_func (active_tool->tool_info,
-                                            tool_manager_tool_ancestry_changed,
-                                            tool_manager);
+      tool_manager_active_tool_deactivated (user_context, tool_manager);
     }
 
   g_signal_connect (tool_info, "ancestry-changed",
@@ -765,10 +764,24 @@ tool_manager_tool_changed (GimpContext     *user_context,
 
   tool_manager_select_tool (tool_manager, new_tool);
 
+  /* Auto-activate any transform or GEGL operation tools */
+  if (GIMP_IS_TRANSFORM_GRID_TOOL (new_tool) ||
+      GIMP_IS_GEGL_TOOL (new_tool))
+    {
+      GimpDisplay *new_display;
+
+      new_display = gimp_context_get_display (user_context);
+      if (new_display && gimp_display_get_image (new_display))
+        tool_manager_initialize_active (user_context->gimp, new_display);
+    }
+
   g_object_unref (new_tool);
 
-  /* ??? */
-  tool_manager_cast_spell (tool_info);
+  if (gimp_widget_animation_enabled ())
+    {
+      /* ??? */
+      tool_manager_cast_spell (tool_info);
+    }
 }
 
 static void
@@ -905,6 +918,78 @@ tool_manager_group_active_tool_changed (GimpToolGroup   *tool_group,
 {
   gimp_context_set_tool (tool_manager->gimp->user_context,
                          gimp_tool_group_get_active_tool_info (tool_group));
+}
+
+static void
+tool_manager_image_changed (GimpContext     *context,
+                            GimpImage       *image,
+                            GimpToolManager *tool_manager)
+{
+  if (tool_manager->image)
+    {
+      g_signal_handlers_disconnect_by_func (tool_manager->image,
+                                            tool_manager_selected_layers_changed,
+                                            tool_manager);
+    }
+
+  tool_manager->image = image;
+
+  /* Turn off auto-activated tools when switching images */
+  if (image                                                    &&
+      (GIMP_IS_TRANSFORM_GRID_TOOL (tool_manager->active_tool) ||
+       GIMP_IS_GEGL_TOOL (tool_manager->active_tool)))
+    {
+      gimp_context_set_tool (context,
+                             tool_manager->active_tool->tool_info);
+
+      tool_manager_active_tool_deactivated (context, tool_manager);
+    }
+
+  if (image)
+    g_signal_connect (tool_manager->image, "selected-layers-changed",
+                      G_CALLBACK (tool_manager_selected_layers_changed),
+                      tool_manager);
+}
+
+static void
+tool_manager_selected_layers_changed (GimpImage       *image,
+                                      GimpToolManager *tool_manager)
+{
+  /* Re-activate transform tools when changing selected layers */
+  if (image                                                    &&
+      (GIMP_IS_TRANSFORM_GRID_TOOL (tool_manager->active_tool) ||
+       GIMP_IS_GEGL_TOOL (tool_manager->active_tool)))
+    {
+      gimp_context_set_tool (tool_manager->gimp->user_context,
+                             tool_manager->active_tool->tool_info);
+
+      tool_manager_tool_changed (tool_manager->gimp->user_context,
+                                 gimp_context_get_tool (
+                                   tool_manager->gimp->user_context),
+                                 tool_manager);
+    }
+}
+
+static void
+tool_manager_active_tool_deactivated (GimpContext     *context,
+                                      GimpToolManager *tool_manager)
+{
+  GimpDisplay *display;
+
+  display = gimp_tool_has_image (tool_manager->active_tool, NULL);
+
+  /*  NULL image returns any display (if there is any)  */
+  if (display)
+    tool_manager_control_active (context->gimp, GIMP_TOOL_ACTION_COMMIT,
+                                 display);
+
+  /*  commit the old tool's operation before creating the new tool
+   *  because creating a tool might mess with the old tool's
+   *  options (old and new tool might be the same)
+   */
+  g_signal_handlers_disconnect_by_func (tool_manager->active_tool->tool_info,
+                                        tool_manager_tool_ancestry_changed,
+                                        tool_manager);
 }
 
 static void

@@ -120,7 +120,7 @@ ico_read_int8 (FILE   *fp,
 }
 
 
-static guint32
+static IcoFileHeader
 ico_read_init (FILE *fp)
 {
   IcoFileHeader header;
@@ -130,17 +130,19 @@ ico_read_init (FILE *fp)
       ! ico_read_int16 (fp, &header.resource_type, 1) ||
       ! ico_read_int16 (fp, &header.icon_count, 1)    ||
       header.reserved != 0 ||
-      header.resource_type != 1)
+      (header.resource_type != 1 && header.resource_type != 2))
     {
-      return 0;
+      header.icon_count = 0;
+      return header;
     }
 
-  return header.icon_count;
+  return header;
 }
 
 
 static gboolean
 ico_read_size (FILE        *fp,
+               gint32       file_offset,
                IcoLoadInfo *info)
 {
   png_structp png_ptr;
@@ -150,7 +152,7 @@ ico_read_size (FILE        *fp,
   gint32      color_type;
   guint32     magic;
 
-  if (fseek (fp, info->offset, SEEK_SET) < 0)
+  if (fseek (fp, info->offset + file_offset, SEEK_SET) < 0)
     return FALSE;
 
   ico_read_int32 (fp, &magic, 1);
@@ -207,6 +209,7 @@ ico_read_size (FILE        *fp,
 static IcoLoadInfo*
 ico_read_info (FILE    *fp,
                gint     icon_count,
+               gint32   file_offset,
                GError **error)
 {
   gint            i;
@@ -219,7 +222,7 @@ ico_read_info (FILE    *fp,
     {
       g_set_error (error, G_FILE_ERROR, 0,
                    _("Could not read '%lu' bytes"),
-                   sizeof (IcoFileEntry));
+                   (long unsigned int) sizeof (IcoFileEntry));
       g_free (entries);
       return NULL;
     }
@@ -229,13 +232,14 @@ ico_read_info (FILE    *fp,
     {
       info[i].width  = entries[i].width;
       info[i].height = entries[i].height;
+      info[i].planes = entries[i].planes;
       info[i].bpp    = GUINT16_FROM_LE (entries[i].bpp);
       info[i].size   = GUINT32_FROM_LE (entries[i].size);
       info[i].offset = GUINT32_FROM_LE (entries[i].offset);
 
       if (info[i].width == 0 || info[i].height == 0)
         {
-          ico_read_size (fp, info + i);
+          ico_read_size (fp, file_offset, info + i);
         }
 
       D(("ico_read_info: %ix%i (%i bits, size: %i, offset: %i)\n",
@@ -597,48 +601,47 @@ ico_read_icon (FILE    *fp,
   return TRUE;
 }
 
-static gint32
+static GimpLayer *
 ico_load_layer (FILE        *fp,
-                gint32       image,
+                GimpImage   *image,
                 gint32       icon_num,
                 guchar      *buf,
                 gint         maxsize,
+                gint32       file_offset,
+                gchar       *layer_prefix,
                 IcoLoadInfo *info)
 {
   gint        width, height;
-  gint32      layer;
+  GimpLayer  *layer;
   guint32     first_bytes;
   GeglBuffer *buffer;
-  gchar       name[ICO_MAXBUF];
 
-  if (fseek (fp, info->offset, SEEK_SET) < 0 ||
+  if (fseek (fp, info->offset + file_offset, SEEK_SET) < 0 ||
       ! ico_read_int32 (fp, &first_bytes, 1))
-    return -1;
+    return NULL;
 
   if (first_bytes == ICO_PNG_MAGIC)
     {
       if (!ico_read_png (fp, first_bytes, buf, maxsize, &width, &height))
-        return -1;
+        return NULL;
     }
   else if (first_bytes == 40)
     {
       if (!ico_read_icon (fp, first_bytes, buf, maxsize, &width, &height))
-        return -1;
+        return NULL;
     }
   else
     {
-      return -1;
+      return NULL;
     }
 
   /* read successfully. add to image */
-  g_snprintf (name, sizeof (name), _("Icon #%i"), icon_num+1);
-  layer = gimp_layer_new (image, name, width, height,
-                          GIMP_RGBA_IMAGE,
-                          100,
+  layer = gimp_layer_new (image, layer_prefix, width, height,
+                          GIMP_RGBA_IMAGE, 100,
                           gimp_image_get_default_new_layer_mode (image));
-  gimp_image_insert_layer (image, layer, -1, icon_num);
+  gimp_image_insert_layer (image, layer, NULL, icon_num);
 
-  buffer = gimp_drawable_get_buffer (layer);
+  buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
 
   gegl_buffer_set (buffer, GEGL_RECTANGLE (0, 0, width, height), 0,
                    NULL, buf, GEGL_AUTO_ROWSTRIDE);
@@ -649,43 +652,53 @@ ico_load_layer (FILE        *fp,
 }
 
 
-gint32
-ico_load_image (const gchar  *filename,
+GimpImage *
+ico_load_image (GFile        *file,
+                gint32       *file_offset,
+                gint          frame_num,
                 GError      **error)
 {
-  FILE        *fp;
-  IcoLoadInfo *info;
-  gint         max_width, max_height;
-  gint         i;
-  gint32       image;
-  guchar      *buf;
-  guint        icon_count;
-  gint         maxsize;
+  FILE          *fp;
+  IcoFileHeader  header;
+  IcoLoadInfo   *info;
+  gint           max_width, max_height;
+  gint           i;
+  GimpImage     *image;
+  guchar        *buf;
+  guint          icon_count;
+  gint           maxsize;
+  gchar         *str;
 
-  gimp_progress_init_printf (_("Opening '%s'"),
-                             gimp_filename_to_utf8 (filename));
+  if (! file_offset)
+    gimp_progress_init_printf (_("Opening '%s'"),
+                               gimp_file_get_utf8_name (file));
 
-  fp = g_fopen (filename, "rb");
+  fp = g_fopen (g_file_peek_path (file), "rb");
+
   if (! fp)
     {
       g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
                    _("Could not open '%s' for reading: %s"),
-                   gimp_filename_to_utf8 (filename), g_strerror (errno));
-      return -1;
+                   gimp_file_get_utf8_name (file), g_strerror (errno));
+      return NULL;
     }
 
-  icon_count = ico_read_init (fp);
+  if (file_offset)
+    fseek (fp, *file_offset, SEEK_SET);
+
+  header = ico_read_init (fp);
+  icon_count = header.icon_count;
   if (!icon_count)
     {
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
-  info = ico_read_info (fp, icon_count, error);
+  info = ico_read_info (fp, icon_count, file_offset ? *file_offset : 0, error);
   if (! info)
     {
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
   /* find width and height of image */
@@ -702,76 +715,346 @@ ico_load_image (const gchar  *filename,
     {
       g_free (info);
       fclose (fp);
-      return -1;
+      return NULL;
     }
   D(("image size: %ix%i\n", max_width, max_height));
 
   image = gimp_image_new (max_width, max_height, GIMP_RGB);
-  gimp_image_set_filename (image, filename);
 
   maxsize = max_width * max_height * 4;
   buf = g_new (guchar, max_width * max_height * 4);
   for (i = 0; i < icon_count; i++)
     {
-      ico_load_layer (fp, image, i, buf, maxsize, info+i);
+      GimpLayer *layer;
+      gchar     *layer_prefix;
+      gchar     *icon_metadata;
+
+      if (info[i].bpp)
+        icon_metadata = g_strdup_printf ("(%dx%d, %dbpp)", info[i].width,
+                                         info[i].height, info[i].bpp);
+      else
+        icon_metadata = g_strdup_printf ("(%dx%d)", info[i].width,
+                                         info[i].height);
+
+      if (frame_num > -1)
+        {
+          layer_prefix = g_strdup_printf ("Cursor %s Frame #%i", icon_metadata,
+                                          frame_num);
+        }
+      else
+        {
+          if (header.resource_type == 1)
+            layer_prefix = g_strdup_printf ("Icon #%i %s ", i + 1,
+                                            icon_metadata);
+          else
+            layer_prefix = g_strdup_printf ("Cursor #%i %s ", i + 1,
+                                            icon_metadata);
+        }
+
+      layer = ico_load_layer (fp, image, i + 1, buf, maxsize,
+                              file_offset ? *file_offset : 0,
+                              layer_prefix, info + i);
+      g_free (icon_metadata);
+      g_free (layer_prefix);
+
+      /* Save CUR hot spot information */
+      if (header.resource_type == 2)
+        {
+          GimpParasite *parasite;
+
+          str = g_strdup_printf ("%d %d", info[i].planes, info[i].bpp);
+          parasite = gimp_parasite_new ("cur-hot-spot",
+                                        GIMP_PARASITE_PERSISTENT,
+                                        strlen (str) + 1, (gpointer) str);
+          g_free (str);
+          gimp_item_attach_parasite (GIMP_ITEM (layer), parasite);
+          gimp_parasite_free (parasite);
+        }
     }
+
+  if (file_offset)
+    *file_offset = ftell (fp);
+
   g_free (buf);
   g_free (info);
   fclose (fp);
+
+  /* Don't update progress here if .ani file */
+  if (! file_offset)
+    gimp_progress_update (1.0);
+
+  return image;
+}
+
+/* Ported from James Huang's ani.c code, under the GPL license, version 3
+ * or any later version of the license */
+GimpImage *
+ani_load_image (GFile   *file,
+                gboolean load_thumb,
+                gint    *width,
+                gint    *height,
+                GError **error)
+{
+  FILE         *fp;
+  GimpImage    *image = NULL;
+  GimpParasite *parasite;
+  gchar         id[4];
+  guint32       size;
+  guint8        padding;
+  gint32        file_offset;
+  guint         frame = 1;
+  AniFileHeader header;
+  gchar        *inam  = NULL;
+  gchar        *iart  = NULL;
+  gchar        *str;
+
+  gimp_progress_init_printf (_("Opening '%s'"),
+                             gimp_file_get_utf8_name (file));
+
+  fp = g_fopen (g_file_peek_path (file), "rb");
+
+  if (! fp)
+    {
+      g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                   _("Could not open '%s' for reading: %s"),
+                   gimp_file_get_utf8_name (file), g_strerror (errno));
+      return NULL;
+    }
+
+  while (fread (id, 1, 4, fp) == 4)
+    {
+      if (memcmp (id, "RIFF", 4) == 0 )
+        {
+          fread (&size, sizeof (size), 1, fp);
+        }
+      else if (memcmp (id, "anih", 4) == 0)
+        {
+          fread (&size, sizeof (size), 1, fp);
+          fread (&header, sizeof (header), 1, fp);
+        }
+      else if (memcmp (id, "rate", 4) == 0)
+        {
+          fread (&size, sizeof (size), 1, fp);
+          fseek (fp, size, SEEK_CUR);
+        }
+      else if (memcmp (id, "seq ", 4) == 0)
+        {
+          fread (&size, sizeof (size), 1, fp);
+          fseek (fp, size, SEEK_CUR);
+        }
+      else if (memcmp (id, "LIST", 4) == 0)
+        {
+          fread (&size, sizeof (size), 1, fp);
+        }
+      else if (memcmp (id, "INAM", 4) == 0)
+        {
+          gint n_read = -1;
+
+          fread (&size, sizeof (size), 1, fp);
+          if (size > 0)
+            {
+              if (inam)
+                g_free (inam);
+
+              inam = g_new0 (gchar, size + 1);
+              n_read = fread (inam, sizeof (gchar), size, fp);
+              inam[size] = '\0';
+            }
+
+          if (n_read < 1 || (inam && ! g_utf8_validate (inam, -1, NULL)))
+            {
+              fclose (fp);
+              g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                           _("Invalid ANI metadata"));
+              return NULL;
+            }
+
+          /* Metadata length must be even. If data itself is odd,
+           * then an extra 0x00 is added for padding. We read in
+           * that extra byte to keep loading properly.
+           * See discussion in #8562.
+           */
+          if (size % 2 != 0)
+            fread (&padding, sizeof (padding), 1, fp);
+        }
+      else if (memcmp (id, "IART", 4) == 0)
+        {
+          gint n_read = -1;
+
+          fread (&size, sizeof (size), 1, fp);
+          if (size > 0)
+            {
+              if (iart)
+                g_free (iart);
+
+              iart = g_new0 (gchar, size + 1);
+              n_read = fread (iart, sizeof (gchar), size, fp);
+              iart[size] = '\0';
+            }
+
+          if (n_read < 1 || (iart && ! g_utf8_validate (iart, -1, NULL)))
+            {
+              fclose (fp);
+              g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
+                           _("Invalid ANI metadata"));
+              return NULL;
+            }
+
+          if (size % 2 != 0)
+            fread (&padding, sizeof (padding), 1, fp);
+        }
+      else if (memcmp (id, "icon", 4) == 0)
+        {
+          fread (&size, sizeof (size), 1, fp);
+          file_offset = ftell (fp);
+          if (load_thumb)
+            {
+              image = ico_load_thumbnail_image (file, width, height, file_offset, error);
+              break;
+            }
+           else
+             {
+               if (! image)
+                 {
+                   image = ico_load_image (file, &file_offset, 1, error);
+                 }
+               else
+                 {
+                   GimpImage    *temp_image = NULL;
+                   GimpLayer   **layers;
+                   GimpLayer    *new_layer;
+
+                   temp_image = ico_load_image (file, &file_offset, frame + 1,
+                                                error);
+                   layers = gimp_image_get_layers (temp_image);
+                   if (layers)
+                     {
+                       for (gint i = 0; layers[i]; i++)
+                         {
+                           new_layer = gimp_layer_new_from_drawable (GIMP_DRAWABLE (layers[i]),
+                                                                     image);
+                           gimp_image_insert_layer (image, new_layer, NULL, frame);
+                           frame++;
+                         }
+                       g_free (layers);
+                     }
+                   gimp_image_delete (temp_image);
+                 }
+
+               /* Update position after reading icon data */
+               fseek (fp, file_offset, SEEK_SET);
+               if (header.frames > 0)
+                 gimp_progress_update ((gdouble) frame /
+                                       (gdouble) header.frames);
+             }
+        }
+    }
+  fclose (fp);
+
+  /* Saving header metadata */
+  str = g_strdup_printf ("%d", header.jif_rate);
+  parasite = gimp_parasite_new ("ani-header",
+                                GIMP_PARASITE_PERSISTENT,
+                                strlen (str) + 1, (gpointer) str);
+  g_free (str);
+  gimp_image_attach_parasite (image, parasite);
+  gimp_parasite_free (parasite);
+
+  /* Saving INFO block */
+  if (inam && strlen (inam) > 0)
+    {
+      str = g_strdup_printf ("%s", inam);
+      parasite = gimp_parasite_new ("ani-info-inam",
+                                    GIMP_PARASITE_PERSISTENT,
+                                    strlen (str) + 1, (gpointer) str);
+      g_free (str);
+      g_free (inam);
+      gimp_image_attach_parasite (image, parasite);
+      gimp_parasite_free (parasite);
+    }
+
+  if (iart && strlen (iart) > 0)
+    {
+      str = g_strdup_printf ("%s", iart);
+      parasite = gimp_parasite_new ("ani-info-iart",
+                                    GIMP_PARASITE_PERSISTENT,
+                                    strlen (str) + 1, (gpointer) str);
+      g_free (str);
+      g_free (iart);
+      gimp_image_attach_parasite (image, parasite);
+      gimp_parasite_free (parasite);
+    }
 
   gimp_progress_update (1.0);
 
   return image;
 }
 
-gint32
-ico_load_thumbnail_image (const gchar  *filename,
-                          gint         *width,
-                          gint         *height,
-                          GError      **error)
+GimpImage *
+ico_load_thumbnail_image (GFile   *file,
+                          gint    *width,
+                          gint    *height,
+                          gint32   file_offset,
+                          GError **error)
 {
-  FILE        *fp;
-  IcoLoadInfo *info;
-  gint32       image;
-  gint         w     = 0;
-  gint         h     = 0;
-  gint         bpp   = 0;
-  gint         match = 0;
-  gint         i, icon_count;
-  guchar      *buf;
+  FILE          *fp;
+  IcoLoadInfo   *info;
+  IcoFileHeader  header;
+  GimpImage     *image;
+  gint           max_width;
+  gint           max_height;
+  gint           w     = 0;
+  gint           h     = 0;
+  gint           bpp   = 0;
+  gint           match = 0;
+  gint           i, icon_count;
+  guchar        *buf;
 
   gimp_progress_init_printf (_("Opening thumbnail for '%s'"),
-                             gimp_filename_to_utf8 (filename));
+                             gimp_file_get_utf8_name (file));
 
-  fp = g_fopen (filename, "rb");
+  fp = g_fopen (g_file_peek_path (file), "rb");
+
   if (! fp)
     {
       g_set_error (error, G_FILE_ERROR, g_file_error_from_errno (errno),
                    _("Could not open '%s' for reading: %s"),
-                   gimp_filename_to_utf8 (filename), g_strerror (errno));
-      return -1;
+                   gimp_file_get_utf8_name (file), g_strerror (errno));
+      return NULL;
     }
 
-  icon_count = ico_read_init (fp);
+  if (file_offset > 0)
+    fseek (fp, file_offset, SEEK_SET);
+
+  header = ico_read_init (fp);
+  icon_count = header.icon_count;
   if (! icon_count)
     {
       fclose (fp);
-      return -1;
+      return NULL;
     }
 
   D(("*** %s: Microsoft icon file, containing %i icon(s)\n",
-     filename, icon_count));
+     gimp_file_get_utf8_name (file), icon_count));
 
-  info = ico_read_info (fp, icon_count, error);
+  info = ico_read_info (fp, icon_count, file_offset, error);
   if (! info)
     {
       fclose (fp);
-      return -1;
+      return NULL;
     }
+
+  max_width  = 0;
+  max_height = 0;
 
   /* Do a quick scan of the icons in the file to find the best match */
   for (i = 0; i < icon_count; i++)
     {
+      if (info[i].width > max_width)
+        max_width = info[i].width;
+      if (info[i].height > max_height)
+        max_height = info[i].height;
+
       if ((info[i].width  > w && w < *width) ||
           (info[i].height > h && h < *height))
         {
@@ -792,15 +1075,16 @@ ico_load_thumbnail_image (const gchar  *filename,
     }
 
   if (w <= 0 || h <= 0)
-    return -1;
+    return NULL;
 
   image = gimp_image_new (w, h, GIMP_RGB);
   buf = g_new (guchar, w*h*4);
-  ico_load_layer (fp, image, match, buf, w*h*4, info+match);
+  ico_load_layer (fp, image, match, buf, w*h*4, file_offset,
+                  "Thumbnail", info + match);
   g_free (buf);
 
-  *width  = w;
-  *height = h;
+  *width  = max_width;
+  *height = max_height;
 
   D(("*** thumbnail successfully loaded.\n\n"));
 

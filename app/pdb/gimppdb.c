@@ -30,9 +30,9 @@
 #include "pdb-types.h"
 
 #include "core/gimp.h"
+#include "core/gimpitem.h"
 #include "core/gimp-memsize.h"
 #include "core/gimpcontext.h"
-#include "core/gimpmarshal.h"
 #include "core/gimpprogress.h"
 
 #include "gimppdb.h"
@@ -82,8 +82,7 @@ gimp_pdb_class_init (GimpPDBClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpPDBClass, register_procedure),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_PROCEDURE);
 
@@ -92,8 +91,7 @@ gimp_pdb_class_init (GimpPDBClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpPDBClass, unregister_procedure),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_PROCEDURE);
 
@@ -390,6 +388,7 @@ gimp_pdb_execute_procedure_by_name (GimpPDB       *pdb,
     {
       GValue *value;
       GType   arg_type;
+      GType   value_type;
       gchar  *error_msg = NULL;
 
       arg_type = va_arg (va_args, GType);
@@ -399,10 +398,30 @@ gimp_pdb_execute_procedure_by_name (GimpPDB       *pdb,
 
       value = gimp_value_array_index (args, i);
 
-      if (arg_type != G_VALUE_TYPE (value))
+      value_type = G_VALUE_TYPE (value);
+
+      /* G_TYPE_INT is widely abused for enums and booleans in
+       * old plug-ins, silently copy stuff into integers when enums
+       * and booleans are passed
+       */
+      if (arg_type != value_type
+
+          &&
+
+          value_type == G_TYPE_INT
+
+          &&
+
+          (arg_type == G_TYPE_BOOLEAN  ||
+           g_type_is_a (arg_type, G_TYPE_ENUM)))
+        {
+          arg_type = value_type;
+        }
+
+      if (arg_type != value_type)
         {
           GError      *pdb_error;
-          const gchar *expected = g_type_name (G_VALUE_TYPE (value));
+          const gchar *expected = g_type_name (value_type);
           const gchar *got      = g_type_name (arg_type);
 
           gimp_value_array_unref (args);
@@ -424,7 +443,16 @@ gimp_pdb_execute_procedure_by_name (GimpPDB       *pdb,
           return return_vals;
         }
 
-      G_VALUE_COLLECT (value, va_args, G_VALUE_NOCOPY_CONTENTS, &error_msg);
+      if (GIMP_VALUE_HOLDS_INT32_ARRAY (value)  ||
+          GIMP_VALUE_HOLDS_DOUBLE_ARRAY (value)  ||
+          GIMP_VALUE_HOLDS_CORE_OBJECT_ARRAY (value))
+        {
+          g_value_set_boxed (value, va_arg (va_args, gpointer));
+        }
+      else
+        {
+          G_VALUE_COLLECT (value, va_args, G_VALUE_NOCOPY_CONTENTS, &error_msg);
+        }
 
       if (error_msg)
         {

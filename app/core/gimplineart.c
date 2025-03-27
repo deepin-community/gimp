@@ -23,6 +23,7 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 
 #include "core-types.h"
@@ -38,7 +39,6 @@
 #include "gimpdrawable.h"
 #include "gimpimage.h"
 #include "gimplineart.h"
-#include "gimpmarshal.h"
 #include "gimppickable.h"
 #include "gimpprojection.h"
 #include "gimpviewable.h"
@@ -59,6 +59,7 @@ enum
   PROP_SELECT_TRANSPARENT,
   PROP_MAX_GROW,
   PROP_THRESHOLD,
+  PROP_AUTOMATIC_CLOSURE,
   PROP_SPLINE_MAX_LEN,
   PROP_SEGMENT_MAX_LEN,
 };
@@ -81,6 +82,7 @@ struct _GimpLineArtPrivate
   /* Used in the closing step. */
   gboolean      select_transparent;
   gdouble       threshold;
+  gboolean      automatic_closure;
   gint          spline_max_len;
   gint          segment_max_len;
   gboolean      max_len_bound;
@@ -95,6 +97,7 @@ typedef struct
 
   gboolean     select_transparent;
   gdouble      threshold;
+  gboolean     automatic_closure;
   gint         spline_max_len;
   gint         segment_max_len;
 } LineArtData;
@@ -182,6 +185,7 @@ static void            gimp_line_art_input_invalidate_preview  (GimpViewable    
 static GeglBuffer    * gimp_line_art_close                     (GeglBuffer             *buffer,
                                                                 gboolean                select_transparent,
                                                                 gdouble                 stroke_threshold,
+                                                                gboolean                automatic_closure,
                                                                 gint                    spline_max_length,
                                                                 gint                    segment_max_length,
                                                                 gint                    minimal_lineart_area,
@@ -305,6 +309,8 @@ static void       gimp_edgelset_next8             (const GeglBuffer  *buffer,
 G_DEFINE_TYPE_WITH_CODE (GimpLineArt, gimp_line_art, GIMP_TYPE_OBJECT,
                          G_ADD_PRIVATE (GimpLineArt))
 
+#define parent_class gimp_line_art_parent_class
+
 static guint gimp_line_art_signals[LAST_SIGNAL] = { 0 };
 
 static void
@@ -317,16 +323,14 @@ gimp_line_art_class_init (GimpLineArtClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpLineArtClass, computing_start),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
   gimp_line_art_signals[COMPUTING_END] =
     g_signal_new ("computing-end",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpLineArtClass, computing_end),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->finalize     = gimp_line_art_finalize;
@@ -353,6 +357,13 @@ gimp_line_art_class_init (GimpLineArtClass *klass)
                                                      _("Maximum number of pixels grown under the line art"),
                                                      1, 100, 3,
                                                      G_PARAM_CONSTRUCT | GIMP_PARAM_READWRITE));
+
+  g_object_class_install_property (object_class, PROP_AUTOMATIC_CLOSURE,
+                                   g_param_spec_boolean ("automatic-closure",
+                                                         _("Whether or not we should perform the closing step"),
+                                                         _("Whether or not we should perform the closing step"),
+                                                         TRUE,
+                                                         G_PARAM_CONSTRUCT | GIMP_PARAM_READWRITE));
 
   g_object_class_install_property (object_class, PROP_SPLINE_MAX_LEN,
                                    g_param_spec_int ("spline-max-length",
@@ -383,6 +394,8 @@ gimp_line_art_finalize (GObject *object)
   line_art->priv->frozen = FALSE;
 
   gimp_line_art_set_input (line_art, NULL);
+
+  G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
 static void
@@ -409,6 +422,13 @@ gimp_line_art_set_property (GObject      *object,
       if (line_art->priv->threshold != g_value_get_double (value))
         {
           line_art->priv->threshold = g_value_get_double (value);
+          gimp_line_art_compute (line_art);
+        }
+      break;
+    case PROP_AUTOMATIC_CLOSURE:
+      if (line_art->priv->automatic_closure != g_value_get_boolean (value))
+        {
+          line_art->priv->automatic_closure = g_value_get_boolean (value);
           gimp_line_art_compute (line_art);
         }
       break;
@@ -455,6 +475,9 @@ gimp_line_art_get_property (GObject    *object,
       break;
     case PROP_THRESHOLD:
       g_value_set_double (value, line_art->priv->threshold);
+      break;
+    case PROP_AUTOMATIC_CLOSURE:
+      g_value_set_boolean (value, line_art->priv->automatic_closure);
       break;
     case PROP_SPLINE_MAX_LEN:
       g_value_set_int (value, line_art->priv->spline_max_len);
@@ -752,6 +775,7 @@ gimp_line_art_prepare_async_func (GimpAsync   *async,
   closed = gimp_line_art_close (buffer,
                                 select_transparent,
                                 data->threshold,
+                                data->automatic_closure,
                                 data->spline_max_len,
                                 data->segment_max_len,
                                 /*minimal_lineart_area,*/
@@ -814,6 +838,7 @@ line_art_data_new (GeglBuffer  *buffer,
   data->buffer             = g_object_ref (buffer);
   data->select_transparent = line_art->priv->select_transparent;
   data->threshold          = line_art->priv->threshold;
+  data->automatic_closure  = line_art->priv->automatic_closure;
   data->spline_max_len     = line_art->priv->spline_max_len;
   data->segment_max_len    = line_art->priv->segment_max_len;
 
@@ -882,6 +907,9 @@ gimp_line_art_input_invalidate_preview (GimpViewable *viewable,
  *                      luminosity.
  * @stroke_threshold: [0-1] threshold value for detecting stroke pixels
  *                    (higher values will detect more stroke pixels).
+ * @automatic_closure: whether the closing step should be performed or
+ *                     not. @spline_max_length and @segment_max_len are
+ *                     used only if @automatic_closure is %TRUE.
  * @spline_max_length: the maximum length for creating splines between
  *                     end points.
  * @segment_max_length: the maximum length for creating segments
@@ -918,7 +946,7 @@ gimp_line_art_input_invalidate_preview (GimpViewable *viewable,
  * https://hal.archives-ouvertes.fr/hal-01891876
  *
  * Returns: a new #GeglBuffer of format "Y u8" representing the
- *          binarized @line_art. If @lineart_distmap is not #NULL, a
+ *          binarized @line_art. If @lineart_distmap is not %NULL, a
  *          newly allocated float buffer is returned, which can be used
  *          for overflowing created masks later.
  */
@@ -926,6 +954,7 @@ static GeglBuffer *
 gimp_line_art_close (GeglBuffer  *buffer,
                      gboolean     select_transparent,
                      gdouble      stroke_threshold,
+                     gboolean     automatic_closure,
                      gint         spline_max_length,
                      gint         segment_max_length,
                      gint         minimal_lineart_area,
@@ -1029,7 +1058,8 @@ gimp_line_art_close (GeglBuffer  *buffer,
 
   closed = g_object_ref (strokes);
 
-  if (spline_max_length > 0 || segment_max_length > 0)
+  if (automatic_closure &&
+      (spline_max_length > 0 || segment_max_length > 0))
     {
       GArray     *keypoints           = NULL;
       GHashTable *visited             = NULL;
@@ -1311,8 +1341,7 @@ gimp_line_art_close (GeglBuffer  *buffer,
                                  "metric",    GEGL_DISTANCE_METRIC_EUCLIDEAN,
                                  "normalize", FALSE,
                                  NULL);
-      gegl_node_connect_to (input, "output",
-                            op, "input");
+      gegl_node_link (input, op);
       gegl_node_blit (op, 1.0, gegl_buffer_get_extent (closed),
                       NULL, *closed_distmap,
                       GEGL_AUTO_ROWSTRIDE, GEGL_BLIT_DEFAULT);
@@ -2086,7 +2115,7 @@ gimp_number_of_transitions (GArray     *pixels,
  * gimp_line_art_allow_closure:
  * @mask: the current state of line art closure.
  * @pixels: the pixels of a candidate closure (spline or segment).
- * @fill_pixels: #GList of unsignificant pixels to bucket fill.
+ * @fill_pixels: #GList of insignificant pixels to bucket fill.
  * @significant_size: number of pixels for area to be considered
  *                    "significant".
  * @minimum_size: number of pixels for area to be allowed.
@@ -2096,13 +2125,13 @@ gimp_number_of_transitions (GArray     *pixels,
  * will be below @minimum_size. If it creates such small areas, the
  * function will refuse this candidate spline/segment, with the
  * exception of very small areas under @significant_size. These
- * micro-area are considered "unsignificant" and accepted (because they
+ * micro-area are considered "insignificant" and accepted (because they
  * can be created in some conditions, for instance when created curves
  * cross or start from a same endpoint), and one pixel for each
  * micro-area will be added to @fill_pixels to be later filled along
  * with the candidate pixels.
  *
- * Returns: #TRUE if @pixels should be added to @mask, #FALSE otherwise.
+ * Returns: %TRUE if @pixels should be added to @mask, %FALSE otherwise.
  */
 static gboolean
 gimp_line_art_allow_closure (GeglBuffer *mask,
@@ -2313,7 +2342,7 @@ gimp_lineart_estimate_strokes_radii (GeglBuffer *mask,
                              "metric",    GEGL_DISTANCE_METRIC_EUCLIDEAN,
                              "normalize", FALSE,
                              NULL);
-  gegl_node_connect_to (input, "output", op, "input");
+  gegl_node_link (input, op);
   gegl_node_blit (op, 1.0, gegl_buffer_get_extent (mask),
                   NULL, dist, GEGL_AUTO_ROWSTRIDE, GEGL_BLIT_DEFAULT);
   g_object_unref (graph);
@@ -2632,7 +2661,7 @@ gimp_edgel_track_mark (GeglBuffer *mask,
  * Follows a line border, starting from @start_edgel to compute the area
  * enclosed by this border.
  * Unfortunately this may return a negative area when the line does not
- * close a zone. In this case, there is an uncertaincy on the size of
+ * close a zone. In this case, there is an uncertainty on the size of
  * the created zone, and we should consider it a big size.
  *
  * Returns: the area enclosed by the followed line, or a negative value

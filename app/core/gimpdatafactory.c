@@ -51,8 +51,10 @@ enum
   PROP_DATA_TYPE,
   PROP_PATH_PROPERTY_NAME,
   PROP_WRITABLE_PROPERTY_NAME,
+  PROP_EXT_PROPERTY_NAME,
   PROP_NEW_FUNC,
-  PROP_GET_STANDARD_FUNC
+  PROP_GET_STANDARD_FUNC,
+  PROP_UNIQUE_NAMES
 };
 
 
@@ -63,9 +65,11 @@ struct _GimpDataFactoryPrivate
   GType                    data_type;
   GimpContainer           *container;
   GimpContainer           *container_obsolete;
+  gboolean                 unique_names;
 
   gchar                   *path_property_name;
   gchar                   *writable_property_name;
+  gchar                   *ext_property_name;
 
   GimpDataNewFunc          data_new_func;
   GimpDataGetStandardFunc  data_get_standard_func;
@@ -158,6 +162,13 @@ gimp_data_factory_class_init (GimpDataFactoryClass *klass)
                                                         GIMP_PARAM_READWRITE |
                                                         G_PARAM_CONSTRUCT_ONLY));
 
+  g_object_class_install_property (object_class, PROP_EXT_PROPERTY_NAME,
+                                   g_param_spec_string ("ext-property-name",
+                                                        NULL, NULL,
+                                                        NULL,
+                                                        GIMP_PARAM_READWRITE |
+                                                        G_PARAM_CONSTRUCT_ONLY));
+
   g_object_class_install_property (object_class, PROP_NEW_FUNC,
                                    g_param_spec_pointer ("new-func",
                                                          NULL, NULL,
@@ -169,6 +180,14 @@ gimp_data_factory_class_init (GimpDataFactoryClass *klass)
                                                          NULL, NULL,
                                                          GIMP_PARAM_READWRITE |
                                                          G_PARAM_CONSTRUCT_ONLY));
+
+  g_object_class_install_property (object_class, PROP_UNIQUE_NAMES,
+                                   g_param_spec_boolean ("unique-names",
+                                                         NULL, NULL,
+                                                         TRUE,
+                                                         GIMP_PARAM_READWRITE |
+                                                         G_PARAM_CONSTRUCT_ONLY));
+
 }
 
 static void
@@ -191,7 +210,8 @@ gimp_data_factory_constructed (GObject *object)
   gimp_assert (GIMP_DATA_FACTORY_GET_CLASS (object)->data_init != NULL);
   gimp_assert (GIMP_DATA_FACTORY_GET_CLASS (object)->data_refresh != NULL);
 
-  priv->container = gimp_list_new (priv->data_type, TRUE);
+  /* Passing along the "unique names" property to the data container. */
+  priv->container = gimp_list_new (priv->data_type, priv->unique_names);
   gimp_list_set_sort_func (GIMP_LIST (priv->container),
                            (GCompareFunc) gimp_data_compare);
 
@@ -226,12 +246,20 @@ gimp_data_factory_set_property (GObject      *object,
       priv->writable_property_name = g_value_dup_string (value);
       break;
 
+    case PROP_EXT_PROPERTY_NAME:
+      priv->ext_property_name = g_value_dup_string (value);
+      break;
+
     case PROP_NEW_FUNC:
       priv->data_new_func = g_value_get_pointer (value);
       break;
 
     case PROP_GET_STANDARD_FUNC:
       priv->data_get_standard_func = g_value_get_pointer (value);
+      break;
+
+    case PROP_UNIQUE_NAMES:
+      priv->unique_names = g_value_get_boolean (value);
       break;
 
     default:
@@ -266,12 +294,20 @@ gimp_data_factory_get_property (GObject    *object,
       g_value_set_string (value, priv->writable_property_name);
       break;
 
+    case PROP_EXT_PROPERTY_NAME:
+      g_value_set_string (value, priv->ext_property_name);
+      break;
+
     case PROP_NEW_FUNC:
       g_value_set_pointer (value, priv->data_new_func);
       break;
 
     case PROP_GET_STANDARD_FUNC:
       g_value_set_pointer (value, priv->data_get_standard_func);
+      break;
+
+    case PROP_UNIQUE_NAMES:
+      g_value_set_boolean (value, priv->unique_names);
       break;
 
     default:
@@ -298,6 +334,7 @@ gimp_data_factory_finalize (GObject *object)
 
   g_clear_pointer (&priv->path_property_name,     g_free);
   g_clear_pointer (&priv->writable_property_name, g_free);
+  g_clear_pointer (&priv->ext_property_name,      g_free);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -362,6 +399,9 @@ gimp_data_factory_real_data_save (GimpDataFactory *factory)
       GimpData *data  = list->data;
       GError   *error = NULL;
 
+      if (gimp_data_get_image (data))
+        continue;
+
       if (! gimp_data_get_file (data))
         gimp_data_create_filename (data, writable_dir);
 
@@ -419,6 +459,7 @@ gimp_data_factory_real_data_duplicate (GimpDataFactory *factory,
       gint         copy_len;
       gint         number;
       gchar       *new_name;
+      GError      *error = NULL;
 
       ext      = strrchr (name, '#');
       copy_len = strlen (_("copy"));
@@ -438,8 +479,12 @@ gimp_data_factory_real_data_duplicate (GimpDataFactory *factory,
 
       gimp_object_take_name (GIMP_OBJECT (new_data), new_name);
 
+      if (! gimp_data_factory_data_save_single (factory, new_data, &error))
+        g_critical ("%s: data saving failed: %s", G_STRFUNC, error->message);
+
       gimp_container_add (priv->container, GIMP_OBJECT (new_data));
       g_object_unref (new_data);
+      g_clear_error (&error);
     }
 
   return new_data;
@@ -493,6 +538,12 @@ gimp_data_factory_data_init (GimpDataFactory *factory,
 
   signal_name = g_strdup_printf ("notify::%s", priv->path_property_name);
   g_signal_connect_object (priv->gimp->config, signal_name,
+                           G_CALLBACK (gimp_data_factory_path_notify),
+                           factory, 0);
+  g_free (signal_name);
+
+  signal_name = g_strdup_printf ("notify::%s", priv->ext_property_name);
+  g_signal_connect_object (priv->gimp->extension_manager, signal_name,
                            G_CALLBACK (gimp_data_factory_path_notify),
                            factory, 0);
   g_free (signal_name);
@@ -627,8 +678,14 @@ gimp_data_factory_data_new (GimpDataFactory *factory,
 
       if (data)
         {
+          GError *error = NULL;
+
+          if (! gimp_data_factory_data_save_single (factory, data, &error))
+            g_critical ("%s: data saving failed: %s", G_STRFUNC, error->message);
+
           gimp_container_add (priv->container, GIMP_OBJECT (data));
           g_object_unref (data);
+          g_clear_error (&error);
 
           return data;
         }
@@ -703,7 +760,7 @@ gimp_data_factory_data_save_single (GimpDataFactory  *factory,
   g_return_val_if_fail (GIMP_IS_DATA (data), FALSE);
   g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
-  if (! gimp_data_is_dirty (data))
+  if (! gimp_data_is_dirty (data) || gimp_data_get_image (data))
     return TRUE;
 
   if (! gimp_data_get_file (data))
@@ -856,6 +913,21 @@ gimp_data_factory_get_data_path_writable (GimpDataFactory *factory)
   return list;
 }
 
+const GList *
+gimp_data_factory_get_data_path_ext (GimpDataFactory *factory)
+{
+  GimpDataFactoryPrivate *priv = GET_PRIVATE (factory);
+  GList                  *list = NULL;
+
+  g_return_val_if_fail (GIMP_IS_DATA_FACTORY (factory), NULL);
+
+  g_object_get (priv->gimp->extension_manager,
+                priv->ext_property_name, &list,
+                NULL);
+
+  return list;
+}
+
 
 /*  private functions  */
 
@@ -895,24 +967,47 @@ gimp_data_factory_get_save_dir (GimpDataFactory  *factory,
                                              (GCompareFunc) gimp_file_compare);
           if (found)
             {
-              GFile *dir = found->data;
+              GFile  *dir         = found->data;
+              GError *mkdir_error = NULL;
 
               found_any = TRUE;
 
-              if (g_file_query_file_type (dir, G_FILE_QUERY_INFO_NONE,
+              /* We always try and create but do not check the error code
+               * because some errors might be non-fatale. E.g.
+               * G_IO_ERROR_EXISTS may mean either that the folder exists
+               * (good) or that a file of another type exists (bad).
+               * I am also unsure if G_IO_ERROR_NOT_SUPPORTED might happen in
+               * cases where creating directories is forbidden but one might
+               * already exist.
+               * So in the end, we create then check the file type.
+               */
+              if (! g_file_make_directory_with_parents (dir, NULL, &mkdir_error) &&
+                  g_file_query_file_type (dir, G_FILE_QUERY_INFO_NONE,
                                           NULL) != G_FILE_TYPE_DIRECTORY)
                 {
                   /*  error out only if this is the last chance  */
                   if (! list->next)
                     {
-                      g_set_error (error, GIMP_DATA_ERROR, 0,
-                                   _("You have a writable data folder "
-                                     "configured (%s), but this folder does "
-                                     "not exist. Please create the folder or "
-                                     "fix your configuration in the "
-                                     "Preferences dialog's 'Folders' section."),
-                                   gimp_file_get_utf8_name (dir));
+                      if (mkdir_error)
+                        g_set_error (error, GIMP_DATA_ERROR, 0,
+                                     _("You have a writable data folder "
+                                       "configured (%s), but this folder could "
+                                       "not be created: \"%s\"\n\n"
+                                       "Please check your configuration in the "
+                                       "Preferences dialog's 'Folders' section."),
+                                     gimp_file_get_utf8_name (dir),
+                                     mkdir_error->message);
+                      else
+                        g_set_error (error, GIMP_DATA_ERROR, 0,
+                                     _("You have a writable data folder "
+                                       "configured (%s), but this folder does "
+                                       "not exist. Please create the folder or "
+                                       "fix your configuration in the "
+                                       "Preferences dialog's 'Folders' section."),
+                                     gimp_file_get_utf8_name (dir));
                     }
+
+                  g_clear_error (&mkdir_error);
                 }
               else
                 {

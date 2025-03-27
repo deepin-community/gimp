@@ -28,14 +28,16 @@
 #include "core/gimpchannel.h"
 #include "core/gimplayer.h"
 
-#include "vectors/gimpvectors.h"
+#include "vectors/gimppath.h"
 
+#include "widgets/gimpcontainerview.h"
 #include "widgets/gimpdialogfactory.h"
 #include "widgets/gimpitemtreeview.h"
 #include "widgets/gimpwidgets-utils.h"
 #include "widgets/gimpwindowstrategy.h"
 
 #include "gimptools-utils.h"
+
 
 
 /*  public functions  */
@@ -46,8 +48,7 @@ gimp_tools_blink_lock_box (Gimp     *gimp,
 {
   GtkWidget        *dockable;
   GimpItemTreeView *view;
-  GdkScreen        *screen;
-  gint              monitor;
+  GdkMonitor       *monitor;
   const gchar      *identifier;
 
   g_return_if_fail (GIMP_IS_GIMP (gimp));
@@ -57,24 +58,38 @@ gimp_tools_blink_lock_box (Gimp     *gimp,
     identifier = "gimp-layer-list";
   else if (GIMP_IS_CHANNEL (item))
     identifier = "gimp-channel-list";
-  else if (GIMP_IS_VECTORS (item))
+  else if (GIMP_IS_PATH (item))
     identifier = "gimp-vectors-list";
   else
     return;
 
-  monitor = gimp_get_monitor_at_pointer (&screen);
+  monitor = gimp_get_monitor_at_pointer ();
 
   dockable = gimp_window_strategy_show_dockable_dialog (
     GIMP_WINDOW_STRATEGY (gimp_get_window_strategy (gimp)),
     gimp,
     gimp_dialog_factory_get_singleton (),
-    screen, monitor,
+    monitor,
     identifier);
 
   if (! dockable)
     return;
 
   view = GIMP_ITEM_TREE_VIEW (gtk_bin_get_child (GTK_BIN (dockable)));
+  gimp_item_tree_view_blink_lock (view, item);
+}
 
-  gimp_widget_blink (gimp_item_tree_view_get_lock_box (view));
+void
+gimp_tools_show_tool_options (Gimp *gimp)
+{
+  GdkMonitor *monitor;
+
+  g_return_if_fail (GIMP_IS_GIMP (gimp));
+
+  monitor = gimp_get_monitor_at_pointer ();
+
+  gimp_window_strategy_show_dockable_dialog (GIMP_WINDOW_STRATEGY (gimp_get_window_strategy (gimp)),
+                                             gimp,
+                                             gimp_dialog_factory_get_singleton (),
+                                             monitor, "gimp-tool-options");
 }

@@ -47,6 +47,14 @@ enum
 };
 
 
+struct _GimpEnumLabel
+{
+  GtkLabel    parent_instance;
+
+  GEnumClass *enum_class;
+};
+
+
 static void   gimp_enum_label_finalize     (GObject      *object);
 static void   gimp_enum_label_get_property (GObject      *object,
                                             guint         property_id,
@@ -111,9 +119,9 @@ gimp_enum_label_init (GimpEnumLabel *enum_label)
 static void
 gimp_enum_label_finalize (GObject *object)
 {
-  GimpEnumLabel *enum_label = GIMP_ENUM_LABEL (object);
+  GimpEnumLabel *label = GIMP_ENUM_LABEL (object);
 
-  g_clear_pointer (&enum_label->enum_class, g_type_class_unref);
+  g_clear_pointer (&label->enum_class, g_type_class_unref);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -170,7 +178,7 @@ gimp_enum_label_set_property (GObject      *object,
  * @enum_type: the #GType of an enum
  * @value:     an enum value
  *
- * Return value: a new #GimpEnumLabel.
+ * Returns: a new #GimpEnumLabel.
  *
  * Since: 2.4
  **/

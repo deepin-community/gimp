@@ -57,6 +57,7 @@ gimp_clone_tool_register (GimpToolRegisterCallback  callback,
                 GIMP_TYPE_CLONE_OPTIONS,
                 gimp_clone_options_gui,
                 GIMP_PAINT_OPTIONS_CONTEXT_MASK |
+                GIMP_CONTEXT_PROP_MASK_EXPAND   |
                 GIMP_CONTEXT_PROP_MASK_PATTERN,
                 "gimp-clone-tool",
                 _("Clone"),
@@ -85,7 +86,7 @@ gimp_clone_tool_init (GimpCloneTool *clone)
   gimp_tool_control_set_tool_cursor     (tool->control,
                                          GIMP_TOOL_CURSOR_CLONE);
   gimp_tool_control_set_action_object_2 (tool->control,
-                                         "context/context-pattern-select-set");
+                                         "context-pattern-select-set");
 
   paint_tool->status      = _("Click to clone");
   paint_tool->status_ctrl = _("%s to set a new clone source");

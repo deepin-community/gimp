@@ -44,16 +44,21 @@ struct _GimpItemClass
   /*  signals  */
   void            (* removed)               (GimpItem            *item);
   void            (* visibility_changed)    (GimpItem            *item);
-  void            (* linked_changed)        (GimpItem            *item);
   void            (* color_tag_changed)     (GimpItem            *item);
   void            (* lock_content_changed)  (GimpItem            *item);
   void            (* lock_position_changed) (GimpItem            *item);
+  void            (* lock_visibility_changed) (GimpItem            *item);
 
   /*  virtual functions  */
   void            (* unset_removed)      (GimpItem               *item);
   gboolean        (* is_attached)        (GimpItem               *item);
-  gboolean        (* is_content_locked)  (GimpItem               *item);
-  gboolean        (* is_position_locked) (GimpItem               *item);
+  gboolean        (* is_content_locked)  (GimpItem               *item,
+                                          GimpItem              **locked_item);
+  gboolean        (* is_position_locked) (GimpItem               *item,
+                                          GimpItem              **locked_item,
+                                          gboolean                checking_children);
+  gboolean        (* is_visibility_locked) (GimpItem               *item,
+                                            GimpItem              **locked_item);
   GimpItemTree  * (* get_tree)           (GimpItem               *item);
   gboolean        (* bounds)             (GimpItem               *item,
                                           gdouble                *x,
@@ -294,13 +299,13 @@ GimpTransformResize   gimp_item_get_clip     (GimpItem           *item,
                                               GimpTransformResize clip_result);
 
 gboolean        gimp_item_fill               (GimpItem           *item,
-                                              GimpDrawable       *drawable,
+                                              GList              *drawables,
                                               GimpFillOptions    *fill_options,
                                               gboolean            push_undo,
                                               GimpProgress       *progress,
                                               GError            **error);
 gboolean        gimp_item_stroke             (GimpItem           *item,
-                                              GimpDrawable       *drawable,
+                                              GList              *drawables,
                                               GimpContext        *context,
                                               GimpStrokeOptions  *stroke_options,
                                               GimpPaintOptions   *paint_options,
@@ -320,8 +325,8 @@ void            gimp_item_add_offset_node    (GimpItem           *item,
 void            gimp_item_remove_offset_node (GimpItem           *item,
                                               GeglNode           *node);
 
-gint            gimp_item_get_ID             (GimpItem           *item);
-GimpItem      * gimp_item_get_by_ID          (Gimp               *gimp,
+gint            gimp_item_get_id             (GimpItem           *item);
+GimpItem      * gimp_item_get_by_id          (Gimp               *gimp,
                                               gint                id);
 
 GimpTattoo      gimp_item_get_tattoo         (GimpItem           *item);
@@ -350,10 +355,9 @@ void            gimp_item_parasite_detach    (GimpItem           *item,
                                               gboolean            push_undo);
 const GimpParasite * gimp_item_parasite_find (GimpItem           *item,
                                               const gchar        *name);
-gchar        ** gimp_item_parasite_list      (GimpItem           *item,
-                                              gint               *count);
+gchar        ** gimp_item_parasite_list      (GimpItem           *item);
 
-void            gimp_item_set_visible        (GimpItem           *item,
+gboolean        gimp_item_set_visible        (GimpItem           *item,
                                               gboolean            visible,
                                               gboolean            push_undo);
 gboolean        gimp_item_get_visible        (GimpItem           *item);
@@ -361,11 +365,6 @@ gboolean        gimp_item_is_visible         (GimpItem           *item);
 
 void        gimp_item_bind_visible_to_active (GimpItem           *item,
                                               gboolean            bind);
-
-void            gimp_item_set_linked         (GimpItem           *item,
-                                              gboolean            linked,
-                                              gboolean            push_undo);
-gboolean        gimp_item_get_linked         (GimpItem           *item);
 
 void            gimp_item_set_color_tag      (GimpItem           *item,
                                               GimpColorTag        color_tag,
@@ -378,14 +377,24 @@ void            gimp_item_set_lock_content   (GimpItem           *item,
                                               gboolean            push_undo);
 gboolean        gimp_item_get_lock_content   (GimpItem           *item);
 gboolean        gimp_item_can_lock_content   (GimpItem           *item);
-gboolean        gimp_item_is_content_locked  (GimpItem           *item);
+gboolean        gimp_item_is_content_locked  (GimpItem           *item,
+                                              GimpItem          **locked_item);
 
 void            gimp_item_set_lock_position  (GimpItem          *item,
                                               gboolean           lock_position,
                                               gboolean           push_undo);
 gboolean        gimp_item_get_lock_position  (GimpItem          *item);
 gboolean        gimp_item_can_lock_position  (GimpItem          *item);
-gboolean        gimp_item_is_position_locked (GimpItem          *item);
+gboolean        gimp_item_is_position_locked (GimpItem          *item,
+                                              GimpItem         **locked_item);
+
+void            gimp_item_set_lock_visibility  (GimpItem        *item,
+                                                gboolean         lock_visibility,
+                                                gboolean         push_undo);
+gboolean        gimp_item_get_lock_visibility  (GimpItem        *item);
+gboolean        gimp_item_can_lock_visibility  (GimpItem        *item);
+gboolean        gimp_item_is_visibility_locked (GimpItem        *item,
+                                                GimpItem       **locked_item);
 
 gboolean        gimp_item_mask_bounds        (GimpItem           *item,
                                               gint               *x1,

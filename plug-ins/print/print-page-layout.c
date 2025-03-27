@@ -101,7 +101,7 @@ static PrintSizeInfo  info;
 
 GtkWidget *
 print_page_layout_gui (PrintData   *data,
-                       const gchar *help_id)
+                       const gchar *help)
 {
   GtkWidget    *main_hbox;
   GtkWidget    *main_vbox;
@@ -114,8 +114,8 @@ print_page_layout_gui (PrintData   *data,
   memset (&info, 0, sizeof (PrintSizeInfo));
 
   info.data         = data;
-  info.image_width  = gimp_drawable_width (data->drawable_id);
-  info.image_height = gimp_drawable_height (data->drawable_id);
+  info.image_width  = gimp_drawable_get_width (data->drawable);
+  info.image_height = gimp_drawable_get_height (data->drawable);
 
   setup = gtk_print_operation_get_default_page_setup (data->operation);
   if (! setup)
@@ -139,12 +139,16 @@ print_page_layout_gui (PrintData   *data,
   /* size entry area for the image's print size */
 
   frame = print_size_frame (data, label_group, entry_group);
+  gtk_widget_set_vexpand (frame, FALSE);
+  gtk_widget_set_valign (frame, GTK_ALIGN_START);
   gtk_box_pack_start (GTK_BOX (main_vbox), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
 
   /* offset entry area for the image's offset position */
 
   frame = print_offset_frame (data, label_group, entry_group);
+  gtk_widget_set_vexpand (frame, FALSE);
+  gtk_widget_set_valign (frame, GTK_ALIGN_START);
   gtk_box_pack_start (GTK_BOX (main_vbox), frame, FALSE, FALSE, 0);
   gtk_widget_show (frame);
 
@@ -177,7 +181,7 @@ print_page_layout_gui (PrintData   *data,
   gtk_box_pack_start (GTK_BOX (main_hbox), frame, TRUE, TRUE, 0);
   gtk_widget_show (frame);
 
-  info.preview = print_preview_new (setup, data->drawable_id);
+  info.preview = print_preview_new (setup, data->drawable);
   print_preview_set_use_full_page (PRINT_PREVIEW (info.preview),
                                    data->use_full_page);
   gtk_container_add (GTK_CONTAINER (frame), info.preview);
@@ -196,7 +200,7 @@ print_page_layout_gui (PrintData   *data,
                            G_CALLBACK (update_custom_widget),
                            main_hbox, 0);
 
-  gimp_help_connect (main_hbox, gimp_standard_help_func, help_id, NULL);
+  gimp_help_connect (main_hbox, NULL, gimp_standard_help_func, help, NULL, NULL);
 
   return main_hbox;
 }
@@ -258,7 +262,7 @@ print_size_frame (PrintData    *data,
   gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
   gtk_widget_show (hbox);
 
-  entry = gimp_size_entry_new (1, data->unit, "%p",
+  entry = gimp_size_entry_new (1, data->unit, "%n",
                                FALSE, FALSE, FALSE, SB_WIDTH,
                                GIMP_SIZE_ENTRY_UPDATE_SIZE);
   gtk_box_pack_start (GTK_BOX (hbox), entry, FALSE, FALSE, 0);
@@ -266,16 +270,14 @@ print_size_frame (PrintData    *data,
 
   info.size_entry = GIMP_SIZE_ENTRY (entry);
 
-  gtk_table_set_row_spacings (GTK_TABLE (entry), 2);
-  gtk_table_set_col_spacing (GTK_TABLE (entry), 0, 6);
-  gtk_table_set_col_spacing (GTK_TABLE (entry), 2, 6);
+  gtk_grid_set_row_spacing (GTK_GRID (entry), 2);
 
-  adj = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  adj = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   height = gimp_spin_button_new (adj, 1, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (height), TRUE);
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (entry),
                              GTK_SPIN_BUTTON (height), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (entry), height, 1, 2, 0, 1);
+  gtk_grid_attach (GTK_GRID (entry), height, 1, 0, 1, 1);
   gtk_widget_show (height);
 
   gtk_size_group_add_widget (entry_group, height);
@@ -310,16 +312,14 @@ print_size_frame (PrintData    *data,
 
   info.resolution_entry = GIMP_SIZE_ENTRY (entry);
 
-  gtk_table_set_row_spacings (GTK_TABLE (entry), 2);
-  gtk_table_set_col_spacing (GTK_TABLE (entry), 0, 6);
-  gtk_table_set_col_spacing (GTK_TABLE (entry), 2, 6);
+  gtk_grid_set_row_spacing (GTK_GRID (entry), 2);
 
-  adj = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  adj = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   height = gimp_spin_button_new (adj, 1, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (height), TRUE);
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (entry),
                              GTK_SPIN_BUTTON (height), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (entry), height, 1, 2, 0, 1);
+  gtk_grid_attach (GTK_GRID (entry), height, 1, 0, 1, 1);
   gtk_widget_show (height);
 
   gtk_size_group_add_widget (entry_group, height);
@@ -352,8 +352,7 @@ print_size_frame (PrintData    *data,
   chain = gimp_chain_button_new (GIMP_CHAIN_RIGHT);
   if (ABS (data->xres - data->yres) < GIMP_MIN_RESOLUTION)
     gimp_chain_button_set_active (GIMP_CHAIN_BUTTON (chain), TRUE);
-  gtk_table_attach (GTK_TABLE (entry), chain, 2, 3, 0, 2,
-                    GTK_SHRINK | GTK_FILL, GTK_EXPAND | GTK_FILL, 0, 0);
+  gtk_grid_attach (GTK_GRID (entry), chain, 2, 0, 1, 2);
   gtk_widget_show (chain);
 
   info.chain = GIMP_CHAIN_BUTTON (chain);
@@ -377,7 +376,7 @@ print_offset_frame (PrintData    *data,
   GtkWidget *spinner;
   GtkWidget *vbox;
   GtkWidget *hbox;
-  GtkWidget *table;
+  GtkWidget *grid;
   GtkWidget *frame;
   GtkWidget *label;
   GtkWidget *combo;
@@ -392,33 +391,31 @@ print_offset_frame (PrintData    *data,
 
   entry = GTK_WIDGET (info.size_entry);
 
-  table = gtk_table_new (4, 4, FALSE);
-  gtk_table_set_row_spacings (GTK_TABLE (table), 2);
-  gtk_table_set_col_spacings (GTK_TABLE (table), 6);
-  gtk_table_set_col_spacing (GTK_TABLE (table), 0, 0);
-  gtk_table_set_col_spacing (GTK_TABLE (table), 1, 12);
-  gtk_box_pack_start (GTK_BOX (vbox), table, FALSE, FALSE, 0);
-  gtk_widget_show (table);
+  grid = gtk_grid_new ();
+  gtk_grid_set_row_spacing (GTK_GRID (grid), 2);
+  gtk_grid_set_column_spacing (GTK_GRID (grid), 6);
+  gtk_box_pack_start (GTK_BOX (vbox), grid, FALSE, FALSE, 0);
+  gtk_widget_show (grid);
 
   /* left */
-  info.left_adj = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  info.left_adj = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   spinner = gimp_spin_button_new (info.left_adj, 1, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinner), TRUE);
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (entry),
                              GTK_SPIN_BUTTON (spinner), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (table), spinner, 1, 2, 0, 1);
+  gtk_grid_attach (GTK_GRID (grid), spinner, 1, 0, 1, 1);
   gtk_widget_show (spinner);
 
   label = gtk_label_new_with_mnemonic (_("_Left:"));
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), spinner);
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 0, 1, 0, 1);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 0, 1, 1);
   gtk_size_group_add_widget (label_group, label);
   gtk_widget_show (label);
 
   /* right */
-  info.right_adj = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  info.right_adj = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   spinner = gimp_spin_button_new (info.right_adj, 1, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinner), TRUE);
 
@@ -428,34 +425,34 @@ print_offset_frame (PrintData    *data,
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (entry),
                              GTK_SPIN_BUTTON (spinner), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (table), spinner, 3, 4, 0, 1);
+  gtk_grid_attach (GTK_GRID (grid), spinner, 3, 0, 1, 1);
   gtk_widget_show (spinner);
 
   label = gtk_label_new_with_mnemonic (_("_Right:"));
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), spinner);
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 2, 3, 0, 1);
+  gtk_grid_attach (GTK_GRID (grid), label, 2, 0, 1, 1);
   gtk_widget_show (label);
 
   /* top */
-  info.top_adj = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  info.top_adj = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   spinner = gimp_spin_button_new (info.top_adj, 1, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinner), TRUE);
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (entry),
                              GTK_SPIN_BUTTON (spinner), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (table), spinner, 1, 2, 1, 2);
+  gtk_grid_attach (GTK_GRID (grid), spinner, 1, 1, 1, 1);
   gtk_widget_show (spinner);
 
   label = gtk_label_new_with_mnemonic (_("_Top:"));
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), spinner);
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 0, 1, 1, 2);
+  gtk_grid_attach (GTK_GRID (grid), label, 0, 1, 1, 1);
   gtk_size_group_add_widget (label_group, label);
   gtk_widget_show (label);
 
   /* bottom */
-  info.bottom_adj = (GtkAdjustment *) gtk_adjustment_new (1, 1, 1, 1, 10, 0);
+  info.bottom_adj = gtk_adjustment_new (1, 1, 1, 1, 10, 0);
   spinner = gimp_spin_button_new (info.bottom_adj, 1, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinner), TRUE);
 
@@ -465,13 +462,13 @@ print_offset_frame (PrintData    *data,
 
   gimp_size_entry_add_field (GIMP_SIZE_ENTRY (entry),
                              GTK_SPIN_BUTTON (spinner), NULL);
-  gtk_table_attach_defaults (GTK_TABLE (table), spinner, 3, 4, 1, 2);
+  gtk_grid_attach (GTK_GRID (grid), spinner, 3, 1, 1, 1);
   gtk_widget_show (spinner);
 
   label = gtk_label_new_with_mnemonic (_("_Bottom:"));
   gtk_label_set_mnemonic_widget (GTK_LABEL (label), spinner);
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
-  gtk_table_attach_defaults (GTK_TABLE (table), label, 2, 3, 1, 2);
+  gtk_grid_attach (GTK_GRID (grid), label, 2, 1, 1, 1);
   gtk_widget_show (label);
 
   gimp_size_entry_set_resolution (GIMP_SIZE_ENTRY (entry), LEFT,   72.0, FALSE);
@@ -509,7 +506,7 @@ print_offset_frame (PrintData    *data,
   gimp_int_combo_box_connect (GIMP_INT_COMBO_BOX (combo),
                               data->center,
                               G_CALLBACK (print_size_info_center_changed),
-                              NULL);
+                              NULL, NULL);
 
   info.center_combo = combo;
 
@@ -877,7 +874,7 @@ print_size_info_set_page_setup (PrintSizeInfo *info)
       format = g_strdup_printf ("%%.%df x %%.%df %s",
                                 gimp_unit_get_digits (data->unit),
                                 gimp_unit_get_digits (data->unit),
-                                gimp_unit_get_plural (data->unit));
+                                gimp_unit_get_name (data->unit));
       text = g_strdup_printf (format, page_width, page_height);
       g_free (format);
 
@@ -940,7 +937,7 @@ print_resolution_load_defaults (PrintSizeInfo *info)
   gdouble xres;
   gdouble yres;
 
-  gimp_image_get_resolution (info->data->image_id, &xres, &yres);
+  gimp_image_get_resolution (info->data->image, &xres, &yres);
 
   gimp_size_entry_set_refval (info->resolution_entry, 0, xres);
   gimp_size_entry_set_refval (info->resolution_entry, 1, yres);

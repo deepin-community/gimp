@@ -128,9 +128,9 @@ HELP
 {
   GimpPalette *pal = NULL;
 
-  if (gimp_pdb_image_is_not_base_type (image, GIMP_INDEXED, error)        &&
-      gimp_pdb_image_is_precision (image, GIMP_PRECISION_U8_GAMMA, error) &&
-      gimp_babl_is_valid (GIMP_INDEXED, gimp_image_get_precision (image)) &&
+  if (gimp_pdb_image_is_not_base_type (image, GIMP_INDEXED, error)             &&
+      gimp_pdb_image_is_precision (image, GIMP_PRECISION_U8_NON_LINEAR, error) &&
+      gimp_babl_is_valid (GIMP_INDEXED, gimp_image_get_precision (image))      &&
       gimp_item_stack_is_flat (GIMP_ITEM_STACK (gimp_image_get_layers (image))))
     {
       switch (palette_type)
@@ -141,7 +141,8 @@ HELP
 	  break;
 
 	case GIMP_CONVERT_PALETTE_CUSTOM:
-          pal = gimp_pdb_get_palette (gimp, palette, FALSE, error);
+          pal = GIMP_PALETTE (gimp_pdb_get_resource (gimp, GIMP_TYPE_PALETTE, palette,
+                                                     GIMP_PDB_DATA_ACCESS_READ, error));
 	  if (! pal)
             {
               success = FALSE;
@@ -192,19 +193,17 @@ HELP
 	  desc => 'Width of the matrix (0 to reset to default matrix)' },
 	{ name => 'height', type => 'int32',
 	  desc => 'Height of the matrix (0 to reset to default matrix)' },
-	{ name => 'matrix', type => 'int8array',
-	  desc => 'The matrix -- all values must be >= 1',
-	  array => { name => 'matrix_length', type => '1 <= int32 <= 1024',
-                     desc => "The length of 'matrix'" }
-	  },
+	{ name => 'matrix', type => 'bytes',
+	  desc => 'The matrix -- all values must be >= 1' },
     );
 
     %invoke = (
 	code => <<'CODE'
 {
-  if (width == 0 || height == 0 || matrix_length == width * height)
+  if (width == 0 || height == 0 || g_bytes_get_size (matrix) == width * height)
     {
-      gimp_image_convert_indexed_set_dither_matrix (matrix, width, height);
+      gimp_image_convert_indexed_set_dither_matrix (g_bytes_get_data (matrix, NULL),
+                                                    width, height);
     }
   else
     {
@@ -239,9 +238,6 @@ HELP
     %invoke = (
 	code => <<'CODE'
 {
-  if (gimp->plug_in_manager->current_plug_in)
-    gimp_plug_in_enable_precision (gimp->plug_in_manager->current_plug_in);
-
   if (gimp_pdb_image_is_not_base_type (image, GIMP_INDEXED, error) &&
       gimp_pdb_image_is_not_precision (image, precision, error)    &&
       gimp_babl_is_valid (gimp_image_get_base_type (image), precision))
@@ -269,8 +265,6 @@ CODE
               "core/gimpimage-convert-type.h"
               "core/gimpitemstack.h"
               "core/gimppalette.h"
-              "plug-in/gimpplugin.h"
-              "plug-in/gimppluginmanager.h"
               "gimppdberror.h"
               "gimppdb-utils.h"
               "gimp-intl.h");

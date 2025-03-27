@@ -33,6 +33,7 @@
 #include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
+#include "libgimpwidgets/gimpwidgets-private.h"
 
 #include "widgets-types.h"
 
@@ -49,8 +50,6 @@
 #include "gimplanguagecombobox.h"
 #include "gimplanguageentry.h"
 #include "gimplayermodebox.h"
-#include "gimpscalebutton.h"
-#include "gimpspinscale.h"
 #include "gimpview.h"
 #include "gimppolar.h"
 #include "gimppropwidgets.h"
@@ -95,15 +94,15 @@ static void         connect_notify     (GObject     *config,
  * @button_label:  Toggle widget title appearing as a frame title.
  * @child:         Child #GtkWidget of the returned frame.
  * @button:        Pointer to the #GtkCheckButton used as frame title
- *                 if not #NULL.
+ *                 if not %NULL.
  *
  * Creates a #GimpFrame containing @child, using a #GtkCheckButton as a
  * title whose value is tied to the boolean @property_name.
- * @child will be visible when @property_name is #TRUE, hidden otherwise.
- * If @button_label is #NULL, the @property_name's nick will be used as
+ * @child will be visible when @property_name is %TRUE, hidden otherwise.
+ * If @button_label is %NULL, the @property_name's nick will be used as
  * label of the #GtkCheckButton title.
  *
- * Return value:  A new #GimpFrame widget.
+ * Returns:  A new #GimpFrame widget.
  *
  * Since GIMP 2.4
  */
@@ -140,6 +139,9 @@ gimp_prop_expanding_frame_new (GObject      *config,
 
   if (button)
     *button = toggle;
+
+  gimp_widget_set_bound_property (frame, config, property_name);
+  gtk_widget_show (frame);
 
   return frame;
 }
@@ -241,6 +243,9 @@ gimp_prop_boolean_icon_box_new (GObject     *config,
                   G_CALLBACK (gimp_prop_radio_button_notify),
                   button);
 
+  gimp_widget_set_bound_property (box, config, property_name);
+  gtk_widget_show (box);
+
   return box;
 }
 
@@ -297,7 +302,7 @@ gimp_prop_radio_button_notify (GObject    *config,
  * Creates a #GimpLayerModeBox widget to display and set the specified
  * Enum property, for which the enum must be #GimpLayerMode.
  *
- * Return value: The newly created #GimpLayerModeBox widget.
+ * Returns: The newly created #GimpLayerModeBox widget.
  *
  * Since GIMP 2.10
  */
@@ -321,6 +326,9 @@ gimp_prop_layer_mode_box_new (GObject              *config,
                           G_BINDING_BIDIRECTIONAL |
                           G_BINDING_SYNC_CREATE);
 
+  gimp_widget_set_bound_property (box, config, property_name);
+  gtk_widget_show (box);
+
   return box;
 }
 
@@ -329,27 +337,27 @@ gimp_prop_layer_mode_box_new (GObject              *config,
 /*  color button  */
 /******************/
 
-static void   gimp_prop_color_button_callback (GtkWidget  *widget,
-                                               GObject    *config);
-static void   gimp_prop_color_button_notify   (GObject    *config,
-                                               GParamSpec *param_spec,
-                                               GtkWidget  *button);
+static void   gimp_prop_gegl_color_button_callback (GtkWidget  *widget,
+                                                    GObject    *config);
+static void   gimp_prop_gegl_color_button_notify   (GObject    *config,
+                                                    GParamSpec *param_spec,
+                                                    GtkWidget  *button);
 
 /**
  * gimp_prop_color_button_new:
  * @config:        #GimpConfig object to which property is attached.
- * @property_name: Name of #GimpRGB property.
+ * @property_name: Name of #GeglColor property.
  * @title:         Title of the #GimpColorPanel that is to be created
  * @width:         Width of color button.
  * @height:        Height of color button.
  * @type:          How transparency is represented.
  *
- * Creates a #GimpColorPanel to set and display the value of a #GimpRGB
+ * Creates a #GimpColorPanel to set and display the value of a #GeglColor
  * property.  Pressing the button brings up a color selector dialog.
- * If @title is #NULL, the @property_name's nick will be used as label
+ * If @title is %NULL, the @property_name's nick will be used as label
  * of the returned widget.
  *
- * Return value:  A new #GimpColorPanel widget.
+ * Returns:  A new #GimpColorPanel widget.
  *
  * Since GIMP 2.4
  */
@@ -363,10 +371,10 @@ gimp_prop_color_button_new (GObject           *config,
 {
   GParamSpec *param_spec;
   GtkWidget  *button;
-  GimpRGB    *value;
+  GeglColor  *color = NULL;
 
   param_spec = check_param_spec_w (config, property_name,
-                                   GIMP_TYPE_PARAM_RGB, G_STRFUNC);
+                                   GIMP_TYPE_PARAM_COLOR, G_STRFUNC);
   if (! param_spec)
     return NULL;
 
@@ -374,511 +382,75 @@ gimp_prop_color_button_new (GObject           *config,
     title = g_param_spec_get_nick (param_spec);
 
   g_object_get (config,
-                property_name, &value,
+                property_name, &color,
                 NULL);
 
-  button = gimp_color_panel_new (title, value, type, width, height);
-  g_free (value);
+  button = gimp_color_panel_new (title, color, type, width, height);
+  g_clear_object (&color);
 
   set_param_spec (G_OBJECT (button), button, param_spec);
 
   g_signal_connect (button, "color-changed",
-                    G_CALLBACK (gimp_prop_color_button_callback),
+                    G_CALLBACK (gimp_prop_gegl_color_button_callback),
                     config);
 
   connect_notify (config, property_name,
-                  G_CALLBACK (gimp_prop_color_button_notify),
+                  G_CALLBACK (gimp_prop_gegl_color_button_notify),
                   button);
+
+  gimp_widget_set_bound_property (button, config, property_name);
+  gtk_widget_show (button);
 
   return button;
 }
 
 static void
-gimp_prop_color_button_callback (GtkWidget *button,
-                                 GObject   *config)
+gimp_prop_gegl_color_button_callback (GtkWidget *button,
+                                      GObject   *config)
 {
   GParamSpec *param_spec;
-  GimpRGB     value;
+  GeglColor  *color;
 
   param_spec = get_param_spec (G_OBJECT (button));
   if (! param_spec)
     return;
 
-  gimp_color_button_get_color (GIMP_COLOR_BUTTON (button), &value);
-
   g_signal_handlers_block_by_func (config,
-                                   gimp_prop_color_button_notify,
+                                   gimp_prop_gegl_color_button_notify,
                                    button);
 
+  color = gimp_color_button_get_color (GIMP_COLOR_BUTTON (button));
   g_object_set (config,
-                param_spec->name, &value,
+                param_spec->name, color,
                 NULL);
+  g_object_unref (color);
 
   g_signal_handlers_unblock_by_func (config,
-                                     gimp_prop_color_button_notify,
+                                     gimp_prop_gegl_color_button_notify,
                                      button);
 }
 
 static void
-gimp_prop_color_button_notify (GObject    *config,
-                               GParamSpec *param_spec,
-                               GtkWidget  *button)
+gimp_prop_gegl_color_button_notify (GObject    *config,
+                                    GParamSpec *param_spec,
+                                    GtkWidget  *button)
 {
-  GimpRGB *value;
+  GeglColor *color;
 
   g_object_get (config,
-                param_spec->name, &value,
+                param_spec->name, &color,
                 NULL);
 
   g_signal_handlers_block_by_func (button,
-                                   gimp_prop_color_button_callback,
+                                   gimp_prop_gegl_color_button_callback,
                                    config);
 
-  gimp_color_button_set_color (GIMP_COLOR_BUTTON (button), value);
-
-  g_free (value);
-
-  g_signal_handlers_unblock_by_func (button,
-                                     gimp_prop_color_button_callback,
-                                     config);
-}
-
-
-/******************/
-/*  scale button  */
-/******************/
-
-static void   gimp_prop_scale_button_callback (GtkWidget  *widget,
-                                               gdouble     value,
-                                               GObject    *config);
-static void   gimp_prop_scale_button_notify   (GObject    *config,
-                                               GParamSpec *param_spec,
-                                               GtkWidget  *button);
-
-/**
- * gimp_prop_scale_button_new:
- * @config:        #GimpConfig object to which property is attached.
- * @property_name: Name of gdouble property
- *
- * Creates a #GimpScaleButton to set and display the value of a
- * gdouble property in a very space-efficient way.
- *
- * Return value:  A new #GimpScaleButton widget.
- *
- * Since GIMP 2.6
- */
-GtkWidget *
-gimp_prop_scale_button_new (GObject     *config,
-                            const gchar *property_name)
-{
-  GParamSpec *param_spec;
-  GtkWidget  *button;
-  gdouble     value;
-
-  param_spec = check_param_spec_w (config, property_name,
-                                   G_TYPE_PARAM_DOUBLE, G_STRFUNC);
-
-  if (! param_spec)
-    return NULL;
-
-  g_object_get (config,
-                param_spec->name, &value,
-                NULL);
-
-  button = gimp_scale_button_new (value,
-                                  G_PARAM_SPEC_DOUBLE (param_spec)->minimum,
-                                  G_PARAM_SPEC_DOUBLE (param_spec)->maximum);
-
-  set_param_spec (G_OBJECT (button), button, param_spec);
-
-  g_signal_connect (button, "value-changed",
-                    G_CALLBACK (gimp_prop_scale_button_callback),
-                    config);
-
-  connect_notify (config, property_name,
-                  G_CALLBACK (gimp_prop_scale_button_notify),
-                  button);
-
-  return button;
-}
-
-static void
-gimp_prop_scale_button_callback (GtkWidget *button,
-                                 gdouble    value,
-                                 GObject   *config)
-{
-  GParamSpec *param_spec;
-  gdouble     v;
-
-  param_spec = get_param_spec (G_OBJECT (button));
-  if (! param_spec)
-    return;
-
-  g_object_get (config, param_spec->name, &v, NULL);
-
-  if (v != value)
-    {
-      g_signal_handlers_block_by_func (config,
-                                       gimp_prop_scale_button_notify,
-                                       button);
-
-      g_object_set (config, param_spec->name, value, NULL);
-
-      g_signal_handlers_unblock_by_func (config,
-                                         gimp_prop_scale_button_notify,
-                                         button);
-    }
-}
-
-static void
-gimp_prop_scale_button_notify (GObject    *config,
-                               GParamSpec *param_spec,
-                               GtkWidget  *button)
-{
-  gdouble value;
-
-  g_object_get (config,
-                param_spec->name, &value,
-                NULL);
-
-  g_signal_handlers_block_by_func (button,
-                                   gimp_prop_scale_button_callback,
-                                   config);
-
-  gtk_scale_button_set_value (GTK_SCALE_BUTTON (button), value);
+  gimp_color_button_set_color (GIMP_COLOR_BUTTON (button), color);
+  g_clear_object (&color);
 
   g_signal_handlers_unblock_by_func (button,
-                                     gimp_prop_scale_button_callback,
+                                     gimp_prop_gegl_color_button_callback,
                                      config);
-}
-
-
-/*****************/
-/*  adjustments  */
-/*****************/
-
-static void   gimp_prop_adjustment_callback (GtkAdjustment *adjustment,
-                                             GObject       *config);
-static void   gimp_prop_adjustment_notify   (GObject       *config,
-                                             GParamSpec    *param_spec,
-                                             GtkAdjustment *adjustment);
-
-/**
- * gimp_prop_spin_scale_new:
- * @config:        #GimpConfig object to which property is attached.
- * @property_name: Name of gdouble property
- * @label:         Label of the created #GimpSpinScale.
- * @step_increment:
- * @page_increment:
- * @digits:
- *
- * Creates a #GimpSpinScale to set and display the value of a
- * gdouble property in a very space-efficient way.
- * If @label is #NULL, the @property_name's nick will be used as label
- * of the returned widget.
- * The property's lower and upper values will be used as min/max of the
- * #GimpSpinScale.
- *
- * Return value:  A new #GimpSpinScale widget.
- *
- * Since GIMP 2.8
- */
-GtkWidget *
-gimp_prop_spin_scale_new (GObject     *config,
-                          const gchar *property_name,
-                          const gchar *label,
-                          gdouble      step_increment,
-                          gdouble      page_increment,
-                          gint         digits)
-{
-  GParamSpec    *param_spec;
-  GtkAdjustment *adjustment;
-  GtkWidget     *scale;
-  gdouble        value;
-  gdouble        lower;
-  gdouble        upper;
-
-  param_spec = find_param_spec (config, property_name, G_STRFUNC);
-  if (! param_spec)
-    return NULL;
-
-  /* The generic min and max for the property. */
-  if (! _gimp_prop_widgets_get_numeric_values (config, param_spec,
-                                               &value, &lower, &upper,
-                                               G_STRFUNC))
-    return NULL;
-
-  /* Get label. */
-  if (! label)
-    label = g_param_spec_get_nick (param_spec);
-
-  /* Also usable on int properties. */
-  if (! G_IS_PARAM_SPEC_DOUBLE (param_spec))
-    digits = 0;
-
-  adjustment = (GtkAdjustment *)
-    gtk_adjustment_new (value, lower, upper,
-                        step_increment, page_increment, 0.0);
-
-  scale = gimp_spin_scale_new (adjustment, label, digits);
-
-  set_param_spec (G_OBJECT (adjustment), scale, param_spec);
-
-  if (GEGL_IS_PARAM_SPEC_DOUBLE (param_spec))
-    {
-      GeglParamSpecDouble *gspec = GEGL_PARAM_SPEC_DOUBLE (param_spec);
-
-      gimp_spin_scale_set_scale_limits (GIMP_SPIN_SCALE (scale),
-                                        gspec->ui_minimum, gspec->ui_maximum);
-      gimp_spin_scale_set_gamma (GIMP_SPIN_SCALE (scale), gspec->ui_gamma);
-    }
-  else if (GEGL_IS_PARAM_SPEC_INT (param_spec))
-    {
-      GeglParamSpecInt *gspec = GEGL_PARAM_SPEC_INT (param_spec);
-
-      gimp_spin_scale_set_scale_limits (GIMP_SPIN_SCALE (scale),
-                                        gspec->ui_minimum, gspec->ui_maximum);
-      gimp_spin_scale_set_gamma (GIMP_SPIN_SCALE (scale), gspec->ui_gamma);
-    }
-
-  g_signal_connect (adjustment, "value-changed",
-                    G_CALLBACK (gimp_prop_adjustment_callback),
-                    config);
-
-  connect_notify (config, property_name,
-                  G_CALLBACK (gimp_prop_adjustment_notify),
-                  adjustment);
-
-  return scale;
-}
-
-void
-gimp_prop_widget_set_factor (GtkWidget *widget,
-                             gdouble    factor,
-                             gdouble    step_increment,
-                             gdouble    page_increment,
-                             gint       digits)
-{
-  GtkAdjustment *adjustment;
-  gdouble       *factor_store;
-  gdouble        old_factor = 1.0;
-  gdouble        f;
-
-  g_return_if_fail (GTK_IS_SPIN_BUTTON (widget));
-  g_return_if_fail (factor != 0.0);
-  g_return_if_fail (digits >= 0);
-
-  adjustment = gtk_spin_button_get_adjustment (GTK_SPIN_BUTTON (widget));
-
-  g_return_if_fail (get_param_spec (G_OBJECT (adjustment)) != NULL);
-
-  factor_store = g_object_get_data (G_OBJECT (adjustment),
-                                    "gimp-prop-adjustment-factor");
-  if (factor_store)
-    {
-      old_factor = *factor_store;
-    }
-  else
-    {
-      factor_store = g_new (gdouble, 1);
-      g_object_set_data_full (G_OBJECT (adjustment),
-                              "gimp-prop-adjustment-factor",
-                              factor_store, (GDestroyNotify) g_free);
-    }
-
-  *factor_store = factor;
-
-  f = factor / old_factor;
-
-  if (step_increment <= 0)
-    step_increment = f * gtk_adjustment_get_step_increment (adjustment);
-
-  if (page_increment <= 0)
-    page_increment = f * gtk_adjustment_get_page_increment (adjustment);
-
-  gtk_adjustment_configure (adjustment,
-                            f * gtk_adjustment_get_value (adjustment),
-                            f * gtk_adjustment_get_lower (adjustment),
-                            f * gtk_adjustment_get_upper (adjustment),
-                            step_increment,
-                            page_increment,
-                            f * gtk_adjustment_get_page_size (adjustment));
-
-  gtk_spin_button_set_digits (GTK_SPIN_BUTTON (widget), digits);
-}
-
-static void
-gimp_prop_adjustment_callback (GtkAdjustment *adjustment,
-                               GObject       *config)
-{
-  GParamSpec *param_spec;
-  gdouble     value;
-  gdouble    *factor;
-
-  param_spec = get_param_spec (G_OBJECT (adjustment));
-  if (! param_spec)
-    return;
-
-  value = gtk_adjustment_get_value (adjustment);
-
-  factor = g_object_get_data (G_OBJECT (adjustment),
-                              "gimp-prop-adjustment-factor");
-  if (factor)
-    value /= *factor;
-
-  if (G_IS_PARAM_SPEC_INT (param_spec))
-    {
-      gint v;
-
-      g_object_get (config, param_spec->name, &v, NULL);
-
-      if (v != (gint) value)
-        g_object_set (config, param_spec->name, (gint) value, NULL);
-    }
-  else if (G_IS_PARAM_SPEC_UINT (param_spec))
-    {
-      guint v;
-
-      g_object_get (config, param_spec->name, &v, NULL);
-
-      if (v != (guint) value)
-        g_object_set (config, param_spec->name, (guint) value, NULL);
-    }
-  else if (G_IS_PARAM_SPEC_LONG (param_spec))
-    {
-      glong v;
-
-      g_object_get (config, param_spec->name, &v, NULL);
-
-      if (v != (glong) value)
-        g_object_set (config, param_spec->name, (glong) value, NULL);
-    }
-  else if (G_IS_PARAM_SPEC_ULONG (param_spec))
-    {
-      gulong v;
-
-      g_object_get (config, param_spec->name, &v, NULL);
-
-      if (v != (gulong) value)
-        g_object_set (config, param_spec->name, (gulong) value, NULL);
-    }
-  else if (G_IS_PARAM_SPEC_INT64 (param_spec))
-    {
-      gint64 v;
-
-      g_object_get (config, param_spec->name, &v, NULL);
-
-      if (v != (gint64) value)
-        g_object_set (config, param_spec->name, (gint64) value, NULL);
-    }
-  else if (G_IS_PARAM_SPEC_UINT64 (param_spec))
-    {
-      guint64 v;
-
-      g_object_get (config, param_spec->name, &v, NULL);
-
-      if (v != (guint64) value)
-        g_object_set (config, param_spec->name, (guint64) value, NULL);
-    }
-  else if (G_IS_PARAM_SPEC_DOUBLE (param_spec))
-    {
-      gdouble v;
-
-      g_object_get (config, param_spec->name, &v, NULL);
-
-      if (v != value)
-        g_object_set (config, param_spec->name, value, NULL);
-    }
-}
-
-static void
-gimp_prop_adjustment_notify (GObject       *config,
-                             GParamSpec    *param_spec,
-                             GtkAdjustment *adjustment)
-{
-  gdouble  value;
-  gdouble *factor;
-
-  if (G_IS_PARAM_SPEC_INT (param_spec))
-    {
-      gint int_value;
-
-      g_object_get (config, param_spec->name, &int_value, NULL);
-
-      value = int_value;
-    }
-  else if (G_IS_PARAM_SPEC_UINT (param_spec))
-    {
-      guint uint_value;
-
-      g_object_get (config, param_spec->name, &uint_value, NULL);
-
-      value = uint_value;
-    }
-  else if (G_IS_PARAM_SPEC_LONG (param_spec))
-    {
-      glong long_value;
-
-      g_object_get (config, param_spec->name, &long_value, NULL);
-
-      value = long_value;
-    }
-  else if (G_IS_PARAM_SPEC_ULONG (param_spec))
-    {
-      gulong ulong_value;
-
-      g_object_get (config, param_spec->name, &ulong_value, NULL);
-
-      value = ulong_value;
-    }
-  else if (G_IS_PARAM_SPEC_INT64 (param_spec))
-    {
-      gint64 int64_value;
-
-      g_object_get (config, param_spec->name, &int64_value, NULL);
-
-      value = int64_value;
-    }
-  else if (G_IS_PARAM_SPEC_UINT64 (param_spec))
-    {
-      guint64 uint64_value;
-
-      g_object_get (config, param_spec->name, &uint64_value, NULL);
-
-#if defined _MSC_VER && (_MSC_VER < 1300)
-      value = (gint64) uint64_value;
-#else
-      value = uint64_value;
-#endif
-    }
-  else if (G_IS_PARAM_SPEC_DOUBLE (param_spec))
-    {
-      g_object_get (config, param_spec->name, &value, NULL);
-    }
-  else
-    {
-      g_warning ("%s: unhandled param spec of type %s",
-                 G_STRFUNC, G_PARAM_SPEC_TYPE_NAME (param_spec));
-      return;
-    }
-
-  factor = g_object_get_data (G_OBJECT (adjustment),
-                              "gimp-prop-adjustment-factor");
-  if (factor)
-    value *= *factor;
-
-  if (gtk_adjustment_get_value (adjustment) != value)
-    {
-      g_signal_handlers_block_by_func (adjustment,
-                                       gimp_prop_adjustment_callback,
-                                       config);
-
-      gtk_adjustment_set_value (adjustment, value);
-
-      g_signal_handlers_unblock_by_func (adjustment,
-                                         gimp_prop_adjustment_callback,
-                                         config);
-    }
 }
 
 
@@ -938,7 +510,7 @@ rad_to_deg (GBinding     *binding,
  * Creates a #GimpDial to set and display the value of a
  * gdouble property that represents an angle.
  *
- * Return value:  A new #GimpDial widget.
+ * Returns:  A new #GimpDial widget.
  *
  * Since GIMP 2.10
  */
@@ -992,6 +564,9 @@ gimp_prop_angle_dial_new (GObject     *config,
                                    rad_to_deg,
                                    l, (GDestroyNotify) g_free);
     }
+
+  gimp_widget_set_bound_property (dial, config, property_name);
+  gtk_widget_show (dial);
 
   return dial;
 }
@@ -1048,6 +623,9 @@ gimp_prop_angle_range_dial_new (GObject     *config,
                           G_BINDING_BIDIRECTIONAL |
                           G_BINDING_SYNC_CREATE);
 
+  gimp_widget_set_bound_property (dial, config, alpha_property_name);
+  gtk_widget_show (dial);
+
   return dial;
 }
 
@@ -1088,6 +666,9 @@ gimp_prop_polar_new (GObject     *config,
                           polar, "radius",
                           G_BINDING_BIDIRECTIONAL |
                           G_BINDING_SYNC_CREATE);
+
+  gimp_widget_set_bound_property (polar, config, angle_property_name);
+  gtk_widget_show (polar);
 
   return polar;
 }
@@ -1160,6 +741,9 @@ gimp_prop_range_new (GObject     *config,
   if (sorted)
     gimp_gtk_adjustment_chain (adjustment1, adjustment2);
 
+  gimp_widget_set_bound_property (vbox, config, lower_property_name);
+  gtk_widget_show (vbox);
+
   return vbox;
 }
 
@@ -1200,7 +784,7 @@ static void   gimp_prop_view_notify (GObject      *config,
  *
  * Creates a widget to display the value of a #GimpViewable property.
  *
- * Return value:  A new #GimpView widget.
+ * Returns:  A new #GimpView widget.
  *
  * Since GIMP 2.4
  */
@@ -1258,6 +842,9 @@ gimp_prop_view_new (GObject     *config,
   connect_notify (config, property_name,
                   G_CALLBACK (gimp_prop_view_notify),
                   view);
+
+  gimp_widget_set_bound_property (view, config, property_name);
+  gtk_widget_show (view);
 
   return view;
 }
@@ -1351,7 +938,7 @@ static void  gimp_prop_number_pair_entry_number_pair_user_override_notify
  * @min_valid_value:
  * @max_valid_value:         What to pass to gimp_number_pair_entry_new ().
  *
- * Return value: A #GimpNumberPairEntry widget.
+ * Returns: A #GimpNumberPairEntry widget.
  */
 GtkWidget *
 gimp_prop_number_pair_entry_new (GObject     *config,
@@ -1457,8 +1044,8 @@ gimp_prop_number_pair_entry_new (GObject     *config,
                   G_CALLBACK (gimp_prop_number_pair_entry_config_notify),
                   number_pair_entry);
 
-
-  /* Done */
+  gimp_widget_set_bound_property (number_pair_entry, config, left_number_property);
+  gtk_widget_show (number_pair_entry);
 
   return number_pair_entry;
 }
@@ -1600,6 +1187,9 @@ gimp_prop_language_combo_box_new (GObject     *config,
                   G_CALLBACK (gimp_prop_language_combo_box_notify),
                   combo);
 
+  gimp_widget_set_bound_property (combo, config, property_name);
+  gtk_widget_show (combo);
+
   return combo;
 }
 
@@ -1697,6 +1287,9 @@ gimp_prop_language_entry_new (GObject     *config,
   connect_notify (config, property_name,
                   G_CALLBACK (gimp_prop_language_entry_notify),
                   entry);
+
+  gimp_widget_set_bound_property (entry, config, property_name);
+  gtk_widget_show (entry);
 
   return entry;
 }
@@ -1827,11 +1420,11 @@ gimp_prop_profile_combo_box_new (GObject      *config,
     }
   else
     {
-      gchar *filename;
+      GFile *file;
 
-      filename = gimp_personal_rc_file ("profilerc");
-      combo = gimp_color_profile_combo_box_new (dialog, filename);
-      g_free (filename);
+      file = gimp_directory_file ("profilerc", NULL);
+      combo = gimp_color_profile_combo_box_new (dialog, file);
+      g_object_unref (file);
     }
 
   gimp_color_profile_combo_box_set_active_file (GIMP_COLOR_PROFILE_COMBO_BOX (combo),
@@ -1849,6 +1442,9 @@ gimp_prop_profile_combo_box_new (GObject      *config,
   connect_notify (config, property_name,
                   G_CALLBACK (gimp_prop_profile_combo_notify),
                   combo);
+
+  gimp_widget_set_bound_property (combo, config, property_name);
+  gtk_widget_show (combo);
 
   return combo;
 }
@@ -1987,6 +1583,9 @@ gimp_prop_compression_combo_box_new (GObject     *config,
                   G_CALLBACK (gimp_prop_compression_combo_box_notify),
                   combo);
 
+  gimp_widget_set_bound_property (combo, config, property_name);
+  gtk_widget_show (combo);
+
   return combo;
 }
 
@@ -2095,6 +1694,8 @@ gimp_prop_icon_picker_new (GimpViewable *viewable,
     g_free (icon_name_value);
   if (pixbuf_value)
     g_object_unref (pixbuf_value);
+
+  gtk_widget_show (picker);
 
   return picker;
 }

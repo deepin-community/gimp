@@ -20,6 +20,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
@@ -152,7 +153,7 @@ gimp_move_options_notify_type (GimpMoveOptions *move_options,
         {
         case GIMP_TRANSFORM_TYPE_LAYER:
           false_label = _("Pick a layer or guide");
-          true_label  = _("Move the active layer");
+          true_label  = _("Move the selected layers");
           break;
 
         case GIMP_TRANSFORM_TYPE_PATH:

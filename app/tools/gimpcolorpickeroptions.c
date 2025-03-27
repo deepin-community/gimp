@@ -20,6 +20,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
@@ -190,19 +191,15 @@ gimp_color_picker_options_gui (GimpToolOptions *tool_options)
   str = g_strdup_printf (_("Pick Target  (%s)"),
                          gimp_get_mod_string (toggle_mask));
   frame = gimp_prop_enum_radio_frame_new (config, "pick-target", str, -1, -1);
-  g_free (str);
-
   gtk_box_pack_start (GTK_BOX (vbox), frame, TRUE, TRUE, 0);
-  gtk_widget_show (frame);
+  g_free (str);
 
   /*  the use_info_window toggle button  */
   str = g_strdup_printf (_("Use info window  (%s)"),
                          gimp_get_mod_string (extend_mask));
   button = gimp_prop_check_button_new (config, "use-info-window", str);
-  g_free (str);
-
   gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
+  g_free (str);
 
   return vbox;
 }

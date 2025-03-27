@@ -43,7 +43,7 @@
  *
  * Returns the Babl format that corresponds to the @pixbuf's pixel format.
  *
- * Return value: the @pixbuf's pixel format
+ * Returns: the @pixbuf's pixel format
  *
  * Since: 2.10
  **/
@@ -72,7 +72,7 @@ gimp_pixbuf_get_format (GdkPixbuf *pixbuf)
  * be kept around for as long as the buffer exists; otherwise the
  * pixels are copied.
  *
- * Return value: a new #GeglBuffer.
+ * Returns: (transfer full): a new #GeglBuffer.
  *
  * Since: 2.10
  **/
@@ -118,13 +118,13 @@ gimp_pixbuf_create_buffer (GdkPixbuf *pixbuf)
 /**
  * gimp_pixbuf_get_icc_profile:
  * @pixbuf: a #GdkPixbuf
- * @length: return location for the ICC profile's length
+ * @length: (out): return location for the ICC profile's length
  *
  * Returns the ICC profile attached to the @pixbuf, or %NULL if there
  * is none.
  *
- * Return value: The ICC profile data, or %NULL. The value should be freed
- *               with g_free().
+ * Returns: (array length=length) (nullable): The ICC profile data, or %NULL.
+ *          The value should be freed with g_free().
  *
  * Since: 2.10
  **/

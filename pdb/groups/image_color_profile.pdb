@@ -26,16 +26,16 @@ HELP
 
     &mitch_pdb_misc('2015', '2.10');
 
+    $lib_private = 1;
+
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' }
     );
 
     @outargs = (
-        { name => 'profile_data', type => 'int8array', wrap => 1,
-          desc => "The image's serialized color profile. The returned value must be freed with g_free()",
-          array => { name => 'num_bytes',
-                     desc => 'Number of bytes in the color_profile array' } }
+        { name => 'profile_data', type => 'bytes',
+          desc => "The image's serialized color profile." }
     );
 
     %invoke = (
@@ -52,8 +52,7 @@ HELP
 
       data = gimp_color_profile_get_icc_profile (profile, &length);
 
-      profile_data = g_memdup (data, length);
-      num_bytes = length;
+      profile_data = g_bytes_new (data, length);
     }
 }
 CODE
@@ -72,16 +71,16 @@ HELP
 
     &mitch_pdb_misc('2015', '2.10');
 
+    $lib_private = 1;
+
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' }
     );
 
     @outargs = (
-        { name => 'profile_data', type => 'int8array', wrap => 1,
-          desc => "The image's serialized color profile. The returned value must be freed with g_free()",
-          array => { name => 'num_bytes',
-                     desc => 'Number of bytes in the color_profile array' } }
+        { name => 'profile_data', type => 'bytes',
+          desc => "The image's serialized color profile." }
     );
 
     %invoke = (
@@ -98,8 +97,7 @@ HELP
 
       data = gimp_color_profile_get_icc_profile (profile, &length);
 
-      profile_data = g_memdup (data, length);
-      num_bytes = length;
+      profile_data = g_bytes_new (data, length);
     }
 }
 CODE
@@ -112,17 +110,20 @@ sub image_set_color_profile {
     $help = <<'HELP';
 This procedure sets the image's color profile, or unsets it if NULL is
 passed as 'color_profile'. This procedure does no color conversion.
+However, it will change the pixel format of all layers to contain the
+babl space matching the profile. You must call this procedure before
+adding layers to the image.
 HELP
 
     &mitch_pdb_misc('2015', '2.10');
 
+    $lib_private = 1;
+
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' },
-        { name => 'color_profile', type => 'int8array', wrap => 1,
-          desc => 'The new serialized color profile',
-          array => { name => 'num_bytes',
-                     desc => 'Number of bytes in the color_profile array' } }
+        { name => 'color_profile', type => 'bytes',
+          desc => 'The new serialized color profile' }
     );
 
     %invoke = (
@@ -132,13 +133,14 @@ HELP
     {
       GimpColorProfile *profile;
 
-      profile = gimp_color_profile_new_from_icc_profile (color_profile,
-                                                         num_bytes,
+      profile = gimp_color_profile_new_from_icc_profile (g_bytes_get_data (color_profile, NULL),
+                                                         g_bytes_get_size (color_profile),
                                                          error);
 
       if (profile)
         {
-          success = gimp_image_set_color_profile (image, profile, error);
+          success = gimp_image_assign_color_profile (image, profile,
+                                                     progress, error);
           g_object_unref (profile);
         }
       else
@@ -146,7 +148,8 @@ HELP
     }
   else
     {
-      success = gimp_image_set_color_profile (image, NULL, error);
+      success = gimp_image_assign_color_profile (image, NULL,
+                                                 progress, error);
     }
 }
 CODE
@@ -158,8 +161,11 @@ sub image_set_color_profile_from_file {
 
     $help = <<'HELP';
 This procedure sets the image's color profile from a file containing
-an ICC profile, or unsets it if NULL is passed as 'uri'. This
-procedure does no color conversion.
+an ICC profile, or unsets it if NULL is passed as 'file'. This
+procedure does no color conversion. However, it will change the pixel
+format of all layers to contain the babl space matching the
+profile. You must call this procedure before adding layers to the
+image.
 HELP
 
     &mitch_pdb_misc('2015', '2.10');
@@ -167,34 +173,277 @@ HELP
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' },
-        { name => 'uri', type => 'string',
-          desc => 'The URI of the file containing the new color profile' }
+        { name => 'file', type => 'file',
+          desc => 'The file containing the new color profile' }
     );
 
     %invoke = (
         code => <<'CODE'
 {
-  if (uri)
+  if (file)
     {
-      GFile            *file = g_file_new_for_uri (uri);
       GimpColorProfile *profile;
 
       profile = gimp_color_profile_new_from_file (file, error);
 
       if (profile)
         {
-          success = gimp_image_set_color_profile (image, profile, error);
+          success = gimp_image_assign_color_profile (image, profile,
+                                                     progress, error);
           g_object_unref (profile);
         }
       else
         success = FALSE;
-
-      g_object_unref (file);
     }
   else
     {
-      success = gimp_image_set_color_profile (image, NULL, error);
+      success = gimp_image_assign_color_profile (image, NULL,
+                                                 progress, error);
     }
+}
+CODE
+    );
+}
+
+sub image_get_simulation_profile {
+    $blurb = "Returns the image's simulation color profile";
+
+    $help = <<'HELP';
+This procedure returns the image's simulation color profile, or NULL if the image
+has no simulation color profile assigned.
+HELP
+
+    &alxsa_pdb_misc('2022', '3.0');
+
+    $lib_private = 1;
+
+    @inargs = (
+        { name => 'image', type => 'image',
+          desc => 'The image' }
+    );
+
+    @outargs = (
+        { name => 'profile_data', type => 'bytes',
+          desc => "The image's serialized simulation color profile." }
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  GimpColorProfile *profile;
+
+  profile = gimp_image_get_simulation_profile (image);
+
+  if (profile)
+    {
+      const guint8 *data;
+      gsize         length;
+
+      data = gimp_color_profile_get_icc_profile (profile, &length);
+
+      profile_data = g_bytes_new (data, length);
+    }
+}
+CODE
+    );
+}
+
+sub image_set_simulation_profile {
+    $blurb = "Sets the image's simulation color profile";
+
+    $help = <<'HELP';
+This procedure sets the image's simulation color profile, or unsets it if NULL is
+passed as 'color_profile'. This procedure does no color conversion.
+HELP
+
+    &alxsa_pdb_misc('2022', '3.0');
+
+    $lib_private = 1;
+
+    @inargs = (
+        { name => 'image', type => 'image',
+          desc => 'The image' },
+        { name => 'color_profile', type => 'bytes',
+          desc => 'The new serialized simulation color profile'}
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  if (color_profile)
+    {
+      GimpColorProfile *profile;
+
+      profile = gimp_color_profile_new_from_icc_profile (g_bytes_get_data (color_profile, NULL),
+                                                         g_bytes_get_size (color_profile),
+                                                         error);
+
+      if (profile)
+        {
+          gimp_image_set_simulation_profile (image, profile);
+          g_object_unref (profile);
+        }
+      else
+        {
+          success = FALSE;
+        }
+    }
+  else
+    {
+      gimp_image_set_simulation_profile (image, NULL);
+    }
+}
+CODE
+    );
+}
+
+sub image_set_simulation_profile_from_file {
+    $blurb = "Sets the image's simulation color profile from an ICC file";
+
+    $help = <<'HELP';
+This procedure sets the image's simulation color profile from a file containing
+an ICC profile, or unsets it if NULL is passed as 'file'. This
+procedure does no color conversion.
+HELP
+
+    &alxsa_pdb_misc('2022', '3.0');
+
+    @inargs = (
+        { name => 'image', type => 'image',
+          desc => 'The image' },
+        { name => 'file', type => 'file',
+          desc => 'The file containing the new simulation color profile' }
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  if (file)
+    {
+      GimpColorProfile *profile;
+
+      profile = gimp_color_profile_new_from_file (file, error);
+
+      if (profile)
+        {
+          gimp_image_set_simulation_profile (image, profile);
+          g_object_unref (profile);
+        }
+      else
+        {
+          success = FALSE;
+        }
+    }
+  else
+    {
+      gimp_image_set_simulation_profile (image, NULL);
+    }
+}
+CODE
+    );
+}
+
+sub image_get_simulation_intent {
+    $blurb = "Returns the image's simulation rendering intent";
+
+    $help = <<'HELP';
+This procedure returns the image's simulation rendering intent.
+HELP
+
+    &alxsa_pdb_misc('2022', '3.0');
+
+    @inargs = (
+        { name => 'image', type => 'image',
+          desc => 'The image' }
+    );
+
+    @outargs = (
+        { name => 'intent', type => 'enum GimpColorRenderingIntent',
+          desc => "The image's simulation rendering intent." }
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  intent = gimp_image_get_simulation_intent (image);
+}
+CODE
+    );
+}
+
+sub image_set_simulation_intent {
+    $blurb = "Sets the image's simulation rendering intent";
+
+    $help = <<'HELP';
+This procedure sets the image's simulation rendering intent.
+HELP
+
+    &alxsa_pdb_misc('2022', '3.0');
+
+    @inargs = (
+        { name => 'image', type => 'image',
+          desc => 'The image' },
+        { name => 'intent', type => 'enum GimpColorRenderingIntent',
+          desc => 'A GimpColorRenderingIntent' }
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  gimp_image_set_simulation_intent (image, intent);
+}
+CODE
+    );
+}
+
+sub image_get_simulation_bpc {
+    $blurb = "Returns whether the image has Black Point Compensation enabled for its simulation";
+
+    $help = <<'HELP';
+This procedure returns whether the image has Black Point Compensation enabled for its simulation
+HELP
+
+    &alxsa_pdb_misc('2022', '3.0');
+
+    @inargs = (
+        { name => 'image', type => 'image',
+          desc => 'The image' }
+    );
+
+    @outargs = (
+        { name => 'bpc', type => 'boolean',
+          desc => "The Black Point Compensation status." }
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  bpc = gimp_image_get_simulation_bpc (image);
+}
+CODE
+    );
+}
+
+sub image_set_simulation_bpc {
+    $blurb = "Sets whether the image has Black Point Compensation enabled for its simulation";
+
+    $help = <<'HELP';
+This procedure whether the image has Black Point Compensation enabled for its simulation
+HELP
+
+    &alxsa_pdb_misc('2022', '3.0');
+
+    @inargs = (
+        { name => 'image', type => 'image',
+          desc => 'The image' },
+        { name => 'bpc', type => 'boolean',
+          desc => 'The Black Point Compensation status.' }
+    );
+
+    %invoke = (
+        code => <<'CODE'
+{
+  gimp_image_set_simulation_bpc (image, bpc);
 }
 CODE
     );
@@ -212,13 +461,13 @@ HELP
 
     &mitch_pdb_misc('2015', '2.10');
 
+    $lib_private = 1;
+
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' },
-        { name => 'color_profile', type => 'int8array', wrap => 1,
-          desc => 'The serialized color profile',
-          array => { name => 'num_bytes',
-                     desc => 'Number of bytes in the color_profile array' } },
+        { name => 'color_profile', type => 'bytes',
+          desc => 'The serialized color profile' },
         { name => 'intent', type => 'enum GimpColorRenderingIntent',
           desc => 'Rendering intent' },
         { name => 'bpc', type => 'boolean',
@@ -232,8 +481,8 @@ HELP
     {
       GimpColorProfile *profile;
 
-      profile = gimp_color_profile_new_from_icc_profile (color_profile,
-                                                         num_bytes,
+      profile = gimp_color_profile_new_from_icc_profile (g_bytes_get_data (color_profile, NULL),
+                                                         g_bytes_get_size (color_profile),
                                                          error);
 
       if (profile)
@@ -259,7 +508,7 @@ sub image_convert_color_profile_from_file {
     $help = <<'HELP';
 This procedure converts from the image's color profile (or the default
 RGB or grayscale profile if none is set) to an ICC profile specified by
-'uri'.  Only RGB and grayscale color profiles are accepted, according to
+'file'.  Only RGB and grayscale color profiles are accepted, according to
 the image's type.
 HELP
 
@@ -268,8 +517,8 @@ HELP
     @inargs = (
         { name => 'image', type => 'image',
           desc => 'The image' },
-        { name => 'uri', type => 'string',
-          desc => 'The URI of the file containing the new color profile' },
+        { name => 'file', type => 'file',
+          desc => 'The file containing the new color profile' },
         { name => 'intent', type => 'enum GimpColorRenderingIntent',
           desc => 'Rendering intent' },
         { name => 'bpc', type => 'boolean',
@@ -279,9 +528,8 @@ HELP
     %invoke = (
         code => <<'CODE'
 {
-  if (uri)
+  if (file)
     {
-      GFile            *file = g_file_new_for_uri (uri);
       GimpColorProfile *profile;
 
       profile = gimp_color_profile_new_from_file (file, error);
@@ -295,8 +543,6 @@ HELP
         }
       else
         success = FALSE;
-
-      g_object_unref (file);
     }
   else
     success = FALSE;
@@ -314,6 +560,13 @@ CODE
             image_get_effective_color_profile
             image_set_color_profile
             image_set_color_profile_from_file
+            image_get_simulation_profile
+            image_set_simulation_profile
+            image_set_simulation_profile_from_file
+            image_get_simulation_intent
+            image_set_simulation_intent
+            image_get_simulation_bpc
+            image_set_simulation_bpc
             image_convert_color_profile
             image_convert_color_profile_from_file);
 

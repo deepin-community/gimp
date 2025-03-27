@@ -18,9 +18,6 @@
 
 #include "config.h"
 
-#ifdef GDK_DISABLE_DEPRECATED
-#undef GDK_DISABLE_DEPRECATED
-#endif
 #include <gtk/gtk.h>
 
 #ifdef GDK_WINDOWING_WIN32
@@ -33,6 +30,10 @@
 
 #ifdef GDK_WINDOWING_QUARTZ
 #include <Cocoa/Cocoa.h>
+#endif
+
+#ifdef GDK_WINDOWING_WAYLAND
+#include <gdk/gdkwayland.h>
 #endif
 
 #include "gimp.h"
@@ -49,9 +50,7 @@
  * @title: gimpui
  * @short_description: Common user interface functions. This header includes
  *                     all other GIMP User Interface Library headers.
- * @see_also: gtk_init(), gdk_set_use_xshm(), gdk_rgb_get_visual(),
- *            gdk_rgb_get_cmap(), gtk_widget_set_default_visual(),
- *            gtk_widget_set_default_colormap(), gtk_preview_set_gamma().
+ * @see_also: gtk_init(), gdk_set_use_xshm(), gtk_widget_set_default_visual().
  *
  * Common user interface functions. This header includes all other
  * GIMP User Interface Library headers.
@@ -60,29 +59,26 @@
 
 /*  local function prototypes  */
 
-static void      gimp_ui_help_func              (const gchar   *help_id,
-                                                 gpointer       help_data);
-static void      gimp_ensure_modules            (void);
-static void      gimp_window_transient_realized (GtkWidget     *window,
-                                                 GdkWindow     *parent);
-static gboolean  gimp_window_set_transient_for  (GtkWindow     *window,
-                                                 GdkWindow     *parent);
+static void        gimp_ui_help_func               (const gchar       *help_id,
+                                                    gpointer           help_data);
+static void        gimp_ui_theme_changed           (GFileMonitor      *monitor,
+                                                    GFile             *file,
+                                                    GFile             *other_file,
+                                                    GFileMonitorEvent  event_type,
+                                                    GtkCssProvider    *css_provider);
+static void        gimp_ensure_modules             (void);
 
-static void      gimp_ui_theme_changed          (void);
-static void      gimp_ui_fix_pixbuf_style       (void);
-static void      gimp_ui_draw_pixbuf_layout     (GtkStyle      *style,
-                                                 GdkWindow     *window,
-                                                 GtkStateType   state_type,
-                                                 gboolean       use_text,
-                                                 GdkRectangle  *area,
-                                                 GtkWidget     *widget,
-                                                 const gchar   *detail,
-                                                 gint           x,
-                                                 gint           y,
-                                                 PangoLayout   *layout);
 #ifdef GDK_WINDOWING_QUARTZ
-static gboolean  gimp_osx_focus_window          (gpointer);
+static gboolean    gimp_osx_focus_window           (gpointer);
 #endif
+
+#ifndef GDK_WINDOWING_WIN32
+static GdkWindow * gimp_ui_get_foreign_window      (gpointer           window);
+#endif
+static gboolean    gimp_window_transient_on_mapped (GtkWidget         *window,
+                                                    GdkEventAny       *event,
+                                                    GBytes            *handle);
+
 
 static gboolean gimp_ui_initialized = FALSE;
 
@@ -94,28 +90,26 @@ static gboolean gimp_ui_initialized = FALSE;
  * @prog_name: The name of the plug-in which will be passed as argv[0] to
  *             gtk_init(). It's a convention to use the name of the
  *             executable and _not_ the PDB procedure name.
- * @preview:   This parameter is unused and exists for historical
- *             reasons only.
  *
- * This function initializes GTK+ with gtk_init() and initializes GDK's
- * image rendering subsystem (GdkRGB) to follow the GIMP main program's
- * colormap allocation/installation policy.
+ * This function initializes GTK+ with gtk_init().
+ * It also initializes Gegl and Babl.
  *
  * It also sets up various other things so that the plug-in user looks
  * and behaves like the GIMP core. This includes selecting the GTK+
  * theme and setting up the help system as chosen in the GIMP
  * preferences. Any plug-in that provides a user interface should call
  * this function.
+ *
+ * It can safely be called more than once.
+ * Calls after the first return quickly with no effect.
  **/
 void
-gimp_ui_init (const gchar *prog_name,
-              gboolean     preview)
+gimp_ui_init (const gchar *prog_name)
 {
-  GdkScreen    *screen;
-  const gchar  *display_name;
-  gchar        *themerc;
-  GFileMonitor *rc_monitor;
-  GFile        *file;
+  const gchar    *display_name;
+  GtkCssProvider *css_provider;
+  GFileMonitor   *css_monitor;
+  GFile          *file;
 
   g_return_if_fail (prog_name != NULL);
 
@@ -148,23 +142,25 @@ gimp_ui_init (const gchar *prog_name,
 
   gtk_init (NULL, NULL);
 
-  themerc = gimp_personal_rc_file ("themerc");
-  gtk_rc_parse (themerc);
+  css_provider = gtk_css_provider_new ();
+  gtk_style_context_add_provider_for_screen (gdk_screen_get_default (),
+                                             GTK_STYLE_PROVIDER (css_provider),
+                                             GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
 
-  file = g_file_new_for_path (themerc);
-  g_free (themerc);
-
-  rc_monitor = g_file_monitor (file, G_FILE_MONITOR_NONE, NULL, NULL);
+  file = gimp_directory_file ("theme.css", NULL);
+  css_monitor = g_file_monitor (file, G_FILE_MONITOR_NONE, NULL, NULL);
   g_object_unref (file);
 
-  g_signal_connect (rc_monitor, "changed",
+  gimp_ui_theme_changed (css_monitor, NULL, NULL, G_FILE_MONITOR_EVENT_CHANGED,
+                         css_provider);
+
+  g_signal_connect (css_monitor, "changed",
                     G_CALLBACK (gimp_ui_theme_changed),
-                    NULL);
+                    css_provider);
+
+  g_object_unref (css_provider);
 
   gdk_set_program_class (gimp_wm_class ());
-
-  screen = gdk_screen_get_default ();
-  gtk_widget_set_default_colormap (gdk_screen_get_rgb_colormap (screen));
 
   if (gimp_icon_theme_dir ())
     {
@@ -176,10 +172,7 @@ gimp_ui_init (const gchar *prog_name,
   gimp_widgets_init (gimp_ui_help_func,
                      gimp_context_get_foreground,
                      gimp_context_get_background,
-                     gimp_ensure_modules);
-
-  if (! gimp_show_tool_tips ())
-    gimp_help_disable_tooltips ();
+                     gimp_ensure_modules, NULL);
 
   gimp_dialogs_show_help_button (gimp_show_help_button ());
 
@@ -187,85 +180,10 @@ gimp_ui_init (const gchar *prog_name,
   g_idle_add (gimp_osx_focus_window, NULL);
 #endif
 
-  gimp_ui_fix_pixbuf_style ();
+  /* Some widgets use GEGL buffers for thumbnails, previews, etc. */
+  gegl_init (NULL, NULL);
+
   gimp_ui_initialized = TRUE;
-}
-
-static GdkWindow *
-gimp_ui_get_foreign_window (guint32 window)
-{
-#ifdef GDK_WINDOWING_X11
-  return gdk_x11_window_foreign_new_for_display (gdk_display_get_default (),
-                                                 window);
-#endif
-
-#ifdef GDK_WINDOWING_WIN32
-  return gdk_win32_window_foreign_new_for_display (gdk_display_get_default (),
-                                                   (HWND) (uintptr_t) window);
-#endif
-
-  return NULL;
-}
-
-/**
- * gimp_ui_get_display_window:
- * @gdisp_ID: a GimpDisplay ID.
- *
- * Returns the #GdkWindow of a display window. The purpose is to allow
- * to make plug-in dialogs transient to the image display as explained
- * with gdk_window_set_transient_for().
- *
- * You shouldn't have to call this function directly. Use
- * gimp_window_set_transient_for_display() instead.
- *
- * Return value: A reference to a #GdkWindow or %NULL. You should
- *               unref the window using g_object_unref() as soon as
- *               you don't need it any longer.
- *
- * Since: 2.4
- */
-GdkWindow *
-gimp_ui_get_display_window (guint32 gdisp_ID)
-{
-  guint32 window;
-
-  g_return_val_if_fail (gimp_ui_initialized, NULL);
-
-  window = gimp_display_get_window_handle (gdisp_ID);
-  if (window)
-    return gimp_ui_get_foreign_window (window);
-
-  return NULL;
-}
-
-/**
- * gimp_ui_get_progress_window:
- *
- * Returns the #GdkWindow of the window this plug-in's progress bar is
- * shown in. Use it to make plug-in dialogs transient to this window
- * as explained with gdk_window_set_transient_for().
- *
- * You shouldn't have to call this function directly. Use
- * gimp_window_set_transient() instead.
- *
- * Return value: A reference to a #GdkWindow or %NULL. You should
- *               unref the window using g_object_unref() as soon as
- *               you don't need it any longer.
- *
- * Since: 2.4
- */
-GdkWindow *
-gimp_ui_get_progress_window (void)
-{
-  guint32  window;
-
-  g_return_val_if_fail (gimp_ui_initialized, NULL);
-
-  window = gimp_progress_get_window_handle ();
-  if (window)
-     return gimp_ui_get_foreign_window (window);
-
-  return NULL;
 }
 
 #ifdef GDK_WINDOWING_QUARTZ
@@ -280,41 +198,86 @@ gimp_window_transient_show (GtkWidget *window)
 #endif
 
 /**
- * gimp_window_set_transient_for_display:
- * @window:   the #GtkWindow that should become transient
- * @gdisp_ID: display ID of the image window that should become the parent
+ * gimp_window_set_transient_for:
+ * @window: the #GtkWindow that should become transient
+ * @handle: handle of the window that should become the parent
  *
  * Indicates to the window manager that @window is a transient dialog
- * associated with the GIMP image window that is identified by it's
- * display ID.  See gdk_window_set_transient_for () for more information.
+ * to the window identified by @handle.
+ *
+ * Note that @handle is an opaque data, which you should not try to
+ * construct yourself or make sense of. It may be different things
+ * depending on the OS or even the display server. You should only use
+ * a handle returned by [func@Gimp.progress_get_window_handle],
+ * [method@Gimp.Display.get_window_handle] or
+ * [method@GimpUi.Dialog.get_native_handle].
  *
  * Most of the time you will want to use the convenience function
- * gimp_window_set_transient().
+ * [func@GimpUi.window_set_transient].
+ *
+ * Since: 3.0
+ */
+void
+gimp_window_set_transient_for (GtkWindow *window,
+                               GBytes    *handle)
+{
+  g_return_if_fail (gimp_ui_initialized);
+  g_return_if_fail (GTK_IS_WINDOW (window));
+  g_return_if_fail (handle != NULL);
+
+  g_signal_handlers_disconnect_matched (window, G_SIGNAL_MATCH_FUNC,
+                                        0, 0, NULL,
+                                        gimp_window_transient_on_mapped,
+                                        NULL);
+
+  g_signal_connect_data (window, "map-event",
+                         G_CALLBACK (gimp_window_transient_on_mapped),
+                         g_bytes_ref (handle),
+                         (GClosureNotify) g_bytes_unref,
+                         G_CONNECT_AFTER);
+
+  if (gtk_widget_get_mapped (GTK_WIDGET (window)))
+    gimp_window_transient_on_mapped (GTK_WIDGET (window), NULL, handle);
+}
+
+/**
+ * gimp_window_set_transient_for_display:
+ * @window:  the #GtkWindow that should become transient
+ * @display: display of the image window that should become the parent
+ *
+ * Indicates to the window manager that @window is a transient dialog
+ * associated with the GIMP image window that is identified by its
+ * display. See [method@Gdk.Window.set_transient_for] for more information.
+ *
+ * Most of the time you will want to use the convenience function
+ * [func@GimpUi.window_set_transient].
  *
  * Since: 2.4
  */
 void
-gimp_window_set_transient_for_display (GtkWindow *window,
-                                       guint32    gdisp_ID)
+gimp_window_set_transient_for_display (GtkWindow   *window,
+                                       GimpDisplay *display)
 {
+  GBytes *handle;
+
   g_return_if_fail (gimp_ui_initialized);
   g_return_if_fail (GTK_IS_WINDOW (window));
+  g_return_if_fail (GIMP_IS_DISPLAY (display));
 
-  if (! gimp_window_set_transient_for (window,
-                                       gimp_ui_get_display_window (gdisp_ID)))
-    {
-      /*  if setting the window transient failed, at least set
-       *  WIN_POS_CENTER, which will center the window on the screen
-       *  where the mouse is (see bug #684003).
-       */
-      gtk_window_set_position (window, GTK_WIN_POS_CENTER);
+  g_signal_handlers_disconnect_matched (window, G_SIGNAL_MATCH_FUNC,
+                                        0, 0, NULL,
+                                        gimp_window_transient_on_mapped,
+                                        NULL);
 
-#ifdef GDK_WINDOWING_QUARTZ
-      g_signal_connect (window, "show",
-                        G_CALLBACK (gimp_window_transient_show),
-                        NULL);
-#endif
-    }
+  handle = gimp_display_get_window_handle (display);
+  g_signal_connect_data (window, "map-event",
+                         G_CALLBACK (gimp_window_transient_on_mapped),
+                         handle,
+                         (GClosureNotify) g_bytes_unref,
+                         G_CONNECT_AFTER);
+
+  if (gtk_widget_get_mapped (GTK_WIDGET (window)))
+    gimp_window_transient_on_mapped (GTK_WIDGET (window), NULL, handle);
 }
 
 /**
@@ -330,20 +293,25 @@ gimp_window_set_transient_for_display (GtkWindow *window,
 void
 gimp_window_set_transient (GtkWindow *window)
 {
+  GBytes *handle;
+
   g_return_if_fail (gimp_ui_initialized);
   g_return_if_fail (GTK_IS_WINDOW (window));
 
-  if (! gimp_window_set_transient_for (window, gimp_ui_get_progress_window ()))
-    {
-      /*  see above  */
-      gtk_window_set_position (window, GTK_WIN_POS_CENTER);
+  g_signal_handlers_disconnect_matched (window, G_SIGNAL_MATCH_FUNC,
+                                        0, 0, NULL,
+                                        gimp_window_transient_on_mapped,
+                                        NULL);
 
-#ifdef GDK_WINDOWING_QUARTZ
-      g_signal_connect (window, "show",
-                        G_CALLBACK (gimp_window_transient_show),
-                        NULL);
-#endif
-    }
+  handle = gimp_progress_get_window_handle ();
+  g_signal_connect_data (window, "map-event",
+                         G_CALLBACK (gimp_window_transient_on_mapped),
+                         handle,
+                         (GClosureNotify) g_bytes_unref,
+                         G_CONNECT_AFTER);
+
+  if (gtk_widget_get_mapped (GTK_WIDGET (window)))
+    gimp_window_transient_on_mapped (GTK_WIDGET (window), NULL, handle);
 }
 
 
@@ -354,6 +322,47 @@ gimp_ui_help_func (const gchar *help_id,
                    gpointer     help_data)
 {
   gimp_help (NULL, help_id);
+}
+
+static void
+gimp_ui_theme_changed (GFileMonitor      *monitor,
+                       GFile             *file,
+                       GFile             *other_file,
+                       GFileMonitorEvent  event_type,
+                       GtkCssProvider    *css_provider)
+{
+  GError *error = NULL;
+  gchar  *contents;
+
+  file = gimp_directory_file ("theme.css", NULL);
+
+  if (g_file_load_contents (file, NULL, &contents, NULL, NULL, &error))
+    {
+      gboolean prefer_dark_theme;
+
+      prefer_dark_theme = strstr (contents, "/* prefer-dark-theme */") != NULL;
+
+      g_object_set (gtk_settings_get_for_screen (gdk_screen_get_default ()),
+                    "gtk-application-prefer-dark-theme", prefer_dark_theme,
+                    NULL);
+
+      g_free (contents);
+    }
+  else
+    {
+      g_printerr ("%s: error loading %s: %s\n", G_STRFUNC,
+                  gimp_file_get_utf8_name (file), error->message);
+      g_clear_error (&error);
+    }
+
+  if (! gtk_css_provider_load_from_file (css_provider, file, &error))
+    {
+      g_printerr ("%s: error parsing %s: %s\n", G_STRFUNC,
+                  gimp_file_get_utf8_name (file), error->message);
+      g_clear_error (&error);
+    }
+
+  g_object_unref (file);
 }
 
 static void
@@ -376,125 +385,6 @@ gimp_ensure_modules (void)
     }
 }
 
-static void
-gimp_window_transient_realized (GtkWidget *window,
-                                GdkWindow *parent)
-{
-  if (gtk_widget_get_realized (window))
-    gdk_window_set_transient_for (gtk_widget_get_window (window), parent);
-}
-
-static gboolean
-gimp_window_set_transient_for (GtkWindow *window,
-                               GdkWindow *parent)
-{
-  gtk_window_set_transient_for (window, NULL);
-
-#ifndef GDK_WINDOWING_WIN32
-  g_signal_handlers_disconnect_matched (window, G_SIGNAL_MATCH_FUNC,
-                                        0, 0, NULL,
-                                        gimp_window_transient_realized,
-                                        NULL);
-
-  if (! parent)
-    return FALSE;
-
-  if (gtk_widget_get_realized (GTK_WIDGET (window)))
-    gdk_window_set_transient_for (gtk_widget_get_window (GTK_WIDGET (window)),
-                                  parent);
-
-  g_signal_connect_object (window, "realize",
-                           G_CALLBACK (gimp_window_transient_realized),
-                           parent, 0);
-  g_object_unref (parent);
-
-  return TRUE;
-#endif
-
-  return FALSE;
-}
-
-static void
-gimp_ui_theme_changed (void)
-{
-  gtk_rc_reparse_all ();
-
-  gimp_ui_fix_pixbuf_style ();
-}
-
-static void
-gimp_ui_fix_pixbuf_style (void)
-{
-  /*  Same hack as in app/gui/themes.c, to be removed for GTK+ 3.x  */
-
-  static GtkStyleClass *pixbuf_style_class = NULL;
-
-  if (! pixbuf_style_class)
-    {
-      GType type = g_type_from_name ("PixbufStyle");
-
-      if (type)
-        {
-          pixbuf_style_class = g_type_class_ref (type);
-
-          if (pixbuf_style_class)
-            pixbuf_style_class->draw_layout = gimp_ui_draw_pixbuf_layout;
-        }
-    }
-}
-
-static void
-gimp_ui_draw_pixbuf_layout (GtkStyle      *style,
-                            GdkWindow     *window,
-                            GtkStateType   state_type,
-                            gboolean       use_text,
-                            GdkRectangle  *area,
-                            GtkWidget     *widget,
-                            const gchar   *detail,
-                            gint           x,
-                            gint           y,
-                            PangoLayout   *layout)
-{
-  GdkGC *gc;
-
-  gc = use_text ? style->text_gc[state_type] : style->fg_gc[state_type];
-
-  if (area)
-    gdk_gc_set_clip_rectangle (gc, area);
-
-  if (state_type == GTK_STATE_INSENSITIVE)
-    {
-      GdkGC       *copy = gdk_gc_new (window);
-      GdkGCValues  orig;
-      GdkColor     fore;
-      guint16      r, g, b;
-
-      gdk_gc_copy (copy, gc);
-      gdk_gc_get_values (gc, &orig);
-
-      r = 0x40 + (((orig.foreground.pixel >> 16) & 0xff) >> 1);
-      g = 0x40 + (((orig.foreground.pixel >>  8) & 0xff) >> 1);
-      b = 0x40 + (((orig.foreground.pixel >>  0) & 0xff) >> 1);
-
-      fore.pixel = (r << 16) | (g << 8) | b;
-      fore.red   = r * 257;
-      fore.green = g * 257;
-      fore.blue  = b * 257;
-
-      gdk_gc_set_foreground (copy, &fore);
-      gdk_draw_layout (window, copy, x, y, layout);
-
-      g_object_unref (copy);
-    }
-  else
-    {
-      gdk_draw_layout (window, gc, x, y, layout);
-    }
-
-  if (area)
-    gdk_gc_set_clip_rectangle (gc, NULL);
-}
-
 #ifdef GDK_WINDOWING_QUARTZ
 static gboolean
 gimp_osx_focus_window (gpointer user_data)
@@ -503,3 +393,104 @@ gimp_osx_focus_window (gpointer user_data)
   return FALSE;
 }
 #endif
+
+static GdkWindow *
+gimp_ui_get_foreign_window (gpointer window)
+{
+#ifdef GDK_WINDOWING_X11
+  if (GDK_IS_X11_DISPLAY (gdk_display_get_default ()))
+    return gdk_x11_window_foreign_new_for_display (gdk_display_get_default (),
+                                                   (Window) window);
+#endif
+
+#ifdef GDK_WINDOWING_WIN32
+  return gdk_win32_window_foreign_new_for_display (gdk_display_get_default (),
+                                                   (HWND) window);
+#endif
+
+  return NULL;
+}
+
+static gboolean
+gimp_window_transient_on_mapped (GtkWidget   *window,
+                                 GdkEventAny *event,
+                                 GBytes      *handle)
+{
+  gboolean transient_set = FALSE;
+
+  if (handle == NULL)
+    return FALSE;
+
+#ifdef GDK_WINDOWING_WAYLAND
+  if (GDK_IS_WAYLAND_DISPLAY (gdk_display_get_default ()))
+    {
+      char *wayland_handle;
+
+      wayland_handle = (char *) g_bytes_get_data (handle, NULL);
+      gdk_wayland_window_set_transient_for_exported (gtk_widget_get_window (window),
+                                                     wayland_handle);
+      transient_set = TRUE;
+    }
+#endif
+
+#ifdef GDK_WINDOWING_X11
+  if (! transient_set && GDK_IS_X11_DISPLAY (gdk_display_get_default ()))
+    {
+      GdkWindow *parent;
+      Window    *handle_data;
+      Window     parent_ID;
+      gsize      handle_size;
+
+      handle_data = (Window *) g_bytes_get_data (handle, &handle_size);
+      g_return_val_if_fail (handle_size == sizeof (Window), FALSE);
+      parent_ID = *handle_data;
+
+      parent = gimp_ui_get_foreign_window ((gpointer) parent_ID);
+
+      if (parent)
+        gdk_window_set_transient_for (gtk_widget_get_window (window), parent);
+
+      transient_set = TRUE;
+    }
+#endif
+  /* To know why it is disabled on Win32, see gimp_window_set_transient_cb() in
+   * app/widgets/gimpwidgets-utils.c.
+   */
+#if 0 && defined (GDK_WINDOWING_WIN32)
+  if (! transient_set)
+    {
+      GdkWindow *parent;
+      HANDLE    *handle_data;
+      HANDLE     parent_ID;
+      gsize      handle_size;
+
+      handle_data = (HANDLE *) g_bytes_get_data (handle, &handle_size);
+      g_return_val_if_fail (handle_size == sizeof (HANDLE), FALSE);
+      parent_ID = *handle_data;
+
+      parent = gimp_ui_get_foreign_window ((gpointer) parent_ID);
+
+      if (parent)
+        gdk_window_set_transient_for (gtk_widget_get_window (window), parent);
+
+      transient_set = TRUE;
+    }
+#endif
+
+  if (! transient_set)
+    {
+      /*  if setting the window transient failed, at least set
+       *  WIN_POS_CENTER, which will center the window on the screen
+       *  where the mouse is (see bug #684003).
+       */
+      gtk_window_set_position (GTK_WINDOW (window), GTK_WIN_POS_CENTER);
+
+#ifdef GDK_WINDOWING_QUARTZ
+      g_signal_connect (window, "show",
+                        G_CALLBACK (gimp_window_transient_show),
+                        NULL);
+#endif
+    }
+
+  return FALSE;
+}

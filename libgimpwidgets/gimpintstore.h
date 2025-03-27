@@ -33,12 +33,11 @@ G_BEGIN_DECLS
  * GimpIntStoreColumns:
  * @GIMP_INT_STORE_VALUE:       the integer value
  * @GIMP_INT_STORE_LABEL:       a human-readable label
+ * @GIMP_INT_STORE_ABBREV:      an abbreviated label
  * @GIMP_INT_STORE_ICON_NAME:   an icon name
  * @GIMP_INT_STORE_PIXBUF:      a #GdkPixbuf
  * @GIMP_INT_STORE_USER_DATA:   arbitrary user data
- * @GIMP_INT_STORE_ABBREV:      an abbreviated label
  * @GIMP_INT_STORE_NUM_COLUMNS: the number of columns
- * @GIMP_INT_STORE_STOCK_ID:    compat alias for @GIMP_INT_STORE_ICON_NAME
  *
  * The column types of #GimpIntStore.
  **/
@@ -46,50 +45,43 @@ typedef enum
 {
   GIMP_INT_STORE_VALUE,
   GIMP_INT_STORE_LABEL,
+  GIMP_INT_STORE_ABBREV,
   GIMP_INT_STORE_ICON_NAME,
   GIMP_INT_STORE_PIXBUF,
   GIMP_INT_STORE_USER_DATA,
-  GIMP_INT_STORE_ABBREV,
-  GIMP_INT_STORE_NUM_COLUMNS,
-
-  /* deprecated */
-  GIMP_INT_STORE_STOCK_ID = GIMP_INT_STORE_ICON_NAME
+  GIMP_INT_STORE_NUM_COLUMNS
 } GimpIntStoreColumns;
 
 
-#define GIMP_TYPE_INT_STORE            (gimp_int_store_get_type ())
-#define GIMP_INT_STORE(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_INT_STORE, GimpIntStore))
-#define GIMP_INT_STORE_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_INT_STORE, GimpIntStoreClass))
-#define GIMP_IS_INT_STORE(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_INT_STORE))
-#define GIMP_IS_INT_STORE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_INT_STORE))
-#define GIMP_INT_STORE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_INT_STORE, GimpIntStoreClass))
-
-
-typedef struct _GimpIntStoreClass  GimpIntStoreClass;
-
-struct _GimpIntStore
-{
-  GtkListStore  parent_instance;
-
-  /*< private >*/
-  GtkTreeIter  *empty_iter;
-};
+#define GIMP_TYPE_INT_STORE (gimp_int_store_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpIntStore, gimp_int_store, GIMP, INT_STORE, GtkListStore)
 
 struct _GimpIntStoreClass
 {
   GtkListStoreClass  parent_class;
 
   /* Padding for future expansion */
+  void (* _gimp_reserved0) (void);
   void (* _gimp_reserved1) (void);
   void (* _gimp_reserved2) (void);
   void (* _gimp_reserved3) (void);
   void (* _gimp_reserved4) (void);
+  void (* _gimp_reserved5) (void);
+  void (* _gimp_reserved6) (void);
+  void (* _gimp_reserved7) (void);
+  void (* _gimp_reserved8) (void);
+  void (* _gimp_reserved9) (void);
 };
 
 
-GType          gimp_int_store_get_type        (void) G_GNUC_CONST;
-
-GtkListStore * gimp_int_store_new             (void);
+GtkListStore * gimp_int_store_new             (const gchar   *first_label,
+                                               gint           first_value,
+                                               ...) G_GNUC_NULL_TERMINATED;
+GtkListStore * gimp_int_store_new_valist      (const gchar   *first_label,
+                                               gint           first_value,
+                                               va_list        values);
+GtkListStore * gimp_int_store_new_array       (gint           n_values,
+                                               const gchar   *labels[]);
 
 gboolean       gimp_int_store_lookup_by_value (GtkTreeModel  *model,
                                                gint           value,

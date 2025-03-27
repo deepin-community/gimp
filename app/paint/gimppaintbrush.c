@@ -47,7 +47,7 @@
 
 
 static void       gimp_paintbrush_paint                        (GimpPaintCore             *paint_core,
-                                                                GimpDrawable              *drawable,
+                                                                GList                     *drawables,
                                                                 GimpPaintOptions          *paint_options,
                                                                 GimpSymmetry              *sym,
                                                                 GimpPaintState             paint_state,
@@ -56,7 +56,7 @@ static void       gimp_paintbrush_paint                        (GimpPaintCore   
 static gboolean   gimp_paintbrush_real_get_color_history_color (GimpPaintbrush            *paintbrush,
                                                                 GimpDrawable              *drawable,
                                                                 GimpPaintOptions          *paint_options,
-                                                                GimpRGB                   *color);
+                                                                GeglColor                **color);
 static void       gimp_paintbrush_real_get_paint_params        (GimpPaintbrush            *paintbrush,
                                                                 GimpDrawable              *drawable,
                                                                 GimpPaintOptions          *paint_options,
@@ -65,7 +65,7 @@ static void       gimp_paintbrush_real_get_paint_params        (GimpPaintbrush  
                                                                 GimpLayerMode             *paint_mode,
                                                                 GimpPaintApplicationMode  *paint_appl_mode,
                                                                 const GimpTempBuf        **paint_pixmap,
-                                                                GimpRGB                   *paint_color);
+                                                                GeglColor                **paint_color);
 
 
 G_DEFINE_TYPE (GimpPaintbrush, gimp_paintbrush, GIMP_TYPE_BRUSH_CORE)
@@ -104,7 +104,7 @@ gimp_paintbrush_init (GimpPaintbrush *paintbrush)
 
 static void
 gimp_paintbrush_paint (GimpPaintCore    *paint_core,
-                       GimpDrawable     *drawable,
+                       GList            *drawables,
                        GimpPaintOptions *paint_options,
                        GimpSymmetry     *sym,
                        GimpPaintState    paint_state,
@@ -112,50 +112,46 @@ gimp_paintbrush_paint (GimpPaintCore    *paint_core,
 {
   GimpPaintbrush *paintbrush = GIMP_PAINTBRUSH (paint_core);
 
+  g_return_if_fail (g_list_length (drawables) == 1);
+
   switch (paint_state)
     {
     case GIMP_PAINT_STATE_INIT:
       {
-        GimpRGB color;
+        GeglColor *color = NULL;
 
-        if (GIMP_PAINTBRUSH_GET_CLASS (paintbrush)->get_color_history_color &&
-            GIMP_PAINTBRUSH_GET_CLASS (paintbrush)->get_color_history_color (
-              paintbrush, drawable, paint_options, &color))
-          {
-            GimpContext *context = GIMP_CONTEXT (paint_options);
+        for (GList *iter = drawables; iter; iter = iter->next)
+          if (GIMP_PAINTBRUSH_GET_CLASS (paintbrush)->get_color_history_color &&
+              GIMP_PAINTBRUSH_GET_CLASS (paintbrush)->get_color_history_color (paintbrush,
+                                                                               iter->data,
+                                                                               paint_options,
+                                                                               &color))
+            {
+              GimpContext *context = GIMP_CONTEXT (paint_options);
 
-            gimp_palettes_add_color_history (context->gimp, &color);
-          }
+              gimp_palettes_add_color_history (context->gimp, color);
+            }
       }
       break;
 
     case GIMP_PAINT_STATE_MOTION:
-      _gimp_paintbrush_motion (paint_core, drawable, paint_options,
-                               sym, GIMP_OPACITY_OPAQUE);
+      for (GList *iter = drawables; iter; iter = iter->next)
+        _gimp_paintbrush_motion (paint_core, iter->data, paint_options,
+                                 sym, GIMP_OPACITY_OPAQUE);
       break;
 
     case GIMP_PAINT_STATE_FINISH:
-      {
-        if (paintbrush->paint_buffer)
-          {
-            g_object_remove_weak_pointer (
-              G_OBJECT (paintbrush->paint_buffer),
-              (gpointer) &paintbrush->paint_buffer);
-
-            paintbrush->paint_buffer = NULL;
-          }
-
-        g_clear_pointer (&paintbrush->paint_pixmap, gimp_temp_buf_unref);
-      }
+      g_clear_weak_pointer (&paintbrush->paint_buffer);
+      g_clear_pointer (&paintbrush->paint_pixmap, gimp_temp_buf_unref);
       break;
     }
 }
 
 static gboolean
-gimp_paintbrush_real_get_color_history_color (GimpPaintbrush   *paintbrush,
-                                              GimpDrawable     *drawable,
-                                              GimpPaintOptions *paint_options,
-                                              GimpRGB          *color)
+gimp_paintbrush_real_get_color_history_color (GimpPaintbrush    *paintbrush,
+                                              GimpDrawable      *drawable,
+                                              GimpPaintOptions  *paint_options,
+                                              GeglColor        **color)
 {
   GimpContext   *context    = GIMP_CONTEXT (paint_options);
   GimpBrushCore *brush_core = GIMP_BRUSH_CORE (paintbrush);
@@ -170,7 +166,7 @@ gimp_paintbrush_real_get_color_history_color (GimpPaintbrush   *paintbrush,
       return FALSE;
     }
 
-  gimp_context_get_foreground (context, color);
+  *color = gimp_context_get_foreground (context);
 
   return TRUE;
 }
@@ -184,24 +180,23 @@ gimp_paintbrush_real_get_paint_params (GimpPaintbrush            *paintbrush,
                                        GimpLayerMode             *paint_mode,
                                        GimpPaintApplicationMode  *paint_appl_mode,
                                        const GimpTempBuf        **paint_pixmap,
-                                       GimpRGB                   *paint_color)
+                                       GeglColor                **paint_color)
 {
   GimpPaintCore *paint_core = GIMP_PAINT_CORE (paintbrush);
   GimpBrushCore *brush_core = GIMP_BRUSH_CORE (paintbrush);
   GimpContext   *context    = GIMP_CONTEXT (paint_options);
   GimpImage     *image      = gimp_item_get_image (GIMP_ITEM (drawable));
 
-  *paint_mode = gimp_context_get_paint_mode (context);
+  *paint_mode  = gimp_context_get_paint_mode (context);
+  *paint_color = NULL;
 
-  if (gimp_paint_options_get_gradient_color (paint_options, image,
+  if (gimp_paint_options_are_dynamics_enabled (paint_options) &&
+      gimp_paint_options_get_gradient_color (paint_options, image,
                                              grad_point,
                                              paint_core->pixel_dist,
                                              paint_color))
     {
       /* optionally take the color from the current gradient */
-      gimp_pickable_srgb_to_image_color (GIMP_PICKABLE (drawable),
-                                         paint_color, paint_color);
-
       *paint_appl_mode = GIMP_PAINT_INCREMENTAL;
     }
   else if (brush_core->brush && gimp_brush_get_pixmap (brush_core->brush))
@@ -216,10 +211,7 @@ gimp_paintbrush_real_get_paint_params (GimpPaintbrush            *paintbrush,
   else
     {
       /* otherwise fill the area with the foreground color */
-      gimp_context_get_foreground (context, paint_color);
-
-      gimp_pickable_srgb_to_image_color (GIMP_PICKABLE (drawable),
-                                         paint_color, paint_color);
+      *paint_color = gegl_color_duplicate (gimp_context_get_foreground (context));
     }
 }
 
@@ -238,18 +230,26 @@ _gimp_paintbrush_motion (GimpPaintCore    *paint_core,
   gdouble           fade_point;
   gdouble           grad_point;
   gdouble           force;
-  const GimpCoords *coords;
+  GimpCoords        coords;
   gint              n_strokes;
+  gint              off_x, off_y;
   gint              i;
 
   fade_point = gimp_paint_options_get_fade (paint_options, image,
                                             paint_core->pixel_dist);
 
-  coords = gimp_symmetry_get_origin (sym);
+  gimp_item_get_offset (GIMP_ITEM (drawable), &off_x, &off_y);
+
+  coords    = *(gimp_symmetry_get_origin (sym));
+  coords.x -= off_x;
+  coords.y -= off_y;
+  gimp_symmetry_set_origin (sym, drawable, &coords);
+  paint_core->sym = sym;
+
   /* Some settings are based on the original stroke. */
   opacity *= gimp_dynamics_get_linear_value (dynamics,
                                              GIMP_DYNAMICS_OUTPUT_OPACITY,
-                                             coords,
+                                             &coords,
                                              paint_options,
                                              fade_point);
   if (opacity == 0.0)
@@ -258,14 +258,14 @@ _gimp_paintbrush_motion (GimpPaintCore    *paint_core,
   if (GIMP_BRUSH_CORE_GET_CLASS (brush_core)->handles_transforming_brush)
     {
       gimp_brush_core_eval_transform_dynamics (brush_core,
-                                               drawable,
+                                               image,
                                                paint_options,
-                                               coords);
+                                               &coords);
     }
 
   grad_point = gimp_dynamics_get_linear_value (dynamics,
                                                GIMP_DYNAMICS_OUTPUT_COLOR,
-                                               coords,
+                                               &coords,
                                                paint_options,
                                                fade_point);
 
@@ -278,7 +278,7 @@ _gimp_paintbrush_motion (GimpPaintCore    *paint_core,
       gint                      paint_buffer_x;
       gint                      paint_buffer_y;
       const GimpTempBuf        *paint_pixmap = NULL;
-      GimpRGB                   paint_color;
+      GeglColor                *paint_color;
       gint                      paint_width, paint_height;
 
       paint_appl_mode = paint_options->application_mode;
@@ -293,7 +293,7 @@ _gimp_paintbrush_motion (GimpPaintCore    *paint_core,
                                                                 &paint_pixmap,
                                                                 &paint_color);
 
-      coords = gimp_symmetry_get_coords (sym, i);
+      coords    = *(gimp_symmetry_get_coords (sym, i));
 
       if (GIMP_BRUSH_CORE_GET_CLASS (brush_core)->handles_transforming_brush)
         gimp_brush_core_eval_transform_symmetry (brush_core, sym, i);
@@ -301,18 +301,23 @@ _gimp_paintbrush_motion (GimpPaintCore    *paint_core,
       paint_buffer = gimp_paint_core_get_paint_buffer (paint_core, drawable,
                                                        paint_options,
                                                        paint_mode,
-                                                       coords,
+                                                       &coords,
                                                        &paint_buffer_x,
                                                        &paint_buffer_y,
                                                        &paint_width,
                                                        &paint_height);
+      coords = *(gimp_symmetry_get_coords (sym, i));
+
       if (! paint_buffer)
         continue;
 
       if (! paint_pixmap)
         {
-          opacity *= paint_color.a;
-          gimp_rgb_set_alpha (&paint_color, GIMP_OPACITY_OPAQUE);
+          gdouble alpha;
+
+          gegl_color_get_pixel (paint_color, babl_format ("A double"), &alpha);
+          opacity *= alpha;
+          gimp_color_set_alpha (paint_color, GIMP_OPACITY_OPAQUE);
         }
 
       /* fill the paint buffer.  we can skip this step when reusing the
@@ -320,27 +325,14 @@ _gimp_paintbrush_motion (GimpPaintCore    *paint_core,
        * (unless using an applicator, which currently modifies the paint buffer
        * in-place).
        */
-      if (paint_core->applicator                   ||
+      if (paint_core->applicators                  ||
           paint_buffer != paintbrush->paint_buffer ||
           paint_pixmap != paintbrush->paint_pixmap ||
-          (! paint_pixmap && (gimp_rgba_distance (&paint_color,
-                                                  &paintbrush->paint_color))))
+          (! paint_pixmap &&
+           ! gimp_color_is_perceptually_identical (paint_color,
+                                                   paintbrush->paint_color)))
         {
-          if (paint_buffer != paintbrush->paint_buffer)
-            {
-              if (paintbrush->paint_buffer)
-                {
-                  g_object_remove_weak_pointer (
-                    G_OBJECT (paintbrush->paint_buffer),
-                    (gpointer) &paintbrush->paint_buffer);
-                }
-
-              paintbrush->paint_buffer = paint_buffer;
-
-              g_object_add_weak_pointer (
-                G_OBJECT (paintbrush->paint_buffer),
-                (gpointer) &paintbrush->paint_buffer);
-            }
+          g_set_weak_pointer (&paintbrush->paint_buffer, paint_buffer);
 
           if (paint_pixmap != paintbrush->paint_pixmap)
             {
@@ -350,33 +342,28 @@ _gimp_paintbrush_motion (GimpPaintCore    *paint_core,
                 paintbrush->paint_pixmap = gimp_temp_buf_ref (paint_pixmap);
             }
 
+          g_clear_object (&paintbrush->paint_color);
           paintbrush->paint_color = paint_color;
 
           if (paint_pixmap)
-            {
-              gimp_brush_core_color_area_with_pixmap (brush_core, drawable,
-                                                      coords,
-                                                      paint_buffer,
-                                                      paint_buffer_x,
-                                                      paint_buffer_y,
-                                                      FALSE);
-            }
+            gimp_brush_core_color_area_with_pixmap (brush_core, drawable,
+                                                    &coords,
+                                                    paint_buffer,
+                                                    paint_buffer_x,
+                                                    paint_buffer_y,
+                                                    FALSE);
           else
-            {
-              GeglColor *color;
-
-              color = gimp_gegl_color_new (&paint_color);
-
-              gegl_buffer_set_color (paint_buffer, NULL, color);
-
-              g_object_unref (color);
-            }
+            gegl_buffer_set_color (paint_buffer, NULL, paint_color);
+        }
+      else
+        {
+          g_clear_object (&paint_color);
         }
 
       if (gimp_dynamics_is_output_enabled (dynamics, GIMP_DYNAMICS_OUTPUT_FORCE))
         force = gimp_dynamics_get_linear_value (dynamics,
                                                 GIMP_DYNAMICS_OUTPUT_FORCE,
-                                                coords,
+                                                &coords,
                                                 paint_options,
                                                 fade_point);
       else
@@ -384,7 +371,7 @@ _gimp_paintbrush_motion (GimpPaintCore    *paint_core,
 
       /* finally, let the brush core paste the colored area on the canvas */
       gimp_brush_core_paste_canvas (brush_core, drawable,
-                                    coords,
+                                    &coords,
                                     MIN (opacity, GIMP_OPACITY_OPAQUE),
                                     gimp_context_get_opacity (context),
                                     paint_mode,

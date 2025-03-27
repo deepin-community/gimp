@@ -20,6 +20,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpmath/gimpmath.h"
 
 #include "display-types.h"
@@ -43,7 +44,7 @@
 #include "gimpdisplayshell.h"
 #include "gimpdisplayshell-expose.h"
 #include "gimpdisplayshell-handlers.h"
-#include "gimpdisplayshell-icon.h"
+#include "gimpdisplayshell-render.h"
 #include "gimpdisplayshell-scroll.h"
 #include "gimpdisplayshell-scrollbars.h"
 #include "gimpdisplayshell-title.h"
@@ -53,8 +54,6 @@
 #include "gimp-intl.h"
 
 
-#define FLUSH_NOW_INTERVAL      (G_TIME_SPAN_SECOND / 60)
-
 #define PAINT_AREA_CHUNK_WIDTH  32
 #define PAINT_AREA_CHUNK_HEIGHT 32
 
@@ -62,19 +61,13 @@
 enum
 {
   PROP_0,
-  PROP_ID,
-  PROP_GIMP,
   PROP_IMAGE,
   PROP_SHELL
 };
 
 
-typedef struct _GimpDisplayPrivate GimpDisplayPrivate;
-
-struct _GimpDisplayPrivate
+struct _GimpDisplayImplPrivate
 {
-  gint            ID;           /*  unique identifier for this display  */
-
   GimpImage      *image;        /*  pointer to the associated image     */
   gint            instance;     /*  the instance # of this display as
                                  *  taken from the image at creation    */
@@ -83,12 +76,7 @@ struct _GimpDisplayPrivate
 
   GtkWidget      *shell;
   cairo_region_t *update_region;
-
-  guint64         last_flush_now;
 };
-
-#define GIMP_DISPLAY_GET_PRIVATE(display) \
-        ((GimpDisplayPrivate *) gimp_display_get_instance_private ((GimpDisplay *) (display)))
 
 
 /*  local function prototypes  */
@@ -104,6 +92,9 @@ static void     gimp_display_get_property           (GObject             *object
                                                      GValue              *value,
                                                      GParamSpec          *pspec);
 
+static gboolean gimp_display_impl_present           (GimpDisplay         *display);
+static gboolean gimp_display_impl_grab_focus        (GimpDisplay         *display);
+
 static GimpProgress * gimp_display_progress_start   (GimpProgress        *progress,
                                                      gboolean             cancellable,
                                                      const gchar         *message);
@@ -115,7 +106,7 @@ static void     gimp_display_progress_set_value     (GimpProgress        *progre
                                                      gdouble              percentage);
 static gdouble  gimp_display_progress_get_value     (GimpProgress        *progress);
 static void     gimp_display_progress_pulse         (GimpProgress        *progress);
-static guint32  gimp_display_progress_get_window_id (GimpProgress        *progress);
+static GBytes * gimp_display_progress_get_window_id (GimpProgress        *progress);
 static gboolean gimp_display_progress_message       (GimpProgress        *progress,
                                                      Gimp                *gimp,
                                                      GimpMessageSeverity  severity,
@@ -124,8 +115,7 @@ static gboolean gimp_display_progress_message       (GimpProgress        *progre
 static void     gimp_display_progress_canceled      (GimpProgress        *progress,
                                                      GimpDisplay         *display);
 
-static void     gimp_display_flush_whenever         (GimpDisplay         *display,
-                                                     gboolean             now);
+static void     gimp_display_flush_update_region    (GimpDisplay         *display);
 static void     gimp_display_paint_area             (GimpDisplay         *display,
                                                      gint                 x,
                                                      gint                 y,
@@ -133,34 +123,25 @@ static void     gimp_display_paint_area             (GimpDisplay         *displa
                                                      gint                 h);
 
 
-G_DEFINE_TYPE_WITH_CODE (GimpDisplay, gimp_display, GIMP_TYPE_OBJECT,
-                         G_ADD_PRIVATE (GimpDisplay)
+G_DEFINE_TYPE_WITH_CODE (GimpDisplayImpl, gimp_display_impl, GIMP_TYPE_DISPLAY,
+                         G_ADD_PRIVATE (GimpDisplayImpl)
                          G_IMPLEMENT_INTERFACE (GIMP_TYPE_PROGRESS,
                                                 gimp_display_progress_iface_init))
 
-#define parent_class gimp_display_parent_class
+#define parent_class gimp_display_impl_parent_class
 
 
 static void
-gimp_display_class_init (GimpDisplayClass *klass)
+gimp_display_impl_class_init (GimpDisplayImplClass *klass)
 {
-  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  GObjectClass     *object_class  = G_OBJECT_CLASS (klass);
+  GimpDisplayClass *display_class = GIMP_DISPLAY_CLASS (klass);
 
   object_class->set_property = gimp_display_set_property;
   object_class->get_property = gimp_display_get_property;
 
-  g_object_class_install_property (object_class, PROP_ID,
-                                   g_param_spec_int ("id",
-                                                     NULL, NULL,
-                                                     0, G_MAXINT, 0,
-                                                     GIMP_PARAM_READABLE));
-
-  g_object_class_install_property (object_class, PROP_GIMP,
-                                   g_param_spec_object ("gimp",
-                                                        NULL, NULL,
-                                                        GIMP_TYPE_GIMP,
-                                                        GIMP_PARAM_READWRITE |
-                                                        G_PARAM_CONSTRUCT_ONLY));
+  display_class->present     = gimp_display_impl_present;
+  display_class->grab_focus  = gimp_display_impl_grab_focus;
 
   g_object_class_install_property (object_class, PROP_IMAGE,
                                    g_param_spec_object ("image",
@@ -176,8 +157,9 @@ gimp_display_class_init (GimpDisplayClass *klass)
 }
 
 static void
-gimp_display_init (GimpDisplay *display)
+gimp_display_impl_init (GimpDisplayImpl *display)
 {
+  display->priv = gimp_display_impl_get_instance_private (display);
 }
 
 static void
@@ -200,31 +182,8 @@ gimp_display_set_property (GObject      *object,
                            const GValue *value,
                            GParamSpec   *pspec)
 {
-  GimpDisplay        *display = GIMP_DISPLAY (object);
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
-
   switch (property_id)
     {
-    case PROP_GIMP:
-      {
-        gint ID;
-
-        display->gimp = g_value_get_object (value); /* don't ref the gimp */
-        display->config = GIMP_DISPLAY_CONFIG (display->gimp->config);
-
-        do
-          {
-            ID = display->gimp->next_display_ID++;
-
-            if (display->gimp->next_display_ID == G_MAXINT)
-              display->gimp->next_display_ID = 1;
-          }
-        while (gimp_display_get_by_ID (display->gimp, ID));
-
-        private->ID = ID;
-      }
-      break;
-
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
@@ -237,25 +196,16 @@ gimp_display_get_property (GObject    *object,
                            GValue     *value,
                            GParamSpec *pspec)
 {
-  GimpDisplay        *display = GIMP_DISPLAY (object);
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
+  GimpDisplayImpl *display = GIMP_DISPLAY_IMPL (object);
 
   switch (property_id)
     {
-    case PROP_ID:
-      g_value_set_int (value, private->ID);
-      break;
-
-    case PROP_GIMP:
-      g_value_set_object (value, display->gimp);
-      break;
-
     case PROP_IMAGE:
-      g_value_set_object (value, private->image);
+      g_value_set_object (value, display->priv->image);
       break;
 
     case PROP_SHELL:
-      g_value_set_object (value, private->shell);
+      g_value_set_object (value, display->priv->shell);
       break;
 
     default:
@@ -264,16 +214,44 @@ gimp_display_get_property (GObject    *object,
     }
 }
 
+static gboolean
+gimp_display_impl_present (GimpDisplay *display)
+{
+  gimp_display_shell_present (gimp_display_get_shell (display));
+
+  return TRUE;
+}
+
+static gboolean
+gimp_display_impl_grab_focus (GimpDisplay *display)
+{
+  GimpDisplayImpl *display_impl = GIMP_DISPLAY_IMPL (display);
+
+  if (display_impl->priv->shell && gimp_display_get_image (display))
+    {
+      GimpImageWindow *image_window;
+
+      image_window = gimp_display_shell_get_window (gimp_display_get_shell (display));
+
+      gimp_display_present (display);
+      gtk_widget_grab_focus (gimp_window_get_primary_focus_widget (GIMP_WINDOW (image_window)));
+
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
 static GimpProgress *
 gimp_display_progress_start (GimpProgress *progress,
                              gboolean      cancellable,
                              const gchar  *message)
 {
-  GimpDisplay        *display = GIMP_DISPLAY (progress);
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
+  GimpDisplayImpl *display = GIMP_DISPLAY_IMPL (progress);
 
-  if (private->shell)
-    return gimp_progress_start (GIMP_PROGRESS (private->shell), cancellable,
+  if (display->priv->shell)
+    return gimp_progress_start (GIMP_PROGRESS (display->priv->shell),
+                                cancellable,
                                 "%s", message);
 
   return NULL;
@@ -282,21 +260,19 @@ gimp_display_progress_start (GimpProgress *progress,
 static void
 gimp_display_progress_end (GimpProgress *progress)
 {
-  GimpDisplay        *display = GIMP_DISPLAY (progress);
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
+  GimpDisplayImpl *display = GIMP_DISPLAY_IMPL (progress);
 
-  if (private->shell)
-    gimp_progress_end (GIMP_PROGRESS (private->shell));
+  if (display->priv->shell)
+    gimp_progress_end (GIMP_PROGRESS (display->priv->shell));
 }
 
 static gboolean
 gimp_display_progress_is_active (GimpProgress *progress)
 {
-  GimpDisplay        *display = GIMP_DISPLAY (progress);
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
+  GimpDisplayImpl *display = GIMP_DISPLAY_IMPL (progress);
 
-  if (private->shell)
-    return gimp_progress_is_active (GIMP_PROGRESS (private->shell));
+  if (display->priv->shell)
+    return gimp_progress_is_active (GIMP_PROGRESS (display->priv->shell));
 
   return FALSE;
 }
@@ -305,32 +281,31 @@ static void
 gimp_display_progress_set_text (GimpProgress *progress,
                                 const gchar  *message)
 {
-  GimpDisplay        *display = GIMP_DISPLAY (progress);
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
+  GimpDisplayImpl *display = GIMP_DISPLAY_IMPL (progress);
 
-  if (private->shell)
-    gimp_progress_set_text_literal (GIMP_PROGRESS (private->shell), message);
+  if (display->priv->shell)
+    gimp_progress_set_text_literal (GIMP_PROGRESS (display->priv->shell),
+                                    message);
 }
 
 static void
 gimp_display_progress_set_value (GimpProgress *progress,
                                  gdouble       percentage)
 {
-  GimpDisplay        *display = GIMP_DISPLAY (progress);
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
+  GimpDisplayImpl *display = GIMP_DISPLAY_IMPL (progress);
 
-  if (private->shell)
-    gimp_progress_set_value (GIMP_PROGRESS (private->shell), percentage);
+  if (display->priv->shell)
+    gimp_progress_set_value (GIMP_PROGRESS (display->priv->shell),
+                             percentage);
 }
 
 static gdouble
 gimp_display_progress_get_value (GimpProgress *progress)
 {
-  GimpDisplay        *display = GIMP_DISPLAY (progress);
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
+  GimpDisplayImpl *display = GIMP_DISPLAY_IMPL (progress);
 
-  if (private->shell)
-    return gimp_progress_get_value (GIMP_PROGRESS (private->shell));
+  if (display->priv->shell)
+    return gimp_progress_get_value (GIMP_PROGRESS (display->priv->shell));
 
   return 0.0;
 }
@@ -338,23 +313,21 @@ gimp_display_progress_get_value (GimpProgress *progress)
 static void
 gimp_display_progress_pulse (GimpProgress *progress)
 {
-  GimpDisplay        *display = GIMP_DISPLAY (progress);
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
+  GimpDisplayImpl *display = GIMP_DISPLAY_IMPL (progress);
 
-  if (private->shell)
-    gimp_progress_pulse (GIMP_PROGRESS (private->shell));
+  if (display->priv->shell)
+    gimp_progress_pulse (GIMP_PROGRESS (display->priv->shell));
 }
 
-static guint32
+static GBytes *
 gimp_display_progress_get_window_id (GimpProgress *progress)
 {
-  GimpDisplay        *display = GIMP_DISPLAY (progress);
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
+  GimpDisplayImpl *display = GIMP_DISPLAY_IMPL (progress);
 
-  if (private->shell)
-    return gimp_progress_get_window_id (GIMP_PROGRESS (private->shell));
+  if (display->priv->shell)
+    return gimp_progress_get_window_id (GIMP_PROGRESS (display->priv->shell));
 
-  return 0;
+  return NULL;
 }
 
 static gboolean
@@ -364,11 +337,10 @@ gimp_display_progress_message (GimpProgress        *progress,
                                const gchar         *domain,
                                const gchar         *message)
 {
-  GimpDisplay        *display = GIMP_DISPLAY (progress);
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
+  GimpDisplayImpl *display = GIMP_DISPLAY_IMPL (progress);
 
-  if (private->shell)
-    return gimp_progress_message (GIMP_PROGRESS (private->shell), gimp,
+  if (display->priv->shell)
+    return gimp_progress_message (GIMP_PROGRESS (display->priv->shell), gimp,
                                   severity, domain, message);
 
   return FALSE;
@@ -387,31 +359,30 @@ gimp_display_progress_canceled (GimpProgress *progress,
 GimpDisplay *
 gimp_display_new (Gimp              *gimp,
                   GimpImage         *image,
-                  GimpUnit           unit,
+                  GimpUnit          *unit,
                   gdouble            scale,
                   GimpUIManager     *popup_manager,
                   GimpDialogFactory *dialog_factory,
-                  GdkScreen         *screen,
-                  gint               monitor)
+                  GdkMonitor        *monitor)
 {
-  GimpDisplay        *display;
-  GimpDisplayPrivate *private;
-  GimpImageWindow    *window = NULL;
-  GimpDisplayShell   *shell;
+  GimpDisplay            *display;
+  GimpDisplayImplPrivate *private;
+  GimpImageWindow        *window = NULL;
+  GimpDisplayShell       *shell;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
   g_return_val_if_fail (image == NULL || GIMP_IS_IMAGE (image), NULL);
-  g_return_val_if_fail (GDK_IS_SCREEN (screen), NULL);
+  g_return_val_if_fail (GDK_IS_MONITOR (monitor), NULL);
 
   /*  If there isn't an interface, never create a display  */
   if (gimp->no_interface)
     return NULL;
 
-  display = g_object_new (GIMP_TYPE_DISPLAY,
+  display = g_object_new (GIMP_TYPE_DISPLAY_IMPL,
                           "gimp", gimp,
                           NULL);
 
-  private = GIMP_DISPLAY_GET_PRIVATE (display);
+  private = GIMP_DISPLAY_IMPL (display)->priv;
 
   /*  refs the image  */
   if (image)
@@ -443,14 +414,12 @@ gimp_display_new (Gimp              *gimp,
       window = gimp_image_window_new (gimp,
                                       private->image,
                                       dialog_factory,
-                                      screen,
                                       monitor);
     }
 
   /*  create the shell for the image  */
   private->shell = gimp_display_shell_new (display, unit, scale,
                                            popup_manager,
-                                           screen,
                                            monitor);
 
   shell = gimp_display_get_shell (display);
@@ -485,12 +454,12 @@ gimp_display_new (Gimp              *gimp,
 void
 gimp_display_delete (GimpDisplay *display)
 {
-  GimpDisplayPrivate *private;
-  GimpTool           *active_tool;
+  GimpDisplayImplPrivate *private;
+  GimpTool               *active_tool;
 
   g_return_if_fail (GIMP_IS_DISPLAY (display));
 
-  private = GIMP_DISPLAY_GET_PRIVATE (display);
+  private = GIMP_DISPLAY_IMPL (display)->priv;
 
   /* remove the display from the list */
   gimp_container_remove (display->gimp->displays, GIMP_OBJECT (display));
@@ -561,39 +530,6 @@ gimp_display_close (GimpDisplay *display)
     }
 }
 
-gint
-gimp_display_get_ID (GimpDisplay *display)
-{
-  GimpDisplayPrivate *private;
-
-  g_return_val_if_fail (GIMP_IS_DISPLAY (display), -1);
-
-  private = GIMP_DISPLAY_GET_PRIVATE (display);
-
-  return private->ID;
-}
-
-GimpDisplay *
-gimp_display_get_by_ID (Gimp *gimp,
-                        gint  ID)
-{
-  GList *list;
-
-  g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
-
-  for (list = gimp_get_display_iter (gimp);
-       list;
-       list = g_list_next (list))
-    {
-      GimpDisplay *display = list->data;
-
-      if (gimp_display_get_ID (display) == ID)
-        return display;
-    }
-
-  return NULL;
-}
-
 /**
  * gimp_display_get_action_name:
  * @display:
@@ -607,15 +543,7 @@ gimp_display_get_action_name (GimpDisplay *display)
   g_return_val_if_fail (GIMP_IS_DISPLAY (display), NULL);
 
   return g_strdup_printf ("windows-display-%04d",
-                          gimp_display_get_ID (display));
-}
-
-Gimp *
-gimp_display_get_gimp (GimpDisplay *display)
-{
-  g_return_val_if_fail (GIMP_IS_DISPLAY (display), NULL);
-
-  return display->gimp;
+                          gimp_display_get_id (display));
 }
 
 GimpImage *
@@ -623,21 +551,21 @@ gimp_display_get_image (GimpDisplay *display)
 {
   g_return_val_if_fail (GIMP_IS_DISPLAY (display), NULL);
 
-  return GIMP_DISPLAY_GET_PRIVATE (display)->image;
+  return GIMP_DISPLAY_IMPL (display)->priv->image;
 }
 
 void
 gimp_display_set_image (GimpDisplay *display,
                         GimpImage   *image)
 {
-  GimpDisplayPrivate *private;
-  GimpImage          *old_image = NULL;
-  GimpDisplayShell   *shell;
+  GimpDisplayImplPrivate *private;
+  GimpImage              *old_image = NULL;
+  GimpDisplayShell       *shell;
 
   g_return_if_fail (GIMP_IS_DISPLAY (display));
   g_return_if_fail (image == NULL || GIMP_IS_IMAGE (image));
 
-  private = GIMP_DISPLAY_GET_PRIVATE (display);
+  private = GIMP_DISPLAY_IMPL (display)->priv;
 
   shell = gimp_display_get_shell (display);
 
@@ -703,7 +631,6 @@ gimp_display_set_image (GimpDisplay *display,
       else
         {
           gimp_display_shell_title_update (shell);
-          gimp_display_shell_icon_update (shell);
         }
     }
 
@@ -714,36 +641,28 @@ gimp_display_set_image (GimpDisplay *display,
 gint
 gimp_display_get_instance (GimpDisplay *display)
 {
-  GimpDisplayPrivate *private;
-
   g_return_val_if_fail (GIMP_IS_DISPLAY (display), 0);
 
-  private = GIMP_DISPLAY_GET_PRIVATE (display);
-
-  return private->instance;
+  return GIMP_DISPLAY_IMPL (display)->priv->instance;
 }
 
 GimpDisplayShell *
 gimp_display_get_shell (GimpDisplay *display)
 {
-  GimpDisplayPrivate *private;
-
   g_return_val_if_fail (GIMP_IS_DISPLAY (display), NULL);
 
-  private = GIMP_DISPLAY_GET_PRIVATE (display);
-
-  return GIMP_DISPLAY_SHELL (private->shell);
+  return GIMP_DISPLAY_SHELL (GIMP_DISPLAY_IMPL (display)->priv->shell);
 }
 
 void
 gimp_display_empty (GimpDisplay *display)
 {
-  GimpDisplayPrivate *private;
-  GList              *iter;
+  GimpDisplayImplPrivate *private;
+  GList                 *iter;
 
   g_return_if_fail (GIMP_IS_DISPLAY (display));
 
-  private = GIMP_DISPLAY_GET_PRIVATE (display);
+  private = GIMP_DISPLAY_IMPL (display)->priv;
 
   g_return_if_fail (GIMP_IS_IMAGE (private->image));
 
@@ -763,15 +682,15 @@ gimp_display_empty (GimpDisplay *display)
 void
 gimp_display_fill (GimpDisplay *display,
                    GimpImage   *image,
-                   GimpUnit     unit,
+                   GimpUnit    *unit,
                    gdouble      scale)
 {
-  GimpDisplayPrivate *private;
+  GimpDisplayImplPrivate *private;
 
   g_return_if_fail (GIMP_IS_DISPLAY (display));
   g_return_if_fail (GIMP_IS_IMAGE (image));
 
-  private = GIMP_DISPLAY_GET_PRIVATE (display);
+  private = GIMP_DISPLAY_IMPL (display)->priv;
 
   g_return_if_fail (private->image == NULL);
 
@@ -784,13 +703,13 @@ gimp_display_fill (GimpDisplay *display,
 void
 gimp_display_update_bounding_box (GimpDisplay *display)
 {
-  GimpDisplayPrivate *private;
-  GimpDisplayShell   *shell;
-  GeglRectangle       bounding_box = {};
+  GimpDisplayImplPrivate *private;
+  GimpDisplayShell       *shell;
+  GeglRectangle           bounding_box = {};
 
   g_return_if_fail (GIMP_IS_DISPLAY (display));
 
-  private = GIMP_DISPLAY_GET_PRIVATE (display);
+  private = GIMP_DISPLAY_IMPL (display)->priv;
   shell   = gimp_display_get_shell (display);
 
   if (shell)
@@ -834,11 +753,11 @@ gimp_display_update_area (GimpDisplay *display,
                           gint         w,
                           gint         h)
 {
-  GimpDisplayPrivate *private;
+  GimpDisplayImplPrivate *private;
 
   g_return_if_fail (GIMP_IS_DISPLAY (display));
 
-  private = GIMP_DISPLAY_GET_PRIVATE (display);
+  private = GIMP_DISPLAY_IMPL (display)->priv;
 
   if (now)
     {
@@ -875,7 +794,11 @@ gimp_display_flush (GimpDisplay *display)
    * NULL
    */
   if (gimp_display_get_shell (display))
-    gimp_display_flush_whenever (display, FALSE);
+    {
+      gimp_display_flush_update_region (display);
+
+      gimp_display_shell_flush (gimp_display_get_shell (display));
+    }
 }
 
 void
@@ -883,17 +806,16 @@ gimp_display_flush_now (GimpDisplay *display)
 {
   g_return_if_fail (GIMP_IS_DISPLAY (display));
 
-  gimp_display_flush_whenever (display, TRUE);
+  gimp_display_flush_update_region (display);
 }
 
 
 /*  private functions  */
 
 static void
-gimp_display_flush_whenever (GimpDisplay *display,
-                             gboolean     now)
+gimp_display_flush_update_region (GimpDisplay *display)
 {
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
+  GimpDisplayImplPrivate *private = GIMP_DISPLAY_IMPL (display)->priv;
 
   if (private->update_region)
     {
@@ -916,22 +838,6 @@ gimp_display_flush_whenever (GimpDisplay *display,
 
       g_clear_pointer (&private->update_region, cairo_region_destroy);
     }
-
-  if (now)
-    {
-      guint64 now = g_get_monotonic_time ();
-
-      if ((now - private->last_flush_now) > FLUSH_NOW_INTERVAL)
-        {
-          gimp_display_shell_flush (gimp_display_get_shell (display), TRUE);
-
-          private->last_flush_now = now;
-        }
-    }
-  else
-    {
-      gimp_display_shell_flush (gimp_display_get_shell (display), now);
-    }
 }
 
 static void
@@ -941,11 +847,11 @@ gimp_display_paint_area (GimpDisplay *display,
                          gint         w,
                          gint         h)
 {
-  GimpDisplayPrivate *private = GIMP_DISPLAY_GET_PRIVATE (display);
-  GimpDisplayShell   *shell   = gimp_display_get_shell (display);
-  GeglRectangle       rect;
-  gint                x1, y1, x2, y2;
-  gdouble             x1_f, y1_f, x2_f, y2_f;
+  GimpDisplayImplPrivate *private = GIMP_DISPLAY_IMPL (display)->priv;
+  GimpDisplayShell       *shell   = gimp_display_get_shell (display);
+  GeglRectangle           rect;
+  gint                    x1, y1, x2, y2;
+  gdouble                 x1_f, y1_f, x2_f, y2_f;
 
   if (! gegl_rectangle_intersect (&rect,
                                   &private->bounding_box,
@@ -982,4 +888,6 @@ gimp_display_paint_area (GimpDisplay *display,
   y2 = ceil  ((gdouble) y2 / PAINT_AREA_CHUNK_HEIGHT) * PAINT_AREA_CHUNK_HEIGHT;
 
   gimp_display_shell_expose_area (shell, x1, y1, x2 - x1, y2 - y1);
+
+  gimp_display_shell_render_invalidate_area (shell, x1, y1, x2 - x1, y2 - y1);
 }

@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -36,8 +38,8 @@
 
 /**
  * _gimp_progress_init:
- * @message: Message to use in the progress dialog.
- * @gdisplay_ID: GimpDisplay to update progressbar in, or -1 for a separate window.
+ * @message: (nullable): Message to use in the progress dialog.
+ * @gdisplay: (nullable): GimpDisplay to update progressbar in, or %NULL for a separate window.
  *
  * Initializes the progress bar for the current plug-in.
  *
@@ -48,21 +50,25 @@
  **/
 gboolean
 _gimp_progress_init (const gchar *message,
-                     gint32       gdisplay_ID)
+                     GimpDisplay *gdisplay)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-progress-init",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, message,
-                                    GIMP_PDB_DISPLAY, gdisplay_ID,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, message,
+                                          GIMP_TYPE_DISPLAY, gdisplay,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-progress-init",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -81,18 +87,22 @@ _gimp_progress_init (const gchar *message,
 gboolean
 _gimp_progress_update (gdouble percentage)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-progress-update",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, percentage,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, percentage,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-progress-update",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -115,24 +125,28 @@ _gimp_progress_update (gdouble percentage)
 gboolean
 gimp_progress_pulse (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-progress-pulse",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-progress-pulse",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_progress_set_text:
- * @message: Message to use in the progress dialog.
+ * @message: (nullable): Message to use in the progress dialog.
  *
  * Changes the text in the progress bar for the current plug-in.
  *
@@ -147,18 +161,22 @@ gimp_progress_pulse (void)
 gboolean
 gimp_progress_set_text (const gchar *message)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-progress-set-text",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, message,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, message,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-progress-set-text",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -179,17 +197,21 @@ gimp_progress_set_text (const gchar *message)
 gboolean
 gimp_progress_end (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-progress-end",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-progress-end",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -197,33 +219,42 @@ gimp_progress_end (void)
 /**
  * gimp_progress_get_window_handle:
  *
- * Returns the native window ID of the toplevel window this plug-in's
- * progress is displayed in.
+ * Returns the native handle of the toplevel window this plug-in's
+ * progress is or would be displayed in.
  *
- * This function returns the native window ID of the toplevel window
- * this plug-in\'s progress is displayed in.
+ * This function returns the native handle allowing to identify the
+ * toplevel window this plug-in's progress is displayed in. It should
+ * still work even if the progress bar has not been initialized yet,
+ * unless the plug-in wasn't called from a GUI.
+ * This handle can be of various types (integer, string, etc.)
+ * depending on the platform you are running on which is why it returns
+ * a GBytes. There are usually no reasons to call this directly.
  *
- * Returns: The progress bar's toplevel window.
+ * Returns: (transfer full): The progress bar's toplevel window's handle.
  *
  * Since: 2.2
  **/
-gint
+GBytes *
 gimp_progress_get_window_handle (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint window = 0;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GBytes *handle = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-progress-get-window-handle",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    window = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-progress-get-window-handle",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    handle = GIMP_VALUES_DUP_BYTES (return_vals, 1);
 
-  return window;
+  gimp_value_array_unref (return_vals);
+
+  return handle;
 }
 
 /**
@@ -244,18 +275,22 @@ gimp_progress_get_window_handle (void)
 gboolean
 _gimp_progress_install (const gchar *progress_callback)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-progress-install",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, progress_callback,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, progress_callback,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-progress-install",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -276,18 +311,22 @@ _gimp_progress_install (const gchar *progress_callback)
 gboolean
 _gimp_progress_uninstall (const gchar *progress_callback)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-progress-uninstall",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, progress_callback,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, progress_callback,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-progress-uninstall",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -307,18 +346,22 @@ _gimp_progress_uninstall (const gchar *progress_callback)
 gboolean
 gimp_progress_cancel (const gchar *progress_callback)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-progress-cancel",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, progress_callback,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, progress_callback,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-progress-cancel",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

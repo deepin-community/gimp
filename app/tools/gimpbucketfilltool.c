@@ -70,6 +70,7 @@ struct _GimpBucketFillToolPrivate
   GimpLineArt        *line_art;
   GimpImage          *line_art_image;
   GimpDisplayShell   *line_art_shell;
+  GList              *line_art_bindings;
 
   /* For preview */
   GeglNode           *graph;
@@ -199,9 +200,9 @@ gimp_bucket_fill_tool_init (GimpBucketFillTool *bucket_fill_tool)
   gimp_tool_control_set_tool_cursor     (tool->control,
                                          GIMP_TOOL_CURSOR_BUCKET_FILL);
   gimp_tool_control_set_action_opacity  (tool->control,
-                                         "context/context-opacity-set");
+                                         "context-opacity-set");
   gimp_tool_control_set_action_object_1 (tool->control,
-                                         "context/context-pattern-select-set");
+                                         "context-pattern-select-set");
 
   bucket_fill_tool->priv =
     gimp_bucket_fill_tool_get_instance_private (bucket_fill_tool);
@@ -215,6 +216,8 @@ gimp_bucket_fill_tool_constructed (GObject *object)
   GimpBucketFillOptions *options     = GIMP_BUCKET_FILL_TOOL_GET_OPTIONS (tool);
   Gimp                  *gimp        = GIMP_CONTEXT (options)->gimp;
   GimpContext           *context     = gimp_get_user_context (gimp);
+  GList                 *bindings    = NULL;
+  GBinding              *binding;
   GimpLineArt           *line_art;
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
@@ -223,22 +226,31 @@ gimp_bucket_fill_tool_constructed (GObject *object)
                                      options->fill_area == GIMP_BUCKET_FILL_LINE_ART ?
                                      GIMP_MOTION_MODE_EXACT : GIMP_MOTION_MODE_COMPRESS);
 
-  line_art = gimp_line_art_new ();
-  g_object_bind_property (options,  "fill-transparent",
-                          line_art, "select-transparent",
-                          G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_object_bind_property (options,  "line-art-threshold",
-                          line_art, "threshold",
-                          G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_object_bind_property (options,  "line-art-max-grow",
-                          line_art, "max-grow",
-                          G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
-  g_object_bind_property (options,  "line-art-max-gap-length",
-                          line_art, "spline-max-length",
-                          G_BINDING_SYNC_CREATE | G_BINDING_DEFAULT);
-  g_object_bind_property (options,  "line-art-max-gap-length",
-                          line_art, "segment-max-length",
-                          G_BINDING_SYNC_CREATE | G_BINDING_DEFAULT);
+  line_art = gimp_context_take_line_art (context);
+  binding = g_object_bind_property (options,  "fill-transparent",
+                                    line_art, "select-transparent",
+                                    G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  bindings = g_list_prepend (bindings, binding);
+  binding = g_object_bind_property (options,  "line-art-threshold",
+                                    line_art, "threshold",
+                                    G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  bindings = g_list_prepend (bindings, binding);
+  binding = g_object_bind_property (options,  "line-art-max-grow",
+                                    line_art, "max-grow",
+                                    G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  bindings = g_list_prepend (bindings, binding);
+  binding = g_object_bind_property (options,  "line-art-automatic-closure",
+                                    line_art, "automatic-closure",
+                                    G_BINDING_SYNC_CREATE | G_BINDING_BIDIRECTIONAL);
+  bindings = g_list_prepend (bindings, binding);
+  binding = g_object_bind_property (options,  "line-art-max-gap-length",
+                                    line_art, "spline-max-length",
+                                    G_BINDING_SYNC_CREATE | G_BINDING_DEFAULT);
+  bindings = g_list_prepend (bindings, binding);
+  binding = g_object_bind_property (options,  "line-art-max-gap-length",
+                                    line_art, "segment-max-length",
+                                    G_BINDING_SYNC_CREATE | G_BINDING_DEFAULT);
+  bindings = g_list_prepend (bindings, binding);
   g_signal_connect_swapped (line_art, "computing-start",
                             G_CALLBACK (gimp_bucket_fill_tool_line_art_computing_start),
                             tool);
@@ -247,6 +259,7 @@ gimp_bucket_fill_tool_constructed (GObject *object)
                             tool);
   gimp_line_art_bind_gap_length (line_art, TRUE);
   bucket_tool->priv->line_art = line_art;
+  bucket_tool->priv->line_art_bindings = bindings;
 
   gimp_bucket_fill_tool_reset_line_art (bucket_tool);
 
@@ -284,7 +297,19 @@ gimp_bucket_fill_tool_finalize (GObject *object)
         tool);
       tool->priv->line_art_shell = NULL;
     }
-  g_clear_object (&tool->priv->line_art);
+
+  /* We don't free the line art object, but gives temporary ownership to
+   * the user context which will free it if a timer runs out.
+   *
+   * This way, we allow people to not suffer a new computational delay
+   * if for instance they just needed to switch tools for a few seconds
+   * while the source layer stays the same.
+   */
+  g_signal_handlers_disconnect_by_data (tool->priv->line_art, tool);
+  g_list_free_full (tool->priv->line_art_bindings,
+                    (GDestroyNotify) g_binding_unbind);
+  gimp_context_store_line_art (context, tool->priv->line_art);
+  tool->priv->line_art = NULL;
 
   g_signal_handlers_disconnect_by_data (options, tool);
   g_signal_handlers_disconnect_by_data (context, tool);
@@ -327,21 +352,23 @@ gimp_bucket_fill_tool_start (GimpBucketFillTool *tool,
                              const GimpCoords   *coords,
                              GimpDisplay        *display)
 {
-  GimpBucketFillOptions *options  = GIMP_BUCKET_FILL_TOOL_GET_OPTIONS (tool);
-  GimpContext           *context  = GIMP_CONTEXT (options);
-  GimpImage             *image    = gimp_display_get_image (display);
-  GimpDrawable          *drawable = gimp_image_get_active_drawable (image);
+  GimpBucketFillOptions *options   = GIMP_BUCKET_FILL_TOOL_GET_OPTIONS (tool);
+  GimpContext           *context   = GIMP_CONTEXT (options);
+  GimpImage             *image     = gimp_display_get_image (display);
+  GList                 *drawables = gimp_image_get_selected_drawables (image);
 
   g_return_if_fail (! tool->priv->filter);
+  g_return_if_fail (g_list_length (drawables) == 1);
 
   gimp_line_art_freeze (tool->priv->line_art);
 
   GIMP_TOOL (tool)->display  = display;
-  GIMP_TOOL (tool)->drawable = drawable;
+  g_list_free (GIMP_TOOL (tool)->drawables);
+  GIMP_TOOL (tool)->drawables = drawables;
 
   gimp_bucket_fill_tool_create_graph (tool);
 
-  tool->priv->filter = gimp_drawable_filter_new (drawable, _("Bucket fill"),
+  tool->priv->filter = gimp_drawable_filter_new (drawables->data, _("Bucket fill"),
                                                  tool->priv->graph,
                                                  GIMP_ICON_TOOL_BUCKET_FILL);
 
@@ -370,10 +397,16 @@ gimp_bucket_fill_tool_preview (GimpBucketFillTool *tool,
                                GimpDisplay        *display,
                                GimpFillOptions    *fill_options)
 {
-  GimpBucketFillOptions *options  = GIMP_BUCKET_FILL_TOOL_GET_OPTIONS (tool);
-  GimpDisplayShell      *shell    = gimp_display_get_shell (display);
-  GimpImage             *image    = gimp_display_get_image (display);
-  GimpDrawable          *drawable = gimp_image_get_active_drawable (image);
+  GimpBucketFillOptions *options   = GIMP_BUCKET_FILL_TOOL_GET_OPTIONS (tool);
+  GimpDisplayShell      *shell     = gimp_display_get_shell (display);
+  GimpImage             *image     = gimp_display_get_image (display);
+  GList                 *drawables = gimp_image_get_selected_drawables (image);
+  GimpDrawable          *drawable;
+
+  g_return_if_fail (g_list_length (drawables) == 1);
+
+  drawable = drawables->data;
+  g_list_free (drawables);
 
   if (tool->priv->filter)
     {
@@ -426,6 +459,11 @@ gimp_bucket_fill_tool_preview (GimpBucketFillTool *tool,
                                                          fill_options,
                                                          options->line_art_source ==
                                                          GIMP_LINE_ART_SOURCE_SAMPLE_MERGED,
+                                                         options->fill_as_line_art &&
+                                                         options->fill_mode != GIMP_BUCKET_FILL_PATTERN,
+                                                         options->fill_as_line_art_threshold / 255.0,
+                                                         options->line_art_stroke,
+                                                         options->stroke_options,
                                                          x, y,
                                                          &tool->priv->fill_mask,
                                                          &x, &y, NULL, NULL);
@@ -459,7 +497,7 @@ gimp_bucket_fill_tool_commit (GimpBucketFillTool *tool)
 {
   if (tool->priv->filter)
     {
-      gimp_drawable_filter_commit (tool->priv->filter,
+      gimp_drawable_filter_commit (tool->priv->filter, FALSE,
                                    GIMP_PROGRESS (tool), FALSE);
       gimp_image_flush (gimp_display_get_image (GIMP_TOOL (tool)->display));
     }
@@ -486,8 +524,9 @@ gimp_bucket_fill_tool_halt (GimpBucketFillTool *tool)
   if (gimp_line_art_is_frozen (tool->priv->line_art))
     gimp_line_art_thaw (tool->priv->line_art);
 
-  GIMP_TOOL (tool)->display  = NULL;
-  GIMP_TOOL (tool)->drawable = NULL;
+  GIMP_TOOL (tool)->display   = NULL;
+  g_list_free (GIMP_TOOL (tool)->drawables);
+  GIMP_TOOL (tool)->drawables = NULL;
 }
 
 static void
@@ -539,7 +578,9 @@ gimp_bucket_fill_tool_button_press (GimpTool            *tool,
   GimpBucketFillOptions *options     = GIMP_BUCKET_FILL_TOOL_GET_OPTIONS (tool);
   GimpGuiConfig         *config      = GIMP_GUI_CONFIG (display->gimp->config);
   GimpImage             *image       = gimp_display_get_image (display);
-  GimpDrawable          *drawable    = gimp_image_get_active_drawable (image);
+  GimpItem              *locked_item = NULL;
+  GList                 *drawables   = gimp_image_get_selected_drawables (image);
+  GimpDrawable          *drawable;
 
   if (gimp_color_tool_is_enabled (GIMP_COLOR_TOOL (tool)))
     {
@@ -547,6 +588,21 @@ gimp_bucket_fill_tool_button_press (GimpTool            *tool,
                                                     press_type, display);
       return;
     }
+
+  if (g_list_length (drawables) != 1)
+    {
+      if (g_list_length (drawables) > 1)
+        gimp_tool_message_literal (tool, display,
+                                   _("Cannot fill multiple layers. Select only one layer."));
+      else
+        gimp_tool_message_literal (tool, display, _("No selected drawables."));
+
+      g_list_free (drawables);
+      return;
+    }
+
+  drawable = drawables->data;
+  g_list_free (drawables);
 
   if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)))
     {
@@ -563,11 +619,11 @@ gimp_bucket_fill_tool_button_press (GimpTool            *tool,
       return;
     }
 
-  if (gimp_item_is_content_locked (GIMP_ITEM (drawable)))
+  if (gimp_item_is_content_locked (GIMP_ITEM (drawable), &locked_item))
     {
       gimp_tool_message_literal (tool, display,
-                                 _("The active layer's pixels are locked."));
-      gimp_tools_blink_lock_box (display->gimp, GIMP_ITEM (drawable));
+                                 _("The selected layer's pixels are locked."));
+      gimp_tools_blink_lock_box (display->gimp, locked_item);
       return;
     }
 
@@ -576,6 +632,7 @@ gimp_bucket_fill_tool_button_press (GimpTool            *tool,
     {
       gimp_tool_message_literal (tool, display,
                                  _("No valid line art source selected."));
+      gimp_blink_dockable (display->gimp, "gimp-tool-options", "line-art-source", NULL, NULL);
       return;
     }
 
@@ -827,10 +884,15 @@ gimp_bucket_fill_tool_cursor_update (GimpTool         *tool,
   if (gimp_bucket_fill_tool_coords_in_active_pickable (bucket_tool,
                                                        display, coords))
     {
-      GimpDrawable *drawable = gimp_image_get_active_drawable (image);
+      GList        *drawables = gimp_image_get_selected_drawables (image);
+      GimpDrawable *drawable  = NULL;
 
-      if (! gimp_viewable_get_children (GIMP_VIEWABLE (drawable)) &&
-          ! gimp_item_is_content_locked (GIMP_ITEM (drawable))    &&
+      if (g_list_length (drawables) == 1)
+        drawable = drawables->data;
+
+      if (drawable                                                   &&
+          ! gimp_viewable_get_children (GIMP_VIEWABLE (drawable))    &&
+          ! gimp_item_is_content_locked (GIMP_ITEM (drawable), NULL) &&
           (gimp_item_is_visible (GIMP_ITEM (drawable)) ||
            config->edit_non_visible))
         {
@@ -849,6 +911,8 @@ gimp_bucket_fill_tool_cursor_update (GimpTool         *tool,
               break;
             }
         }
+
+      g_list_free (drawables);
     }
 
   gimp_tool_control_set_cursor_modifier (tool->control, modifier);
@@ -958,10 +1022,10 @@ gimp_bucket_fill_tool_reset_line_art (GimpBucketFillTool *tool)
 
       if (image)
         {
-          g_signal_connect_swapped (image, "active-layer-changed",
+          g_signal_connect_swapped (image, "selected-layers-changed",
                                     G_CALLBACK (gimp_bucket_fill_tool_reset_line_art),
                                     tool);
-          g_signal_connect_swapped (image, "active-channel-changed",
+          g_signal_connect_swapped (image, "selected-channels-changed",
                                     G_CALLBACK (gimp_bucket_fill_tool_reset_line_art),
                                     tool);
 
@@ -999,10 +1063,16 @@ gimp_bucket_fill_tool_reset_line_art (GimpBucketFillTool *tool)
 
   if (image)
     {
-      GimpDrawable *drawable = gimp_image_get_active_drawable (image);
+      GList        *drawables = gimp_image_get_selected_drawables (image);
+      GimpDrawable *drawable  = NULL;
 
-      if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)))
-        drawable = NULL;
+      if (g_list_length (drawables) == 1)
+        {
+          drawable = drawables->data;
+          if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)))
+            drawable = NULL;
+        }
+      g_list_free (drawables);
 
       if (options->line_art_source == GIMP_LINE_ART_SOURCE_SAMPLE_MERGED)
         {

@@ -20,7 +20,7 @@
 
 #define LOAD_PROC       "file-jpeg-load"
 #define LOAD_THUMB_PROC "file-jpeg-load-thumb"
-#define SAVE_PROC       "file-jpeg-save"
+#define EXPORT_PROC     "file-jpeg-export"
 #define PLUG_IN_BINARY  "file-jpeg"
 #define PLUG_IN_ROLE    "gimp-file-jpeg"
 
@@ -51,15 +51,12 @@ typedef enum
   JPEG_SUBSAMPLING_1x2_1x1_1x1 = 3
 } JpegSubsampling;
 
-extern gint32 volatile  preview_image_ID;
-extern gint32           preview_layer_ID;
+extern GimpImage * volatile  preview_image;
+extern GimpLayer *      preview_layer;
 extern gboolean         undo_touched;
 extern gboolean         load_interactive;
-extern gint32           display_ID;
-extern gchar           *image_comment;
-extern gint             orig_quality;
-extern JpegSubsampling  orig_subsmp;
-extern gint             num_quant_tables;
+extern GimpDisplay     *display;
+extern gboolean         separate_display;
 
 
 void      destroy_preview               (void);

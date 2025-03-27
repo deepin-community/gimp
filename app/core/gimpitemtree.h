@@ -56,6 +56,10 @@ GimpItem     * gimp_item_tree_get_active_item  (GimpItemTree  *tree);
 void           gimp_item_tree_set_active_item  (GimpItemTree  *tree,
                                                 GimpItem      *item);
 
+GList        * gimp_item_tree_get_selected_items (GimpItemTree  *tree);
+void           gimp_item_tree_set_selected_items (GimpItemTree  *tree,
+                                                  GList         *items);
+
 GimpItem     * gimp_item_tree_get_item_by_name (GimpItemTree  *tree,
                                                 const gchar   *name);
 
@@ -68,9 +72,9 @@ void           gimp_item_tree_add_item         (GimpItemTree  *tree,
                                                 GimpItem      *item,
                                                 GimpItem      *parent,
                                                 gint           position);
-GimpItem     * gimp_item_tree_remove_item      (GimpItemTree  *tree,
+GList        * gimp_item_tree_remove_item      (GimpItemTree  *tree,
                                                 GimpItem      *item,
-                                                GimpItem      *new_active);
+                                                GList         *new_selected);
 
 gboolean       gimp_item_tree_reorder_item     (GimpItemTree  *tree,
                                                 GimpItem      *item,

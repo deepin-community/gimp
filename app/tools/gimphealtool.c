@@ -48,7 +48,9 @@ gimp_heal_tool_register (GimpToolRegisterCallback  callback,
   (* callback) (GIMP_TYPE_HEAL_TOOL,
                 GIMP_TYPE_SOURCE_OPTIONS,
                 gimp_heal_options_gui,
-                GIMP_PAINT_OPTIONS_CONTEXT_MASK,
+                GIMP_PAINT_OPTIONS_CONTEXT_MASK |
+                GIMP_CONTEXT_PROP_MASK_PATTERN  |
+                GIMP_CONTEXT_PROP_MASK_EXPAND,
                 "gimp-heal-tool",
                 _("Healing"),
                 _("Healing Tool: Heal image irregularities"),
@@ -98,14 +100,12 @@ gimp_heal_options_gui (GimpToolOptions *tool_options)
   button = gimp_prop_check_button_new (config, "sample-merged",
                                        _("Sample merged"));
   gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   /* the alignment combo */
   combo = gimp_prop_enum_combo_box_new (config, "align-mode", 0, 0);
   gimp_int_combo_box_set_label (GIMP_INT_COMBO_BOX (combo), _("Alignment"));
   g_object_set (combo, "ellipsize", PANGO_ELLIPSIZE_END, NULL);
   gtk_box_pack_start (GTK_BOX (vbox), combo, TRUE, TRUE, 0);
-  gtk_widget_show (combo);
 
   return vbox;
 }

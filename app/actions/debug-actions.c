@@ -31,47 +31,42 @@
 #include "debug-actions.h"
 #include "debug-commands.h"
 
+#include "gimp-intl.h"
+
 
 static const GimpActionEntry debug_actions[] =
 {
-  { "debug-menu", NULL, "_Debug" },
+  { "debug-gtk-inspector", NULL,
+    N_("Start _GtkInspector"), NULL, { NULL }, NULL,
+    debug_gtk_inspector_cmd_callback,
+    NULL },
 
   { "debug-mem-profile", NULL,
-    "_Memory Profile", NULL, NULL,
+    N_("_Memory Profile"), NULL, { NULL }, NULL,
     debug_mem_profile_cmd_callback,
     NULL },
 
   { "debug-benchmark-projection", NULL,
-    "Benchmark _Projection", NULL,
-    "Invalidates the entire projection, measures the time it takes to "
+    N_("Benchmark _Projection"), NULL, { NULL },
+    N_("Invalidates the entire projection, measures the time it takes to "
     "validate (render) the part that is visible in the active display, "
-    "and print the result to stdout.",
+    "and print the result to stdout."),
     debug_benchmark_projection_cmd_callback,
     NULL },
 
   { "debug-show-image-graph", NULL,
-    "Show Image _Graph", NULL,
-    "Creates a new image showing the GEGL graph of this image",
+    N_("Show Image _Graph"), NULL, { NULL },
+    N_("Creates a new image showing the GEGL graph of this image"),
     debug_show_image_graph_cmd_callback,
     NULL },
 
-  { "debug-dump-items", NULL,
-    "_Dump Items", NULL, NULL,
-    debug_dump_menus_cmd_callback,
-    NULL },
-
-  { "debug-dump-managers", NULL,
-    "Dump _UI Managers", NULL, NULL,
-    debug_dump_managers_cmd_callback,
-    NULL },
-
   { "debug-dump-keyboard-shortcuts", NULL,
-    "Dump _Keyboard Shortcuts", NULL, NULL,
+    N_("Dump _Keyboard Shortcuts"), NULL, { NULL }, NULL,
     debug_dump_keyboard_shortcuts_cmd_callback,
     NULL },
 
   { "debug-dump-attached-data", NULL,
-    "Dump Attached Data", NULL, NULL,
+    N_("Dump _Attached Data"), NULL, { NULL }, NULL,
     debug_dump_attached_data_cmd_callback,
     NULL }
 };
@@ -99,7 +94,7 @@ debug_actions_update (GimpActionGroup *group,
                       gpointer         data)
 {
 #define SET_SENSITIVE(action,condition) \
-        gimp_action_group_set_action_sensitive (group, action, (condition) != 0)
+        gimp_action_group_set_action_sensitive (group, action, (condition) != 0, NULL)
 
   SET_SENSITIVE ("debug-show-image-graph", gegl_has_operation ("gegl:introspect"));
 

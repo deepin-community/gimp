@@ -51,15 +51,16 @@ struct _GimpDisplayShell
 
   GimpDisplay       *display;
 
+  GBytes            *window_handle;
+
   GimpUIManager     *popup_manager;
-  GdkScreen         *initial_screen;
-  gint               initial_monitor;
+  GdkMonitor        *initial_monitor;
 
   GimpDisplayOptions *options;
   GimpDisplayOptions *fullscreen_options;
   GimpDisplayOptions *no_image_options;
 
-  GimpUnit           unit;
+  GimpUnit           *unit;
 
   gint               offset_x;         /*  offset of display image            */
   gint               offset_y;
@@ -84,8 +85,6 @@ struct _GimpDisplayShell
   gint               last_offset_x;    /*  offsets used when reverting zoom   */
   gint               last_offset_y;
 
-  gdouble            other_scale;      /*  scale factor entered in Zoom->Other*/
-
   gint               disp_width;       /*  width of drawing area              */
   gint               disp_height;      /*  height of drawing area             */
 
@@ -101,6 +100,8 @@ struct _GimpDisplayShell
   GList             *children;
 
   GtkWidget         *canvas;           /*  GimpCanvas widget                  */
+  GtkGesture        *zoom_gesture;     /*  Zoom gesture handler for the canvas*/
+  GtkGesture        *rotate_gesture;   /*  Rotation gesture handler           */
 
   GtkAdjustment     *hsbdata;          /*  adjustments                        */
   GtkAdjustment     *vsbdata;
@@ -134,11 +135,6 @@ struct _GimpDisplayShell
   gchar             *title;            /*  current title                      */
   gchar             *status;           /*  current default statusbar content  */
 
-  gint               icon_size;        /*  size of the icon pixbuf            */
-  gint               icon_size_small;  /*  size of the icon's wilber pixbuf   */
-  guint              icon_idle_id;     /*  ID of the idle-function            */
-  GdkPixbuf         *icon;             /*  icon                               */
-
   guint              fill_idle_id;     /*  display_shell_fill() idle ID       */
 
   GimpHandedness     cursor_handedness;/*  Handedness for cursor display      */
@@ -168,11 +164,20 @@ struct _GimpDisplayShell
 
   GimpColorTransform *filter_transform;
   const Babl         *filter_format;   /*  filter_buffer's format             */
+  GimpColorProfile   *filter_profile;  /*  filter_format's profile            */
   GeglBuffer         *filter_buffer;   /*  buffer for display filters         */
   guchar             *filter_data;     /*  filter_buffer's pixels             */
   gint                filter_stride;   /*  filter_buffer's stride             */
 
-  GimpDisplayXfer   *xfer;             /*  manages image buffer transfers     */
+  gint               render_scale;
+
+  cairo_surface_t   *render_cache;
+  cairo_region_t    *render_cache_valid;
+
+  gint               render_buf_width;
+  gint               render_buf_height;
+
+  cairo_surface_t   *render_surface;   /*  buffer for rendering the mask      */
   cairo_surface_t   *mask_surface;     /*  buffer for rendering the mask      */
   cairo_pattern_t   *checkerboard;     /*  checkerboard pattern               */
 
@@ -188,13 +193,18 @@ struct _GimpDisplayShell
   gboolean           size_allocate_center_image;
 
   /*  the state of gimp_display_shell_tool_events()  */
-  gboolean           pointer_grabbed;
-  guint32            pointer_grab_time;
+  GdkSeat           *grab_seat;
+  GdkDevice         *grab_pointer;
+  GdkDevice         *grab_pointer_source;
 
-  gboolean           keyboard_grabbed;
-  guint32            keyboard_grab_time;
+  /*  the state of gimp_display_shell_zoom_gesture_*() */
+  gdouble            last_zoom_scale;
+  gboolean           zoom_gesture_active;
 
-  gboolean           inferior_ignore_mode;
+  /*  the state of gimp_display_shell_rotate_gesture_*() */
+  guint              last_gesture_rotate_state;
+  gdouble            initial_gesture_rotate_angle;
+  gboolean           rotate_gesture_active;
 
   /* Two states are possible when the shell is grabbed: it can be
    * grabbed with space (or space+button1 which is the same state),
@@ -205,30 +215,46 @@ struct _GimpDisplayShell
   gboolean           button1_release_pending;
   const gchar       *space_shaded_tool;
 
-  gboolean           scrolling;
+  /* Modifier action currently ON. */
+  GimpModifierAction mod_action;
+  gchar             *mod_action_desc;
+
   gint               scroll_start_x;
   gint               scroll_start_y;
   gint               scroll_last_x;
   gint               scroll_last_y;
-  gboolean           rotating;
   gdouble            rotate_drag_angle;
-  gboolean           scaling;
   gpointer           scroll_info;
-  gboolean           layer_picking;
   GimpLayer         *picked_layer;
 
   GeglBuffer        *mask;
   gint               mask_offset_x;
   gint               mask_offset_y;
-  GimpRGB            mask_color;
+  GeglColor         *mask_color;
   gboolean           mask_inverted;
 
   GimpMotionBuffer  *motion_buffer;
 
-  GQueue            *zoom_focus_pointer_queue;
+  GdkPoint          *zoom_focus_point;
 
   gboolean           blink;
   guint              blink_timeout_id;
+
+  GimpAlignmentType  snapped_side_horizontal; /* if GIMP_ARRANGE_HFILL then no snapping happen */
+  GimpLayer         *snapped_layer_horizontal;
+
+  GimpAlignmentType  snapped_side_vertical; /* if GIMP_ARRANGE_HFILL then no snapping happen */
+  GimpLayer         *snapped_layer_vertical;
+
+  GimpAlignmentType  equidistance_side_horizontal;
+  GimpLayer         *near_layer_horizontal1;
+  GimpLayer         *near_layer_horizontal2;
+
+  GimpAlignmentType  equidistance_side_vertical;
+  GimpLayer         *near_layer_vertical1;
+  GimpLayer         *near_layer_vertical2;
+
+  gboolean           drawn;
 };
 
 struct _GimpDisplayShellClass
@@ -245,11 +271,10 @@ struct _GimpDisplayShellClass
 GType             gimp_display_shell_get_type      (void) G_GNUC_CONST;
 
 GtkWidget       * gimp_display_shell_new           (GimpDisplay        *display,
-                                                    GimpUnit            unit,
+                                                    GimpUnit           *unit,
                                                     gdouble             scale,
                                                     GimpUIManager      *popup_manager,
-                                                    GdkScreen          *screen,
-                                                    gint                monitor);
+                                                    GdkMonitor         *monitor);
 
 void              gimp_display_shell_add_overlay   (GimpDisplayShell   *shell,
                                                     GtkWidget          *child,
@@ -279,7 +304,7 @@ void              gimp_display_shell_reconnect     (GimpDisplayShell   *shell);
 void              gimp_display_shell_empty         (GimpDisplayShell   *shell);
 void              gimp_display_shell_fill          (GimpDisplayShell   *shell,
                                                     GimpImage          *image,
-                                                    GimpUnit            unit,
+                                                    GimpUnit           *unit,
                                                     gdouble             scale);
 
 void              gimp_display_shell_scaled        (GimpDisplayShell   *shell);
@@ -287,8 +312,8 @@ void              gimp_display_shell_scrolled      (GimpDisplayShell   *shell);
 void              gimp_display_shell_rotated       (GimpDisplayShell   *shell);
 
 void              gimp_display_shell_set_unit      (GimpDisplayShell   *shell,
-                                                    GimpUnit            unit);
-GimpUnit          gimp_display_shell_get_unit      (GimpDisplayShell   *shell);
+                                                    GimpUnit           *unit);
+GimpUnit        * gimp_display_shell_get_unit      (GimpDisplayShell   *shell);
 
 gboolean          gimp_display_shell_snap_coords   (GimpDisplayShell   *shell,
                                                     GimpCoords         *coords,
@@ -321,8 +346,7 @@ gboolean          gimp_display_shell_get_infinite_canvas
 void              gimp_display_shell_update_priority_rect
                                                    (GimpDisplayShell *shell);
 
-void              gimp_display_shell_flush         (GimpDisplayShell   *shell,
-                                                    gboolean            now);
+void              gimp_display_shell_flush         (GimpDisplayShell   *shell);
 
 void              gimp_display_shell_pause         (GimpDisplayShell   *shell);
 void              gimp_display_shell_resume        (GimpDisplayShell   *shell);
@@ -334,8 +358,10 @@ void              gimp_display_shell_set_mask      (GimpDisplayShell   *shell,
                                                     GeglBuffer         *mask,
                                                     gint                offset_x,
                                                     gint                offset_y,
-                                                    const GimpRGB      *color,
+                                                    GeglColor          *color,
                                                     gboolean            inverted);
+
+gboolean          gimp_display_shell_is_drawn      (GimpDisplayShell   *shell);
 
 
 #endif /* __GIMP_DISPLAY_SHELL_H__ */

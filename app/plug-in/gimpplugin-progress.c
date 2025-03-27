@@ -22,9 +22,12 @@
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #include <gegl.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "plug-in-types.h"
 
 #include "core/gimp.h"
+#include "core/gimpdisplay.h"
 #include "core/gimpparamspecs.h"
 #include "core/gimppdbprogress.h"
 #include "core/gimpprogress.h"
@@ -89,12 +92,12 @@ gimp_plug_in_progress_detach (GimpProgress *progress)
 void
 gimp_plug_in_progress_start (GimpPlugIn  *plug_in,
                              const gchar *message,
-                             GimpObject  *display)
+                             GimpDisplay *display)
 {
   GimpPlugInProcFrame *proc_frame;
 
   g_return_if_fail (GIMP_IS_PLUG_IN (plug_in));
-  g_return_if_fail (display == NULL || GIMP_IS_OBJECT (display));
+  g_return_if_fail (display == NULL || GIMP_IS_DISPLAY (display));
 
   proc_frame = gimp_plug_in_get_proc_frame (plug_in);
 
@@ -230,7 +233,7 @@ gimp_plug_in_progress_pulse (GimpPlugIn *plug_in)
     gimp_progress_pulse (proc_frame->progress);
 }
 
-guint32
+GBytes *
 gimp_plug_in_progress_get_window_id (GimpPlugIn *plug_in)
 {
   GimpPlugInProcFrame *proc_frame;
@@ -241,6 +244,8 @@ gimp_plug_in_progress_get_window_id (GimpPlugIn *plug_in)
 
   if (proc_frame->progress)
     return gimp_progress_get_window_id (proc_frame->progress);
+  else if (plug_in->display)
+    return gimp_get_display_window_id (plug_in->manager->gimp, plug_in->display);
 
   return 0;
 }
@@ -261,9 +266,9 @@ gimp_plug_in_progress_install (GimpPlugIn  *plug_in,
   if (! GIMP_IS_TEMPORARY_PROCEDURE (procedure)                ||
       GIMP_TEMPORARY_PROCEDURE (procedure)->plug_in != plug_in ||
       procedure->num_args                           != 3       ||
-      ! GIMP_IS_PARAM_SPEC_INT32 (procedure->args[0])          ||
-      ! G_IS_PARAM_SPEC_STRING   (procedure->args[1])          ||
-      ! G_IS_PARAM_SPEC_DOUBLE   (procedure->args[2]))
+      ! G_IS_PARAM_SPEC_INT    (procedure->args[0])            ||
+      ! G_IS_PARAM_SPEC_STRING (procedure->args[1])            ||
+      ! G_IS_PARAM_SPEC_DOUBLE (procedure->args[2]))
     {
       return FALSE;
     }

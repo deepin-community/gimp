@@ -33,7 +33,7 @@
 #include "core/gimp.h"
 #include "core/gimp-memsize.h"
 #include "core/gimpdrawable.h"
-#include "core/gimpmarshal.h"
+#include "core/gimpimage.h"
 #include "core/gimpparamspecs.h"
 
 #include "file/file-utils.h"
@@ -70,7 +70,7 @@ static const gchar * gimp_plug_in_procedure_get_blurb  (GimpProcedure  *procedur
 static const gchar * gimp_plug_in_procedure_get_help_id(GimpProcedure  *procedure);
 static gboolean   gimp_plug_in_procedure_get_sensitive (GimpProcedure  *procedure,
                                                         GimpObject     *object,
-                                                        const gchar  **tooltip);
+                                                        const gchar  **reason);
 static GimpValueArray * gimp_plug_in_procedure_execute (GimpProcedure  *procedure,
                                                         Gimp           *gimp,
                                                         GimpContext    *context,
@@ -82,7 +82,7 @@ static void     gimp_plug_in_procedure_execute_async   (GimpProcedure  *procedur
                                                         GimpContext    *context,
                                                         GimpProgress   *progress,
                                                         GimpValueArray *args,
-                                                        GimpObject     *display);
+                                                        GimpDisplay    *display);
 
 static GFile  * gimp_plug_in_procedure_real_get_file   (GimpPlugInProcedure *procedure);
 
@@ -113,8 +113,7 @@ gimp_plug_in_procedure_class_init (GimpPlugInProcedureClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpPlugInProcedureClass, menu_path_added),
-                  NULL, NULL,
-                  gimp_marshal_VOID__STRING,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   G_TYPE_STRING);
 
@@ -140,9 +139,10 @@ gimp_plug_in_procedure_class_init (GimpPlugInProcedureClass *klass)
 static void
 gimp_plug_in_procedure_init (GimpPlugInProcedure *proc)
 {
-  GIMP_PROCEDURE (proc)->proc_type = GIMP_PLUGIN;
+  GIMP_PROCEDURE (proc)->proc_type = GIMP_PDB_PROC_TYPE_PLUGIN;
 
   proc->icon_data_length = -1;
+  proc->sensitivity_mask = GIMP_PROCEDURE_SENSITIVE_DRAWABLE | GIMP_PROCEDURE_SENSITIVE_DRAWABLES;
 }
 
 static void
@@ -155,12 +155,11 @@ gimp_plug_in_procedure_finalize (GObject *object)
 
   g_list_free_full (proc->menu_paths, (GDestroyNotify) g_free);
 
-  g_free (proc->label);
-  g_free (proc->help_id);
+  g_free (proc->help_id_with_domain);
 
   g_free (proc->icon_data);
   g_free (proc->image_types);
-  g_free (proc->image_types_tooltip);
+  g_free (proc->insensitive_reason);
 
   g_free (proc->extensions);
   g_free (proc->prefixes);
@@ -173,6 +172,7 @@ gimp_plug_in_procedure_finalize (GObject *object)
   g_slist_free_full (proc->mime_types_list, (GDestroyNotify) g_free);
 
   g_free (proc->thumb_loader);
+  g_free (proc->batch_interpreter_name);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -199,7 +199,7 @@ gimp_plug_in_procedure_get_memsize (GimpObject *object,
       memsize += gimp_string_get_memsize ((const gchar *) proc->icon_data);
       break;
 
-    case GIMP_ICON_TYPE_INLINE_PIXBUF:
+    case GIMP_ICON_TYPE_PIXBUF:
       memsize += proc->icon_data_length;
       break;
     }
@@ -209,6 +209,7 @@ gimp_plug_in_procedure_get_memsize (GimpObject *object,
   memsize += gimp_string_get_memsize (proc->magics);
   memsize += gimp_string_get_memsize (proc->mime_types);
   memsize += gimp_string_get_memsize (proc->thumb_loader);
+  memsize += gimp_string_get_memsize (proc->batch_interpreter_name);
 
   for (slist = proc->extensions_list; slist; slist = g_slist_next (slist))
     memsize += sizeof (GSList) + gimp_string_get_memsize (slist->data);
@@ -242,43 +243,11 @@ static const gchar *
 gimp_plug_in_procedure_get_label (GimpProcedure *procedure)
 {
   GimpPlugInProcedure *proc = GIMP_PLUG_IN_PROCEDURE (procedure);
-  const gchar         *path;
-  gchar               *stripped;
-  gchar               *ellipsis;
-  gchar               *label;
 
-  if (proc->label)
-    return proc->label;
-
-  if (proc->menu_label)
-    path = dgettext (gimp_plug_in_procedure_get_locale_domain (proc),
-                     proc->menu_label);
-  else if (proc->menu_paths)
-    path = dgettext (gimp_plug_in_procedure_get_locale_domain (proc),
-                     proc->menu_paths->data);
-  else
+  if (! proc->menu_label)
     return NULL;
 
-  stripped = gimp_strip_uline (path);
-
-  if (proc->menu_label)
-    label = g_strdup (stripped);
-  else
-    label = g_path_get_basename (stripped);
-
-  g_free (stripped);
-
-  ellipsis = strstr (label, "...");
-
-  if (! ellipsis)
-    ellipsis = strstr (label, "\342\200\246" /* U+2026 HORIZONTAL ELLIPSIS */);
-
-  if (ellipsis && ellipsis == (label + strlen (label) - 3))
-    *ellipsis = '\0';
-
-  proc->label = label;
-
-  return proc->label;
+  return GIMP_PROCEDURE_CLASS (parent_class)->get_label (procedure);
 }
 
 static const gchar *
@@ -287,22 +256,7 @@ gimp_plug_in_procedure_get_menu_label (GimpProcedure *procedure)
   GimpPlugInProcedure *proc = GIMP_PLUG_IN_PROCEDURE (procedure);
 
   if (proc->menu_label)
-    {
-      return dgettext (gimp_plug_in_procedure_get_locale_domain (proc),
-                       proc->menu_label);
-    }
-  else if (proc->menu_paths)
-    {
-      const gchar *translated;
-
-      translated = dgettext (gimp_plug_in_procedure_get_locale_domain (proc),
-                             proc->menu_paths->data);
-
-      translated = strrchr (translated, '/');
-
-      if (translated)
-        return translated + 1;
-    }
+    return proc->menu_label;
 
   return GIMP_PROCEDURE_CLASS (parent_class)->get_menu_label (procedure);
 }
@@ -310,12 +264,8 @@ gimp_plug_in_procedure_get_menu_label (GimpProcedure *procedure)
 static const gchar *
 gimp_plug_in_procedure_get_blurb (GimpProcedure *procedure)
 {
-  GimpPlugInProcedure *proc = GIMP_PLUG_IN_PROCEDURE (procedure);
-
-  /*  do not to pass the empty string to gettext()  */
-  if (procedure->blurb && strlen (procedure->blurb))
-    return dgettext (gimp_plug_in_procedure_get_locale_domain (proc),
-                     procedure->blurb);
+  if (procedure->blurb)
+    return procedure->blurb;
 
   return NULL;
 }
@@ -325,67 +275,99 @@ gimp_plug_in_procedure_get_help_id (GimpProcedure *procedure)
 {
   GimpPlugInProcedure *proc = GIMP_PLUG_IN_PROCEDURE (procedure);
   const gchar         *domain;
+  const gchar         *help_id;
 
-  if (proc->help_id)
-    return proc->help_id;
+  if (proc->help_id_with_domain)
+    return proc->help_id_with_domain;
 
   domain = gimp_plug_in_procedure_get_help_domain (proc);
 
-  if (domain)
-    proc->help_id = g_strconcat (domain, "?", gimp_object_get_name (proc), NULL);
+  if (procedure->help_id)
+    help_id = procedure->help_id;
   else
-    proc->help_id = g_strdup (gimp_object_get_name (proc));
+    help_id = gimp_object_get_name (procedure);
 
-  return proc->help_id;
+  if (domain)
+    proc->help_id_with_domain = g_strconcat (domain, "?", help_id, NULL);
+  else
+    proc->help_id_with_domain = g_strdup (help_id);
+
+  return proc->help_id_with_domain;
 }
 
 static gboolean
 gimp_plug_in_procedure_get_sensitive (GimpProcedure  *procedure,
                                       GimpObject     *object,
-                                      const gchar   **tooltip)
+                                      const gchar   **reason)
 {
   GimpPlugInProcedure *proc       = GIMP_PLUG_IN_PROCEDURE (procedure);
-  GimpDrawable        *drawable;
+  GimpImage           *image;
+  GList               *drawables  = NULL;
   GimpImageType        image_type = -1;
   gboolean             sensitive  = FALSE;
 
-  g_return_val_if_fail (object == NULL || GIMP_IS_DRAWABLE (object), FALSE);
+  g_return_val_if_fail (object == NULL || GIMP_IS_IMAGE (object), FALSE);
 
-  drawable = GIMP_DRAWABLE (object);
+  image = GIMP_IMAGE (object);
+  if (image)
+    drawables = gimp_image_get_selected_drawables (image);
 
-  if (drawable)
+  if (drawables)
     {
-      const Babl *format = gimp_drawable_get_format (drawable);
+      const Babl *format = gimp_drawable_get_format (drawables->data);
 
       image_type = gimp_babl_format_get_image_type (format);
     }
 
-  switch (image_type)
+  if (proc->image_types_val)
     {
-    case GIMP_RGB_IMAGE:
-      sensitive = proc->image_types_val & GIMP_PLUG_IN_RGB_IMAGE;
-      break;
-    case GIMP_RGBA_IMAGE:
-      sensitive = proc->image_types_val & GIMP_PLUG_IN_RGBA_IMAGE;
-      break;
-    case GIMP_GRAY_IMAGE:
-      sensitive = proc->image_types_val & GIMP_PLUG_IN_GRAY_IMAGE;
-      break;
-    case GIMP_GRAYA_IMAGE:
-      sensitive = proc->image_types_val & GIMP_PLUG_IN_GRAYA_IMAGE;
-      break;
-    case GIMP_INDEXED_IMAGE:
-      sensitive = proc->image_types_val & GIMP_PLUG_IN_INDEXED_IMAGE;
-      break;
-    case GIMP_INDEXEDA_IMAGE:
-      sensitive = proc->image_types_val & GIMP_PLUG_IN_INDEXEDA_IMAGE;
-      break;
-    default:
-      break;
+      switch (image_type)
+        {
+        case GIMP_RGB_IMAGE:
+          sensitive = proc->image_types_val & GIMP_PLUG_IN_RGB_IMAGE;
+          break;
+        case GIMP_RGBA_IMAGE:
+          sensitive = proc->image_types_val & GIMP_PLUG_IN_RGBA_IMAGE;
+          break;
+        case GIMP_GRAY_IMAGE:
+          sensitive = proc->image_types_val & GIMP_PLUG_IN_GRAY_IMAGE;
+          break;
+        case GIMP_GRAYA_IMAGE:
+          sensitive = proc->image_types_val & GIMP_PLUG_IN_GRAYA_IMAGE;
+          break;
+        case GIMP_INDEXED_IMAGE:
+          sensitive = proc->image_types_val & GIMP_PLUG_IN_INDEXED_IMAGE;
+          break;
+        case GIMP_INDEXEDA_IMAGE:
+          sensitive = proc->image_types_val & GIMP_PLUG_IN_INDEXEDA_IMAGE;
+          break;
+        default:
+          sensitive = FALSE;
+          break;
+        }
+    }
+  else
+    {
+      sensitive = (image_type != -1);
     }
 
+  if (! image &&
+      (proc->sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_NO_IMAGE) != 0)
+    sensitive = TRUE;
+  else if (g_list_length (drawables) == 1 &&
+           (proc->sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_DRAWABLE) == 0)
+    sensitive = FALSE;
+  else if (image && g_list_length (drawables) == 0 &&
+           (proc->sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_NO_DRAWABLES) == 0)
+    sensitive = FALSE;
+  else if (g_list_length (drawables) > 1 &&
+           (proc->sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_DRAWABLES) == 0)
+    sensitive = FALSE;
+
+  g_list_free (drawables);
+
   if (! sensitive)
-    *tooltip = proc->image_types_tooltip;
+    *reason = proc->insensitive_reason;
 
   return sensitive ? TRUE : FALSE;
 }
@@ -413,7 +395,7 @@ gimp_plug_in_procedure_execute (GimpProcedure  *procedure,
       return return_vals;
     }
 
-  if (procedure->proc_type == GIMP_INTERNAL)
+  if (procedure->proc_type == GIMP_PDB_PROC_TYPE_INTERNAL)
     return GIMP_PROCEDURE_CLASS (parent_class)->execute (procedure, gimp,
                                                          context, progress,
                                                          args, error);
@@ -430,7 +412,7 @@ gimp_plug_in_procedure_execute_async (GimpProcedure  *procedure,
                                       GimpContext    *context,
                                       GimpProgress   *progress,
                                       GimpValueArray *args,
-                                      GimpObject     *display)
+                                      GimpDisplay    *display)
 {
   GimpPlugInProcedure *plug_in_procedure = GIMP_PLUG_IN_PROCEDURE (procedure);
   GError              *error             = NULL;
@@ -467,55 +449,62 @@ gimp_plug_in_procedure_real_get_file (GimpPlugInProcedure *procedure)
   return procedure->file;
 }
 
+static inline gboolean
+GIMP_IS_PARAM_SPEC_RUN_MODE (GParamSpec *pspec)
+{
+  return (G_IS_PARAM_SPEC_ENUM (pspec) &&
+          pspec->value_type == GIMP_TYPE_RUN_MODE);
+}
+
 static gboolean
 gimp_plug_in_procedure_validate_args (GimpPlugInProcedure *proc,
                                       Gimp                *gimp,
                                       GimpValueArray      *args,
                                       GError             **error)
 {
-  if (proc->file_proc && proc->handles_uri)
+#if 0
+  GimpProcedure *procedure = GIMP_PROCEDURE (proc);
+  GValue        *uri_value = NULL;
+
+  if (! proc->file_proc)
+    return TRUE;
+
+  /*  make sure that the passed strings are actually URIs, not just a
+   *  file path (bug 758685)
+   */
+
+  if ((procedure->num_args   >= 3)                     &&
+      (procedure->num_values >= 1)                     &&
+      GIMP_IS_PARAM_SPEC_RUN_MODE (procedure->args[0]) &&
+      GIMP_IS_PARAM_SPEC_FILE     (procedure->args[1]) &&
+      GIMP_IS_PARAM_SPEC_IMAGE    (procedure->values[0]))
     {
-      /*  for file procedures that handle URIs, make sure that the
-       *  passed string actually is an URI, not just a file path
-       *  (bug 758685)
-       */
-      GimpProcedure *procedure = GIMP_PROCEDURE (proc);
-      GValue        *uri_value = NULL;
-
-      if ((procedure->num_args   >= 3)                     &&
-          (procedure->num_values >= 1)                     &&
-          GIMP_IS_PARAM_SPEC_INT32    (procedure->args[0]) &&
-          G_IS_PARAM_SPEC_STRING      (procedure->args[1]) &&
-          G_IS_PARAM_SPEC_STRING      (procedure->args[2]) &&
-          GIMP_IS_PARAM_SPEC_IMAGE_ID (procedure->values[0]))
-        {
-          uri_value = gimp_value_array_index (args, 1);
-        }
-      else if ((procedure->num_args >= 5)                          &&
-               GIMP_IS_PARAM_SPEC_INT32       (procedure->args[0]) &&
-               GIMP_IS_PARAM_SPEC_IMAGE_ID    (procedure->args[1]) &&
-               GIMP_IS_PARAM_SPEC_DRAWABLE_ID (procedure->args[2]) &&
-               G_IS_PARAM_SPEC_STRING         (procedure->args[3]) &&
-               G_IS_PARAM_SPEC_STRING         (procedure->args[4]))
-        {
-          uri_value = gimp_value_array_index (args, 3);
-        }
-
-      if (uri_value)
-        {
-          GFile *file;
-
-          file = file_utils_filename_to_file (gimp,
-                                              g_value_get_string (uri_value),
-                                              error);
-
-          if (! file)
-            return FALSE;
-
-          g_value_take_string (uri_value, g_file_get_uri (file));
-          g_object_unref (file);
-        }
+      uri_value = gimp_value_array_index (args, 1);
     }
+  else if ((procedure->num_args >= 5)                       &&
+           GIMP_IS_PARAM_SPEC_RUN_MODE (procedure->args[0]) &&
+           GIMP_IS_PARAM_SPEC_IMAGE    (procedure->args[1]) &&
+           GIMP_IS_PARAM_SPEC_DRAWABLE (procedure->args[2]) &&
+           GIMP_IS_PARAM_SPEC_FILE     (procedure->args[3]))
+    {
+      uri_value = gimp_value_array_index (args, 3);
+    }
+
+  if (uri_value)
+    {
+      GFile *file;
+
+      file = file_utils_filename_to_file (gimp,
+                                          g_value_get_string (uri_value),
+                                          error);
+
+      if (! file)
+        return FALSE;
+
+      g_value_take_string (uri_value, g_file_get_uri (file));
+      g_object_unref (file);
+    }
+#endif
 
   return TRUE;
 }
@@ -529,8 +518,8 @@ gimp_plug_in_procedure_new (GimpPDBProcType  proc_type,
 {
   GimpPlugInProcedure *proc;
 
-  g_return_val_if_fail (proc_type == GIMP_PLUGIN ||
-                        proc_type == GIMP_EXTENSION, NULL);
+  g_return_val_if_fail (proc_type == GIMP_PDB_PROC_TYPE_PLUGIN ||
+                        proc_type == GIMP_PDB_PROC_TYPE_PERSISTENT, NULL);
   g_return_val_if_fail (G_IS_FILE (file), NULL);
 
   proc = g_object_new (GIMP_TYPE_PLUG_IN_PROCEDURE, NULL);
@@ -568,23 +557,6 @@ gimp_plug_in_procedure_get_file (GimpPlugInProcedure *proc)
 }
 
 void
-gimp_plug_in_procedure_set_locale_domain (GimpPlugInProcedure *proc,
-                                          const gchar         *locale_domain)
-{
-  g_return_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc));
-
-  proc->locale_domain = locale_domain ? g_quark_from_string (locale_domain) : 0;
-}
-
-const gchar *
-gimp_plug_in_procedure_get_locale_domain (GimpPlugInProcedure *proc)
-{
-  g_return_val_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc), NULL);
-
-  return g_quark_to_string (proc->locale_domain);
-}
-
-void
 gimp_plug_in_procedure_set_help_domain (GimpPlugInProcedure *proc,
                                         const gchar         *help_domain)
 {
@@ -599,6 +571,41 @@ gimp_plug_in_procedure_get_help_domain (GimpPlugInProcedure *proc)
   g_return_val_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc), NULL);
 
   return g_quark_to_string (proc->help_domain);
+}
+
+gboolean
+gimp_plug_in_procedure_set_menu_label (GimpPlugInProcedure  *proc,
+                                       const gchar          *menu_label,
+                                       GError              **error)
+{
+  g_return_val_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc), FALSE);
+  g_return_val_if_fail (menu_label != NULL && strlen (menu_label), FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  if (menu_label[0] == '<')
+    {
+      gchar *basename = g_path_get_basename (gimp_file_get_utf8_name (proc->file));
+
+      g_set_error (error, GIMP_PLUG_IN_ERROR, GIMP_PLUG_IN_FAILED,
+                   "Plug-in \"%s\"\n(%s)\n\n"
+                   "attempted to install procedure \"%s\" with a full "
+                   "menu path \"%s\" as menu label, this is not supported "
+                   "any longer.",
+                   basename, gimp_file_get_utf8_name (proc->file),
+                   gimp_object_get_name (proc),
+                   menu_label);
+
+      g_free (basename);
+
+      return FALSE;
+    }
+
+  g_clear_pointer (&GIMP_PROCEDURE (proc)->label, g_free);
+
+  g_free (proc->menu_label);
+  proc->menu_label = g_strdup (menu_label);
+
+  return TRUE;
 }
 
 gboolean
@@ -618,6 +625,24 @@ gimp_plug_in_procedure_add_menu_path (GimpPlugInProcedure  *proc,
 
   procedure = GIMP_PROCEDURE (proc);
 
+  if (! proc->menu_label)
+    {
+      basename = g_path_get_basename (gimp_file_get_utf8_name (proc->file));
+
+      g_set_error (error, GIMP_PLUG_IN_ERROR, GIMP_PLUG_IN_FAILED,
+                   "Plug-in \"%s\"\n(%s)\n"
+                   "attempted to register the procedure \"%s\" "
+                   "in the menu \"%s\", but the procedure has no label. "
+                   "This is not allowed.",
+                   basename, gimp_file_get_utf8_name (proc->file),
+                   gimp_object_get_name (proc),
+                   menu_path);
+
+      g_free (basename);
+
+      return FALSE;
+    }
+
   p = strchr (menu_path, '>');
   if (p == NULL || (*(++p) && *p != '/'))
     {
@@ -635,93 +660,67 @@ gimp_plug_in_procedure_add_menu_path (GimpPlugInProcedure  *proc,
       goto failure;
     }
 
-  if (g_str_has_prefix (menu_path, "<Toolbox>") ||
-      g_str_has_prefix (menu_path, "<Image>"))
+  if (g_str_has_prefix (menu_path, "<Image>"))
     {
       if ((procedure->num_args < 1) ||
-          ! GIMP_IS_PARAM_SPEC_INT32 (procedure->args[0]))
+          ! GIMP_IS_PARAM_SPEC_RUN_MODE (procedure->args[0]))
         {
-          required = "INT32";
+          required = "GimpRunMode";
           goto failure;
         }
     }
   else if (g_str_has_prefix (menu_path, "<Layers>"))
     {
-      if ((procedure->num_args < 3)                             ||
-          ! GIMP_IS_PARAM_SPEC_INT32       (procedure->args[0]) ||
-          ! GIMP_IS_PARAM_SPEC_IMAGE_ID    (procedure->args[1]) ||
-          ! (G_TYPE_FROM_INSTANCE (procedure->args[2])
-                               == GIMP_TYPE_PARAM_LAYER_ID ||
-             G_TYPE_FROM_INSTANCE (procedure->args[2])
-                               == GIMP_TYPE_PARAM_DRAWABLE_ID))
+      if ((procedure->num_args < 3)                          ||
+          ! GIMP_IS_PARAM_SPEC_RUN_MODE (procedure->args[0]) ||
+          ! GIMP_IS_PARAM_SPEC_IMAGE    (procedure->args[1]) ||
+          ! (G_TYPE_FROM_INSTANCE       (procedure->args[2]) == GIMP_TYPE_PARAM_CORE_OBJECT_ARRAY))
         {
-          required = "INT32, IMAGE, (LAYER | DRAWABLE)";
+          required = "GimpRunMode, GimpImage, NULL-terminated array of (GimpLayer | GimpDrawable)";
           goto failure;
+        }
+      else
+        {
+          const gchar *type_name = g_type_name (gimp_param_spec_core_object_array_get_object_type (procedure->args[2]));
+
+          if (g_strcmp0 (type_name, "GimpDrawable") != 0 &&
+              g_strcmp0 (type_name, "GimpLayer")    != 0)
+            {
+              required = "GimpRunMode, GimpImage, NULL-terminated array of (GimpLayer | GimpDrawable)";
+              goto failure;
+            }
         }
     }
   else if (g_str_has_prefix (menu_path, "<Channels>"))
     {
-      if ((procedure->num_args < 3)                             ||
-          ! GIMP_IS_PARAM_SPEC_INT32       (procedure->args[0]) ||
-          ! GIMP_IS_PARAM_SPEC_IMAGE_ID    (procedure->args[1]) ||
-          ! (G_TYPE_FROM_INSTANCE (procedure->args[2])
-                               == GIMP_TYPE_PARAM_CHANNEL_ID ||
-             G_TYPE_FROM_INSTANCE (procedure->args[2])
-                               == GIMP_TYPE_PARAM_DRAWABLE_ID))
+      if ((procedure->num_args < 3)                          ||
+          ! GIMP_IS_PARAM_SPEC_RUN_MODE (procedure->args[0]) ||
+          ! GIMP_IS_PARAM_SPEC_IMAGE    (procedure->args[1]) ||
+          ! (G_TYPE_FROM_INSTANCE       (procedure->args[2]) == GIMP_TYPE_PARAM_CORE_OBJECT_ARRAY))
         {
-          required = "INT32, IMAGE, (CHANNEL | DRAWABLE)";
+          required = "GimpRunMode, GimpImage, NULL-terminated array of (GimpChannel | GimpDrawable)";
           goto failure;
         }
-    }
-  else if (g_str_has_prefix (menu_path, "<Vectors>"))
-    {
-      if ((procedure->num_args < 3)                            ||
-          ! GIMP_IS_PARAM_SPEC_INT32      (procedure->args[0]) ||
-          ! GIMP_IS_PARAM_SPEC_IMAGE_ID   (procedure->args[1]) ||
-          ! GIMP_IS_PARAM_SPEC_VECTORS_ID (procedure->args[2]))
+      else
         {
-          required = "INT32, IMAGE, VECTORS";
-          goto failure;
-        }
-    }
-  else if (g_str_has_prefix (menu_path, "<Colormap>"))
-    {
-      if ((procedure->num_args < 2)                            ||
-          ! GIMP_IS_PARAM_SPEC_INT32      (procedure->args[0]) ||
-          ! GIMP_IS_PARAM_SPEC_IMAGE_ID   (procedure->args[1]))
-        {
-          required = "INT32, IMAGE";
-          goto failure;
-        }
-    }
-  else if (g_str_has_prefix (menu_path, "<Load>"))
-    {
-      if ((procedure->num_args < 3)                       ||
-          ! GIMP_IS_PARAM_SPEC_INT32 (procedure->args[0]) ||
-          ! G_IS_PARAM_SPEC_STRING   (procedure->args[1]) ||
-          ! G_IS_PARAM_SPEC_STRING   (procedure->args[2]))
-        {
-          required = "INT32, STRING, STRING";
-          goto failure;
-        }
+          const gchar *type_name = g_type_name (gimp_param_spec_core_object_array_get_object_type (procedure->args[2]));
 
-      if ((procedure->num_values < 1) ||
-          ! GIMP_IS_PARAM_SPEC_IMAGE_ID (procedure->values[0]))
-        {
-          required = "IMAGE";
-          goto failure;
+          if (g_strcmp0 (type_name, "GimpDrawable") != 0 &&
+              g_strcmp0 (type_name, "GimpChannel")  != 0)
+            {
+              required = "GimpRunMode, GimpImage, NULL-terminated array of (GimpChannel | GimpDrawable)";
+              goto failure;
+            }
         }
     }
-  else if (g_str_has_prefix (menu_path, "<Save>"))
+  else if (g_str_has_prefix (menu_path, "<Colormap>") ||
+           g_str_has_prefix (menu_path, "<Paths>"))
     {
-      if ((procedure->num_args < 5)                             ||
-          ! GIMP_IS_PARAM_SPEC_INT32       (procedure->args[0]) ||
-          ! GIMP_IS_PARAM_SPEC_IMAGE_ID    (procedure->args[1]) ||
-          ! GIMP_IS_PARAM_SPEC_DRAWABLE_ID (procedure->args[2]) ||
-          ! G_IS_PARAM_SPEC_STRING         (procedure->args[3]) ||
-          ! G_IS_PARAM_SPEC_STRING         (procedure->args[4]))
+      if ((procedure->num_args < 2)                          ||
+          ! GIMP_IS_PARAM_SPEC_RUN_MODE (procedure->args[0]) ||
+          ! GIMP_IS_PARAM_SPEC_IMAGE    (procedure->args[1]))
         {
-          required = "INT32, IMAGE, DRAWABLE, STRING, STRING";
+          required = "GimpRunMode, GimpImage";
           goto failure;
         }
     }
@@ -736,9 +735,9 @@ gimp_plug_in_procedure_add_menu_path (GimpPlugInProcedure  *proc,
            g_str_has_prefix (menu_path, "<Buffers>"))
     {
       if ((procedure->num_args < 1) ||
-          ! GIMP_IS_PARAM_SPEC_INT32 (procedure->args[0]))
+          ! GIMP_IS_PARAM_SPEC_RUN_MODE (procedure->args[0]))
         {
-          required = "INT32";
+          required = "GimpRunMode";
           goto failure;
         }
     }
@@ -751,7 +750,7 @@ gimp_plug_in_procedure_add_menu_path (GimpPlugInProcedure  *proc,
                    "attempted to install procedure \"%s\" "
                    "in the invalid menu location \"%s\".\n"
                    "Use either \"<Image>\", "
-                   "\"<Layers>\", \"<Channels>\", \"<Vectors>\", "
+                   "\"<Layers>\", \"<Channels>\", \"<Paths>\", "
                    "\"<Colormap>\", \"<Brushes>\", \"<Dynamics>\", "
                    "\"<MyPaintBrushes>\", \"<Gradients>\", \"<Palettes>\", "
                    "\"<Patterns>\", \"<ToolPresets>\", \"<Fonts>\" "
@@ -800,49 +799,31 @@ gimp_plug_in_procedure_add_menu_path (GimpPlugInProcedure  *proc,
   return FALSE;
 }
 
-void
-gimp_plug_in_procedure_set_icon (GimpPlugInProcedure *proc,
-                                 GimpIconType         icon_type,
-                                 const guint8        *icon_data,
-                                 gint                 icon_data_length)
+gboolean
+gimp_plug_in_procedure_set_icon (GimpPlugInProcedure  *proc,
+                                 GimpIconType          icon_type,
+                                 const guint8         *icon_data,
+                                 gint                  icon_data_length,
+                                 GError              **error)
 {
-  guint8 *data_copy = NULL;
-
-  g_return_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc));
-
-  switch (icon_type)
-    {
-    case GIMP_ICON_TYPE_ICON_NAME:
-      data_copy = (guint8 *) g_strdup ((gchar *) icon_data);
-      break;
-
-    case GIMP_ICON_TYPE_INLINE_PIXBUF:
-      data_copy = g_memdup (icon_data, icon_data_length);
-      break;
-
-    case GIMP_ICON_TYPE_IMAGE_FILE:
-      data_copy = (guint8 *) g_strdup ((gchar *) icon_data);
-      break;
-
-    default:
-      g_return_if_reached ();
-    }
-
-  gimp_plug_in_procedure_take_icon (proc, icon_type,
-                                    data_copy, icon_data_length);
+  return gimp_plug_in_procedure_take_icon (proc, icon_type,
+                                           g_memdup2 (icon_data, icon_data_length),
+                                           icon_data_length, error);
 }
 
-void
-gimp_plug_in_procedure_take_icon (GimpPlugInProcedure *proc,
-                                  GimpIconType         icon_type,
-                                  guint8              *icon_data,
-                                  gint                 icon_data_length)
+gboolean
+gimp_plug_in_procedure_take_icon (GimpPlugInProcedure  *proc,
+                                  GimpIconType          icon_type,
+                                  guint8               *icon_data,
+                                  gint                  icon_data_length,
+                                  GError              **error)
 {
   const gchar *icon_name   = NULL;
   GdkPixbuf   *icon_pixbuf = NULL;
-  GError      *error       = NULL;
+  gboolean     success     = TRUE;
 
-  g_return_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc));
+  g_return_val_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc), FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
 
   if (proc->icon_data)
     {
@@ -855,6 +836,9 @@ gimp_plug_in_procedure_take_icon (GimpPlugInProcedure *proc,
 
   switch (proc->icon_type)
     {
+      GdkPixbufLoader *loader;
+      gchar           *path;
+
     case GIMP_ICON_TYPE_ICON_NAME:
       proc->icon_data_length = -1;
       proc->icon_data        = icon_data;
@@ -862,27 +846,50 @@ gimp_plug_in_procedure_take_icon (GimpPlugInProcedure *proc,
       icon_name = (const gchar *) proc->icon_data;
       break;
 
-    case GIMP_ICON_TYPE_INLINE_PIXBUF:
+    case GIMP_ICON_TYPE_PIXBUF:
       proc->icon_data_length = icon_data_length;
       proc->icon_data        = icon_data;
 
-      icon_pixbuf = gdk_pixbuf_new_from_inline (proc->icon_data_length,
-                                                proc->icon_data, TRUE, &error);
+      loader = gdk_pixbuf_loader_new ();
+
+      if (! gdk_pixbuf_loader_write (loader,
+                                     proc->icon_data,
+                                     proc->icon_data_length,
+                                     error))
+        {
+          gdk_pixbuf_loader_close (loader, NULL);
+          success = FALSE;
+        }
+      else if (! gdk_pixbuf_loader_close (loader, error))
+        {
+          success = FALSE;
+        }
+
+      if (success)
+        {
+          icon_pixbuf = gdk_pixbuf_loader_get_pixbuf (loader);
+
+          if (icon_pixbuf)
+            g_object_ref (icon_pixbuf);
+        }
+
+      g_object_unref (loader);
       break;
 
     case GIMP_ICON_TYPE_IMAGE_FILE:
       proc->icon_data_length = -1;
       proc->icon_data        = icon_data;
 
-      icon_pixbuf = gdk_pixbuf_new_from_file ((gchar *) proc->icon_data,
-                                              &error);
-      break;
-    }
+      path = g_filename_from_uri ((const gchar *) proc->icon_data, NULL, error);
+      if (path != NULL)
+        {
+          icon_pixbuf = gdk_pixbuf_new_from_file (path, error);
+          g_free (path);
+        }
 
-  if (! icon_pixbuf && error)
-    {
-      g_printerr ("gimp_plug_in_procedure_take_icon: %s\n", error->message);
-      g_clear_error (&error);
+      if (! icon_pixbuf)
+        success = FALSE;
+      break;
     }
 
   gimp_viewable_set_icon_name (GIMP_VIEWABLE (proc), icon_name);
@@ -890,6 +897,8 @@ gimp_plug_in_procedure_take_icon (GimpPlugInProcedure *proc,
 
   if (icon_pixbuf)
     g_object_unref (icon_pixbuf);
+
+  return success;
 }
 
 static GimpPlugInImageType
@@ -1002,7 +1011,7 @@ gimp_plug_in_procedure_set_image_types (GimpPlugInProcedure *proc,
   proc->image_types_val = image_types_parse (gimp_object_get_name (proc),
                                              proc->image_types);
 
-  g_clear_pointer (&proc->image_types_tooltip, g_free);
+  g_clear_pointer (&proc->insensitive_reason, g_free);
 
   if (proc->image_types_val &
       (GIMP_PLUG_IN_RGB_IMAGE | GIMP_PLUG_IN_RGBA_IMAGE))
@@ -1065,12 +1074,9 @@ gimp_plug_in_procedure_set_image_types (GimpPlugInProcedure *proc,
 
       types = g_list_reverse (types);
 
-      string = g_string_new (gimp_procedure_get_blurb (GIMP_PROCEDURE (proc)));
-
-      g_string_append (string, "\n\n");
-      g_string_append (string, _("This plug-in only works on the "
-                                 "following layer types:"));
-      g_string_append (string, "\n");
+      string = g_string_new (_("This plug-in only works on the "
+                               "following layer types:"));
+      g_string_append (string, " ");
 
       for (list = types; list; list = g_list_next (list))
         {
@@ -1084,8 +1090,20 @@ gimp_plug_in_procedure_set_image_types (GimpPlugInProcedure *proc,
 
       g_list_free (types);
 
-      proc->image_types_tooltip = g_string_free (string, FALSE);
+      proc->insensitive_reason = g_string_free (string, FALSE);
     }
+}
+
+void
+gimp_plug_in_procedure_set_sensitivity_mask (GimpPlugInProcedure *proc,
+                                             gint                 sensitivity_mask)
+{
+  g_return_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc));
+
+  if (sensitivity_mask == 0)
+    proc->sensitivity_mask = GIMP_PROCEDURE_SENSITIVE_DRAWABLE | GIMP_PROCEDURE_SENSITIVE_DRAWABLES;
+  else
+    proc->sensitivity_mask = sensitivity_mask;
 }
 
 static GSList *
@@ -1189,6 +1207,13 @@ gimp_plug_in_procedure_set_file_proc (GimpPlugInProcedure *proc,
 }
 
 void
+gimp_plug_in_procedure_set_generic_file_proc (GimpPlugInProcedure *proc,
+                                              gboolean             is_generic_file_proc)
+{
+  proc->generic_file_proc = is_generic_file_proc;
+}
+
+void
 gimp_plug_in_procedure_set_priority (GimpPlugInProcedure *proc,
                                      gint                 priority)
 {
@@ -1218,11 +1243,11 @@ gimp_plug_in_procedure_set_mime_types (GimpPlugInProcedure *proc,
 }
 
 void
-gimp_plug_in_procedure_set_handles_uri (GimpPlugInProcedure *proc)
+gimp_plug_in_procedure_set_handles_remote (GimpPlugInProcedure *proc)
 {
   g_return_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc));
 
-  proc->handles_uri = TRUE;
+  proc->handles_remote = TRUE;
 }
 
 void
@@ -1231,6 +1256,14 @@ gimp_plug_in_procedure_set_handles_raw (GimpPlugInProcedure *proc)
   g_return_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc));
 
   proc->handles_raw = TRUE;
+}
+
+void
+gimp_plug_in_procedure_set_handles_vector (GimpPlugInProcedure *proc)
+{
+  g_return_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc));
+
+  proc->handles_vector = TRUE;
 }
 
 void
@@ -1243,6 +1276,20 @@ gimp_plug_in_procedure_set_thumb_loader (GimpPlugInProcedure *proc,
     g_free (proc->thumb_loader);
 
   proc->thumb_loader = g_strdup (thumb_loader);
+}
+
+void
+gimp_plug_in_procedure_set_batch_interpreter (GimpPlugInProcedure *proc,
+                                              const gchar         *name)
+{
+  g_return_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (proc));
+  g_return_if_fail (name != NULL);
+
+  if (proc->batch_interpreter_name)
+    g_free (proc->batch_interpreter_name);
+
+  proc->batch_interpreter      = TRUE;
+  proc->batch_interpreter_name = g_strdup (name);
 }
 
 void

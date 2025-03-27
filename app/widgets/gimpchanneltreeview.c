@@ -61,8 +61,8 @@ static void  gimp_channel_tree_view_view_iface_init   (GimpContainerViewInterfac
 
 static void   gimp_channel_tree_view_constructed      (GObject                 *object);
 
-static void   gimp_channel_tree_view_drop_viewable    (GimpContainerTreeView   *view,
-                                                       GimpViewable            *src_viewable,
+static void   gimp_channel_tree_view_drop_viewables   (GimpContainerTreeView   *view,
+                                                       GList                   *src_viewables,
                                                        GimpViewable            *dest_viewable,
                                                        GtkTreeViewDropPosition  drop_pos);
 static void   gimp_channel_tree_view_drop_component   (GimpContainerTreeView   *tree_view,
@@ -99,33 +99,39 @@ gimp_channel_tree_view_class_init (GimpChannelTreeViewClass *klass)
 
   object_class->constructed  = gimp_channel_tree_view_constructed;
 
-  view_class->drop_viewable  = gimp_channel_tree_view_drop_viewable;
+  view_class->drop_viewables = gimp_channel_tree_view_drop_viewables;
   view_class->drop_component = gimp_channel_tree_view_drop_component;
+
+  iv_class->move_cursor_up_action    = "channels-select-previous";
+  iv_class->move_cursor_down_action  = "channels-select-next";
+  iv_class->move_cursor_start_action = "channels-select-top";
+  iv_class->move_cursor_end_action   = "channels-select-bottom";
 
   iv_class->set_image        = gimp_channel_tree_view_set_image;
 
   iv_class->item_type        = GIMP_TYPE_CHANNEL;
-  iv_class->signal_name      = "active-channel-changed";
+  iv_class->signal_name      = "selected-channels-changed";
 
   iv_class->get_container    = gimp_image_get_channels;
-  iv_class->get_active_item  = (GimpGetItemFunc) gimp_image_get_active_channel;
-  iv_class->set_active_item  = (GimpSetItemFunc) gimp_image_set_active_channel;
+  iv_class->get_selected_items = (GimpGetItemsFunc) gimp_image_get_selected_channels;
+  iv_class->set_selected_items = (GimpSetItemsFunc) gimp_image_set_selected_channels;
   iv_class->add_item         = (GimpAddItemFunc) gimp_image_add_channel;
   iv_class->remove_item      = (GimpRemoveItemFunc) gimp_image_remove_channel;
   iv_class->new_item         = gimp_channel_tree_view_item_new;
 
-  iv_class->action_group          = "channels";
-  iv_class->activate_action       = "channels-edit-attributes";
-  iv_class->new_action            = "channels-new";
-  iv_class->new_default_action    = "channels-new-last-values";
-  iv_class->raise_action          = "channels-raise";
-  iv_class->raise_top_action      = "channels-raise-to-top";
-  iv_class->lower_action          = "channels-lower";
-  iv_class->lower_bottom_action   = "channels-lower-to-bottom";
-  iv_class->duplicate_action      = "channels-duplicate";
-  iv_class->delete_action         = "channels-delete";
-  iv_class->lock_content_help_id  = GIMP_HELP_CHANNEL_LOCK_PIXELS;
-  iv_class->lock_position_help_id = GIMP_HELP_CHANNEL_LOCK_POSITION;
+  iv_class->action_group            = "channels";
+  iv_class->activate_action         = "channels-edit-attributes";
+  iv_class->new_action              = "channels-new";
+  iv_class->new_default_action      = "channels-new-last-values";
+  iv_class->raise_action            = "channels-raise";
+  iv_class->raise_top_action        = "channels-raise-to-top";
+  iv_class->lower_action            = "channels-lower";
+  iv_class->lower_bottom_action     = "channels-lower-to-bottom";
+  iv_class->duplicate_action        = "channels-duplicate";
+  iv_class->delete_action           = "channels-delete";
+  iv_class->lock_content_help_id    = GIMP_HELP_CHANNEL_LOCK_PIXELS;
+  iv_class->lock_position_help_id   = GIMP_HELP_CHANNEL_LOCK_POSITION;
+  iv_class->lock_visibility_help_id = GIMP_HELP_CHANNEL_LOCK_VISIBILITY;
 }
 
 static void
@@ -189,46 +195,50 @@ gimp_channel_tree_view_constructed (GObject *object)
 /*  GimpContainerTreeView methods  */
 
 static void
-gimp_channel_tree_view_drop_viewable (GimpContainerTreeView   *tree_view,
-                                      GimpViewable            *src_viewable,
-                                      GimpViewable            *dest_viewable,
-                                      GtkTreeViewDropPosition  drop_pos)
+gimp_channel_tree_view_drop_viewables (GimpContainerTreeView   *tree_view,
+                                       GList                   *src_viewables,
+                                       GimpViewable            *dest_viewable,
+                                       GtkTreeViewDropPosition  drop_pos)
 {
   GimpItemTreeView      *item_view = GIMP_ITEM_TREE_VIEW (tree_view);
   GimpImage             *image     = gimp_item_tree_view_get_image (item_view);
   GimpItemTreeViewClass *item_view_class;
+  GList                 *iter;
 
   item_view_class = GIMP_ITEM_TREE_VIEW_GET_CLASS (item_view);
 
-  if (GIMP_IS_DRAWABLE (src_viewable) &&
-      (image != gimp_item_get_image (GIMP_ITEM (src_viewable)) ||
-       G_TYPE_FROM_INSTANCE (src_viewable) != item_view_class->item_type))
+  for (iter = src_viewables; iter; iter = iter->next)
     {
-      GimpItem *new_item;
-      GimpItem *parent;
-      gint      index;
+      GimpViewable *src_viewable = iter->data;
 
-      index = gimp_item_tree_view_get_drop_index (item_view, dest_viewable,
-                                                  drop_pos,
-                                                  (GimpViewable **) &parent);
+      if (GIMP_IS_DRAWABLE (src_viewable) &&
+          (image != gimp_item_get_image (GIMP_ITEM (src_viewable)) ||
+           G_TYPE_FROM_INSTANCE (src_viewable) != item_view_class->item_type))
+        {
+          GimpItem *new_item;
+          GimpItem *parent;
+          gint      index;
 
-      new_item = gimp_item_convert (GIMP_ITEM (src_viewable),
-                                    gimp_item_tree_view_get_image (item_view),
-                                    item_view_class->item_type);
+          index = gimp_item_tree_view_get_drop_index (item_view, dest_viewable,
+                                                      drop_pos,
+                                                      (GimpViewable **) &parent);
 
-      gimp_item_set_linked (new_item, FALSE, FALSE);
+          new_item = gimp_item_convert (GIMP_ITEM (src_viewable),
+                                        gimp_item_tree_view_get_image (item_view),
+                                        item_view_class->item_type);
 
-      item_view_class->add_item (image, new_item, parent, index, TRUE);
+          item_view_class->add_item (image, new_item, parent, index, TRUE);
 
-      gimp_image_flush (image);
+          gimp_image_flush (image);
 
-      return;
+          return;
+        }
     }
 
-  GIMP_CONTAINER_TREE_VIEW_CLASS (parent_class)->drop_viewable (tree_view,
-                                                                src_viewable,
-                                                                dest_viewable,
-                                                                drop_pos);
+  GIMP_CONTAINER_TREE_VIEW_CLASS (parent_class)->drop_viewables (tree_view,
+                                                                 src_viewables,
+                                                                 dest_viewable,
+                                                                 drop_pos);
 }
 
 static void
@@ -316,17 +326,17 @@ static GimpItem *
 gimp_channel_tree_view_item_new (GimpImage *image)
 {
   GimpChannel *new_channel;
-  GimpRGB      color;
-
-  gimp_rgba_set (&color, 0.0, 0.0, 0.0, 0.5);
+  GeglColor   *color = gegl_color_new ("black");
 
   gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_EDIT_PASTE,
                                _("New Channel"));
 
+  gimp_color_set_alpha (color, 0.5);
   new_channel = gimp_channel_new (image,
                                   gimp_image_get_width (image),
                                   gimp_image_get_height (image),
-                                  _("Channel"), &color);
+                                  _("Channel"), color);
+  g_object_unref (color);
 
   gimp_image_add_channel (image, new_channel,
                           GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);

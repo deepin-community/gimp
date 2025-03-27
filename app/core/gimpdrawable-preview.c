@@ -83,7 +83,8 @@ sub_preview_data_new (const Babl          *format,
   SubPreviewData *data = g_slice_new (SubPreviewData);
 
   data->format = format;
-  data->buffer = g_object_ref (buffer);
+  /* We take ownership if the buffer reference. */
+  data->buffer = buffer;
   data->rect   = *rect;
   data->scale  = scale;
 
@@ -150,33 +151,27 @@ gimp_drawable_get_new_pixbuf (GimpViewable *viewable,
 const Babl *
 gimp_drawable_get_preview_format (GimpDrawable *drawable)
 {
-  gboolean alpha;
-  gboolean linear;
+  const Babl  *space;
+  gboolean     alpha;
+  GimpTRCType  trc;
 
   g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), NULL);
 
-  alpha  = gimp_drawable_has_alpha (drawable);
-  linear = gimp_drawable_get_linear (drawable);
+  space = gimp_drawable_get_space (drawable);
+  alpha = gimp_drawable_has_alpha (drawable);
+  trc   = gimp_drawable_get_trc (drawable);
 
   switch (gimp_drawable_get_base_type (drawable))
     {
-    case GIMP_GRAY:
-      return gimp_babl_format (GIMP_GRAY,
-                               gimp_babl_precision (GIMP_COMPONENT_TYPE_U8,
-                                                    linear),
-                               alpha);
-
     case GIMP_RGB:
-      return gimp_babl_format (GIMP_RGB,
-                               gimp_babl_precision (GIMP_COMPONENT_TYPE_U8,
-                                                    linear),
-                               alpha);
+    case GIMP_GRAY:
+      return gimp_drawable_get_format (drawable);
 
     case GIMP_INDEXED:
-      if (alpha)
-        return babl_format ("R'G'B'A u8");
-      else
-        return babl_format ("R'G'B' u8");
+      return gimp_babl_format (GIMP_RGB,
+                               gimp_babl_precision (GIMP_COMPONENT_TYPE_U8,
+                                                    trc),
+                               alpha, space);
     }
 
   g_return_val_if_reached (NULL);
@@ -217,7 +212,7 @@ gimp_drawable_get_sub_preview (GimpDrawable *drawable,
   if (! image->gimp->config->layer_previews)
     return NULL;
 
-  buffer = gimp_drawable_get_buffer (drawable);
+  buffer = gimp_drawable_get_buffer_with_effects (drawable);
 
   preview = gimp_temp_buf_new (dest_width, dest_height,
                                gimp_drawable_get_preview_format (drawable));
@@ -234,6 +229,7 @@ gimp_drawable_get_sub_preview (GimpDrawable *drawable,
                    gimp_temp_buf_get_format (preview),
                    gimp_temp_buf_get_data (preview),
                    GEGL_AUTO_ROWSTRIDE, GEGL_ABYSS_CLAMP);
+  g_object_unref (buffer);
 
   return preview;
 }
@@ -274,7 +270,7 @@ gimp_drawable_get_sub_pixbuf (GimpDrawable *drawable,
   if (! image->gimp->config->layer_previews)
     return NULL;
 
-  buffer = gimp_drawable_get_buffer (drawable);
+  buffer = gimp_drawable_get_buffer_with_effects (drawable);
 
   pixbuf = gdk_pixbuf_new (GDK_COLORSPACE_RGB, TRUE, 8,
                            dest_width, dest_height);
@@ -330,6 +326,8 @@ gimp_drawable_get_sub_pixbuf (GimpDrawable *drawable,
                        gdk_pixbuf_get_rowstride (pixbuf),
                        GEGL_ABYSS_CLAMP);
     }
+
+  g_object_unref (buffer);
 
   return pixbuf;
 }
@@ -436,7 +434,7 @@ gimp_drawable_get_sub_preview_async (GimpDrawable *drawable,
   if (! image->gimp->config->layer_previews)
     return NULL;
 
-  buffer = gimp_drawable_get_buffer (drawable);
+  buffer = gimp_drawable_get_buffer_with_effects (drawable);
 
   if (no_async_drawable_previews < 0)
     {

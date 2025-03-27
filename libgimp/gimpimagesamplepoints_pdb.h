@@ -32,16 +32,16 @@ G_BEGIN_DECLS
 /* For information look into the C source or the html documentation */
 
 
-gint32   gimp_image_add_sample_point          (gint32  image_ID,
-                                               gint    position_x,
-                                               gint    position_y);
-gboolean gimp_image_delete_sample_point       (gint32  image_ID,
-                                               gint32  sample_point_ID);
-gint32   gimp_image_find_next_sample_point    (gint32  image_ID,
-                                               gint32  sample_point_ID);
-gint     gimp_image_get_sample_point_position (gint32  image_ID,
-                                               gint32  sample_point_ID,
-                                               gint   *position_y);
+guint    gimp_image_add_sample_point          (GimpImage *image,
+                                               gint       position_x,
+                                               gint       position_y);
+gboolean gimp_image_delete_sample_point       (GimpImage *image,
+                                               guint      sample_point);
+guint    gimp_image_find_next_sample_point    (GimpImage *image,
+                                               guint      sample_point);
+gint     gimp_image_get_sample_point_position (GimpImage *image,
+                                               guint      sample_point,
+                                               gint      *position_y);
 
 
 G_END_DECLS

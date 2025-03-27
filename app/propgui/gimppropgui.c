@@ -41,7 +41,6 @@
 
 #include "widgets/gimpcolorpanel.h"
 #include "widgets/gimpmessagebox.h"
-#include "widgets/gimpspinscale.h"
 #include "widgets/gimppropwidgets.h"
 
 #include "gimppropgui.h"
@@ -200,7 +199,7 @@ gimp_prop_widget_new_from_pspec (GObject                  *config,
             }
         }
 
-      widget = gimp_prop_spin_scale_new (config, pspec->name, NULL,
+      widget = gimp_prop_spin_scale_new (config, pspec->name,
                                          step, page, digits);
 
       if (HAS_KEY (pspec, "unit", "degree") &&
@@ -363,12 +362,12 @@ gimp_prop_widget_new_from_pspec (GObject                  *config,
 
       gimp_prop_gui_bind_label (widget, widget);
     }
-  else if (GIMP_IS_PARAM_SPEC_RGB (pspec))
+  else if (GIMP_IS_PARAM_SPEC_COLOR (pspec))
     {
       gboolean   has_alpha;
       GtkWidget *button;
 
-      has_alpha = gimp_param_spec_rgb_has_alpha (pspec);
+      has_alpha = gimp_param_spec_color_has_alpha (pspec);
 
       widget = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
 
@@ -376,8 +375,8 @@ gimp_prop_widget_new_from_pspec (GObject                  *config,
                                            g_param_spec_get_nick (pspec),
                                            128, 24,
                                            has_alpha ?
-                                             GIMP_COLOR_AREA_SMALL_CHECKS :
-                                             GIMP_COLOR_AREA_FLAT);
+                                           GIMP_COLOR_AREA_SMALL_CHECKS :
+                                           GIMP_COLOR_AREA_FLAT);
       gimp_color_button_set_update (GIMP_COLOR_BUTTON (button), TRUE);
       gimp_color_panel_set_context (GIMP_COLOR_PANEL (button), context);
       gtk_box_pack_start (GTK_BOX (widget), button, TRUE, TRUE, 0);
@@ -434,6 +433,8 @@ gimp_prop_widget_new_from_pspec (GObject                  *config,
       /* update all the properties now */
       gimp_prop_config_notify (config, NULL, widget);
     }
+
+  gtk_widget_show (widget);
 
   return widget;
 }
@@ -550,8 +551,13 @@ gimp_prop_gui_new (GObject                  *config,
       gimp_label_set_attributes (GTK_LABEL (gui),
                                  PANGO_ATTR_STYLE, PANGO_STYLE_ITALIC,
                                  -1);
-      gtk_misc_set_padding (GTK_MISC (gui), 0, 4);
+      g_object_set (gui,
+                    "margin-top",    4,
+                    "margin-bottom", 4,
+                    NULL);
     }
+
+  gtk_widget_show (gui);
 
   return gui;
 }

@@ -26,9 +26,8 @@
 
 #include <string.h>  /*  strlen, strcmp  */
 
-#include <gtk/gtk.h>
-
 #include <libgimp/gimp.h>
+#include <libgimp/gimpui.h>
 
 #include "plug-ins/help/gimphelp.h"
 
@@ -37,253 +36,303 @@
 #include "libgimp/stdplugins-intl.h"
 
 
-/*  defines  */
-
 #define GIMP_HELP_BROWSER_EXT_PROC       "extension-gimp-help-browser"
 #define GIMP_HELP_BROWSER_TEMP_EXT_PROC  "extension-gimp-help-browser-temp"
 #define PLUG_IN_BINARY                   "help-browser"
 #define PLUG_IN_ROLE                     "gimp-help-browser"
 
 
-/*  forward declarations  */
+#define GIMP_TYPE_HELP_BROWSER (gimp_help_browser_get_type ())
+G_DECLARE_FINAL_TYPE (GimpHelpBrowser, gimp_help_browser,
+                      GIMP, HELP_BROWSER,
+                      GimpPlugIn)
 
-static void      query                  (void);
-static void      run                    (const gchar      *name,
-                                         gint              nparams,
-                                         const GimpParam  *param,
-                                         gint             *nreturn_vals,
-                                         GimpParam       **return_vals);
+static GimpValueArray * help_browser_run              (GimpProcedure        *procedure,
+                                                       GimpProcedureConfig  *config,
+                                                       gpointer              run_data);
 
-static void      temp_proc_install      (void);
-static void      temp_proc_run          (const gchar      *name,
-                                         gint              nparams,
-                                         const GimpParam  *param,
-                                         gint             *nreturn_vals,
-                                         GimpParam       **return_vals);
+static void             temp_proc_install             (GimpPlugIn           *plug_in);
+static GimpValueArray * temp_proc_run                 (GimpProcedure        *procedure,
+                                                       GimpProcedureConfig  *config,
+                                                       gpointer              run_data);
 
-static gboolean  help_browser_show_help (const gchar      *help_domain,
-                                         const gchar      *help_locales,
-                                         const gchar      *help_id);
+static GimpHelpProgress * help_browser_progress_new   (void);
 
-static GimpHelpProgress * help_browser_progress_new (void);
-
-
-/*  local variables  */
-
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _GimpHelpBrowser
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
+  GimpPlugIn parent_instance;
+
+  GimpProcedureConfig   *config;
+  GtkApplication        *app;
+  GimpHelpBrowserDialog *window;
 };
 
+G_DEFINE_TYPE (GimpHelpBrowser, gimp_help_browser, GIMP_TYPE_PLUG_IN)
 
-MAIN ()
+GIMP_MAIN (GIMP_TYPE_HELP_BROWSER)
+DEFINE_STD_SET_I18N
 
-static void
-query (void)
+static GList *
+help_browser_query_procedures (GimpPlugIn *plug_in)
 {
-  static const GimpParamDef args[] =
-  {
-    { GIMP_PDB_INT32,       "run-mode", "The run mode { RUN-INTERACTIVE (0) }" },
-    { GIMP_PDB_INT32,       "num-domain-names", ""    },
-    { GIMP_PDB_STRINGARRAY, "domain-names",     ""    },
-    { GIMP_PDB_INT32,       "num-domain-uris",  ""    },
-    { GIMP_PDB_STRINGARRAY, "domain-uris",      ""    }
-  };
-
-  gimp_install_procedure (GIMP_HELP_BROWSER_EXT_PROC,
-                          "Browse the GIMP user manual",
-                          "A small and simple HTML browser optimized for "
-                          "browsing the GIMP user manual.",
-                          "Sven Neumann <sven@gimp.org>, "
-                          "Michael Natterer <mitch@gimp.org>"
-                          "Henrik Brix Andersen <brix@gimp.org>",
-                          "Sven Neumann, Michael Natterer & Henrik Brix Andersen",
-                          "1999-2008",
-                          NULL,
-                          "",
-                          GIMP_EXTENSION,
-                          G_N_ELEMENTS (args), 0,
-                          args, NULL);
+  return g_list_append (NULL, g_strdup (GIMP_HELP_BROWSER_EXT_PROC));
 }
 
-static void
-run (const gchar      *name,
-     gint              nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+static GimpProcedure *
+help_browser_create_procedure (GimpPlugIn  *plug_in,
+                               const gchar *name)
 {
-  GimpRunMode        run_mode = param[0].data.d_int32;
-  GimpPDBStatusType  status   = GIMP_PDB_SUCCESS;
+  GimpProcedure *procedure = NULL;
 
-  static GimpParam   values[1];
-
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
-
-  *nreturn_vals = 1;
-  *return_vals  = values;
-
-  INIT_I18N ();
-
-  switch (run_mode)
+  if (! strcmp (name, GIMP_HELP_BROWSER_EXT_PROC))
     {
-    case GIMP_RUN_INTERACTIVE:
-    case GIMP_RUN_NONINTERACTIVE:
-    case GIMP_RUN_WITH_LAST_VALS:
-      /*  Make sure all the arguments are there!  */
-      if (nparams >= 1)
-        {
-          if (nparams == 5)
-            {
-              if (! gimp_help_init (param[1].data.d_int32,
-                                    param[2].data.d_stringarray,
-                                    param[3].data.d_int32,
-                                    param[4].data.d_stringarray))
-                {
-                  status = GIMP_PDB_CALLING_ERROR;
-                }
-            }
+      procedure = gimp_procedure_new (plug_in, name,
+                                      GIMP_PDB_PROC_TYPE_PERSISTENT,
+                                      help_browser_run, plug_in, NULL);
 
-          if (status == GIMP_PDB_SUCCESS)
-            {
-              browser_dialog_open (PLUG_IN_BINARY);
+      gimp_procedure_set_documentation (procedure,
+                                        "Browse the GIMP user manual",
+                                        "A small and simple HTML browser "
+                                        "optimized for browsing the GIMP "
+                                        "user manual.",
+                                        GIMP_HELP_BROWSER_EXT_PROC);
+      gimp_procedure_set_attribution (procedure,
+                                      "Sven Neumann <sven@gimp.org>, "
+                                      "Michael Natterer <mitch@gimp.org>"
+                                      "Henrik Brix Andersen <brix@gimp.org>",
+                                      "Sven Neumann, Michael Natterer & "
+                                      "Henrik Brix Andersen",
+                                      "1999-2008");
 
-              temp_proc_install ();
+      gimp_procedure_add_enum_argument (procedure, "run-mode",
+                                        "Run mode",
+                                        "The run mode",
+                                        GIMP_TYPE_RUN_MODE,
+                                        GIMP_RUN_INTERACTIVE,
+                                        G_PARAM_READWRITE);
 
-              gimp_extension_ack ();
-              gimp_extension_enable ();
+      gimp_procedure_add_string_array_argument (procedure, "domain-names",
+                                                "Domain names",
+                                                "Domain names",
+                                                G_PARAM_READWRITE);
 
-              gtk_main ();
-            }
-        }
-      else
-        {
-          status = GIMP_PDB_CALLING_ERROR;
-        }
-      break;
+      gimp_procedure_add_string_array_argument (procedure, "domain-uris",
+                                                "Domain URIs",
+                                                "Domain URIs",
+                                                G_PARAM_READWRITE);
 
-    default:
-      status = GIMP_PDB_CALLING_ERROR;
-      break;
+      gimp_procedure_add_bytes_aux_argument (procedure, "dialog-data",
+                                             "Dialog data",
+                                             "Remembering dialog's basic features; this is never meant to be a public argument",
+                                             GIMP_PARAM_READWRITE);
     }
 
-  values[0].data.d_status = status;
+  return procedure;
 }
 
 static void
-temp_proc_install (void)
+on_app_activate (GApplication *gapp,
+                 gpointer      user_data)
 {
-  static const GimpParamDef args[] =
-  {
-    { GIMP_PDB_STRING, "help-domain",  "Help domain to use" },
-    { GIMP_PDB_STRING, "help-locales", "Language to use"    },
-    { GIMP_PDB_STRING, "help-id",      "Help ID to open"    }
-  };
+  GimpHelpBrowser *browser = GIMP_HELP_BROWSER (user_data);
+  GtkApplication  *app     = GTK_APPLICATION (gapp);
 
-  gimp_install_temp_proc (GIMP_HELP_BROWSER_TEMP_EXT_PROC,
-                          "DON'T USE THIS ONE",
-                          "(Temporary procedure)",
-                          "Sven Neumann <sven@gimp.org>, "
-                          "Michael Natterer <mitch@gimp.org>"
-                          "Henrik Brix Andersen <brix@gimp.org>",
-                          "Sven Neumann, Michael Natterer & Henrik Brix Andersen",
-                          "1999-2008",
-                          NULL,
-                          "",
-                          GIMP_TEMPORARY,
-                          G_N_ELEMENTS (args), 0,
-                          args, NULL,
-                          temp_proc_run);
+  browser->window = gimp_help_browser_dialog_new (PLUG_IN_BINARY, gapp, browser->config);
+
+  gtk_application_set_accels_for_action (app, "win.back", (const char*[]) { "<alt>Left", NULL });
+  gtk_application_set_accels_for_action (app, "win.forward", (const char*[]) { "<alt>Right", NULL });
+  gtk_application_set_accels_for_action (app, "win.reload", (const char*[]) { "<control>R", NULL });
+  gtk_application_set_accels_for_action (app, "win.stop", (const char*[]) { "Escape", NULL });
+  gtk_application_set_accels_for_action (app, "win.home", (const char*[]) { "<alt>Home", NULL });
+  gtk_application_set_accels_for_action (app, "win.copy-selection", (const char*[]) { "<control>C", NULL });
+  gtk_application_set_accels_for_action (app, "win.zoom-in", (const char*[]) { "<control>plus", NULL });
+  gtk_application_set_accels_for_action (app, "win.zoom-out", (const char*[]) { "<control>minus", NULL });
+  gtk_application_set_accels_for_action (app, "win.find", (const char*[]) { "<control>F", NULL });
+  gtk_application_set_accels_for_action (app, "win.find-again", (const char*[]) { "<control>G", NULL });
+  gtk_application_set_accels_for_action (app, "win.close", (const char*[]) { "<control>W", "<control>Q", NULL });
+  gtk_application_set_accels_for_action (app, "win.show-index", (const char*[]) { "<control>I", NULL });
 }
 
-static void
-temp_proc_run (const gchar      *name,
-               gint              nparams,
-               const GimpParam  *param,
-               gint             *nreturn_vals,
-               GimpParam       **return_vals)
+static GimpValueArray *
+help_browser_run (GimpProcedure        *procedure,
+                  GimpProcedureConfig  *config,
+                  gpointer              user_data)
 {
-  static GimpParam  values[1];
-  GimpPDBStatusType status = GIMP_PDB_SUCCESS;
+  GimpHelpBrowser  *browser      = GIMP_HELP_BROWSER (user_data);
+  gchar           **domain_names = NULL;
+  gchar           **domain_uris  = NULL;
 
-  *nreturn_vals = 1;
-  *return_vals  = values;
-
-  /*  make sure all the arguments are there  */
-  if (nparams == 3)
+  browser->config = config;
+  g_object_get (config,
+                "domain-names", &domain_names,
+                "domain-uris",  &domain_uris,
+                NULL);
+  if (! gimp_help_init ((const gchar **) domain_names,
+                        (const gchar **) domain_uris))
     {
-      const gchar    *help_domain  = GIMP_HELP_DEFAULT_DOMAIN;
-      const gchar    *help_locales = NULL;
-      const gchar    *help_id      = GIMP_HELP_DEFAULT_ID;
+      g_strfreev (domain_names);
+      g_strfreev (domain_uris);
 
-      if (param[0].data.d_string && strlen (param[0].data.d_string))
-        help_domain = param[0].data.d_string;
-
-      if (param[1].data.d_string && strlen (param[1].data.d_string))
-        help_locales = param[1].data.d_string;
-
-      if (param[2].data.d_string && strlen (param[2].data.d_string))
-        help_id = param[2].data.d_string;
-
-      if (! help_browser_show_help (help_domain, help_locales, help_id))
-        {
-          gtk_main_quit ();
-        }
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_CALLING_ERROR,
+                                               NULL);
     }
+  g_strfreev (domain_names);
+  g_strfreev (domain_uris);
 
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
+  temp_proc_install (gimp_procedure_get_plug_in (procedure));
+
+  gimp_procedure_persistent_ready (procedure);
+  gimp_plug_in_persistent_enable (gimp_procedure_get_plug_in (procedure));
+
+#if GLIB_CHECK_VERSION(2,74,0)
+  browser->app = gtk_application_new (NULL, G_APPLICATION_DEFAULT_FLAGS);
+#else
+  browser->app = gtk_application_new (NULL, G_APPLICATION_FLAGS_NONE);
+#endif
+  g_signal_connect (browser->app, "activate", G_CALLBACK (on_app_activate), browser);
+
+  g_application_run (G_APPLICATION (browser->app), 0, NULL);
+
+  g_clear_object (&browser->app);
+
+  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
+}
+
+static void
+temp_proc_install (GimpPlugIn *plug_in)
+{
+  GimpProcedure *procedure;
+
+  procedure = gimp_procedure_new (plug_in, GIMP_HELP_BROWSER_TEMP_EXT_PROC,
+                                  GIMP_PDB_PROC_TYPE_TEMPORARY,
+                                  temp_proc_run, plug_in, NULL);
+
+  gimp_procedure_set_documentation (procedure,
+                                    "DON'T USE THIS ONE",
+                                    "(Temporary procedure)",
+                                    NULL);
+  gimp_procedure_set_attribution (procedure,
+                                  "Sven Neumann <sven@gimp.org>, "
+                                  "Michael Natterer <mitch@gimp.org>"
+                                  "Henrik Brix Andersen <brix@gimp.org>",
+                                  "Sven Neumann, Michael Natterer & "
+                                  "Henrik Brix Andersen",
+                                  "1999-2008");
+
+  gimp_procedure_add_string_argument (procedure, "help-domain",
+                                      "Help domain",
+                                      "Help domain to use",
+                                      NULL,
+                                      G_PARAM_READWRITE);
+
+  gimp_procedure_add_string_argument (procedure, "help-locales",
+                                      "Help locales",
+                                      "Language to use",
+                                      NULL,
+                                      G_PARAM_READWRITE);
+
+  gimp_procedure_add_string_argument (procedure, "help-id",
+                                      "Help ID",
+                                      "Help ID to open",
+                                      NULL,
+                                      G_PARAM_READWRITE);
+
+  gimp_plug_in_add_temp_procedure (plug_in, procedure);
+  g_object_unref (procedure);
+}
+
+typedef struct _IdleClosure
+{
+  GimpHelpBrowser *browser;
+  char            *help_domain;
+  char            *help_locales;
+  char            *help_id;
+} IdleClosure;
+
+static void
+idle_closure_free (gpointer data)
+{
+  IdleClosure *closure = data;
+
+  g_free (closure->help_domain);
+  g_free (closure->help_locales);
+  g_free (closure->help_id);
+  g_free (closure);
 }
 
 static gboolean
-help_browser_show_help (const gchar *help_domain,
-                        const gchar *help_locales,
-                        const gchar *help_id)
+show_help_on_idle (gpointer user_data)
 {
-  GimpHelpDomain *domain;
-  gboolean        success = TRUE;
+  IdleClosure      *closure = user_data;
+  GimpHelpDomain   *domain;
+  GimpHelpProgress *progress = NULL;
+  GimpHelpLocale   *locale;
+  GList            *locales;
+  char             *uri;
+  gboolean          fatal_error;
 
-  domain = gimp_help_lookup_domain (help_domain);
+  /* First get the URI to load */
+  domain = gimp_help_lookup_domain (closure->help_domain);
+  if (!domain)
+    return G_SOURCE_REMOVE;
 
-  if (domain)
+  locales = gimp_help_parse_locales (closure->help_locales);
+
+  if (! g_str_has_prefix (domain->help_uri, "file:"))
+    progress = help_browser_progress_new ();
+
+  uri = gimp_help_domain_map (domain, locales, closure->help_id,
+                              progress, &locale, &fatal_error);
+
+  if (progress)
+    gimp_help_progress_free (progress);
+
+  g_list_free_full (locales, (GDestroyNotify) g_free);
+
+  /* Now actually load it */
+  if (uri)
     {
-      GimpHelpProgress *progress = NULL;
-      GimpHelpLocale   *locale;
-      GList            *locales;
-      gchar            *uri;
-      gboolean          fatal_error;
+      gimp_help_browser_dialog_make_index (closure->browser->window, domain, locale);
+      gimp_help_browser_dialog_load (closure->browser->window, uri);
 
-      locales = gimp_help_parse_locales (help_locales);
-
-      if (! g_str_has_prefix (domain->help_uri, "file:"))
-        progress = help_browser_progress_new ();
-
-      uri = gimp_help_domain_map (domain, locales, help_id,
-                                  progress, &locale, &fatal_error);
-
-      if (progress)
-        gimp_help_progress_free (progress);
-
-      g_list_free_full (locales, (GDestroyNotify) g_free);
-
-      if (uri)
-        {
-          browser_dialog_make_index (domain, locale);
-          browser_dialog_load (uri);
-
-          g_free (uri);
-        }
-      else if (fatal_error)
-        {
-          success = FALSE;
-        }
+      g_free (uri);
     }
 
-  return success;
+  return G_SOURCE_REMOVE;
+}
+
+static GimpValueArray *
+temp_proc_run (GimpProcedure        *procedure,
+               GimpProcedureConfig  *config,
+               gpointer              user_data)
+{
+  GimpHelpBrowser *browser = GIMP_HELP_BROWSER (user_data);
+  IdleClosure     *closure;
+  gchar           *str;
+
+  closure = g_new0 (IdleClosure, 1);
+  closure->browser = browser;
+
+  g_object_get (config, "help-domain", &str, NULL);
+  closure->help_domain = g_strdup ((str && *str)? str : GIMP_HELP_DEFAULT_DOMAIN);
+  g_free (str);
+
+  g_object_get (config, "help-locales", &str, NULL);
+  if (str && *str)
+    closure->help_locales = g_strdup (str);
+  g_free (str);
+
+  g_object_get (config, "help-id", &str, NULL);
+  closure->help_id = g_strdup ((str && *str)? str : GIMP_HELP_DEFAULT_ID);
+  g_free (str);
+
+  /* Do this on idle, to make sure everything is initialized already */
+  g_idle_add_full (G_PRIORITY_DEFAULT_IDLE,
+                   show_help_on_idle,
+                   closure, idle_closure_free);
+
+  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }
 
 
@@ -319,4 +368,19 @@ help_browser_progress_new (void)
   };
 
   return gimp_help_progress_new (&vtable, NULL);
+}
+
+static void
+gimp_help_browser_class_init (GimpHelpBrowserClass *klass)
+{
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
+
+  plug_in_class->query_procedures = help_browser_query_procedures;
+  plug_in_class->create_procedure = help_browser_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
+}
+
+static void
+gimp_help_browser_init (GimpHelpBrowser *help_browser)
+{
 }

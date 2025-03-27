@@ -29,18 +29,7 @@
 #include "gimpboundary.h"
 
 
-GType
-gimp_bezier_desc_get_type (void)
-{
-  static GType type = 0;
-
-  if (! type)
-    type = g_boxed_type_register_static ("GimpBezierDesc",
-                                         (GBoxedCopyFunc) gimp_bezier_desc_copy,
-                                         (GBoxedFreeFunc) gimp_bezier_desc_free);
-
-  return type;
-}
+G_DEFINE_BOXED_TYPE (GimpBezierDesc, gimp_bezier_desc, gimp_bezier_desc_copy, gimp_bezier_desc_free)
 
 GimpBezierDesc *
 gimp_bezier_desc_new (cairo_path_data_t *data,
@@ -187,8 +176,8 @@ gimp_bezier_desc_copy (const GimpBezierDesc *desc)
 {
   g_return_val_if_fail (desc != NULL, NULL);
 
-  return gimp_bezier_desc_new (g_memdup (desc->data,
-                                         desc->num_data * sizeof (cairo_path_data_t)),
+  return gimp_bezier_desc_new (g_memdup2 (desc->data,
+                                          desc->num_data * sizeof (cairo_path_data_t)),
                                desc->num_data);
 }
 

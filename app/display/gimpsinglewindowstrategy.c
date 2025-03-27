@@ -29,6 +29,8 @@
 
 #include "core/gimp.h"
 
+#include "menus/menus.h"
+
 #include "widgets/gimpdialogfactory.h"
 #include "widgets/gimpdock.h"
 #include "widgets/gimpdockbook.h"
@@ -43,8 +45,7 @@ static void        gimp_single_window_strategy_window_strategy_iface_init (GimpW
 static GtkWidget * gimp_single_window_strategy_show_dockable_dialog       (GimpWindowStrategy          *strategy,
                                                                            Gimp                        *gimp,
                                                                            GimpDialogFactory           *factory,
-                                                                           GdkScreen                   *screen,
-                                                                           gint                         monitor,
+                                                                           GdkMonitor                  *monitor,
                                                                            const gchar                 *identifiers);
 
 
@@ -75,8 +76,7 @@ static GtkWidget *
 gimp_single_window_strategy_show_dockable_dialog (GimpWindowStrategy *strategy,
                                                   Gimp               *gimp,
                                                   GimpDialogFactory  *factory,
-                                                  GdkScreen          *screen,
-                                                  gint                monitor,
+                                                  GdkMonitor         *monitor,
                                                   const gchar        *identifiers)
 {
   GList           *windows = gimp_get_image_windows (gimp);
@@ -94,12 +94,11 @@ gimp_single_window_strategy_show_dockable_dialog (GimpWindowStrategy *strategy,
       if (! gimp_image_window_has_toolbox (window))
         {
           GimpDockColumns *columns;
-          GimpUIManager   *ui_manager = gimp_image_window_get_ui_manager (window);
+          GimpUIManager   *ui_manager = menus_get_image_manager_singleton (gimp);
 
-          widget = gimp_dialog_factory_dialog_new (factory,
-                                                   screen,
-                                                   monitor,
+          widget = gimp_dialog_factory_dialog_new (factory, monitor,
                                                    ui_manager,
+                                                   GTK_WIDGET (window),
                                                    "gimp-toolbox",
                                                    -1 /*view_size*/,
                                                    FALSE /*present*/);
@@ -110,11 +109,16 @@ gimp_single_window_strategy_show_dockable_dialog (GimpWindowStrategy *strategy,
                                       GIMP_DOCK (widget),
                                       -1 /*index*/);
         }
+      else
+        {
+          widget = gimp_dialog_factory_find_widget (factory, "gimp-toolbox");
+        }
     }
   else if (gimp_dialog_factory_find_widget (factory, identifiers))
     {
       /* if the dialog is already open, simply raise it */
-      return gimp_dialog_factory_dialog_raise (factory, screen, monitor,
+      return gimp_dialog_factory_dialog_raise (factory, monitor,
+                                               GTK_WIDGET (window),
                                                identifiers, -1);
    }
   else
@@ -135,8 +139,7 @@ gimp_single_window_strategy_show_dockable_dialog (GimpWindowStrategy *strategy,
         }
 
       widget = gimp_dockbook_add_from_dialog_factory (GIMP_DOCKBOOK (dockbook),
-                                                      identifiers,
-                                                      -1 /*index*/);
+                                                      identifiers);
     }
 
 

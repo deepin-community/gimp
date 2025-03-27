@@ -1,14 +1,217 @@
-gimp (2.10.38-1deepin2) unstable; urgency=medium
+gimp (3.0.2-1) unstable; urgency=medium
 
-  * fix-libheif-detection.
+  * New upstream bugfix release
+    https://www.gimp.org/news/2025/03/23/gimp-3-0-2-released/
+  * Bump minimum gegl
 
- -- lichenggang <lichenggang@deepin.org>  Mon, 11 Nov 2024 11:39:21 +0800
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Wed, 26 Mar 2025 09:11:20 -0400
 
-gimp (2.10.38-1deepin1) unstable; urgency=medium
+gimp (3.0.0-2) unstable; urgency=medium
 
-  * Revert 64-bit time_t changes.
+  * Add Depends: librsvg2-common (Closes: #1099419)
 
- -- Tianyu Chen <sweetyfish@deepin.org>  Wed, 10 Jul 2024 11:26:38 +0200
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Mon, 17 Mar 2025 14:36:50 -0400
+
+gimp (3.0.0-1) unstable; urgency=medium
+
+  * New upstream release
+  * Bump minimum babl & gegl
+  * debian/libgimp-3.0-0.symbols: Update
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Mon, 17 Mar 2025 09:53:40 -0400
+
+gimp (3.0.0~RC3-1) unstable; urgency=medium
+
+  * New upstream release
+  * debian/libgimp-3.0-0.symbols: Add new symbols
+  * Bump minimum gegl
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Sun, 09 Feb 2025 21:12:06 -0500
+
+gimp (3.0.0~RC2-1) unstable; urgency=medium
+
+  * New upstream release
+  * Bump minimum gegl
+  * debian/libgimp-3.0-0.symbols: Add new symbols
+  * Use xvfb with dh_auto_test to run additional tests
+  * Remove all patches: applied in new release
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Fri, 27 Dec 2024 22:50:42 -0500
+
+gimp (3.0.0~RC1-4) unstable; urgency=medium
+
+  * Add gimp-data.postinst to clean up /etc/gimp/2.0/ (Closes: #1089406)
+  * Cherry-pick more commits
+  * Release to unstable
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Wed, 11 Dec 2024 09:48:59 -0500
+
+gimp (3.0.0~RC1-3) experimental; urgency=medium
+
+  * Cherrypick many commits after 3.0.0 RC1
+  * Have gimp depend on gir1.2-gimp-3.0, needed for several plugins
+    (Closes: #1014420)
+  * Add Build-Depends: dh-sequence-gir
+  * Add Provides: ${gir:Provides} to -dev package
+  * Have -dev package depend on libgexiv2-dev per pkgconf
+  * Disable lua plugins as recommended by upstream
+  * Disable the useless GJS plugin more thoroughly
+  * Extend build test timeout (for riscv64) (Closes: #1088156)
+  * Only build docs when building libgimp-3.0-doc
+  * Update autopkgtest for gimp3
+  * Closes: #651587, #862336, #918381, #967937, #1035523, #1078402
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Mon, 25 Nov 2024 16:43:40 -0500
+
+gimp (3.0.0~RC1-1) experimental; urgency=medium
+
+  * New upstream release.
+  * Bump Build-Depends for babl, gegl and harfbuzz.
+  * Adapt to install plugins and modules in the 3.0 versioned dir.
+  * Update symlink origins for 3.0.
+  * Enable lua and js plugins and add necessary build dependencies.
+  * Add python-gi-dev to Build-Depends.
+  * Adapt globbing install patterns to accept single digit minor versions.
+  * Install new "-3" suffixed symlinks for various binaries.
+  * Drop no longer built plugins and adapt for renamed ones.
+  * Update symbols file to reflect numerous API changes.
+  * Update changelog and release to experimental.
+  * Replace dependency on pkg-config with pkgconf.
+  * Replace libfreetype6-dev Build-Dep with libfreetype-dev.
+  * Update Standards-Version to 4.7.0.
+
+ -- Jordi Mallach <jordi@debian.org>  Thu, 07 Nov 2024 00:49:15 +0100
+
+gimp (2.99.18-1) experimental; urgency=medium
+
+  * New upstream release.
+    - pasting from the clipboard creates a new image (closes: #1037239).
+  * Bump versions for libheif, pango and gegl Build-Deps.
+  * Stop using dh-sequence-gnome to generate debian/control.
+  * Disable support for ilbm, as requirements are not available.
+  * Add Build-Depends on libqoi-dev.
+  * Install the file-qoi and file-farbfeld plugins.
+  * Update symbols file.
+
+ -- Jordi Mallach <jordi@debian.org>  Tue, 19 Mar 2024 02:17:38 +0100
+
+gimp (2.99.16-2) experimental; urgency=medium
+
+  * Temporarily disable building with LTO to work around #9633
+  * debian/rules: Turn on auto features, but temporarily
+    disable javascript & lua plugins
+  * Disable mng plugin since libmng-dev in Unstable doesn't ship the .pc file
+  * Revert "Temporarily drop the file-heif plugin"
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Sat, 05 Aug 2023 19:59:04 -0400
+
+gimp (2.99.16-1) experimental; urgency=medium
+
+  * New upstream release.
+  * Bump minimal build versions for glib, exiv2 and gegl.
+  * Drop test failure patch, which was included upstream.
+  * Request meson feature support via "enabled" instead of "true".
+  * Stop installing aclocal files, which are now gone.
+  * Build-Dep on libcfitsoi-dev for rewritten fits support.
+  * Temporarily drop the file-heif plugin.
+  * Install the python plugins in the gimp package.
+  * Update symbols file.
+  * Switch fontconfig B-D to unversioned libfontconfig-dev.
+
+ -- Jordi Mallach <jordi@debian.org>  Mon, 10 Jul 2023 23:54:08 +0200
+
+gimp (2.99.14-2) experimental; urgency=medium
+
+  * Increase test timeout to 60s, to maybe fix timeouts on armel.
+
+ -- Jordi Mallach <jordi@debian.org>  Tue, 22 Nov 2022 10:10:55 +0100
+
+gimp (2.99.14-1) experimental; urgency=medium
+
+  * New upstream release.
+  * Drop all patches taken from upstream git.
+  * Update Build-Depends as per meson.build.
+  * Stop generating links for gimp, gimp-console, gimp-test-clipboard and
+    gimptool, they are again generated by the build system.
+  * Install new plugin file-icns.
+  * Install new symlink for gimp-debug-tool-?.??.
+  * Drop both Hurd patches, gimp3 has no remaining references to PATH_MAX.
+  * Update symbols file.
+  * Unversion references to gimptool in README.Debian.
+
+ -- Jordi Mallach <jordi@debian.org>  Mon, 21 Nov 2022 14:32:19 +0100
+
+gimp (2.99.12-2) experimental; urgency=medium
+
+  * Add additional unversioned links for gimp-script-fu-interpreter
+    and gimp-test-clipboard.
+  * Upload to experimental, to trigger a rebuild against new libgs-dev.
+
+ -- Jordi Mallach <jordi@debian.org>  Tue, 08 Nov 2022 10:14:20 +0100
+
+gimp (2.99.12-1) experimental; urgency=medium
+
+  * Drop Build-Deps on webkitgtk, as that feature is unmaintained.
+  * Merge changes from debian/master.
+  * New upstream release
+  * Build with Meson.
+  * Drop the g-ir docs patch, not needed anymore.
+  * Explicitly enable the non-gtk-binary build.
+  * Drop now unneeded build-dep on intltool.
+  * Add gimp and gimp-console links via dh_link, as those are not being
+    generated by the build system.
+  * Add jxl-metadata-import-export.patch from git to fix recent FTBFS
+    with jpeg-xl >= 0.7.0.
+  * Add patch from git to fix building with libheif 1.13.0+ (closes: #1021699).
+  * Update install files to adapt to changes in new version.
+  * Update symbols file.
+  * Update a few paths in copyright file.
+  * Also add a symlink for gimptool.
+
+ -- Jordi Mallach <jordi@debian.org>  Thu, 13 Oct 2022 22:54:55 +0200
+
+gimp (2.99.10-1) experimental; urgency=medium
+
+  * New upstream release
+  * Update Build-Depends as per configure.ac.
+  * Watch for unstable versions.
+  * Change debian-branch and upstream-branch to gimp3 and 3.x.
+  * Refresh 02_hurd_ftbfs.patch.
+  * Fix references to gimp libdir "2.0" to reflect current "2.99".
+  * Adapt packaging for soname bump to libgimp-3.0.
+  * Switch from gtk-doc to gi-docgen.
+  * Adapt install files for file renames and removals.
+  * Add a gir1.2-gimp-3.0 binary for GObject Instrospection bindings.
+  * Update symbols file.
+  * Install libs and modules in multiarchified paths.
+  * Install fractal-explorer examples to examples dir.
+  * Drop dh_autoreconf override, --as-needed is the default nowadays.
+  * Add luajit, python3 and gjs to Suggests, for plugins that require
+    those interpreters.
+  * Drop dh_shlibdeps override that avoided libasound2 dependencies.
+    This workaround was included in gimp 2.2.4-2 in 2005; since then,
+    all Debian installs running gimp are most probably pulling in
+    ALSA libs anyway.
+  * Temporarily add Build-Deps on libhwy-dev, libbrotli-dev and
+    liblcms-dev until libkxl-dev pulls them in as it should.
+  * Add the file-jpegxl plugin to the installed.
+  * Split out gimptool-2.99 to a new libgimp-3.0-bin binary package.
+  * Pass --enable-g-ir-doc to build GObject Instropection docs.
+  * Add Build-Dep on yelp-tools for the above.
+  * Add patch to fix doc syntax errors for gimp_procedure_add_menu_path.
+  * Install g-ir-docs via libgimp-3.0-doc.docs, as the build system does
+    not install the generated documentation.
+  * Add upstream metadata.
+  * Mark -dev package as Multi-Arch: same.
+  * Update Standards-Version to 4.6.1.
+
+ -- Jordi Mallach <jordi@debian.org>  Mon, 16 May 2022 16:30:53 +0200
+
+gimp (2.10.38-2) unstable; urgency=medium
+
+  * Cherry-pick patch to fix build with gcc-14 (Closes: #1074998)
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Fri, 26 Jul 2024 14:26:20 -0400
 
 gimp (2.10.38-1) unstable; urgency=medium
 
@@ -1816,7 +2019,7 @@ gimp (2.0.0-5) unstable; urgency=low
     errors no longer exist in the gimp source. (Closes: #125783)
   * Correct debian/gimp-data.files (Closes: #241587, #241575)
 
- -- Ari Pollak <ari@debian.org>  Thu, 01 Apr 2004 11:28:13 -0500
+ -- Ari Pollak <ari@debian.org>  Sun, 1 Apr 2004 11:28:13 -0500
 
 gimp (2.0.0-4) unstable; urgency=low
 
@@ -1944,7 +2147,7 @@ gimp1.3 (1.3.24+2.0pre1-1) unstable; urgency=low
   * Pass --enable-fast-install to configure so we don't have to build-conflict
     with libgimp1.3
 
- -- Ari Pollak <ari@debian.org>  Wed, 07 Jan 2004 22:16:40 -0500
+ -- Ari Pollak <ari@debian.org>  Tue,  7 Jan 2004 22:16:40 -0500
 
 gimp1.3 (1.3.23-2) unstable; urgency=low
 

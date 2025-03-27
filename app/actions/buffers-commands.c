@@ -20,6 +20,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "actions-types.h"
@@ -88,11 +89,15 @@ buffers_paste_cmd_callback (GimpAction *action,
 
       if (image)
         {
-          gimp_edit_paste (image, gimp_image_get_active_drawable (image),
-                           GIMP_OBJECT (buffer), paste_type,
-                           x, y, width, height);
+          GList *drawables = gimp_image_get_selected_drawables (image);
+
+          g_list_free (gimp_edit_paste (image, drawables,
+                                        GIMP_OBJECT (buffer), paste_type,
+                                        context, FALSE,
+                                        x, y, width, height));
 
           gimp_image_flush (image);
+          g_list_free (drawables);
         }
     }
 }
@@ -118,11 +123,11 @@ buffers_paste_as_new_image_cmd_callback (GimpAction *action,
       GimpImage *new_image;
 
       new_image = gimp_edit_paste_as_new_image (context->gimp,
-                                                GIMP_OBJECT (buffer));
+                                                GIMP_OBJECT (buffer),
+                                                context);
       gimp_create_display (context->gimp, new_image,
-                           GIMP_UNIT_PIXEL, 1.0,
-                           G_OBJECT (gtk_widget_get_screen (widget)),
-                           gimp_widget_get_monitor (widget));
+                           gimp_unit_pixel (), 1.0,
+                           G_OBJECT (gimp_widget_get_monitor (widget)));
       g_object_unref (new_image);
     }
 }

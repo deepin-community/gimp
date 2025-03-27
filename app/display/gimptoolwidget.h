@@ -120,6 +120,12 @@ struct _GimpToolWidgetClass
                                 GimpToolCursorType    *tool_cursor,
                                 GimpCursorModifier    *modifier);
 
+  GimpUIManager *
+           (* get_popup)       (GimpToolWidget        *widget,
+                                const GimpCoords      *coords,
+                                GdkModifierType        state,
+                                const gchar          **ui_path);
+
   gboolean update_on_scale;
   gboolean update_on_scroll;
   gboolean update_on_rotate;
@@ -314,5 +320,10 @@ gboolean   gimp_tool_widget_get_cursor      (GimpToolWidget        *widget,
                                              GimpToolCursorType    *tool_cursor,
                                              GimpCursorModifier    *modifier);
 
+GimpUIManager *
+           gimp_tool_widget_get_popup       (GimpToolWidget        *widget,
+                                             const GimpCoords      *coords,
+                                             GdkModifierType        state,
+                                             const gchar          **ui_path);
 
 #endif /* __GIMP_TOOL_WIDGET_H__ */

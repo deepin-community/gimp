@@ -107,34 +107,32 @@ gimp_pattern_select_run_callback (GimpPdbDialog  *dialog,
   GimpPattern    *pattern = GIMP_PATTERN (object);
   const Babl     *format;
   gpointer        data;
-  GimpArray      *array;
+  GBytes         *bytes;
   GimpValueArray *return_vals;
 
   format = gimp_babl_compat_u8_format (
     gimp_temp_buf_get_format (pattern->mask));
   data   = gimp_temp_buf_lock (pattern->mask, format, GEGL_ACCESS_READ);
 
-  array = gimp_array_new (data,
-                          gimp_temp_buf_get_width         (pattern->mask) *
-                          gimp_temp_buf_get_height        (pattern->mask) *
-                          babl_format_get_bytes_per_pixel (format),
-                          TRUE);
+  bytes = g_bytes_new_static (data,
+                              gimp_temp_buf_get_width         (pattern->mask) *
+                              gimp_temp_buf_get_height        (pattern->mask) *
+                              babl_format_get_bytes_per_pixel (format));
 
   return_vals =
     gimp_pdb_execute_procedure_by_name (dialog->pdb,
                                         dialog->caller_context,
                                         NULL, error,
                                         dialog->callback_name,
-                                        G_TYPE_STRING,        gimp_object_get_name (object),
-                                        GIMP_TYPE_INT32,      gimp_temp_buf_get_width  (pattern->mask),
-                                        GIMP_TYPE_INT32,      gimp_temp_buf_get_height (pattern->mask),
-                                        GIMP_TYPE_INT32,      babl_format_get_bytes_per_pixel (gimp_temp_buf_get_format (pattern->mask)),
-                                        GIMP_TYPE_INT32,      array->length,
-                                        GIMP_TYPE_INT8_ARRAY, array,
-                                        GIMP_TYPE_INT32,      closing,
+                                        GIMP_TYPE_RESOURCE,    object,
+                                        G_TYPE_INT,            gimp_temp_buf_get_width  (pattern->mask),
+                                        G_TYPE_INT,            gimp_temp_buf_get_height (pattern->mask),
+                                        G_TYPE_INT,            babl_format_get_bytes_per_pixel (gimp_temp_buf_get_format (pattern->mask)),
+                                        G_TYPE_BYTES,          bytes,
+                                        G_TYPE_BOOLEAN,        closing,
                                         G_TYPE_NONE);
 
-  gimp_array_free (array);
+  g_bytes_unref (bytes);
 
   gimp_temp_buf_unlock (pattern->mask, data);
 

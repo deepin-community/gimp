@@ -32,6 +32,8 @@
 
 #include "config/gimpcoreconfig.h"
 
+#include "gegl/gimp-babl.h"
+
 #include "gimp.h"
 #include "gimp-memsize.h"
 #include "gimpbrush.h"
@@ -39,11 +41,12 @@
 #include "gimpcontainer.h"
 #include "gimpcontext.h"
 #include "gimpdatafactory.h"
+#include "gimpdisplay.h"
 #include "gimpdynamics.h"
 #include "gimpimagefile.h"
 #include "gimpgradient.h"
 #include "gimpimage.h"
-#include "gimpmarshal.h"
+#include "gimplineart.h"
 #include "gimpmybrush.h"
 #include "gimppaintinfo.h"
 #include "gimppalette.h"
@@ -56,8 +59,6 @@
 
 #include "gimp-intl.h"
 
-
-#define RGBA_EPSILON 1e-10
 
 typedef void (* GimpContextCopyPropFunc) (GimpContext *src,
                                           GimpContext *dest);
@@ -113,6 +114,8 @@ static gboolean     gimp_context_copy               (GimpConfig       *src,
                                                      GParamFlags       flags);
 
 /*  image  */
+static void gimp_context_image_disconnect    (GimpImage        *image,
+                                              GimpContext      *context);
 static void gimp_context_image_removed       (GimpContainer    *container,
                                               GimpImage        *image,
                                               GimpContext      *context);
@@ -121,10 +124,10 @@ static void gimp_context_real_set_image      (GimpContext      *context,
 
 /*  display  */
 static void gimp_context_display_removed     (GimpContainer    *container,
-                                              gpointer          display,
+                                              GimpDisplay      *display,
                                               GimpContext      *context);
 static void gimp_context_real_set_display    (GimpContext      *context,
-                                              gpointer          display);
+                                              GimpDisplay      *display);
 
 /*  tool  */
 static void gimp_context_tool_dirty          (GimpToolInfo     *tool_info,
@@ -150,11 +153,11 @@ static void gimp_context_real_set_paint_info (GimpContext      *context,
 
 /*  foreground  */
 static void gimp_context_real_set_foreground (GimpContext      *context,
-                                              const GimpRGB    *color);
+                                              GeglColor        *color);
 
 /*  background  */
 static void gimp_context_real_set_background (GimpContext      *context,
-                                              const GimpRGB    *color);
+                                              GeglColor        *color);
 
 /*  opacity  */
 static void gimp_context_real_set_opacity    (GimpContext      *context,
@@ -287,6 +290,10 @@ static void gimp_context_real_set_template   (GimpContext      *context,
                                               GimpTemplate     *template);
 
 
+/*  line art  */
+static gboolean gimp_context_free_line_art   (GimpContext      *context);
+
+
 /*  utilities  */
 static gpointer gimp_context_find_object     (GimpContext      *context,
                                               GimpContainer    *container,
@@ -398,19 +405,15 @@ gimp_context_class_init (GimpContextClass *klass)
 {
   GObjectClass    *object_class      = G_OBJECT_CLASS (klass);
   GimpObjectClass *gimp_object_class = GIMP_OBJECT_CLASS (klass);
-  GimpRGB          black;
-  GimpRGB          white;
-
-  gimp_rgba_set (&black, 0.0, 0.0, 0.0, GIMP_OPACITY_OPAQUE);
-  gimp_rgba_set (&white, 1.0, 1.0, 1.0, GIMP_OPACITY_OPAQUE);
+  GeglColor       *black             = gegl_color_new ("black");
+  GeglColor       *white             = gegl_color_new ("white");
 
   gimp_context_signals[IMAGE_CHANGED] =
     g_signal_new ("image-changed",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, image_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_IMAGE);
 
@@ -419,18 +422,16 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, display_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
-                  GIMP_TYPE_OBJECT);
+                  GIMP_TYPE_DISPLAY);
 
   gimp_context_signals[TOOL_CHANGED] =
     g_signal_new ("tool-changed",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, tool_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_TOOL_INFO);
 
@@ -439,8 +440,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, paint_info_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_PAINT_INFO);
 
@@ -449,28 +449,25 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, foreground_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__BOXED,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
-                  GIMP_TYPE_RGB | G_SIGNAL_TYPE_STATIC_SCOPE);
+                  GEGL_TYPE_COLOR);
 
   gimp_context_signals[BACKGROUND_CHANGED] =
     g_signal_new ("background-changed",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, background_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__BOXED,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
-                  GIMP_TYPE_RGB | G_SIGNAL_TYPE_STATIC_SCOPE);
+                  GEGL_TYPE_COLOR);
 
   gimp_context_signals[OPACITY_CHANGED] =
     g_signal_new ("opacity-changed",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, opacity_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__DOUBLE,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   G_TYPE_DOUBLE);
 
@@ -479,8 +476,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, paint_mode_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__ENUM,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_LAYER_MODE);
 
@@ -489,8 +485,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, brush_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_BRUSH);
 
@@ -499,8 +494,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, dynamics_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_DYNAMICS);
 
@@ -509,8 +503,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, mybrush_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_MYBRUSH);
 
@@ -519,8 +512,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, pattern_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_PATTERN);
 
@@ -529,8 +521,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, gradient_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_GRADIENT);
 
@@ -539,8 +530,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, palette_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_PALETTE);
 
@@ -549,8 +539,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, font_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_FONT);
 
@@ -559,8 +548,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, tool_preset_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_TOOL_PRESET);
 
@@ -569,8 +557,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, buffer_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_BUFFER);
 
@@ -579,8 +566,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, imagefile_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_IMAGEFILE);
 
@@ -589,8 +575,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, template_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_TEMPLATE);
 
@@ -599,8 +584,7 @@ gimp_context_class_init (GimpContextClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpContextClass, prop_name_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__INT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   G_TYPE_INT);
 
@@ -664,7 +648,7 @@ gimp_context_class_init (GimpContextClass *klass)
   g_object_class_install_property (object_class, GIMP_CONTEXT_PROP_DISPLAY,
                                    g_param_spec_object (gimp_context_prop_names[GIMP_CONTEXT_PROP_DISPLAY],
                                                         NULL, NULL,
-                                                        GIMP_TYPE_OBJECT,
+                                                        GIMP_TYPE_DISPLAY,
                                                         GIMP_PARAM_READWRITE));
 
   GIMP_CONFIG_PROP_OBJECT (object_class, GIMP_CONTEXT_PROP_TOOL,
@@ -679,19 +663,19 @@ gimp_context_class_init (GimpContextClass *klass)
                            GIMP_TYPE_PAINT_INFO,
                            GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_RGB (object_class, GIMP_CONTEXT_PROP_FOREGROUND,
-                        gimp_context_prop_names[GIMP_CONTEXT_PROP_FOREGROUND],
-                        _("Foreground"),
-                        _("Foreground color"),
-                         FALSE, &black,
-                        GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_COLOR (object_class, GIMP_CONTEXT_PROP_FOREGROUND,
+                          gimp_context_prop_names[GIMP_CONTEXT_PROP_FOREGROUND],
+                          _("Foreground"),
+                          _("Foreground color"),
+                          FALSE, black,
+                          GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_RGB (object_class, GIMP_CONTEXT_PROP_BACKGROUND,
-                        gimp_context_prop_names[GIMP_CONTEXT_PROP_BACKGROUND],
-                        _("Background"),
-                        _("Background color"),
-                        FALSE, &white,
-                        GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_COLOR (object_class, GIMP_CONTEXT_PROP_BACKGROUND,
+                          gimp_context_prop_names[GIMP_CONTEXT_PROP_BACKGROUND],
+                          _("Background"),
+                          _("Background color"),
+                          FALSE, white,
+                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_DOUBLE (object_class, GIMP_CONTEXT_PROP_OPACITY,
                            gimp_context_prop_names[GIMP_CONTEXT_PROP_OPACITY],
@@ -783,6 +767,9 @@ gimp_context_class_init (GimpContextClass *klass)
                                                         NULL, NULL,
                                                         GIMP_TYPE_TEMPLATE,
                                                         GIMP_PARAM_READWRITE));
+
+  g_object_unref (black);
+  g_object_unref (white);
 }
 
 static void
@@ -836,6 +823,12 @@ gimp_context_init (GimpContext *context)
 
   context->template        = NULL;
   context->template_name   = NULL;
+
+  context->line_art            = NULL;
+  context->line_art_timeout_id = 0;
+
+  context->foreground      = gegl_color_new ("black");
+  context->background      = gegl_color_new ("white");
 }
 
 static void
@@ -1032,6 +1025,10 @@ gimp_context_finalize (GObject *object)
   g_clear_pointer (&context->imagefile_name,   g_free);
   g_clear_pointer (&context->template_name,    g_free);
 
+  g_clear_object (&context->line_art);
+  g_clear_object (&context->foreground);
+  g_clear_object (&context->background);
+
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
@@ -1061,10 +1058,10 @@ gimp_context_set_property (GObject      *object,
       gimp_context_set_paint_info (context, g_value_get_object (value));
       break;
     case GIMP_CONTEXT_PROP_FOREGROUND:
-      gimp_context_set_foreground (context, g_value_get_boxed (value));
+      gimp_context_set_foreground (context, g_value_get_object (value));
       break;
     case GIMP_CONTEXT_PROP_BACKGROUND:
-      gimp_context_set_background (context, g_value_get_boxed (value));
+      gimp_context_set_background (context, g_value_get_object (value));
       break;
     case GIMP_CONTEXT_PROP_OPACITY:
       gimp_context_set_opacity (context, g_value_get_double (value));
@@ -1137,20 +1134,10 @@ gimp_context_get_property (GObject    *object,
       g_value_set_object (value, gimp_context_get_paint_info (context));
       break;
     case GIMP_CONTEXT_PROP_FOREGROUND:
-      {
-        GimpRGB color;
-
-        gimp_context_get_foreground (context, &color);
-        g_value_set_boxed (value, &color);
-      }
+      g_value_take_object (value, gegl_color_duplicate (gimp_context_get_foreground (context)));
       break;
     case GIMP_CONTEXT_PROP_BACKGROUND:
-      {
-        GimpRGB color;
-
-        gimp_context_get_background (context, &color);
-        g_value_set_boxed (value, &color);
-      }
+      g_value_take_object (value, gegl_color_duplicate (gimp_context_get_background (context)));
       break;
     case GIMP_CONTEXT_PROP_OPACITY:
       g_value_set_double (value, gimp_context_get_opacity (context));
@@ -1542,18 +1529,12 @@ gimp_context_set_parent (GimpContext *context,
       g_signal_handlers_disconnect_by_func (context->parent,
                                             gimp_context_parent_notify,
                                             context);
-
-      g_object_remove_weak_pointer (G_OBJECT (context->parent),
-                                    (gpointer) &context->parent);
     }
 
-  context->parent = parent;
+  g_set_weak_pointer (&context->parent, parent);
 
   if (parent)
     {
-      g_object_add_weak_pointer (G_OBJECT (context->parent),
-                                 (gpointer) &context->parent);
-
       /*  copy all undefined properties from the new parent  */
       gimp_context_copy_properties (parent, context,
                                     ~context->defined_props &
@@ -1678,11 +1659,11 @@ gimp_context_copy_property (GimpContext         *src,
       break;
 
     case GIMP_CONTEXT_PROP_FOREGROUND:
-      gimp_context_real_set_foreground (dest, &src->foreground);
+      gimp_context_real_set_foreground (dest, src->foreground);
       break;
 
     case GIMP_CONTEXT_PROP_BACKGROUND:
-      gimp_context_real_set_background (dest, &src->background);
+      gimp_context_real_set_background (dest, src->background);
       break;
 
     case GIMP_CONTEXT_PROP_OPACITY:
@@ -1934,6 +1915,107 @@ gimp_context_image_changed (GimpContext *context)
                  context->image);
 }
 
+/* This is a utility function to share, across the program, some common logic of
+ * "which format to use when you are not sure and you need to give generic color
+ * information" in RGBA.
+ * @babl_type must be a valid babl type name such as "u8", "double", "float".
+ * If @space_image is not NULL, it will be used to return the GimpImage
+ * associated to the returned format (if the returned format is indeed using the
+ * image's space).
+ *
+ * The logic for the format to use in RGB color actions is as follows:
+ * - The space we navigate through is the active image's space.
+ * - Increasing/decreasing follows the image TRC (in particular, if the image is
+ *   linear or perceptual, we care about chromaticities yet don't follow the
+ *   space TRC).
+ * - If there is no active image or if its space is non-sRGB, we use the context
+ *   color's space (if set).
+ * - We discard non-RGB spaces and fallback to sRGB.
+ */
+const Babl *
+gimp_context_get_rgba_format (GimpContext  *context,
+                              GeglColor    *color,
+                              const gchar  *babl_type,
+                              GimpImage   **space_image)
+{
+  GimpImage            *image  = NULL;
+  const Babl           *format = NULL;
+  const Babl           *space  = NULL;
+  gchar                *format_name;
+  GimpTRCType           trc = GIMP_TRC_NON_LINEAR;
+
+  g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
+  g_return_val_if_fail (babl_type != NULL , NULL);
+  g_return_val_if_fail (space_image == NULL || *space_image == NULL, NULL);
+
+  image = gimp_context_get_image (context);
+  if (image)
+    {
+      format = gimp_image_get_layer_format (image, FALSE);
+      space  = babl_format_get_space (format);
+      if (space_image)
+        *space_image = image;
+    }
+
+  if (color != NULL && (space == NULL || ! babl_space_is_rgb (space)))
+    {
+      format = gegl_color_get_format (color);
+      space  = babl_format_get_space (format);
+      if (space_image)
+        *space_image = NULL;
+    }
+
+  if (! babl_space_is_rgb (space))
+    {
+      format = NULL;
+      space  = NULL;
+      if (space_image)
+        *space_image = NULL;
+    }
+
+  if (format != NULL)
+    {
+      if (image != NULL)
+        {
+          GimpPrecision precision;
+
+          precision = gimp_image_get_precision (image);
+          trc       = gimp_babl_trc (precision);
+        }
+      else
+        {
+          trc = gimp_babl_format_get_trc (format);
+        }
+    }
+
+  switch (trc)
+    {
+    case GIMP_TRC_LINEAR:
+      format_name = g_strdup_printf ("RGBA %s", babl_type);
+      break;
+    case GIMP_TRC_NON_LINEAR:
+      format_name = g_strdup_printf ("R'G'B'A %s", babl_type);
+      break;
+    case GIMP_TRC_PERCEPTUAL:
+      format_name = g_strdup_printf ("R~G~B~A %s", babl_type);
+      break;
+    default:
+      g_return_val_if_reached (NULL);
+    }
+  format = babl_format_with_space (format_name, space);
+  g_free (format_name);
+
+  return format;
+}
+
+static void
+gimp_context_image_disconnect (GimpImage   *image,
+                               GimpContext *context)
+{
+  if (image == context->image)
+    gimp_context_real_set_image (context, NULL);
+}
+
 static void
 gimp_context_image_removed (GimpContainer *container,
                             GimpImage     *image,
@@ -1950,7 +2032,17 @@ gimp_context_real_set_image (GimpContext *context,
   if (context->image == image)
     return;
 
+  if (context->image)
+    g_signal_handlers_disconnect_by_func (context->image,
+                                          G_CALLBACK (gimp_context_image_disconnect),
+                                          context);
+
   context->image = image;
+
+  if (image)
+    g_signal_connect_object (image, "disconnect",
+                             G_CALLBACK (gimp_context_image_disconnect),
+                             context, 0);
 
   g_object_notify (G_OBJECT (context), "image");
   gimp_context_image_changed (context);
@@ -1960,7 +2052,7 @@ gimp_context_real_set_image (GimpContext *context,
 /*****************************************************************************/
 /*  display  *****************************************************************/
 
-gpointer
+GimpDisplay *
 gimp_context_get_display (GimpContext *context)
 {
   g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
@@ -1970,10 +2062,10 @@ gimp_context_get_display (GimpContext *context)
 
 void
 gimp_context_set_display (GimpContext *context,
-                          gpointer     display)
+                          GimpDisplay *display)
 {
   g_return_if_fail (GIMP_IS_CONTEXT (context));
-  g_return_if_fail (display == NULL || GIMP_IS_OBJECT (display));
+  g_return_if_fail (display == NULL || GIMP_IS_DISPLAY (display));
 
   context_find_defined (context, GIMP_CONTEXT_PROP_DISPLAY);
 
@@ -1992,7 +2084,7 @@ gimp_context_display_changed (GimpContext *context)
 
 static void
 gimp_context_display_removed (GimpContainer *container,
-                              gpointer       display,
+                              GimpDisplay   *display,
                               GimpContext   *context)
 {
   if (context->display == display)
@@ -2001,9 +2093,9 @@ gimp_context_display_removed (GimpContainer *container,
 
 static void
 gimp_context_real_set_display (GimpContext *context,
-                               gpointer     display)
+                               GimpDisplay *display)
 {
-  GimpObject *old_display;
+  GimpDisplay *old_display;
 
   if (context->display == display)
     {
@@ -2284,22 +2376,20 @@ gimp_context_real_set_paint_info (GimpContext   *context,
 /*****************************************************************************/
 /*  foreground color  ********************************************************/
 
-void
-gimp_context_get_foreground (GimpContext *context,
-                             GimpRGB     *color)
+GeglColor *
+gimp_context_get_foreground (GimpContext *context)
 {
-  g_return_if_fail (GIMP_IS_CONTEXT (context));
-  g_return_if_fail (color != NULL);
+  g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
 
-  *color = context->foreground;
+  return context->foreground;
 }
 
 void
-gimp_context_set_foreground (GimpContext   *context,
-                             const GimpRGB *color)
+gimp_context_set_foreground (GimpContext *context,
+                             GeglColor   *color)
 {
   g_return_if_fail (GIMP_IS_CONTEXT (context));
-  g_return_if_fail (color != NULL);
+  g_return_if_fail (GEGL_IS_COLOR (color));
 
   context_find_defined (context, GIMP_CONTEXT_PROP_FOREGROUND);
 
@@ -2313,18 +2403,16 @@ gimp_context_foreground_changed (GimpContext *context)
 
   g_signal_emit (context,
                  gimp_context_signals[FOREGROUND_CHANGED], 0,
-                 &context->foreground);
+                 context->foreground);
 }
 
 static void
-gimp_context_real_set_foreground (GimpContext   *context,
-                                  const GimpRGB *color)
+gimp_context_real_set_foreground (GimpContext *context,
+                                  GeglColor   *color)
 {
-  if (gimp_rgba_distance (&context->foreground, color) < RGBA_EPSILON)
-    return;
-
-  context->foreground = *color;
-  gimp_rgb_set_alpha (&context->foreground, GIMP_OPACITY_OPAQUE);
+  g_clear_object (&context->foreground);
+  context->foreground = gegl_color_duplicate (color);
+  gimp_color_set_alpha (context->foreground, GIMP_OPACITY_OPAQUE);
 
   g_object_notify (G_OBJECT (context), "foreground");
   gimp_context_foreground_changed (context);
@@ -2334,23 +2422,20 @@ gimp_context_real_set_foreground (GimpContext   *context,
 /*****************************************************************************/
 /*  background color  ********************************************************/
 
-void
-gimp_context_get_background (GimpContext *context,
-                             GimpRGB     *color)
+GeglColor *
+gimp_context_get_background (GimpContext *context)
 {
-  g_return_if_fail (GIMP_IS_CONTEXT (context));
+  g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
 
-  g_return_if_fail (color != NULL);
-
-  *color = context->background;
+  return context->background;
 }
 
 void
-gimp_context_set_background (GimpContext   *context,
-                             const GimpRGB *color)
+gimp_context_set_background (GimpContext *context,
+                             GeglColor   *color)
 {
   g_return_if_fail (GIMP_IS_CONTEXT (context));
-  g_return_if_fail (color != NULL);
+  g_return_if_fail (GEGL_IS_COLOR (color));
 
   context_find_defined (context, GIMP_CONTEXT_PROP_BACKGROUND);
 
@@ -2364,18 +2449,16 @@ gimp_context_background_changed (GimpContext *context)
 
   g_signal_emit (context,
                  gimp_context_signals[BACKGROUND_CHANGED], 0,
-                 &context->background);
+                 context->background);
 }
 
 static void
-gimp_context_real_set_background (GimpContext   *context,
-                                  const GimpRGB *color)
+gimp_context_real_set_background (GimpContext *context,
+                                  GeglColor   *color)
 {
-  if (gimp_rgba_distance (&context->background, color) < RGBA_EPSILON)
-    return;
-
-  context->background = *color;
-  gimp_rgb_set_alpha (&context->background, GIMP_OPACITY_OPAQUE);
+  g_clear_object (&context->background);
+  context->background = gegl_color_duplicate (color);
+  gimp_color_set_alpha (context->background, GIMP_OPACITY_OPAQUE);
 
   g_object_notify (G_OBJECT (context), "background");
   gimp_context_background_changed (context);
@@ -2389,8 +2472,8 @@ void
 gimp_context_set_default_colors (GimpContext *context)
 {
   GimpContext *bg_context;
-  GimpRGB      fg;
-  GimpRGB      bg;
+  GeglColor   *fg;
+  GeglColor   *bg;
 
   g_return_if_fail (GIMP_IS_CONTEXT (context));
 
@@ -2399,19 +2482,22 @@ gimp_context_set_default_colors (GimpContext *context)
   context_find_defined (context, GIMP_CONTEXT_PROP_FOREGROUND);
   context_find_defined (bg_context, GIMP_CONTEXT_PROP_BACKGROUND);
 
-  gimp_rgba_set (&fg, 0.0, 0.0, 0.0, GIMP_OPACITY_OPAQUE);
-  gimp_rgba_set (&bg, 1.0, 1.0, 1.0, GIMP_OPACITY_OPAQUE);
+  fg = gegl_color_new ("black");
+  bg = gegl_color_new ("white");
 
-  gimp_context_real_set_foreground (context, &fg);
-  gimp_context_real_set_background (bg_context, &bg);
+  gimp_context_real_set_foreground (context, fg);
+  gimp_context_real_set_background (bg_context, bg);
+
+  g_object_unref (fg);
+  g_object_unref (bg);
 }
 
 void
 gimp_context_swap_colors (GimpContext *context)
 {
   GimpContext *bg_context;
-  GimpRGB      fg;
-  GimpRGB      bg;
+  GeglColor   *fg;
+  GeglColor   *bg;
 
   g_return_if_fail (GIMP_IS_CONTEXT (context));
 
@@ -2420,11 +2506,14 @@ gimp_context_swap_colors (GimpContext *context)
   context_find_defined (context, GIMP_CONTEXT_PROP_FOREGROUND);
   context_find_defined (bg_context, GIMP_CONTEXT_PROP_BACKGROUND);
 
-  gimp_context_get_foreground (context, &fg);
-  gimp_context_get_background (bg_context, &bg);
+  fg = g_object_ref (context->foreground);
+  bg = g_object_ref (context->background);
 
-  gimp_context_real_set_foreground (context, &bg);
-  gimp_context_real_set_background (bg_context, &fg);
+  gimp_context_real_set_foreground (context, bg);
+  gimp_context_real_set_background (bg_context, fg);
+
+  g_object_unref (fg);
+  g_object_unref (bg);
 }
 
 
@@ -3240,7 +3329,9 @@ gimp_context_set_font_name (GimpContext *context,
   g_return_if_fail (GIMP_IS_CONTEXT (context));
 
   container = gimp_data_factory_get_container (context->gimp->font_factory);
-  font      = gimp_container_get_child_by_name (container, name);
+  font      = gimp_container_search (container,
+                                     (GimpContainerSearchFunc) gimp_font_match_by_lookup_name,
+                                     (gpointer) name);
 
   if (font)
     {
@@ -3340,7 +3431,7 @@ gimp_context_real_set_font (GimpContext *context,
                                0);
 
       if (font != GIMP_FONT (gimp_font_get_standard ()))
-        context->font_name = g_strdup (gimp_object_get_name (font));
+        context->font_name = g_strdup (gimp_font_get_lookup_name (font));
     }
 
   g_object_notify (G_OBJECT (context), "font");
@@ -3801,6 +3892,74 @@ gimp_context_real_set_template (GimpContext  *context,
 
   g_object_notify (G_OBJECT (context), "template");
   gimp_context_template_changed (context);
+}
+
+
+/*****************************************************************************/
+/*  Line Art  ****************************************************************/
+
+GimpLineArt *
+gimp_context_take_line_art (GimpContext *context)
+{
+  GimpLineArt *line_art;
+
+  g_return_val_if_fail (GIMP_IS_CONTEXT (context), NULL);
+
+  if (context->line_art)
+    {
+      g_source_remove (context->line_art_timeout_id);
+      context->line_art_timeout_id = 0;
+
+      line_art = context->line_art;
+      context->line_art = NULL;
+    }
+  else
+    {
+      line_art = gimp_line_art_new ();
+    }
+
+  return line_art;
+}
+
+/*
+ * gimp_context_store_line_art:
+ * @context:
+ * @line_art:
+ *
+ * The @context takes ownership of @line_art until the next time it is
+ * requested with gimp_context_take_line_art() or until 3 minutes have
+ * passed.
+ * This function allows to temporarily store the computed line art data
+ * in case it is needed very soon again, so that not to free and
+ * recompute all the time the data when quickly switching tools.
+ */
+void
+gimp_context_store_line_art (GimpContext *context,
+                             GimpLineArt *line_art)
+{
+  g_return_if_fail (GIMP_IS_CONTEXT (context));
+  g_return_if_fail (GIMP_IS_LINE_ART (line_art));
+
+  if (context->line_art)
+    {
+      g_source_remove (context->line_art_timeout_id);
+      context->line_art_timeout_id = 0;
+    }
+
+  context->line_art            = line_art;
+  context->line_art_timeout_id = g_timeout_add (180000,
+                                                (GSourceFunc) gimp_context_free_line_art,
+                                                context);
+}
+
+static gboolean
+gimp_context_free_line_art (GimpContext *context)
+{
+  g_clear_object (&context->line_art);
+
+  context->line_art_timeout_id = 0;
+
+  return G_SOURCE_REMOVE;
 }
 
 

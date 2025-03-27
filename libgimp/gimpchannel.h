@@ -29,16 +29,34 @@ G_BEGIN_DECLS
 
 /* For information look into the C source or the html documentation */
 
+#include <libgimp/gimpdrawable.h>
 
-gint32  gimp_channel_new (gint32         image_ID,
-                          const gchar   *name,
-                          guint          width,
-                          guint          height,
-                          gdouble        opacity,
-                          const GimpRGB *color);
+
+#define GIMP_TYPE_CHANNEL (gimp_channel_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpChannel, gimp_channel, GIMP, CHANNEL, GimpDrawable)
+
+
+struct _GimpChannelClass
+{
+  GimpDrawableClass parent_class;
+
+  /* Padding for future expansion */
+  void (*_gimp_reserved0) (void);
+  void (*_gimp_reserved1) (void);
+  void (*_gimp_reserved2) (void);
+  void (*_gimp_reserved3) (void);
+  void (*_gimp_reserved4) (void);
+  void (*_gimp_reserved5) (void);
+  void (*_gimp_reserved6) (void);
+  void (*_gimp_reserved7) (void);
+  void (*_gimp_reserved8) (void);
+  void (*_gimp_reserved9) (void);
+};
+
+
+GimpChannel * gimp_channel_get_by_id (gint32       channel_id);
 
 
 G_END_DECLS
 
 #endif /* __GIMP_CHANNEL_H__ */
-

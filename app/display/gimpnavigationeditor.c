@@ -56,9 +56,6 @@
 #include "gimp-intl.h"
 
 
-#define UPDATE_DELAY 300 /* From GtkRange in GTK+ 2.22 */
-
-
 static void        gimp_navigation_editor_docked_iface_init            (GimpDockedInterface  *iface);
 
 static void        gimp_navigation_editor_dispose                      (GObject              *object);
@@ -82,9 +79,10 @@ static void        gimp_navigation_editor_marker_changed               (GimpNavi
                                                                         GimpNavigationEditor *editor);
 static void        gimp_navigation_editor_zoom                         (GimpNavigationView   *view,
                                                                         GimpZoomType          direction,
+                                                                        gdouble               delta,
                                                                         GimpNavigationEditor *editor);
 static void        gimp_navigation_editor_scroll                       (GimpNavigationView   *view,
-                                                                        GdkScrollDirection    direction,
+                                                                        GdkEventScroll       *sevent,
                                                                         GimpNavigationEditor *editor);
 
 static void        gimp_navigation_editor_zoom_adj_changed             (GtkAdjustment        *adj,
@@ -267,13 +265,13 @@ gimp_navigation_editor_new (GimpMenuFactory *menu_factory)
 void
 gimp_navigation_editor_popup (GimpDisplayShell *shell,
                               GtkWidget        *widget,
+                              GdkEvent         *event,
                               gint              click_x,
                               gint              click_y)
 {
-  GtkStyle             *style = gtk_widget_get_style (widget);
+  GtkStyleContext      *style = gtk_widget_get_style_context (widget);
   GimpNavigationEditor *editor;
   GimpNavigationView   *view;
-  GdkScreen            *screen;
   gint                  x, y;
   gint                  view_marker_center_x, view_marker_center_y;
   gint                  view_marker_width, view_marker_height;
@@ -312,8 +310,8 @@ gimp_navigation_editor_popup (GimpDisplayShell *shell,
   view = GIMP_NAVIGATION_VIEW (editor->view);
 
   /* Set poup screen */
-  screen = gtk_widget_get_screen (widget);
-  gtk_window_set_screen (GTK_WINDOW (shell->nav_popup), screen);
+  gtk_window_set_screen (GTK_WINDOW (shell->nav_popup),
+                         gtk_widget_get_screen (widget));
 
   gimp_navigation_view_get_local_marker (view,
                                          &view_marker_center_x,
@@ -322,18 +320,27 @@ gimp_navigation_editor_popup (GimpDisplayShell *shell,
                                          &view_marker_height);
   /* Position the popup */
   {
-    gint x_origin, y_origin;
-    gint popup_width, popup_height;
-    gint border_width, border_height;
-    gint screen_click_x, screen_click_y;
+    GdkMonitor   *monitor;
+    GdkRectangle  workarea;
+    GtkBorder     border;
+    gint          x_origin, y_origin;
+    gint          popup_width, popup_height;
+    gint          border_width, border_height;
+    gint          screen_click_x, screen_click_y;
+
+    monitor = gimp_widget_get_monitor (widget);
+    gdk_monitor_get_workarea (monitor, &workarea);
 
     gdk_window_get_origin (gtk_widget_get_window (widget),
                            &x_origin, &y_origin);
 
+    gtk_style_context_get_border (style, gtk_widget_get_state_flags (widget),
+                                  &border);
+
     screen_click_x = x_origin + click_x;
     screen_click_y = y_origin + click_y;
-    border_width   = 2 * style->xthickness;
-    border_height  = 2 * style->ythickness;
+    border_width   = 2 * border.left;
+    border_height  = 2 * border.top;
     popup_width    = GIMP_VIEW (view)->renderer->width  - 2 * border_width;
     popup_height   = GIMP_VIEW (view)->renderer->height - 2 * border_height;
 
@@ -361,18 +368,18 @@ gimp_navigation_editor_popup (GimpDisplayShell *shell,
      *
      * Warping the pointer would be another solution ...
      */
-    x = CLAMP (x, 0, gdk_screen_get_width (screen)  - popup_width);
-    y = CLAMP (y, 0, gdk_screen_get_height (screen) - popup_height);
+    x = CLAMP (x, workarea.x, workarea.x + workarea.width  - popup_width);
+    y = CLAMP (y, workarea.y, workarea.y + workarea.height - popup_height);
 
     gtk_window_move (GTK_WINDOW (shell->nav_popup), x, y);
   }
 
   gtk_widget_show (shell->nav_popup);
-  gdk_flush ();
+  gdk_display_flush (gtk_widget_get_display (shell->nav_popup));
 
   /* fill in then grab pointer */
   gimp_navigation_view_set_motion_offset (view, 0, 0);
-  gimp_navigation_view_grab_pointer (view);
+  gimp_navigation_view_grab_pointer (view, event);
 }
 
 
@@ -457,8 +464,8 @@ gimp_navigation_editor_new_private (GimpMenuFactory  *menu_factory,
       gtk_box_pack_end (GTK_BOX (editor), hbox, FALSE, FALSE, 0);
       gtk_widget_show (hbox);
 
-      editor->zoom_adjustment =
-        GTK_ADJUSTMENT (gtk_adjustment_new (0.0, -8.0, 8.0, 0.5, 1.0, 0.0));
+      editor->zoom_adjustment = gtk_adjustment_new (0.0, -8.0, 8.0,
+                                                    0.5, 1.0, 0.0);
 
       g_signal_connect (editor->zoom_adjustment, "value-changed",
                         G_CALLBACK (gimp_navigation_editor_zoom_adj_changed),
@@ -627,6 +634,7 @@ gimp_navigation_editor_marker_changed (GimpNavigationView   *view,
 static void
 gimp_navigation_editor_zoom (GimpNavigationView   *view,
                              GimpZoomType          direction,
+                             gdouble               delta,
                              GimpNavigationEditor *editor)
 {
   g_return_if_fail (direction != GIMP_ZOOM_TO);
@@ -636,57 +644,28 @@ gimp_navigation_editor_zoom (GimpNavigationView   *view,
       if (gimp_display_get_image (editor->shell->display))
         gimp_display_shell_scale (editor->shell,
                                   direction,
-                                  0.0,
+                                  delta,
                                   GIMP_ZOOM_FOCUS_BEST_GUESS);
     }
 }
 
 static void
 gimp_navigation_editor_scroll (GimpNavigationView   *view,
-                               GdkScrollDirection    direction,
+                               GdkEventScroll       *sevent,
                                GimpNavigationEditor *editor)
 {
   if (editor->shell)
     {
-      GtkAdjustment *adj = NULL;
-      gdouble        value;
+      gdouble value_x;
+      gdouble value_y;
 
-      switch (direction)
-        {
-        case GDK_SCROLL_LEFT:
-        case GDK_SCROLL_RIGHT:
-          adj = editor->shell->hsbdata;
-          break;
+      gimp_scroll_adjustment_values (sevent,
+                                     editor->shell->hsbdata,
+                                     editor->shell->vsbdata,
+                                     &value_x, &value_y);
 
-        case GDK_SCROLL_UP:
-        case GDK_SCROLL_DOWN:
-          adj = editor->shell->vsbdata;
-          break;
-        }
-
-      gimp_assert (adj != NULL);
-
-      value = gtk_adjustment_get_value (adj);
-
-      switch (direction)
-        {
-        case GDK_SCROLL_LEFT:
-        case GDK_SCROLL_UP:
-          value -= gtk_adjustment_get_page_increment (adj) / 2;
-          break;
-
-        case GDK_SCROLL_RIGHT:
-        case GDK_SCROLL_DOWN:
-          value += gtk_adjustment_get_page_increment (adj) / 2;
-          break;
-        }
-
-      value = CLAMP (value,
-                     gtk_adjustment_get_lower (adj),
-                     gtk_adjustment_get_upper (adj) -
-                     gtk_adjustment_get_page_size (adj));
-
-      gtk_adjustment_set_value (adj, value);
+      gtk_adjustment_set_value (editor->shell->hsbdata, value_x);
+      gtk_adjustment_set_value (editor->shell->vsbdata, value_y);
     }
 }
 
@@ -715,9 +694,8 @@ gimp_navigation_editor_zoom_adj_changed (GtkAdjustment        *adj,
     g_source_remove (editor->scale_timeout);
 
   editor->scale_timeout =
-    g_timeout_add (UPDATE_DELAY,
-                   gimp_navigation_editor_zoom_adj_changed_timeout,
-                   editor);
+    g_idle_add (gimp_navigation_editor_zoom_adj_changed_timeout,
+                editor);
 }
 
 static void

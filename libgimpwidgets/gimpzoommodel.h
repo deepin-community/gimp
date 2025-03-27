@@ -29,41 +29,9 @@
 G_BEGIN_DECLS
 
 
-#define GIMP_TYPE_ZOOM_MODEL            (gimp_zoom_model_get_type ())
-#define GIMP_ZOOM_MODEL(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_ZOOM_MODEL, GimpZoomModel))
-#define GIMP_ZOOM_MODEL_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_ZOOM_MODEL, GimpZoomModelClass))
-#define GIMP_IS_ZOOM_MODEL(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_ZOOM_MODEL))
-#define GIMP_IS_ZOOM_MODEL_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_ZOOM_MODEL))
-#define GIMP_ZOOM_MODEL_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_ZOOM_MODEL, GimpZoomModel))
+#define GIMP_TYPE_ZOOM_MODEL (gimp_zoom_model_get_type ())
+G_DECLARE_FINAL_TYPE (GimpZoomModel, gimp_zoom_model, GIMP, ZOOM_MODEL, GObject)
 
-
-typedef struct _GimpZoomModelClass  GimpZoomModelClass;
-
-struct _GimpZoomModel
-{
-  GObject   parent_instance;
-
-  /*< private >*/
-  gpointer  priv;
-};
-
-struct _GimpZoomModelClass
-{
-  GObjectClass  parent_class;
-
-  void (* zoomed) (GimpZoomModel *model,
-                   gdouble        old_factor,
-                   gdouble        new_factor);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-};
-
-
-GType           gimp_zoom_model_get_type     (void) G_GNUC_CONST;
 
 GimpZoomModel * gimp_zoom_model_new          (void);
 void            gimp_zoom_model_set_range    (GimpZoomModel      *model,
@@ -82,7 +50,8 @@ GtkWidget     * gimp_zoom_button_new         (GimpZoomModel      *model,
                                               GtkIconSize         icon_size);
 
 gdouble         gimp_zoom_model_zoom_step    (GimpZoomType        zoom_type,
-                                              gdouble             scale);
+                                              gdouble             scale,
+                                              gdouble             delta);
 
 G_END_DECLS
 

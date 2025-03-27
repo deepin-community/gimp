@@ -26,7 +26,6 @@ EXPORTS
 	gimp_matrix4_mult
 	gimp_matrix4_to_deg
 	gimp_matrix4_transform_point
-	gimp_md5_get_digest
 	gimp_param_matrix2_get_type
 	gimp_param_matrix3_get_type
 	gimp_param_spec_matrix2
@@ -35,6 +34,7 @@ EXPORTS
 	gimp_vector2_add_val
 	gimp_vector2_cross_product
 	gimp_vector2_cross_product_val
+	gimp_vector2_get_type
 	gimp_vector2_inner_product
 	gimp_vector2_inner_product_val
 	gimp_vector2_length
@@ -57,6 +57,7 @@ EXPORTS
 	gimp_vector3_add_val
 	gimp_vector3_cross_product
 	gimp_vector3_cross_product_val
+	gimp_vector3_get_type
 	gimp_vector3_inner_product
 	gimp_vector3_inner_product_val
 	gimp_vector3_length

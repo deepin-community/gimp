@@ -23,6 +23,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "widgets-types.h"
@@ -109,6 +110,8 @@ gimp_viewable_button_init (GimpViewableButton *button)
 
   button->button_view_size  = GIMP_VIEW_SIZE_SMALL;
   button->view_border_width = 1;
+
+  gtk_widget_add_events (GTK_WIDGET (button), GDK_SCROLL_MASK);
 }
 
 static void
@@ -312,7 +315,6 @@ gimp_viewable_button_new (GimpContainer     *container,
   button->view = gimp_prop_view_new (G_OBJECT (context), prop_name,
                                      context, button->button_view_size);
   gtk_container_add (GTK_CONTAINER (button), button->view);
-  gtk_widget_show (button->view);
 
   return GTK_WIDGET (button);
 }

@@ -125,8 +125,7 @@ gimp_undo_class_init (GimpUndoClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpUndoClass, free),
-                  NULL, NULL,
-                  gimp_marshal_VOID__ENUM,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_UNDO_MODE);
 
@@ -555,7 +554,7 @@ gimp_undo_is_weak (GimpUndo *undo)
  * gimp_undo_get_age:
  * @undo:
  *
- * Return value: the time in seconds since this undo item was created
+ * Returns: the time in seconds since this undo item was created
  */
 gint
 gimp_undo_get_age (GimpUndo *undo)

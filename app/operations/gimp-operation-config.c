@@ -32,13 +32,12 @@
 #include "core/gimp.h"
 
 #include "core/gimplist.h"
-#include "core/gimpparamspecs-duplicate.h"
 #include "core/gimpviewable.h"
 
 #include "gegl/gimp-gegl-utils.h"
 
-#include "gimp-operation-config.h"
 #include "gimpoperationsettings.h"
+#include "gimp-operation-config.h"
 
 
 /*  local function prototypes  */
@@ -58,208 +57,66 @@ static void    gimp_operation_config_add_sep       (GimpContainer    *container)
 static void    gimp_operation_config_remove_sep    (GimpContainer    *container);
 
 
-/*  public functions  */
-
-static GHashTable *
-gimp_operation_config_get_type_table (Gimp *gimp)
-{
-  static GHashTable *config_types = NULL;
-
-  if (! config_types)
-    config_types = g_hash_table_new_full (g_str_hash,
-                                          g_str_equal,
-                                          (GDestroyNotify) g_free,
-                                          NULL);
-
-  return config_types;
-}
-
-static GHashTable *
-gimp_operation_config_get_container_table (Gimp *gimp)
-{
-  static GHashTable *config_containers = NULL;
-
-  if (! config_containers)
-    config_containers = g_hash_table_new_full (g_direct_hash,
-                                               g_direct_equal,
-                                               NULL,
-                                               (GDestroyNotify) g_object_unref);
-
-  return config_containers;
-}
-
-static GValue *
-gimp_operation_config_value_new (GParamSpec *pspec)
-{
-  GValue *value = g_slice_new0 (GValue);
-
-  g_value_init (value, pspec->value_type);
-  g_param_value_set_default (pspec, value);
-
-  return value;
-}
-
-static void
-gimp_operation_config_value_free (GValue *value)
-{
-  g_value_unset (value);
-  g_slice_free (GValue, value);
-}
-
-static GHashTable *
-gimp_operation_config_get_properties (GObject *object)
-{
-  GHashTable *properties = g_object_get_data (object, "properties");
-
-  if (! properties)
-    {
-      properties = g_hash_table_new_full (g_str_hash,
-                                          g_str_equal,
-                                          (GDestroyNotify) g_free,
-                                          (GDestroyNotify) gimp_operation_config_value_free);
-
-      g_object_set_data_full (object, "properties", properties,
-                              (GDestroyNotify) g_hash_table_unref);
-    }
-
-  return properties;
-}
-
-static GValue *
-gimp_operation_config_value_get (GObject    *object,
-                                 GParamSpec *pspec)
-{
-  GHashTable *properties = gimp_operation_config_get_properties (object);
-  GValue     *value;
-
-  value = g_hash_table_lookup (properties, pspec->name);
-
-  if (! value)
-    {
-      value = gimp_operation_config_value_new (pspec);
-      g_hash_table_insert (properties, g_strdup (pspec->name), value);
-    }
-
-  return value;
-}
-
-static void
-gimp_operation_config_set_property (GObject      *object,
-                                    guint         property_id,
-                                    const GValue *value,
-                                    GParamSpec   *pspec)
-{
-  GValue *val = gimp_operation_config_value_get (object, pspec);
-
-  g_value_copy (value, val);
-}
-
-static void
-gimp_operation_config_get_property (GObject    *object,
-                                    guint       property_id,
-                                    GValue     *value,
-                                    GParamSpec *pspec)
-{
-  GValue *val = gimp_operation_config_value_get (object, pspec);
-
-  g_value_copy (val, value);
-}
-
-static void
-gimp_operation_config_class_init (GObjectClass *klass,
-                                  const gchar  *operation)
-{
-  GParamSpec **pspecs;
-  guint        n_pspecs;
-  gint         i;
-
-  klass->set_property = gimp_operation_config_set_property;
-  klass->get_property = gimp_operation_config_get_property;
-
-  pspecs = gegl_operation_list_properties (operation, &n_pspecs);
-
-  for (i = 0; i < n_pspecs; i++)
-    {
-      GParamSpec *pspec = pspecs[i];
-
-      if ((pspec->flags & G_PARAM_READABLE) &&
-          (pspec->flags & G_PARAM_WRITABLE) &&
-          strcmp (pspec->name, "input")     &&
-          strcmp (pspec->name, "output"))
-        {
-          GParamSpec *copy = gimp_param_spec_duplicate (pspec);
-
-          if (copy)
-            {
-              g_object_class_install_property (klass, i + 1, copy);
-            }
-        }
-    }
-
-  g_free (pspecs);
-}
-
-static gboolean
-gimp_operation_config_equal (GimpConfig *a,
-                             GimpConfig *b)
-{
-  GList    *diff;
-  gboolean  equal = TRUE;
-
-  diff = gimp_config_diff (G_OBJECT (a), G_OBJECT (b),
-                           GIMP_CONFIG_PARAM_SERIALIZE);
-
-  if (G_TYPE_FROM_INSTANCE (a) == G_TYPE_FROM_INSTANCE (b))
-    {
-      GList *list;
-
-      for (list = diff; list; list = g_list_next (list))
-        {
-          GParamSpec *pspec = list->data;
-
-          if (g_type_is_a (pspec->owner_type, GIMP_TYPE_OPERATION_SETTINGS))
-            {
-              equal = FALSE;
-              break;
-            }
-        }
-    }
-  else if (diff)
-    {
-      equal = FALSE;
-    }
-
-  g_list_free (diff);
-
-  return equal;
-}
-
-static void
-gimp_operation_config_config_iface_init (GimpConfigInterface *iface)
-{
-  iface->equal = gimp_operation_config_equal;
-}
+static GHashTable *config_types      = NULL;
+static GHashTable *config_containers = NULL;
+static GList      *custom_config_ops = NULL;
+static gboolean    custom_init_done  = FALSE;
 
 
 /*  public functions  */
+
+void
+gimp_operation_config_init_start (Gimp *gimp)
+{
+  config_types      = g_hash_table_new_full (g_str_hash,
+                                             g_str_equal,
+                                             (GDestroyNotify) g_free,
+                                             NULL);
+  config_containers = g_hash_table_new_full (g_direct_hash,
+                                             g_direct_equal,
+                                             NULL,
+                                             (GDestroyNotify) g_object_unref);
+}
+
+void
+gimp_operation_config_init_end (Gimp *gimp)
+{
+  custom_init_done = TRUE;
+}
+
+void
+gimp_operation_config_exit (Gimp *gimp)
+{
+  g_hash_table_unref (config_types);
+  g_hash_table_unref (config_containers);
+  g_list_free (custom_config_ops);
+}
+
 
 void
 gimp_operation_config_register (Gimp        *gimp,
                                 const gchar *operation,
                                 GType        config_type)
 {
-  GHashTable *config_types;
-
   g_return_if_fail (GIMP_IS_GIMP (gimp));
   g_return_if_fail (operation != NULL);
   g_return_if_fail (g_type_is_a (config_type, GIMP_TYPE_OBJECT));
 
-  config_types = gimp_operation_config_get_type_table (gimp);
+  if (! custom_init_done)
+    /* Custom ops are registered with static string, not generated names. */
+    custom_config_ops = g_list_prepend (custom_config_ops, (gpointer) operation);
 
   g_hash_table_insert (config_types,
                        g_strdup (operation),
                        (gpointer) config_type);
- }
+}
+
+gboolean
+gimp_operation_config_is_custom (Gimp        *gimp,
+                                 const gchar *operation)
+{
+  return (g_list_find_custom (custom_config_ops, operation, (GCompareFunc) g_strcmp0) != NULL);
+}
 
 GType
 gimp_operation_config_get_type (Gimp        *gimp,
@@ -267,71 +124,99 @@ gimp_operation_config_get_type (Gimp        *gimp,
                                 const gchar *icon_name,
                                 GType        parent_type)
 {
-  GHashTable *config_types;
-  GType       config_type;
+  GType config_type;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), G_TYPE_NONE);
   g_return_val_if_fail (operation != NULL, G_TYPE_NONE);
-
-  config_types = gimp_operation_config_get_type_table (gimp);
+  g_return_val_if_fail (g_type_is_a (parent_type, GIMP_TYPE_OBJECT),
+                        G_TYPE_NONE);
 
   config_type = (GType) g_hash_table_lookup (config_types, operation);
 
   if (! config_type)
     {
-      GTypeQuery query;
+      GParamSpec **pspecs;
+      guint        n_pspecs;
+      gchar       *type_name;
+      gint         i, j;
 
-      g_return_val_if_fail (g_type_is_a (parent_type, GIMP_TYPE_OBJECT),
-                            G_TYPE_NONE);
+      pspecs = gegl_operation_list_properties (operation, &n_pspecs);
 
-      g_type_query (parent_type, &query);
-
-      {
-        GTypeInfo info =
+      for (i = 0, j = 0; i < n_pspecs; i++)
         {
-          query.class_size,
-          (GBaseInitFunc) NULL,
-          (GBaseFinalizeFunc) NULL,
-          (GClassInitFunc) gimp_operation_config_class_init,
-          NULL,           /* class_finalize */
-          operation,
-          query.instance_size,
-          0,              /* n_preallocs */
-          (GInstanceInitFunc) NULL,
-        };
+          GParamSpec *pspec = pspecs[i];
 
-        const GInterfaceInfo config_info =
+          if ((pspec->flags & G_PARAM_READABLE) &&
+              (pspec->flags & G_PARAM_WRITABLE) &&
+              strcmp (pspec->name, "input")     &&
+              strcmp (pspec->name, "output"))
+            {
+              GParamFlags flags;
+
+              flags = pspec->flags & ~(GEGL_PARAM_PAD_INPUT | GEGL_PARAM_PAD_OUTPUT);
+
+              if (GEGL_IS_PARAM_SPEC_COLOR (pspec))
+                {
+                  /* As special exception, let's transform GeglParamColor
+                   * into GimpParamColor in all core code. This way, we
+                   * have one less param type to handle.
+                   */
+                  gchar **prop_keys;
+                  guint   n_keys = 0;
+
+                  pspecs[j] = gimp_param_spec_color (pspec->name,
+                                                     g_param_spec_get_nick (pspec),
+                                                     g_param_spec_get_blurb (pspec),
+                                                     TRUE,
+                                                     gegl_param_spec_color_get_default (pspec),
+                                                     flags);
+                  prop_keys = gegl_operation_list_property_keys (operation, pspec->name, &n_keys);
+                  for (gint k = 0; k < n_keys; k++)
+                    {
+                      const gchar *key;
+
+                      key = gegl_param_spec_get_property_key (pspec, prop_keys[k]);
+                      gegl_param_spec_set_property_key (pspecs[j], prop_keys[k], key);
+                    }
+
+                  g_free (prop_keys);
+                }
+              else
+                {
+                  pspecs[j] = gimp_config_param_spec_duplicate (pspec);
+                  if (pspecs[j])
+                    pspecs[j]->flags = flags;
+                }
+
+              if (pspecs[j])
+                j++;
+            }
+        }
+
+      n_pspecs = j;
+
+      type_name = g_strdup_printf ("GimpGegl-%s-config", operation);
+
+      g_strcanon (type_name,
+                  G_CSET_DIGITS "-" G_CSET_a_2_z G_CSET_A_2_Z, '-');
+
+      config_type = gimp_config_type_register (parent_type,
+                                               type_name,
+                                               pspecs, n_pspecs);
+
+      g_free (pspecs);
+      g_free (type_name);
+
+      if (icon_name && g_type_is_a (config_type, GIMP_TYPE_VIEWABLE))
         {
-          (GInterfaceInitFunc) gimp_operation_config_config_iface_init,
-          NULL, /* interface_finalize */
-          NULL  /* interface_data     */
-        };
+          GimpViewableClass *viewable_class = g_type_class_ref (config_type);
 
-        gchar *type_name = g_strdup_printf ("GimpGegl-%s-config",
-                                            operation);
+          viewable_class->default_icon_name = g_strdup (icon_name);
 
-        g_strcanon (type_name,
-                    G_CSET_DIGITS "-" G_CSET_a_2_z G_CSET_A_2_Z, '-');
+          g_type_class_unref (viewable_class);
+        }
 
-        config_type = g_type_register_static (parent_type, type_name,
-                                              &info, 0);
-
-        g_free (type_name);
-
-        g_type_add_interface_static (config_type, GIMP_TYPE_CONFIG,
-                                     &config_info);
-
-        if (icon_name && g_type_is_a (config_type, GIMP_TYPE_VIEWABLE))
-          {
-            GimpViewableClass *viewable_class = g_type_class_ref (config_type);
-
-            viewable_class->default_icon_name = g_strdup (icon_name);
-
-            g_type_class_unref (viewable_class);
-          }
-
-        gimp_operation_config_register (gimp, operation, config_type);
-      }
+      gimp_operation_config_register (gimp, operation, config_type);
     }
 
   return config_type;
@@ -342,13 +227,10 @@ gimp_operation_config_get_container (Gimp         *gimp,
                                      GType         config_type,
                                      GCompareFunc  sort_func)
 {
-  GHashTable    *config_containers;
   GimpContainer *container;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
   g_return_val_if_fail (g_type_is_a (config_type, GIMP_TYPE_OBJECT), NULL);
-
-  config_containers = gimp_operation_config_get_container_table (gimp);
 
   container = g_hash_table_lookup (config_containers, (gpointer) config_type);
 
@@ -424,11 +306,11 @@ gimp_operation_config_serialize (Gimp          *gimp,
 
   gimp_operation_config_remove_sep (container);
 
-  if (! gimp_config_serialize_to_gfile (GIMP_CONFIG (container),
-                                        file,
-                                        "settings",
-                                        "end of settings",
-                                        NULL, &error))
+  if (! gimp_config_serialize_to_file (GIMP_CONFIG (container),
+                                       file,
+                                       "settings",
+                                       "end of settings",
+                                       NULL, &error))
     {
       gimp_message_literal (gimp, NULL, GIMP_MESSAGE_ERROR,
                             error->message);
@@ -465,9 +347,9 @@ gimp_operation_config_deserialize (Gimp          *gimp,
   if (gimp->be_verbose)
     g_print ("Parsing '%s'\n", gimp_file_get_utf8_name (file));
 
-  if (! gimp_config_deserialize_gfile (GIMP_CONFIG (container),
-                                       file,
-                                       NULL, &error))
+  if (! gimp_config_deserialize_file (GIMP_CONFIG (container),
+                                      file,
+                                      NULL, &error))
     {
       if (error->code != GIMP_CONFIG_ERROR_OPEN_ENOENT)
         gimp_message_literal (gimp, NULL, GIMP_MESSAGE_ERROR,
@@ -524,20 +406,6 @@ gimp_operation_config_sync_node (GObject  *config,
 
           g_object_get_property (G_OBJECT (config), gimp_pspec->name,
                                  &value);
-
-          if (GEGL_IS_PARAM_SPEC_COLOR (gegl_pspec))
-            {
-              GimpRGB    gimp_color;
-              GeglColor *gegl_color;
-
-              gimp_value_get_rgb (&value, &gimp_color);
-              g_value_unset (&value);
-
-              gegl_color = gimp_gegl_color_new (&gimp_color);
-
-              g_value_init (&value, gegl_pspec->value_type);
-              g_value_take_object (&value, gegl_color);
-            }
 
           gegl_node_set_property (node, gegl_pspec->name,
                                   &value);
@@ -684,20 +552,6 @@ gimp_operation_config_config_notify (GObject          *config,
       g_value_init (&value, gimp_pspec->value_type);
       g_object_get_property (config, gimp_pspec->name, &value);
 
-      if (GEGL_IS_PARAM_SPEC_COLOR (gegl_pspec))
-        {
-          GimpRGB    gimp_color;
-          GeglColor *gegl_color;
-
-          gimp_value_get_rgb (&value, &gimp_color);
-          g_value_unset (&value);
-
-          gegl_color = gimp_gegl_color_new (&gimp_color);
-
-          g_value_init (&value, gegl_pspec->value_type);
-          g_value_take_object (&value, gegl_color);
-        }
-
       handler = g_signal_handler_find (node,
                                        G_SIGNAL_MATCH_DETAIL |
                                        G_SIGNAL_MATCH_FUNC   |
@@ -735,32 +589,6 @@ gimp_operation_config_node_notify (GeglNode         *node,
 
       g_value_init (&value, gegl_pspec->value_type);
       gegl_node_get_property (node, gegl_pspec->name, &value);
-
-      if (GEGL_IS_PARAM_SPEC_COLOR (gegl_pspec))
-        {
-          GeglColor *gegl_color;
-          GimpRGB    gimp_color;
-
-          gegl_color = g_value_dup_object (&value);
-          g_value_unset (&value);
-
-          if (gegl_color)
-            {
-              gegl_color_get_rgba (gegl_color,
-                                   &gimp_color.r,
-                                   &gimp_color.g,
-                                   &gimp_color.b,
-                                   &gimp_color.a);
-              g_object_unref (gegl_color);
-            }
-          else
-            {
-              gimp_rgba_set (&gimp_color, 0.0, 0.0, 0.0, 1.0);
-            }
-
-          g_value_init (&value, gimp_pspec->value_type);
-          gimp_value_set_rgb (&value, &gimp_color);
-        }
 
       handler = g_signal_handler_find (config,
                                        G_SIGNAL_MATCH_DETAIL |

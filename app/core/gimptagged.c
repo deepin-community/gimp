@@ -24,7 +24,6 @@
 
 #include "core-types.h"
 
-#include "gimpmarshal.h"
 #include "gimptag.h"
 #include "gimptagged.h"
 
@@ -54,8 +53,7 @@ gimp_tagged_default_init (GimpTaggedInterface *iface)
                   GIMP_TYPE_TAGGED,
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpTaggedInterface, tag_added),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_TAG);
 
@@ -64,8 +62,7 @@ gimp_tagged_default_init (GimpTaggedInterface *iface)
                   GIMP_TYPE_TAGGED,
                   G_SIGNAL_RUN_LAST,
                   G_STRUCT_OFFSET (GimpTaggedInterface, tag_removed),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__OBJECT,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 1,
                   GIMP_TYPE_TAG);
 }
@@ -90,7 +87,7 @@ gimp_tagged_add_tag (GimpTagged *tagged,
   g_return_if_fail (GIMP_IS_TAGGED (tagged));
   g_return_if_fail (GIMP_IS_TAG (tag));
 
-  if (GIMP_TAGGED_GET_INTERFACE (tagged)->add_tag (tagged, tag))
+  if (GIMP_TAGGED_GET_IFACE (tagged)->add_tag (tagged, tag))
     {
       g_signal_emit (tagged, gimp_tagged_signals[TAG_ADDED], 0, tag);
     }
@@ -124,7 +121,7 @@ gimp_tagged_remove_tag (GimpTagged *tagged,
         {
           g_object_ref (tag_ref);
 
-          if (GIMP_TAGGED_GET_INTERFACE (tagged)->remove_tag (tagged, tag_ref))
+          if (GIMP_TAGGED_GET_IFACE (tagged)->remove_tag (tagged, tag_ref))
             {
               g_signal_emit (tagged, gimp_tagged_signals[TAG_REMOVED], 0,
                              tag_ref);
@@ -178,14 +175,14 @@ gimp_tagged_set_tags (GimpTagged *tagged,
  * Returns the list of tags assigned to this object. The returned %GList
  * is owned by the @tagged object and must not be modified or destroyed.
  *
- * Return value: a list of tags
+ * Returns: a list of tags
  **/
 GList *
 gimp_tagged_get_tags (GimpTagged *tagged)
 {
   g_return_val_if_fail (GIMP_IS_TAGGED (tagged), NULL);
 
-  return GIMP_TAGGED_GET_INTERFACE (tagged)->get_tags (tagged);
+  return GIMP_TAGGED_GET_IFACE (tagged)->get_tags (tagged);
 }
 
 /**
@@ -199,7 +196,7 @@ gimp_tagged_get_tags (GimpTagged *tagged)
  * sessions, so for example an instance pointer cannot be used as an
  * identifier.
  *
- * Return value: a newly allocated string containing unique identifier
+ * Returns: a newly allocated string containing unique identifier
  * of the object. It must be freed using #g_free.
  **/
 gchar *
@@ -207,7 +204,7 @@ gimp_tagged_get_identifier (GimpTagged *tagged)
 {
   g_return_val_if_fail (GIMP_IS_TAGGED (tagged), NULL);
 
-  return GIMP_TAGGED_GET_INTERFACE (tagged)->get_identifier (tagged);
+  return GIMP_TAGGED_GET_IFACE (tagged)->get_identifier (tagged);
 }
 
 /**
@@ -219,17 +216,17 @@ gimp_tagged_get_identifier (GimpTagged *tagged)
  * example if the user has renamed a data file since the last session.
  *
  * If the object does not want to support such remapping (objects not
- * stored in file for example) it can return #NULL.
+ * stored in file for example) it can return %NULL.
  *
- * Return value: checksum string if object needs identifier remapping,
- * #NULL otherwise. Returned string must be freed with #g_free().
+ * Returns: (nullable): checksum string if object needs identifier remapping,
+ * %NULL otherwise. Returned string must be freed with #g_free().
  **/
 gchar *
 gimp_tagged_get_checksum (GimpTagged *tagged)
 {
   g_return_val_if_fail (GIMP_IS_TAGGED (tagged), FALSE);
 
-  return GIMP_TAGGED_GET_INTERFACE (tagged)->get_checksum (tagged);
+  return GIMP_TAGGED_GET_IFACE (tagged)->get_checksum (tagged);
 }
 
 /**
@@ -237,7 +234,7 @@ gimp_tagged_get_checksum (GimpTagged *tagged)
  * @tagged: an object that implements the %GimpTagged interface
  * @tag:    a %GimpTag
  *
- * Return value: #TRUE if the object has @tag, #FALSE otherwise.
+ * Returns: %TRUE if the object has @tag, %FALSE otherwise.
  **/
 gboolean
 gimp_tagged_has_tag (GimpTagged *tagged,

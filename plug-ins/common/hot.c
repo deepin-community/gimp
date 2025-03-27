@@ -77,15 +77,6 @@
 #define PLUG_IN_ROLE   "gimp-hot"
 
 
-typedef struct
-{
-  gint32 image;
-  gint32 drawable;
-  gint32 mode;
-  gint32 action;
-  gint32 new_layerp;
-} piArgs;
-
 typedef enum
 {
   ACT_LREDUX,
@@ -111,7 +102,9 @@ struct
   gdouble pedestal;
   gdouble gamma;
   gdouble code[3][3];
-} static mode[2] = {
+}
+static mode_vals[2] =
+{
   {
     7.5,
     2.2,
@@ -136,25 +129,46 @@ struct
 #define SCALE   8192            /* scale factor: do floats with int math */
 #define MAXPIX   255            /* white value */
 
-static gint     tab[3][3][MAXPIX+1]; /* multiply lookup table */
-static gdouble  chroma_lim;          /* chroma limit */
-static gdouble  compos_lim;          /* composite amplitude limit */
-static glong    ichroma_lim2;        /* chroma limit squared (scaled integer) */
-static gint     icompos_lim;         /* composite amplitude limit (scaled integer) */
 
-static void       query         (void);
-static void       run           (const gchar      *name,
-                                 gint              nparam,
-                                 const GimpParam  *param,
-                                 gint             *nretvals,
-                                 GimpParam       **retvals);
+typedef struct _Hot      Hot;
+typedef struct _HotClass HotClass;
 
-static gboolean   pluginCore    (piArgs           *argp);
-static gboolean   plugin_dialog (piArgs           *argp);
-static gboolean   hotp          (guint8            r,
-                                 guint8            g,
-                                 guint8            b);
-static void       build_tab     (gint              m);
+struct _Hot
+{
+  GimpPlugIn parent_instance;
+};
+
+struct _HotClass
+{
+  GimpPlugInClass parent_class;
+};
+
+
+#define HOT_TYPE  (hot_get_type ())
+#define HOT(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), HOT_TYPE, Hot))
+
+GType                   hot_get_type         (void) G_GNUC_CONST;
+
+static GList          * hot_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * hot_create_procedure (GimpPlugIn           *plug_in,
+                                              const gchar          *name);
+
+static GimpValueArray * hot_run              (GimpProcedure        *procedure,
+                                              GimpRunMode           run_mode,
+                                              GimpImage            *image,
+                                              GimpDrawable        **drawables,
+                                              GimpProcedureConfig  *config,
+                                              gpointer              run_data);
+
+static gboolean         pluginCore           (GimpImage            *image,
+                                              GimpDrawable         *drawable,
+                                              GObject              *config);
+static gboolean         plugin_dialog        (GimpProcedure        *procedure,
+                                              GObject              *config);
+static gboolean         hotp                 (guint8                r,
+                                              guint8                g,
+                                              guint8                b);
+static void             build_tab            (gint                  m);
 
 /*
  * gc: apply the gamma correction specified for this video standard.
@@ -164,8 +178,8 @@ static void       build_tab     (gint              m);
  * Future standards may use more complex functions.
  * (e.g. SMPTE 240M's "electro-optic transfer characteristic").
  */
-#define gc(x,m)     pow(x, 1.0 / mode[m].gamma)
-#define inv_gc(x,m) pow(x,       mode[m].gamma)
+#define gc(x,m)     pow(x, 1.0 / mode_vals[m].gamma)
+#define inv_gc(x,m) pow(x,       mode_vals[m].gamma)
 
 /*
  * pix_decode: decode an integer pixel value into a floating-point
@@ -180,133 +194,159 @@ static void       build_tab     (gint              m);
 #define pix_decode(v)  ((double)v / (double)MAXPIX)
 #define pix_encode(v)  ((int)(v * (double)MAXPIX + 0.5))
 
-const GimpPlugInInfo PLUG_IN_INFO =
-{
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run,   /* run_proc   */
-};
 
-MAIN ()
+G_DEFINE_TYPE (Hot, hot, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (HOT_TYPE)
+DEFINE_STD_SET_I18N
+
+
+static gint     tab[3][3][MAXPIX+1]; /* multiply lookup table */
+static gdouble  chroma_lim;          /* chroma limit */
+static gdouble  compos_lim;          /* composite amplitude limit */
+static glong    ichroma_lim2;        /* chroma limit squared (scaled integer) */
+static gint     icompos_lim;         /* composite amplitude limit (scaled integer) */
+
 
 static void
-query (void)
+hot_class_init (HotClass *klass)
 {
-  static const GimpParamDef args[] =
-  {
-    { GIMP_PDB_INT32,    "run-mode",  "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }" },
-    { GIMP_PDB_IMAGE,    "image",     "The Image" },
-    { GIMP_PDB_DRAWABLE, "drawable",  "The Drawable" },
-    { GIMP_PDB_INT32,    "mode",      "Mode { NTSC (0), PAL (1) }" },
-    { GIMP_PDB_INT32,    "action",    "The action to perform" },
-    { GIMP_PDB_INT32,    "new-layer", "Create a new layer { TRUE, FALSE }" }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  gimp_install_procedure (PLUG_IN_PROC,
-                          N_("Find and fix pixels that may be unsafely bright"),
-                          "hot scans an image for pixels that will give unsave "
-                          "values of chrominance or composite signale "
-                          "amplitude when encoded into an NTSC or PAL signal.  "
-                          "Three actions can be performed on these ``hot'' "
-                          "pixels. (0) reduce luminance, (1) reduce "
-                          "saturation, or (2) Blacken.",
-                          "Eric L. Hernes, Alan Wm Paeth",
-                          "Eric L. Hernes",
-                          "1997",
-                          N_("_Hot..."),
-                          "RGB",
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args), 0,
-                          args, NULL);
-
-  gimp_plugin_menu_register (PLUG_IN_PROC, "<Image>/Colors/Modify");
+  plug_in_class->query_procedures = hot_query_procedures;
+  plug_in_class->create_procedure = hot_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint              nparam,
-     const GimpParam  *param,
-     gint             *nretvals,
-     GimpParam       **retvals)
+hot_init (Hot *hot)
 {
-  static GimpParam rvals[1];
-  piArgs           args;
+}
 
-  *nretvals = 1;
-  *retvals  = rvals;
+static GList *
+hot_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (PLUG_IN_PROC));
+}
 
-  INIT_I18N ();
+static GimpProcedure *
+hot_create_procedure (GimpPlugIn  *plug_in,
+                               const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, PLUG_IN_PROC))
+    {
+      procedure = gimp_image_procedure_new (plug_in, name,
+                                            GIMP_PDB_PROC_TYPE_PLUGIN,
+                                            hot_run, NULL, NULL);
+
+      gimp_procedure_set_image_types (procedure, "RGB");
+      gimp_procedure_set_sensitivity_mask (procedure,
+                                           GIMP_PROCEDURE_SENSITIVE_DRAWABLE);
+
+      gimp_procedure_set_menu_label (procedure, _("_Hot..."));
+      gimp_procedure_add_menu_path (procedure, "<Image>/Colors/[Modify]");
+
+      gimp_procedure_set_documentation (procedure,
+                                        _("Find and fix pixels that may "
+                                          "be unsafely bright"),
+                                        "hot scans an image for pixels that "
+                                        "will give unsave values of "
+                                        "chrominance or composite signal "
+                                        "amplitude when encoded into an NTSC "
+                                        "or PAL signal. Three actions can be "
+                                        "performed on these 'hot' pixels. "
+                                        "(0) reduce luminance, "
+                                        "(1) reduce saturation, or (2) Blacken.",
+                                        name);
+      gimp_procedure_set_attribution (procedure,
+                                      "Eric L. Hernes, Alan Wm Paeth",
+                                      "Eric L. Hernes",
+                                      "1997");
+
+      gimp_procedure_add_choice_argument (procedure, "mode",
+                                          _("_Mode"),
+                                          _("Signal mode"),
+                                          gimp_choice_new_with_values ("ntsc", MODE_NTSC, _("NTSC"), NULL,
+                                                                       "pal",  MODE_PAL,  _("PAL"),   NULL,
+                                                                       NULL),
+                                          "ntsc",
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_choice_argument (procedure, "action",
+                                          _("_Action"),
+                                          _("Action"),
+                                          gimp_choice_new_with_values ("reduce-luminance",   ACT_LREDUX, _("Reduce Luminance"),  NULL,
+                                                                       "reduce-saturation",  ACT_SREDUX, _("Reduce Saturation"), NULL,
+                                                                       "blacken",            ACT_FLAG,   _("Blacken"),           NULL,
+                                                                       NULL),
+                                          "reduce-luminance",
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_boolean_argument (procedure, "new-layer",
+                                           _("Create _new layer"),
+                                           _("Create a new layer"),
+                                           TRUE,
+                                           G_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+hot_run (GimpProcedure        *procedure,
+         GimpRunMode           run_mode,
+         GimpImage            *image,
+         GimpDrawable        **drawables,
+         GimpProcedureConfig  *config,
+         gpointer              run_data)
+{
+  GimpDrawable *drawable;
+
   gegl_init (NULL, NULL);
 
-  memset (&args, 0, sizeof (args));
-  args.mode = -1;
-
-  gimp_get_data (PLUG_IN_PROC, &args);
-
-  args.image    = param[1].data.d_image;
-  args.drawable = param[2].data.d_drawable;
-
-  rvals[0].type          = GIMP_PDB_STATUS;
-  rvals[0].data.d_status = GIMP_PDB_SUCCESS;
-
-  switch (param[0].data.d_int32)
+  if (gimp_core_object_array_get_length ((GObject **) drawables) != 1)
     {
-    case GIMP_RUN_INTERACTIVE:
-      /* XXX: add code here for interactive running */
-      if (args.mode == -1)
-        {
-          args.mode       = MODE_NTSC;
-          args.action     = ACT_LREDUX;
-          args.new_layerp = 1;
-        }
+      GError *error = NULL;
 
-      if (plugin_dialog (&args))
-        {
-          if (! pluginCore (&args))
-            {
-              rvals[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
-            }
-        }
-      else
-        {
-          rvals[0].data.d_status = GIMP_PDB_CANCEL;
-        }
+      g_set_error (&error, GIMP_PLUG_IN_ERROR, 0,
+                   _("Procedure '%s' only works with one drawable."),
+                   gimp_procedure_get_name (procedure));
 
-      gimp_set_data (PLUG_IN_PROC, &args, sizeof (args));
-    break;
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_CALLING_ERROR,
+                                               error);
+    }
+  else
+    {
+      drawable = drawables[0];
+    }
 
-    case GIMP_RUN_NONINTERACTIVE:
-      /* XXX: add code here for non-interactive running */
-      if (nparam != 6)
-        {
-          rvals[0].data.d_status = GIMP_PDB_CALLING_ERROR;
-          break;
-        }
-      args.mode       = param[3].data.d_int32;
-      args.action     = param[4].data.d_int32;
-      args.new_layerp = param[5].data.d_int32;
+  if (run_mode == GIMP_RUN_INTERACTIVE && ! plugin_dialog (procedure, G_OBJECT (config)))
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_CANCEL,
+                                             NULL);
 
-      if (! pluginCore (&args))
-        {
-          rvals[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
-          break;
-        }
-    break;
+  if (! pluginCore (image, drawable, G_OBJECT (config)))
+    return gimp_procedure_new_return_values (procedure,
+                                             GIMP_PDB_EXECUTION_ERROR,
+                                             NULL);
 
-    case GIMP_RUN_WITH_LAST_VALS:
-      /* XXX: add code here for last-values running */
-      if (! pluginCore (&args))
-        {
-          rvals[0].data.d_status = GIMP_PDB_EXECUTION_ERROR;
-        }
-    break;
-  }
+  if (run_mode != GIMP_RUN_NONINTERACTIVE)
+    gimp_displays_flush ();
+
+  return gimp_procedure_new_return_values (procedure, GIMP_PDB_SUCCESS, NULL);
 }
 
 static gboolean
-pluginCore (piArgs *argp)
+pluginCore (GimpImage    *image,
+            GimpDrawable *drawable,
+            GObject      *config)
 {
+  gint        mode;
+  gint        action;
+  gboolean    new_layer;
   GeglBuffer *src_buffer;
   GeglBuffer *dest_buffer;
   const Babl *src_format;
@@ -314,7 +354,7 @@ pluginCore (piArgs *argp)
   gint        src_bpp;
   gint        dest_bpp;
   gboolean    success = TRUE;
-  gint        nl      = 0;
+  GimpLayer  *nl      = NULL;
   gint        y, i;
   gint        Y, I, Q;
   gint        width, height;
@@ -328,17 +368,25 @@ pluginCore (piArgs *argp)
   gdouble     pr, pg, pb;
   gdouble     py;
 
-  width  = gimp_drawable_width  (argp->drawable);
-  height = gimp_drawable_height (argp->drawable);
+  g_object_get (config,
+                "new-layer", &new_layer,
+                NULL);
+  mode = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                              "mode");
+  action = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                "action");
 
-  if (gimp_drawable_has_alpha (argp->drawable))
+  width  = gimp_drawable_get_width  (drawable);
+  height = gimp_drawable_get_height (drawable);
+
+  if (gimp_drawable_has_alpha (drawable))
     src_format = babl_format ("R'G'B'A u8");
   else
     src_format = babl_format ("R'G'B' u8");
 
   dest_format = src_format;
 
-  if (argp->new_layerp)
+  if (new_layer)
     {
       gchar        name[40];
       const gchar *mode_names[] =
@@ -354,21 +402,21 @@ pluginCore (piArgs *argp)
       };
 
       g_snprintf (name, sizeof (name), "hot mask (%s, %s)",
-                  mode_names[argp->mode],
-                  action_names[argp->action]);
+                  mode_names[mode],
+                  action_names[action]);
 
-      nl = gimp_layer_new (argp->image, name, width, height,
+      nl = gimp_layer_new (image, name, width, height,
                            GIMP_RGBA_IMAGE,
                            100,
-                           gimp_image_get_default_new_layer_mode (argp->image));
+                           gimp_image_get_default_new_layer_mode (image));
 
-      gimp_drawable_fill (nl, GIMP_FILL_TRANSPARENT);
-      gimp_image_insert_layer (argp->image, nl, -1, 0);
+      gimp_drawable_fill (GIMP_DRAWABLE (nl), GIMP_FILL_TRANSPARENT);
+      gimp_image_insert_layer (image, nl, NULL, 0);
 
       dest_format = babl_format ("R'G'B'A u8");
     }
 
-  if (! gimp_drawable_mask_intersect (argp->drawable,
+  if (! gimp_drawable_mask_intersect (drawable,
                                       &sel_x1, &sel_y1, &width, &height))
     return success;
 
@@ -381,15 +429,15 @@ pluginCore (piArgs *argp)
   src = g_new (guchar, width * height * src_bpp);
   dst = g_new (guchar, width * height * dest_bpp);
 
-  src_buffer = gimp_drawable_get_buffer (argp->drawable);
+  src_buffer = gimp_drawable_get_buffer (drawable);
 
-  if (argp->new_layerp)
+  if (new_layer)
     {
-      dest_buffer = gimp_drawable_get_buffer (nl);
+      dest_buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (nl));
     }
   else
     {
-      dest_buffer = gimp_drawable_get_shadow_buffer (argp->drawable);
+      dest_buffer = gimp_drawable_get_shadow_buffer (drawable);
     }
 
   gegl_buffer_get (src_buffer,
@@ -400,7 +448,7 @@ pluginCore (piArgs *argp)
   s = src;
   d = dst;
 
-  build_tab (argp->mode);
+  build_tab (mode);
 
   gimp_progress_init (_("Hot"));
   prog_interval = height / 10;
@@ -416,14 +464,14 @@ pluginCore (piArgs *argp)
         {
           if (hotp (r = *(s + 0), g = *(s + 1), b = *(s + 2)))
             {
-              if (argp->action == ACT_FLAG)
+              if (action == ACT_FLAG)
                 {
                   for (i = 0; i < 3; i++)
                     *d++ = 0;
                   s += 3;
                   if (src_bpp == 4)
                     *d++ = *s++;
-                  else if (argp->new_layerp)
+                  else if (new_layer)
                     *d++ = 255;
                 }
               else
@@ -439,7 +487,7 @@ pluginCore (piArgs *argp)
                       s += 3;
                       if (src_bpp == 4)
                         *d++ = *s++;
-                      else if (argp->new_layerp)
+                      else if (new_layer)
                         *d++ = 255;
                     }
                   else
@@ -480,7 +528,7 @@ pluginCore (piArgs *argp)
                        * pixel with the same luminance (R=G=B=Y), we
                        * change saturation without affecting luminance.
                        */
-                      if (argp->action == ACT_LREDUX)
+                      if (action == ACT_LREDUX)
                         {
                           /*
                            * Calculate a scale factor that will bring the pixel
@@ -498,7 +546,7 @@ pluginCore (piArgs *argp)
                           t = compos_lim / (fy + fc);
                           if (t < scale)
                             scale = t;
-                          scale = pow (scale, mode[argp->mode].gamma);
+                          scale = pow (scale, mode_vals[mode].gamma);
 
                           r = (guint8) pix_encode (scale * pr);
                           g = (guint8) pix_encode (scale * pg);
@@ -522,20 +570,20 @@ pluginCore (piArgs *argp)
                           if (t < scale)
                             scale = t;
 
-                          pr = gc (pr, argp->mode);
-                          pg = gc (pg, argp->mode);
-                          pb = gc (pb, argp->mode);
+                          pr = gc (pr, mode);
+                          pg = gc (pg, mode);
+                          pb = gc (pb, mode);
 
-                          py = pr * mode[argp->mode].code[0][0] +
-                               pg * mode[argp->mode].code[0][1] +
-                               pb * mode[argp->mode].code[0][2];
+                          py = pr * mode_vals[mode].code[0][0] +
+                               pg * mode_vals[mode].code[0][1] +
+                               pb * mode_vals[mode].code[0][2];
 
                           r = pix_encode (inv_gc (py + scale * (pr - py),
-                                                  argp->mode));
+                                                  mode));
                           g = pix_encode (inv_gc (py + scale * (pg - py),
-                                                  argp->mode));
+                                                  mode));
                           b = pix_encode (inv_gc (py + scale * (pb - py),
-                                                  argp->mode));
+                                                  mode));
                         }
 
                       *d++ = new_r = r;
@@ -546,14 +594,14 @@ pluginCore (piArgs *argp)
 
                       if (src_bpp == 4)
                         *d++ = *s++;
-                      else if (argp->new_layerp)
+                      else if (new_layer)
                         *d++ = 255;
                     }
                 }
             }
           else
             {
-              if (! argp->new_layerp)
+              if (! new_layer)
                 {
                   for (i = 0; i < src_bpp; i++)
                     *d++ = *s++;
@@ -580,14 +628,14 @@ pluginCore (piArgs *argp)
   g_object_unref (src_buffer);
   g_object_unref (dest_buffer);
 
-  if (argp->new_layerp)
+  if (new_layer)
     {
-      gimp_drawable_update (nl, sel_x1, sel_y1, width, height);
+      gimp_drawable_update (GIMP_DRAWABLE (nl), sel_x1, sel_y1, width, height);
     }
   else
     {
-      gimp_drawable_merge_shadow (argp->drawable, TRUE);
-      gimp_drawable_update (argp->drawable, sel_x1, sel_y1, width, height);
+      gimp_drawable_merge_shadow (drawable, TRUE);
+      gimp_drawable_update (drawable, sel_x1, sel_y1, width, height);
     }
 
   gimp_displays_flush ();
@@ -596,80 +644,50 @@ pluginCore (piArgs *argp)
 }
 
 static gboolean
-plugin_dialog (piArgs *argp)
+plugin_dialog (GimpProcedure *procedure,
+               GObject       *config)
 {
-  GtkWidget *dlg;
-  GtkWidget *hbox;
-  GtkWidget *vbox;
-  GtkWidget *toggle;
-  GtkWidget *frame;
-  gboolean   run;
+  GtkWidget  *dlg;
+  GtkWidget  *vbox;
+  GtkWidget  *hbox;
+  gboolean    run;
 
-  gimp_ui_init (PLUG_IN_BINARY, FALSE);
+  gimp_ui_init (PLUG_IN_BINARY);
 
-  dlg = gimp_dialog_new (_("Hot"), PLUG_IN_ROLE,
-                         NULL, 0,
-                         gimp_standard_help_func, PLUG_IN_PROC,
+  dlg = gimp_procedure_dialog_new (procedure,
+                                   GIMP_PROCEDURE_CONFIG (config),
+                                   _("Hot"));
 
-                         _("_Cancel"), GTK_RESPONSE_CANCEL,
-                         _("_OK"),     GTK_RESPONSE_OK,
+  gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dlg),
+                                    "mode", GIMP_TYPE_INT_RADIO_FRAME);
+  gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dlg),
+                                    "action", GIMP_TYPE_INT_RADIO_FRAME);
 
-                         NULL);
+  vbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dlg),
+                                         "hot-left-side",
+                                         "mode",
+                                         "new-layer",
+                                         NULL);
+  gtk_box_set_spacing (GTK_BOX (vbox), 12);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dlg),
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
+  hbox = gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dlg),
+                                         "hot-hbox",
+                                         "hot-left-side",
+                                         "action",
+                                         NULL);
+  gtk_box_set_spacing (GTK_BOX (hbox), 12);
+  gtk_box_set_homogeneous (GTK_BOX (hbox), TRUE);
+  gtk_widget_set_margin_bottom (hbox, 12);
+  gtk_orientable_set_orientation (GTK_ORIENTABLE (hbox),
+                                  GTK_ORIENTATION_HORIZONTAL);
 
-  gimp_window_set_transient (GTK_WINDOW (dlg));
-
-  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-  gtk_container_set_border_width (GTK_CONTAINER (hbox), 12);
-  gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dlg))),
-                      hbox, TRUE, TRUE, 0);
-  gtk_widget_show (hbox);
-
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-  gtk_box_pack_start (GTK_BOX (hbox), vbox, TRUE, TRUE, 0);
-  gtk_widget_show (vbox);
-
-  frame = gimp_int_radio_group_new (TRUE, _("Mode"),
-                                    G_CALLBACK (gimp_radio_button_update),
-                                    &argp->mode, argp->mode,
-
-                                    "N_TSC", MODE_NTSC, NULL,
-                                    "_PAL",  MODE_PAL,  NULL,
-
-                                    NULL);
-
-  gtk_box_pack_start (GTK_BOX (vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
-
-  toggle = gtk_check_button_new_with_mnemonic (_("Create _new layer"));
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle), argp->new_layerp);
-  gtk_box_pack_start (GTK_BOX (vbox), toggle, FALSE, FALSE, 0);
-  gtk_widget_show (toggle);
-
-  g_signal_connect (toggle, "toggled",
-                    G_CALLBACK (gimp_toggle_button_update),
-                    &argp->new_layerp);
-
-  frame = gimp_int_radio_group_new (TRUE, _("Action"),
-                                    G_CALLBACK (gimp_radio_button_update),
-                                    &argp->action, argp->action,
-
-                                    _("Reduce _Luminance"),  ACT_LREDUX, NULL,
-                                    _("Reduce _Saturation"), ACT_SREDUX, NULL,
-                                    _("_Blacken"),           ACT_FLAG,   NULL,
-
-                                    NULL);
-
-  gtk_box_pack_start (GTK_BOX (hbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dlg),
+                              "hot-hbox",
+                              NULL);
 
   gtk_widget_show (dlg);
 
-  run = (gimp_dialog_run (GIMP_DIALOG (dlg)) == GTK_RESPONSE_OK);
+  run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dlg));
 
   gtk_widget_destroy (dlg);
 
@@ -704,21 +722,21 @@ build_tab (int m)
 
   for (pv = 0; pv <= MAXPIX; pv++)
     {
-      f = (double)SCALE * (double)gc((double)pix_decode(pv),m);
-      tab[0][0][pv] = (int)(f * mode[m].code[0][0] + 0.5);
-      tab[0][1][pv] = (int)(f * mode[m].code[0][1] + 0.5);
-      tab[0][2][pv] = (int)(f * mode[m].code[0][2] + 0.5);
-      tab[1][0][pv] = (int)(f * mode[m].code[1][0] + 0.5);
-      tab[1][1][pv] = (int)(f * mode[m].code[1][1] + 0.5);
-      tab[1][2][pv] = (int)(f * mode[m].code[1][2] + 0.5);
-      tab[2][0][pv] = (int)(f * mode[m].code[2][0] + 0.5);
-      tab[2][1][pv] = (int)(f * mode[m].code[2][1] + 0.5);
-      tab[2][2][pv] = (int)(f * mode[m].code[2][2] + 0.5);
+      f = (double) SCALE * (double) gc ((double) pix_decode (pv), m);
+      tab[0][0][pv] = (int) (f * mode_vals[m].code[0][0] + 0.5);
+      tab[0][1][pv] = (int) (f * mode_vals[m].code[0][1] + 0.5);
+      tab[0][2][pv] = (int) (f * mode_vals[m].code[0][2] + 0.5);
+      tab[1][0][pv] = (int) (f * mode_vals[m].code[1][0] + 0.5);
+      tab[1][1][pv] = (int) (f * mode_vals[m].code[1][1] + 0.5);
+      tab[1][2][pv] = (int) (f * mode_vals[m].code[1][2] + 0.5);
+      tab[2][0][pv] = (int) (f * mode_vals[m].code[2][0] + 0.5);
+      tab[2][1][pv] = (int) (f * mode_vals[m].code[2][1] + 0.5);
+      tab[2][2][pv] = (int) (f * mode_vals[m].code[2][2] + 0.5);
     }
 
-  chroma_lim = (double)CHROMA_LIM / (100.0 - mode[m].pedestal);
-  compos_lim = ((double)COMPOS_LIM - mode[m].pedestal) /
-    (100.0 - mode[m].pedestal);
+  chroma_lim = (double) CHROMA_LIM / (100.0 - mode_vals[m].pedestal);
+  compos_lim = ((double )COMPOS_LIM - mode_vals[m].pedestal) /
+    (100.0 - mode_vals[m].pedestal);
 
   ichroma_lim2 = (int)(chroma_lim * SCALE + 0.5);
   ichroma_lim2 *= ichroma_lim2;

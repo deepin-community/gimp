@@ -38,7 +38,7 @@ GimpUndo * gimp_image_undo_push_image_grid          (GimpImage     *image,
                                                      GimpGrid      *grid);
 GimpUndo * gimp_image_undo_push_image_colormap      (GimpImage     *image,
                                                      const gchar   *undo_desc);
-GimpUndo * gimp_image_undo_push_image_color_managed (GimpImage     *image,
+GimpUndo * gimp_image_undo_push_image_hidden_profile(GimpImage     *image,
                                                      const gchar   *undo_desc);
 GimpUndo * gimp_image_undo_push_image_metadata      (GimpImage     *image,
                                                      const gchar   *undo_desc);
@@ -72,6 +72,29 @@ GimpUndo * gimp_image_undo_push_drawable_mod        (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpDrawable  *drawable,
                                                      gboolean       copy_buffer);
+GimpUndo * gimp_image_undo_push_drawable_format     (GimpImage     *image,
+                                                     const gchar   *undo_desc,
+                                                     GimpDrawable  *drawable);
+
+
+/*  drawable filter undos  */
+GimpUndo * gimp_image_undo_push_filter_add          (GimpImage     *image,
+                                                     const gchar   *undo_desc,
+                                                     GimpDrawable  *drawable,
+                                                     GimpDrawableFilter
+                                                                   *filter);
+
+GimpUndo * gimp_image_undo_push_filter_remove       (GimpImage     *image,
+                                                     const gchar   *undo_desc,
+                                                     GimpDrawable  *drawable,
+                                                     GimpDrawableFilter
+                                                                   *filter);
+
+GimpUndo * gimp_image_undo_push_filter_reorder      (GimpImage     *image,
+                                                     const gchar   *undo_desc,
+                                                     GimpDrawable  *drawable,
+                                                     GimpDrawableFilter
+                                                                   *filter);
 
 
 /*  mask undos  */
@@ -98,9 +121,6 @@ GimpUndo * gimp_image_undo_push_item_displace       (GimpImage     *image,
 GimpUndo * gimp_image_undo_push_item_visibility     (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpItem      *item);
-GimpUndo * gimp_image_undo_push_item_linked         (GimpImage     *image,
-                                                     const gchar   *undo_desc,
-                                                     GimpItem      *item);
 GimpUndo * gimp_image_undo_push_item_color_tag      (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpItem      *item);
@@ -110,6 +130,9 @@ GimpUndo * gimp_image_undo_push_item_lock_content   (GimpImage     *image,
 GimpUndo * gimp_image_undo_push_item_lock_position  (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpItem      *item);
+GimpUndo * gimp_image_undo_push_item_lock_visibility (GimpImage    *image,
+                                                      const gchar  *undo_desc,
+                                                      GimpItem     *item);
 GimpUndo * gimp_image_undo_push_item_parasite       (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpItem      *item,
@@ -125,13 +148,13 @@ GimpUndo * gimp_image_undo_push_item_parasite_remove(GimpImage     *image,
 GimpUndo * gimp_image_undo_push_layer_add           (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpLayer     *layer,
-                                                     GimpLayer     *prev_layer);
+                                                     GList         *prev_layers);
 GimpUndo * gimp_image_undo_push_layer_remove        (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpLayer     *layer,
                                                      GimpLayer     *prev_parent,
                                                      gint           prev_position,
-                                                     GimpLayer     *prev_layer);
+                                                     GList         *prev_layers);
 GimpUndo * gimp_image_undo_push_layer_mode          (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpLayer     *layer);
@@ -211,33 +234,33 @@ GimpUndo * gimp_image_undo_push_layer_mask_show     (GimpImage     *image,
 GimpUndo * gimp_image_undo_push_channel_add         (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpChannel   *channel,
-                                                     GimpChannel   *prev_channel);
+                                                     GList         *prev_channels);
 GimpUndo * gimp_image_undo_push_channel_remove      (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpChannel   *channel,
                                                      GimpChannel   *prev_parent,
                                                      gint           prev_position,
-                                                     GimpChannel   *prev_channel);
+                                                     GList         *prev_channels);
 GimpUndo * gimp_image_undo_push_channel_color       (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpChannel   *channel);
 
 
-/*  vectors undos  */
+/*  path undos  */
 
-GimpUndo * gimp_image_undo_push_vectors_add         (GimpImage     *image,
+GimpUndo * gimp_image_undo_push_path_add            (GimpImage     *image,
                                                      const gchar   *undo_desc,
-                                                     GimpVectors   *vectors,
-                                                     GimpVectors   *prev_vectors);
-GimpUndo * gimp_image_undo_push_vectors_remove      (GimpImage     *image,
+                                                     GimpPath      *path,
+                                                     GList         *prev_paths);
+GimpUndo * gimp_image_undo_push_path_remove         (GimpImage     *image,
                                                      const gchar   *undo_desc,
-                                                     GimpVectors   *vectors,
-                                                     GimpVectors   *prev_parent,
+                                                     GimpPath      *path,
+                                                     GimpPath      *prev_parent,
                                                      gint           prev_position,
-                                                     GimpVectors   *prev_vectors);
-GimpUndo * gimp_image_undo_push_vectors_mod         (GimpImage     *image,
+                                                     GList         *prev_paths);
+GimpUndo * gimp_image_undo_push_path_mod            (GimpImage     *image,
                                                      const gchar   *undo_desc,
-                                                     GimpVectors   *vectors);
+                                                     GimpPath      *path);
 
 
 /*  floating selection undos  */

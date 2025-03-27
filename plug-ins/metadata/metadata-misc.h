@@ -23,20 +23,43 @@
 typedef struct
 {
   GtkWidget      *dialog;
-  GtkBuilder     *builder;
+  GHashTable     *widgets;
   GExiv2Metadata *metadata;
-  gint32          image_id;
+  GimpImage      *image;
   gchar          *filename;
 } metadata_editor;
 
+typedef enum
+{
+  MODE_SINGLE,
+  MODE_MULTI,
+  MODE_COMBO,
+  MODE_LIST,
+} MetadataMode;
+
 typedef struct
 {
-  gchar  *tag;
-  gchar  *mode;
-  gint32  other_tag_index;
-  gint32  tag_type;
-  gint32  xmp_type;
+  gchar        *tag;
+  MetadataMode  mode;
+  gint32        other_tag_index;
+  gint32        tag_type;
+  gint32        xmp_type;
 } metadata_tag;
+
+typedef struct
+{
+  gchar        *tag;
+  MetadataMode  mode;
+  gint32        default_tag_index;
+  gint32        exif_tag_index;
+} iptc_tag_info;
+
+typedef struct
+{
+  gint32        xmp_equivalent_index;
+  gchar        *tag;
+  MetadataMode  mode;
+} exif_tag_info;
 
 typedef struct
 {
@@ -52,18 +75,11 @@ typedef struct
 
 typedef struct
 {
-  gchar  *header;
-  gchar  *type;
-  gint32  size;
-} TranslateHeaderTag;
-
-typedef struct
-{
-  gchar  *id;
-  gchar  *tag;
-  gchar  *mode;
-  gint32  other_tag_index;
-  gint32  tag_type;
+  gchar        *id;
+  gchar        *tag;
+  MetadataMode  mode;
+  gint32        other_tag_index;
+  gint32        tag_type;
 } TranslateTag;
 
 #endif /* __METADATA_MISC_H__ */

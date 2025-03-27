@@ -20,11 +20,10 @@
 
 #include "config.h"
 
-#undef GSEAL_ENABLE
-
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
@@ -37,6 +36,7 @@
 #include "core/gimpcontext.h"
 #include "core/gimpdatafactory.h"
 #include "core/gimpgradient.h"
+#include "core/gimpimage.h"
 #include "core/gimplist.h"
 #include "core/gimppattern.h"
 #include "core/gimptoolinfo.h"
@@ -107,6 +107,9 @@ static void gimp_device_status_notify_device   (GimpDeviceManager     *manager,
 static void gimp_device_status_config_notify   (GimpGuiConfig         *config,
                                                 const GParamSpec      *pspec,
                                                 GimpDeviceStatus      *status);
+static void gimp_device_status_image_changed   (GimpContext           *user_context,
+                                                GimpImage             *image,
+                                                GimpDeviceStatus      *status);
 static void gimp_device_status_notify_info     (GimpDeviceInfo        *device_info,
                                                 const GParamSpec      *pspec,
                                                 GimpDeviceStatusEntry *entry);
@@ -115,6 +118,10 @@ static void gimp_device_status_save_clicked    (GtkWidget             *button,
 static void gimp_device_status_view_clicked    (GtkWidget             *widget,
                                                 GdkModifierType        state,
                                                 const gchar           *identifier);
+
+static void
+        gimp_device_status_set_color_help_data (GimpDeviceStatusEntry *entry,
+                                                GimpContext           *user_context);
 
 
 G_DEFINE_TYPE (GimpDeviceStatus, gimp_device_status, GIMP_TYPE_EDITOR)
@@ -192,6 +199,10 @@ gimp_device_status_constructed (GObject *object)
 
   gimp_device_status_config_notify (GIMP_GUI_CONFIG (status->gimp->config),
                                     NULL, status);
+
+  g_signal_connect_object (gimp_get_user_context (status->gimp), "image-changed",
+                           G_CALLBACK (gimp_device_status_image_changed),
+                           status, 0);
 }
 
 static void
@@ -270,6 +281,8 @@ gimp_device_status_device_add (GimpContainer    *devices,
                                GimpDeviceStatus *status)
 {
   GimpDeviceStatusEntry *entry;
+  GdkDisplay            *display;
+
   GClosure              *closure;
   GParamSpec            *pspec;
   GtkWidget             *vbox;
@@ -313,13 +326,13 @@ gimp_device_status_device_add (GimpContainer    *devices,
 
   /*  the device name  */
 
-  if (device_info->display == NULL ||
-      device_info->display == gdk_display_get_default ())
+  gimp_device_info_get_device (device_info, &display);
+  if (display == NULL || display == gdk_display_get_default ())
     name = g_strdup (gimp_object_get_name (device_info));
   else
     name = g_strdup_printf ("%s (%s)",
                             gimp_object_get_name (device_info),
-                            gdk_display_get_name (device_info->display));
+                            gdk_display_get_name (display));
 
   label = gtk_label_new (name);
   g_free (name);
@@ -343,7 +356,6 @@ gimp_device_status_device_add (GimpContainer    *devices,
   entry->tool = gimp_prop_view_new (G_OBJECT (entry->context), "tool",
                                     entry->context, CELL_SIZE);
   gtk_box_pack_start (GTK_BOX (hbox), entry->tool, FALSE, FALSE, 0);
-  gtk_widget_show (entry->tool);
 
   /*  the foreground color  */
 
@@ -457,11 +469,20 @@ gimp_device_status_notify_device (GimpDeviceManager *manager,
 
   for (list = status->devices; list; list = list->next)
     {
-      GimpDeviceStatusEntry *entry = list->data;
+      GimpDeviceStatusEntry *entry  = list->data;
+      GtkWidget             *widget = entry->ebox;
+      GtkStyleContext       *style  = gtk_widget_get_style_context (widget);
 
-      gtk_widget_set_state (entry->ebox,
-                            entry->device_info == status->current_device ?
-                            GTK_STATE_SELECTED : GTK_STATE_NORMAL);
+      if (entry->device_info == status->current_device)
+        {
+          gtk_widget_set_state_flags (widget, GTK_STATE_FLAG_SELECTED, TRUE);
+          gtk_style_context_add_class (style, GTK_STYLE_CLASS_VIEW);
+        }
+      else
+        {
+          gtk_widget_set_state_flags (widget, GTK_STATE_FLAG_NORMAL, TRUE);
+          gtk_style_context_remove_class (style, GTK_STYLE_CLASS_VIEW);
+        }
     }
 }
 
@@ -480,6 +501,21 @@ gimp_device_status_config_notify (GimpGuiConfig    *config,
       GimpDeviceStatusEntry *entry = list->data;
 
       gtk_widget_set_visible (entry->options_hbox, show_options);
+    }
+}
+
+static void
+gimp_device_status_image_changed (GimpContext      *user_context,
+                                  GimpImage        *image,
+                                  GimpDeviceStatus *status)
+{
+  GList *list;
+
+  for (list = status->devices; list; list = list->next)
+    {
+      GimpDeviceStatusEntry *entry = list->data;
+
+      gimp_device_status_set_color_help_data (entry, user_context);
     }
 }
 
@@ -541,21 +577,8 @@ gimp_device_status_notify_info (GimpDeviceInfo        *device_info,
     }
 
   if (! strcmp (pspec->name, "tool-options"))
-    {
-      GimpRGB color;
-      guchar  r, g, b;
-      gchar   buf[64];
-
-      gimp_context_get_foreground (entry->context, &color);
-      gimp_rgb_get_uchar (&color, &r, &g, &b);
-      g_snprintf (buf, sizeof (buf), _("Foreground: %d, %d, %d"), r, g, b);
-      gimp_help_set_help_data (entry->foreground, buf, NULL);
-
-      gimp_context_get_background (entry->context, &color);
-      gimp_rgb_get_uchar (&color, &r, &g, &b);
-      g_snprintf (buf, sizeof (buf), _("Background: %d, %d, %d"), r, g, b);
-      gimp_help_set_help_data (entry->background, buf, NULL);
-    }
+    gimp_device_status_set_color_help_data (entry,
+                                            gimp_get_user_context (entry->context->gimp));
 }
 
 static void
@@ -580,7 +603,45 @@ gimp_device_status_view_clicked (GtkWidget       *widget,
   gimp_window_strategy_show_dockable_dialog (GIMP_WINDOW_STRATEGY (gimp_get_window_strategy (status->gimp)),
                                              status->gimp,
                                              dialog_factory,
-                                             gtk_widget_get_screen (widget),
                                              gimp_widget_get_monitor (widget),
                                              identifier);
+}
+
+static void
+gimp_device_status_set_color_help_data (GimpDeviceStatusEntry *entry,
+                                        GimpContext           *user_context)
+{
+  const Babl *format;
+  GimpImage  *image = NULL;
+  GeglColor  *color;
+  guchar      rgb[4];
+  gchar      *buf;
+
+  /* Note: we don't set the GeglColor on purpose. Whatever is the specific
+   * color space is too disconnected to this GUI usage and showing info in
+   * this space would only be confusing.
+   */
+  format = gimp_context_get_rgba_format (user_context, NULL, "u8", &image);
+
+  color = gimp_context_get_foreground (entry->context);
+  gegl_color_get_pixel (color, format, rgb);
+  if (image != NULL)
+    buf = g_strdup_printf (_("Foreground: %d, %d, %d (in color space of \"%s\")"),
+                           rgb[0], rgb[1], rgb[2],
+                           gimp_image_get_display_name (image));
+  else
+    buf = g_strdup_printf (_("Foreground: %d, %d, %d (in sRGB)"), rgb[0], rgb[1], rgb[2]);
+  gimp_help_set_help_data (entry->foreground, buf, NULL);
+  g_free (buf);
+
+  color = gimp_context_get_background (entry->context);
+  gegl_color_get_pixel (color, format, rgb);
+  if (image != NULL)
+    buf = g_strdup_printf (_("Background: %d, %d, %d (in color space of \"%s\")"),
+                           rgb[0], rgb[1], rgb[2],
+                           gimp_image_get_display_name (image));
+  else
+    buf = g_strdup_printf (_("Background: %d, %d, %d (in sRGB)"), rgb[0], rgb[1], rgb[2]);
+  gimp_help_set_help_data (entry->background, buf, NULL);
+  g_free (buf);
 }

@@ -1,7 +1,8 @@
 /* LIBGIMP - The GIMP Library
- * Copyright (C) 1995-2003 Peter Mattis and Spencer Kimball
+ * Copyright (C) 1995-1997 Peter Mattis and Spencer Kimball
  *
  * gimppalette.h
+ * Copyright (C) 2023 Jehan
  *
  * This library is free software: you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -29,18 +30,23 @@ G_BEGIN_DECLS
 
 /* For information look into the C source or the html documentation */
 
-GIMP_DEPRECATED_FOR(gimp_context_get_foreground)
-gboolean gimp_palette_get_foreground     (GimpRGB       *foreground);
-GIMP_DEPRECATED_FOR(gimp_context_get_background)
-gboolean gimp_palette_get_background     (GimpRGB       *background);
-GIMP_DEPRECATED_FOR(gimp_context_set_foreground)
-gboolean gimp_palette_set_foreground     (const GimpRGB *foreground);
-GIMP_DEPRECATED_FOR(gimp_context_set_background)
-gboolean gimp_palette_set_background     (const GimpRGB *background);
-GIMP_DEPRECATED_FOR(gimp_context_set_default_colors)
-gboolean gimp_palette_set_default_colors (void);
-GIMP_DEPRECATED_FOR(gimp_context_swap_colors)
-gboolean gimp_palette_swap_colors        (void);
+
+#include <libgimp/gimpresource.h>
+
+
+#define GIMP_TYPE_PALETTE (gimp_palette_get_type ())
+G_DECLARE_FINAL_TYPE (GimpPalette, gimp_palette, GIMP, PALETTE, GimpResource)
+
+
+guint8    * gimp_palette_get_colormap (GimpPalette *palette,
+                                       const Babl  *format,
+                                       gint        *num_colors,
+                                       gsize       *num_bytes);
+
+gboolean    gimp_palette_set_colormap (GimpPalette *palette,
+                                       const Babl  *format,
+                                       guint8      *colormap,
+                                       gsize        num_bytes);
 
 G_END_DECLS
 

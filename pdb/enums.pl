@@ -21,6 +21,7 @@ package Gimp::CodeGen::enums;
 %enums = (
     GeglDistanceMetric =>
 	{ contig => 1,
+	  header => '',
 	  external => 1,
 	  symbols => [ qw(GEGL_DISTANCE_METRIC_EUCLIDEAN
 			  GEGL_DISTANCE_METRIC_MANHATTAN
@@ -44,16 +45,6 @@ package Gimp::CodeGen::enums;
 		       GIMP_ADD_MASK_COPY => '5',
 		       GIMP_ADD_MASK_CHANNEL => '6' }
 	},
-    GimpBlendMode =>
-	{ contig => 1,
-	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_BLEND_FG_BG_RGB GIMP_BLEND_FG_BG_HSV
-			  GIMP_BLEND_FG_TRANSPARENT GIMP_BLEND_CUSTOM) ],
-	  mapping => { GIMP_BLEND_FG_BG_RGB => '0',
-		       GIMP_BLEND_FG_BG_HSV => '1',
-		       GIMP_BLEND_FG_TRANSPARENT => '2',
-		       GIMP_BLEND_CUSTOM => '3' }
-	},
     GimpBrushGeneratedShape =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
@@ -63,15 +54,6 @@ package Gimp::CodeGen::enums;
 	  mapping => { GIMP_BRUSH_GENERATED_CIRCLE => '0',
 		       GIMP_BRUSH_GENERATED_SQUARE => '1',
 		       GIMP_BRUSH_GENERATED_DIAMOND => '2' }
-	},
-    GimpBucketFillMode =>
-	{ contig => 1,
-	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_BUCKET_FILL_FG GIMP_BUCKET_FILL_BG
-			  GIMP_BUCKET_FILL_PATTERN) ],
-	  mapping => { GIMP_BUCKET_FILL_FG => '0',
-		       GIMP_BUCKET_FILL_BG => '1',
-		       GIMP_BUCKET_FILL_PATTERN => '2' }
 	},
     GimpCapStyle =>
 	{ contig => 1,
@@ -147,14 +129,12 @@ package Gimp::CodeGen::enums;
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
 	  symbols => [ qw(GIMP_CONVERT_PALETTE_GENERATE
-			  GIMP_CONVERT_PALETTE_REUSE
 			  GIMP_CONVERT_PALETTE_WEB GIMP_CONVERT_PALETTE_MONO
 			  GIMP_CONVERT_PALETTE_CUSTOM) ],
 	  mapping => { GIMP_CONVERT_PALETTE_GENERATE => '0',
-		       GIMP_CONVERT_PALETTE_REUSE => '1',
-		       GIMP_CONVERT_PALETTE_WEB => '2',
-		       GIMP_CONVERT_PALETTE_MONO => '3',
-		       GIMP_CONVERT_PALETTE_CUSTOM => '4' }
+		       GIMP_CONVERT_PALETTE_WEB => '1',
+		       GIMP_CONVERT_PALETTE_MONO => '2',
+		       GIMP_CONVERT_PALETTE_CUSTOM => '3' }
 	},
     GimpConvolveType =>
 	{ contig => 1,
@@ -187,21 +167,20 @@ package Gimp::CodeGen::enums;
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
 	  symbols => [ qw(GIMP_FILL_FOREGROUND GIMP_FILL_BACKGROUND
-			  GIMP_FILL_WHITE GIMP_FILL_TRANSPARENT
-			  GIMP_FILL_PATTERN) ],
+			  GIMP_FILL_CIELAB_MIDDLE_GRAY GIMP_FILL_WHITE
+			  GIMP_FILL_TRANSPARENT GIMP_FILL_PATTERN) ],
 	  mapping => { GIMP_FILL_FOREGROUND => '0',
 		       GIMP_FILL_BACKGROUND => '1',
-		       GIMP_FILL_WHITE => '2',
-		       GIMP_FILL_TRANSPARENT => '3',
-		       GIMP_FILL_PATTERN => '4' }
+		       GIMP_FILL_CIELAB_MIDDLE_GRAY => '2',
+		       GIMP_FILL_WHITE => '3',
+		       GIMP_FILL_TRANSPARENT => '4',
+		       GIMP_FILL_PATTERN => '5' }
 	},
     GimpForegroundExtractMode =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_FOREGROUND_EXTRACT_SIOX
-			  GIMP_FOREGROUND_EXTRACT_MATTING) ],
-	  mapping => { GIMP_FOREGROUND_EXTRACT_SIOX => '0',
-		       GIMP_FOREGROUND_EXTRACT_MATTING => '1' }
+	  symbols => [ qw(GIMP_FOREGROUND_EXTRACT_MATTING) ],
+	  mapping => { GIMP_FOREGROUND_EXTRACT_MATTING => '0' }
 	},
     GimpGradientBlendColorSpace =>
 	{ contig => 1,
@@ -293,11 +272,10 @@ package Gimp::CodeGen::enums;
     GimpIconType =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_ICON_TYPE_ICON_NAME
-			  GIMP_ICON_TYPE_INLINE_PIXBUF
+	  symbols => [ qw(GIMP_ICON_TYPE_ICON_NAME GIMP_ICON_TYPE_PIXBUF
 			  GIMP_ICON_TYPE_IMAGE_FILE) ],
 	  mapping => { GIMP_ICON_TYPE_ICON_NAME => '0',
-		       GIMP_ICON_TYPE_INLINE_PIXBUF => '1',
+		       GIMP_ICON_TYPE_PIXBUF => '1',
 		       GIMP_ICON_TYPE_IMAGE_FILE => '2' }
 	},
     GimpImageBaseType =>
@@ -379,9 +357,9 @@ package Gimp::CodeGen::enums;
     GimpOffsetType =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_OFFSET_BACKGROUND GIMP_OFFSET_TRANSPARENT
+	  symbols => [ qw(GIMP_OFFSET_COLOR GIMP_OFFSET_TRANSPARENT
 			  GIMP_OFFSET_WRAP_AROUND) ],
-	  mapping => { GIMP_OFFSET_BACKGROUND => '0',
+	  mapping => { GIMP_OFFSET_COLOR => '0',
 		       GIMP_OFFSET_TRANSPARENT => '1',
 		       GIMP_OFFSET_WRAP_AROUND => '2' }
 	},
@@ -401,46 +379,6 @@ package Gimp::CodeGen::enums;
 	  mapping => { GIMP_PAINT_CONSTANT => '0',
 		       GIMP_PAINT_INCREMENTAL => '1' }
 	},
-    GimpPDBArgType =>
-	{ contig => 0,
-	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_PDB_INT32 GIMP_PDB_INT16 GIMP_PDB_INT8
-			  GIMP_PDB_FLOAT GIMP_PDB_STRING GIMP_PDB_INT32ARRAY
-			  GIMP_PDB_INT16ARRAY GIMP_PDB_INT8ARRAY
-			  GIMP_PDB_FLOATARRAY GIMP_PDB_STRINGARRAY
-			  GIMP_PDB_COLOR GIMP_PDB_ITEM GIMP_PDB_DISPLAY
-			  GIMP_PDB_IMAGE GIMP_PDB_LAYER GIMP_PDB_CHANNEL
-			  GIMP_PDB_DRAWABLE GIMP_PDB_SELECTION
-			  GIMP_PDB_COLORARRAY GIMP_PDB_VECTORS
-			  GIMP_PDB_PARASITE GIMP_PDB_STATUS GIMP_PDB_END
-			  GIMP_PDB_PATH GIMP_PDB_BOUNDARY GIMP_PDB_REGION) ],
-	  mapping => { GIMP_PDB_INT32 => '0',
-		       GIMP_PDB_INT16 => '1',
-		       GIMP_PDB_INT8 => '2',
-		       GIMP_PDB_FLOAT => '3',
-		       GIMP_PDB_STRING => '4',
-		       GIMP_PDB_INT32ARRAY => '5',
-		       GIMP_PDB_INT16ARRAY => '6',
-		       GIMP_PDB_INT8ARRAY => '7',
-		       GIMP_PDB_FLOATARRAY => '8',
-		       GIMP_PDB_STRINGARRAY => '9',
-		       GIMP_PDB_COLOR => '10',
-		       GIMP_PDB_ITEM => '11',
-		       GIMP_PDB_DISPLAY => '12',
-		       GIMP_PDB_IMAGE => '13',
-		       GIMP_PDB_LAYER => '14',
-		       GIMP_PDB_CHANNEL => '15',
-		       GIMP_PDB_DRAWABLE => '16',
-		       GIMP_PDB_SELECTION => '17',
-		       GIMP_PDB_COLORARRAY => '18',
-		       GIMP_PDB_VECTORS => '19',
-		       GIMP_PDB_PARASITE => '20',
-		       GIMP_PDB_STATUS => '21',
-		       GIMP_PDB_END => '22',
-		       GIMP_PDB_PATH => 'GIMP_PDB_VECTORS',
-		       GIMP_PDB_BOUNDARY => 'GIMP_PDB_COLORARRAY',
-		       GIMP_PDB_REGION => 'GIMP_PDB_ITEM' }
-	},
     GimpPDBErrorHandler =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
@@ -452,12 +390,14 @@ package Gimp::CodeGen::enums;
     GimpPDBProcType =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_INTERNAL GIMP_PLUGIN GIMP_EXTENSION
-			  GIMP_TEMPORARY) ],
-	  mapping => { GIMP_INTERNAL => '0',
-		       GIMP_PLUGIN => '1',
-		       GIMP_EXTENSION => '2',
-		       GIMP_TEMPORARY => '3' }
+	  symbols => [ qw(GIMP_PDB_PROC_TYPE_INTERNAL
+			  GIMP_PDB_PROC_TYPE_PLUGIN
+			  GIMP_PDB_PROC_TYPE_PERSISTENT
+			  GIMP_PDB_PROC_TYPE_TEMPORARY) ],
+	  mapping => { GIMP_PDB_PROC_TYPE_INTERNAL => '0',
+		       GIMP_PDB_PROC_TYPE_PLUGIN => '1',
+		       GIMP_PDB_PROC_TYPE_PERSISTENT => '2',
+		       GIMP_PDB_PROC_TYPE_TEMPORARY => '3' }
 	},
     GimpPDBStatusType =>
 	{ contig => 1,
@@ -474,27 +414,42 @@ package Gimp::CodeGen::enums;
     GimpPrecision =>
 	{ contig => 0,
 	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_PRECISION_U8_LINEAR GIMP_PRECISION_U8_GAMMA
-			  GIMP_PRECISION_U16_LINEAR GIMP_PRECISION_U16_GAMMA
-			  GIMP_PRECISION_U32_LINEAR GIMP_PRECISION_U32_GAMMA
+	  symbols => [ qw(GIMP_PRECISION_U8_LINEAR
+			  GIMP_PRECISION_U8_NON_LINEAR
+			  GIMP_PRECISION_U8_PERCEPTUAL
+			  GIMP_PRECISION_U16_LINEAR
+			  GIMP_PRECISION_U16_NON_LINEAR
+			  GIMP_PRECISION_U16_PERCEPTUAL
+			  GIMP_PRECISION_U32_LINEAR
+			  GIMP_PRECISION_U32_NON_LINEAR
+			  GIMP_PRECISION_U32_PERCEPTUAL
 			  GIMP_PRECISION_HALF_LINEAR
-			  GIMP_PRECISION_HALF_GAMMA
+			  GIMP_PRECISION_HALF_NON_LINEAR
+			  GIMP_PRECISION_HALF_PERCEPTUAL
 			  GIMP_PRECISION_FLOAT_LINEAR
-			  GIMP_PRECISION_FLOAT_GAMMA
+			  GIMP_PRECISION_FLOAT_NON_LINEAR
+			  GIMP_PRECISION_FLOAT_PERCEPTUAL
 			  GIMP_PRECISION_DOUBLE_LINEAR
-			  GIMP_PRECISION_DOUBLE_GAMMA) ],
+			  GIMP_PRECISION_DOUBLE_NON_LINEAR
+			  GIMP_PRECISION_DOUBLE_PERCEPTUAL) ],
 	  mapping => { GIMP_PRECISION_U8_LINEAR => '100',
-		       GIMP_PRECISION_U8_GAMMA => '150',
+		       GIMP_PRECISION_U8_NON_LINEAR => '150',
+		       GIMP_PRECISION_U8_PERCEPTUAL => '175',
 		       GIMP_PRECISION_U16_LINEAR => '200',
-		       GIMP_PRECISION_U16_GAMMA => '250',
+		       GIMP_PRECISION_U16_NON_LINEAR => '250',
+		       GIMP_PRECISION_U16_PERCEPTUAL => '275',
 		       GIMP_PRECISION_U32_LINEAR => '300',
-		       GIMP_PRECISION_U32_GAMMA => '350',
+		       GIMP_PRECISION_U32_NON_LINEAR => '350',
+		       GIMP_PRECISION_U32_PERCEPTUAL => '375',
 		       GIMP_PRECISION_HALF_LINEAR => '500',
-		       GIMP_PRECISION_HALF_GAMMA => '550',
+		       GIMP_PRECISION_HALF_NON_LINEAR => '550',
+		       GIMP_PRECISION_HALF_PERCEPTUAL => '575',
 		       GIMP_PRECISION_FLOAT_LINEAR => '600',
-		       GIMP_PRECISION_FLOAT_GAMMA => '650',
+		       GIMP_PRECISION_FLOAT_NON_LINEAR => '650',
+		       GIMP_PRECISION_FLOAT_PERCEPTUAL => '675',
 		       GIMP_PRECISION_DOUBLE_LINEAR => '700',
-		       GIMP_PRECISION_DOUBLE_GAMMA => '750' }
+		       GIMP_PRECISION_DOUBLE_NON_LINEAR => '750',
+		       GIMP_PRECISION_DOUBLE_PERCEPTUAL => '775' }
 	},
     GimpProgressCommand =>
 	{ contig => 1,
@@ -515,20 +470,21 @@ package Gimp::CodeGen::enums;
     GimpRepeatMode =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_REPEAT_NONE GIMP_REPEAT_SAWTOOTH
-			  GIMP_REPEAT_TRIANGULAR GIMP_REPEAT_TRUNCATE) ],
+	  symbols => [ qw(GIMP_REPEAT_NONE GIMP_REPEAT_TRUNCATE
+			  GIMP_REPEAT_SAWTOOTH GIMP_REPEAT_TRIANGULAR) ],
 	  mapping => { GIMP_REPEAT_NONE => '0',
-		       GIMP_REPEAT_SAWTOOTH => '1',
-		       GIMP_REPEAT_TRIANGULAR => '2',
-		       GIMP_REPEAT_TRUNCATE => '3' }
+		       GIMP_REPEAT_TRUNCATE => '1',
+		       GIMP_REPEAT_SAWTOOTH => '2',
+		       GIMP_REPEAT_TRIANGULAR => '3' }
 	},
     GimpRotationType =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_ROTATE_90 GIMP_ROTATE_180 GIMP_ROTATE_270) ],
-	  mapping => { GIMP_ROTATE_90 => '0',
-		       GIMP_ROTATE_180 => '1',
-		       GIMP_ROTATE_270 => '2' }
+	  symbols => [ qw(GIMP_ROTATE_DEGREES90 GIMP_ROTATE_DEGREES180
+			  GIMP_ROTATE_DEGREES270) ],
+	  mapping => { GIMP_ROTATE_DEGREES90 => '0',
+		       GIMP_ROTATE_DEGREES180 => '1',
+		       GIMP_ROTATE_DEGREES270 => '2' }
 	},
     GimpRunMode =>
 	{ contig => 1,
@@ -543,24 +499,27 @@ package Gimp::CodeGen::enums;
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
 	  symbols => [ qw(GIMP_SELECT_CRITERION_COMPOSITE
-			  GIMP_SELECT_CRITERION_R GIMP_SELECT_CRITERION_G
-			  GIMP_SELECT_CRITERION_B GIMP_SELECT_CRITERION_H
-			  GIMP_SELECT_CRITERION_S GIMP_SELECT_CRITERION_V
-			  GIMP_SELECT_CRITERION_A
-			  GIMP_SELECT_CRITERION_LCH_L
-			  GIMP_SELECT_CRITERION_LCH_C
-			  GIMP_SELECT_CRITERION_LCH_H) ],
+			  GIMP_SELECT_CRITERION_RGB_RED
+			  GIMP_SELECT_CRITERION_RGB_GREEN
+			  GIMP_SELECT_CRITERION_RGB_BLUE
+			  GIMP_SELECT_CRITERION_HSV_HUE
+			  GIMP_SELECT_CRITERION_HSV_SATURATION
+			  GIMP_SELECT_CRITERION_HSV_VALUE
+			  GIMP_SELECT_CRITERION_LCH_LIGHTNESS
+			  GIMP_SELECT_CRITERION_LCH_CHROMA
+			  GIMP_SELECT_CRITERION_LCH_HUE
+			  GIMP_SELECT_CRITERION_ALPHA) ],
 	  mapping => { GIMP_SELECT_CRITERION_COMPOSITE => '0',
-		       GIMP_SELECT_CRITERION_R => '1',
-		       GIMP_SELECT_CRITERION_G => '2',
-		       GIMP_SELECT_CRITERION_B => '3',
-		       GIMP_SELECT_CRITERION_H => '4',
-		       GIMP_SELECT_CRITERION_S => '5',
-		       GIMP_SELECT_CRITERION_V => '6',
-		       GIMP_SELECT_CRITERION_A => '7',
-		       GIMP_SELECT_CRITERION_LCH_L => '8',
-		       GIMP_SELECT_CRITERION_LCH_C => '9',
-		       GIMP_SELECT_CRITERION_LCH_H => '10' }
+		       GIMP_SELECT_CRITERION_RGB_RED => '1',
+		       GIMP_SELECT_CRITERION_RGB_GREEN => '2',
+		       GIMP_SELECT_CRITERION_RGB_BLUE => '3',
+		       GIMP_SELECT_CRITERION_HSV_HUE => '4',
+		       GIMP_SELECT_CRITERION_HSV_SATURATION => '5',
+		       GIMP_SELECT_CRITERION_HSV_VALUE => '6',
+		       GIMP_SELECT_CRITERION_LCH_LIGHTNESS => '7',
+		       GIMP_SELECT_CRITERION_LCH_CHROMA => '8',
+		       GIMP_SELECT_CRITERION_LCH_HUE => '9',
+		       GIMP_SELECT_CRITERION_ALPHA => '10' }
 	},
     GimpSizeType =>
 	{ contig => 1,
@@ -650,7 +609,7 @@ package Gimp::CodeGen::enums;
 		       GIMP_TRANSFORM_RESIZE_CROP => '2',
 		       GIMP_TRANSFORM_RESIZE_CROP_WITH_ASPECT => '3' }
 	},
-    GimpUnit =>
+    GimpUnitID =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
 	  symbols => [ qw(GIMP_UNIT_PIXEL GIMP_UNIT_INCH GIMP_UNIT_MM
@@ -662,31 +621,50 @@ package Gimp::CodeGen::enums;
 		       GIMP_UNIT_PICA => '4',
 		       GIMP_UNIT_END => '5' }
 	},
-    GimpUserDirectory =>
+    GimpPathStrokeType =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_USER_DIRECTORY_DESKTOP
-			  GIMP_USER_DIRECTORY_DOCUMENTS
-			  GIMP_USER_DIRECTORY_DOWNLOAD
-			  GIMP_USER_DIRECTORY_MUSIC
-			  GIMP_USER_DIRECTORY_PICTURES
-			  GIMP_USER_DIRECTORY_PUBLIC_SHARE
-			  GIMP_USER_DIRECTORY_TEMPLATES
-			  GIMP_USER_DIRECTORY_VIDEOS) ],
-	  mapping => { GIMP_USER_DIRECTORY_DESKTOP => '0',
-		       GIMP_USER_DIRECTORY_DOCUMENTS => '1',
-		       GIMP_USER_DIRECTORY_DOWNLOAD => '2',
-		       GIMP_USER_DIRECTORY_MUSIC => '3',
-		       GIMP_USER_DIRECTORY_PICTURES => '4',
-		       GIMP_USER_DIRECTORY_PUBLIC_SHARE => '5',
-		       GIMP_USER_DIRECTORY_TEMPLATES => '6',
-		       GIMP_USER_DIRECTORY_VIDEOS => '7' }
+	  symbols => [ qw(GIMP_PATH_STROKE_TYPE_BEZIER) ],
+	  mapping => { GIMP_PATH_STROKE_TYPE_BEZIER => '0' }
 	},
-    GimpVectorsStrokeType =>
-	{ contig => 1,
+    GimpExportCapabilities =>
+	{ contig => 0,
 	  header => 'libgimpbase/gimpbaseenums.h',
-	  symbols => [ qw(GIMP_VECTORS_STROKE_TYPE_BEZIER) ],
-	  mapping => { GIMP_VECTORS_STROKE_TYPE_BEZIER => '0' }
+	  symbols => [ qw(GIMP_EXPORT_CAN_HANDLE_RGB
+			  GIMP_EXPORT_CAN_HANDLE_GRAY
+			  GIMP_EXPORT_CAN_HANDLE_INDEXED
+			  GIMP_EXPORT_CAN_HANDLE_BITMAP
+			  GIMP_EXPORT_CAN_HANDLE_ALPHA
+			  GIMP_EXPORT_CAN_HANDLE_LAYERS
+			  GIMP_EXPORT_CAN_HANDLE_LAYERS_AS_ANIMATION
+			  GIMP_EXPORT_CAN_HANDLE_LAYER_MASKS
+			  GIMP_EXPORT_CAN_HANDLE_LAYER_EFFECTS
+			  GIMP_EXPORT_NEEDS_ALPHA GIMP_EXPORT_NEEDS_CROP) ],
+	  mapping => { GIMP_EXPORT_CAN_HANDLE_RGB => '1 << 0',
+		       GIMP_EXPORT_CAN_HANDLE_GRAY => '1 << 1',
+		       GIMP_EXPORT_CAN_HANDLE_INDEXED => '1 << 2',
+		       GIMP_EXPORT_CAN_HANDLE_BITMAP => '1 << 3',
+		       GIMP_EXPORT_CAN_HANDLE_ALPHA => '1 << 4',
+		       GIMP_EXPORT_CAN_HANDLE_LAYERS => '1 << 5',
+		       GIMP_EXPORT_CAN_HANDLE_LAYERS_AS_ANIMATION => '1 << 6',
+		       GIMP_EXPORT_CAN_HANDLE_LAYER_MASKS => '1 << 7',
+		       GIMP_EXPORT_CAN_HANDLE_LAYER_EFFECTS => '1 << 8',
+		       GIMP_EXPORT_NEEDS_ALPHA => '1 << 9',
+		       GIMP_EXPORT_NEEDS_CROP => '1 << 10' }
+	},
+    GimpFileChooserAction =>
+	{ contig => 0,
+	  header => 'libgimpbase/gimpbaseenums.h',
+	  symbols => [ qw(GIMP_FILE_CHOOSER_ACTION_ANY
+			  GIMP_FILE_CHOOSER_ACTION_OPEN
+			  GIMP_FILE_CHOOSER_ACTION_SAVE
+			  GIMP_FILE_CHOOSER_ACTION_SELECT_FOLDER
+			  GIMP_FILE_CHOOSER_ACTION_CREATE_FOLDER) ],
+	  mapping => { GIMP_FILE_CHOOSER_ACTION_ANY => '-1',
+		       GIMP_FILE_CHOOSER_ACTION_OPEN => '0',
+		       GIMP_FILE_CHOOSER_ACTION_SAVE => '1',
+		       GIMP_FILE_CHOOSER_ACTION_SELECT_FOLDER => '2',
+		       GIMP_FILE_CHOOSER_ACTION_CREATE_FOLDER => '3' }
 	},
     GimpColorManagementMode =>
 	{ contig => 1,
@@ -715,10 +693,14 @@ package Gimp::CodeGen::enums;
 	  header => 'operations/operations-enums.h',
 	  symbols => [ qw(GIMP_LAYER_COLOR_SPACE_AUTO
 			  GIMP_LAYER_COLOR_SPACE_RGB_LINEAR
+			  GIMP_LAYER_COLOR_SPACE_RGB_NON_LINEAR
+			  GIMP_LAYER_COLOR_SPACE_LAB
 			  GIMP_LAYER_COLOR_SPACE_RGB_PERCEPTUAL) ],
 	  mapping => { GIMP_LAYER_COLOR_SPACE_AUTO => '0',
 		       GIMP_LAYER_COLOR_SPACE_RGB_LINEAR => '1',
-		       GIMP_LAYER_COLOR_SPACE_RGB_PERCEPTUAL => '2' }
+		       GIMP_LAYER_COLOR_SPACE_RGB_NON_LINEAR => '2',
+		       GIMP_LAYER_COLOR_SPACE_LAB => '3',
+		       GIMP_LAYER_COLOR_SPACE_RGB_PERCEPTUAL => '4' }
 	},
     GimpLayerCompositeMode =>
 	{ contig => 1,
@@ -789,7 +771,8 @@ package Gimp::CodeGen::enums;
 			  GIMP_LAYER_MODE_LUMINANCE
 			  GIMP_LAYER_MODE_COLOR_ERASE GIMP_LAYER_MODE_ERASE
 			  GIMP_LAYER_MODE_MERGE GIMP_LAYER_MODE_SPLIT
-			  GIMP_LAYER_MODE_PASS_THROUGH) ],
+			  GIMP_LAYER_MODE_PASS_THROUGH
+			  GIMP_LAYER_MODE_REPLACE) ],
 	  mapping => { GIMP_LAYER_MODE_NORMAL_LEGACY => '0',
 		       GIMP_LAYER_MODE_DISSOLVE => '1',
 		       GIMP_LAYER_MODE_BEHIND_LEGACY => '2',
@@ -851,7 +834,8 @@ package Gimp::CodeGen::enums;
 		       GIMP_LAYER_MODE_ERASE => '58',
 		       GIMP_LAYER_MODE_MERGE => '59',
 		       GIMP_LAYER_MODE_SPLIT => '60',
-		       GIMP_LAYER_MODE_PASS_THROUGH => '61' }
+		       GIMP_LAYER_MODE_PASS_THROUGH => '61',
+		       GIMP_LAYER_MODE_REPLACE => '62' }
 	},
     GimpConvertDitherType =>
 	{ contig => 1,

@@ -108,32 +108,30 @@ gimp_display_shell_rotate_dialog (GimpDisplayShell *shell)
   data->shell     = shell;
   data->old_angle = shell->rotate_angle;
 
-  shell->rotate_dialog =
-    gimp_viewable_dialog_new (GIMP_VIEWABLE (image),
-                              gimp_get_user_context (shell->display->gimp),
-                              _("Rotate View"), "display-rotate",
-                              GIMP_ICON_OBJECT_ROTATE_180,
-                              _("Select Rotation Angle"),
-                              GTK_WIDGET (shell),
-                              gimp_standard_help_func,
-                              GIMP_HELP_VIEW_ROTATE_OTHER,
+  g_set_weak_pointer
+    (&shell->rotate_dialog,
+     gimp_viewable_dialog_new (g_list_prepend (NULL, image),
+                               gimp_get_user_context (shell->display->gimp),
+                               _("Rotate View"), "display-rotate",
+                               GIMP_ICON_OBJECT_ROTATE_180,
+                               _("Select Rotation Angle"),
+                               GTK_WIDGET (shell),
+                               gimp_standard_help_func,
+                               GIMP_HELP_VIEW_ROTATE_OTHER,
 
-                              _("_Reset"),  RESPONSE_RESET,
-                              _("_Cancel"), GTK_RESPONSE_CANCEL,
-                              _("_OK"),     GTK_RESPONSE_OK,
+                               _("_Reset"),  RESPONSE_RESET,
+                               _("_Cancel"), GTK_RESPONSE_CANCEL,
+                               _("_OK"),     GTK_RESPONSE_OK,
 
-                              NULL);
+                               NULL));
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (shell->rotate_dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (shell->rotate_dialog),
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
                                            -1);
 
   g_object_weak_ref (G_OBJECT (shell->rotate_dialog),
                      (GWeakNotify) gimp_display_shell_rotate_dialog_free, data);
-
-  g_object_add_weak_pointer (G_OBJECT (shell->rotate_dialog),
-                             (gpointer) &shell->rotate_dialog);
 
   toplevel = gtk_widget_get_toplevel (GTK_WIDGET (shell));
 
@@ -155,8 +153,8 @@ gimp_display_shell_rotate_dialog (GimpDisplayShell *shell)
   gtk_box_pack_start (GTK_BOX (hbox), label, FALSE, FALSE, 0);
   gtk_widget_show (label);
 
-  data->rotate_adj = (GtkAdjustment *)
-    gtk_adjustment_new (shell->rotate_angle, 0.0, 360.0, 1, 15, 0);
+  data->rotate_adj = gtk_adjustment_new (shell->rotate_angle,
+                                         0.0, 360.0, 1, 15, 0);
   spin = gimp_spin_button_new (data->rotate_adj, 1.0, 2);
   gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spin), TRUE);
   gtk_spin_button_set_wrap (GTK_SPIN_BUTTON (spin), TRUE);

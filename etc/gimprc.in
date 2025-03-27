@@ -8,8 +8,8 @@
 # documents the default values and shows what changes are possible.
 # 
 # The variable ${gimp_dir} is set to the value of the environment variable
-# GIMP2_DIRECTORY or, if that is not set, the compiled-in default value is
-# used.  If GIMP2_DIRECTORY is not an absolute path, it is interpreted
+# GIMP3_DIRECTORY or, if that is not set, the compiled-in default value is
+# used.  If GIMP3_DIRECTORY is not an absolute path, it is interpreted
 # relative to your home directory.
 
 # Sets the folder for temporary storage. Files will appear here during the
@@ -168,7 +168,7 @@
 # Specify a default dynamics.  The dynamics is searched for in the specified
 # dynamics path.  This is a string value.
 # 
-# (default-dynamics "Dynamics Off")
+# (default-dynamics "Pressure Size")
 
 # Specify a default MyPaint brush.  This is a string value.
 # 
@@ -228,15 +228,14 @@
 # Sets the default image in the "File/New" dialog.  This is a parameter list.
 # 
 # (default-image
-#     (width 1920)
-#     (height 1080)
+#     (width 2001)
+#     (height 1984)
 #     (unit pixels)
 #     (xresolution 300)
 #     (yresolution 300)
 #     (resolution-unit inches)
 #     (image-type rgb)
-#     (precision u8-gamma)
-#     (color-managed yes)
+#     (precision u8-non-linear)
 #     (color-profile NULL)
 #     (fill-type background)
 #     (comment "Created with GIMP"))
@@ -327,10 +326,7 @@
 #     (simulation-use-black-point-compensation no)
 #     (simulation-optimize yes)
 #     (simulation-gamut-check no)
-#     (out-of-gamut-color (color-rgb 1 0 1))
-#     (show-rgb-u8 no)
-#     (show-hsv no)
-#     (display-module "CdisplayLcms"))
+#     (out-of-gamut-color (color-rgb 1 0 1)))
 
 # Keep a permanent record of all opened and saved files in the Recent
 # Documents list.  Possible values are yes and no.
@@ -374,6 +370,14 @@
 # 
 # (export-color-profile yes)
 
+# Export the image's comment by default.  Possible values are yes and no.
+# 
+# (export-comment yes)
+
+# Export the image's thumbnail by default  Possible values are yes and no.
+# 
+# (export-thumbnail yes)
+
 # Export Exif metadata by default.  Possible values are yes and no.
 # 
 # (export-metadata-exif yes)
@@ -389,18 +393,18 @@
 # Try generating debug data for bug reporting when appropriate.  Possible
 # values are warning, critical, fatal and never.
 # 
-# (debug-policy fatal)
+# (debug-policy warning)
 
 # Check for availability of GIMP updates through background internet queries.
 #  Possible values are yes and no.
 # 
 # (check-updates yes)
 
-# Timestamp of the last update check.  (null)
+# Timestamp of the last update check.  This is an integer value.
 # 
 # (check-update-timestamp 0)
 
-# The timestamp for the last known release date.  (null)
+# The timestamp for the last known release date.  This is an integer value.
 # 
 # (last-release-timestamp 0)
 
@@ -665,7 +669,7 @@
 # (edit-non-visible no)
 
 # If enabled, the move tool sets the edited layer or path as active.  This
-# used to be the default behaviour in older versions.  Possible values are
+# used to be the default behavior in older versions.  Possible values are
 # yes and no.
 # 
 # (move-tool-changes-active no)
@@ -679,11 +683,6 @@
 # and no.
 # 
 # (filter-tool-use-last-settings no)
-
-# Show advanced color options in filter tools.  Possible values are yes and
-# no.
-# 
-# (filter-tool-show-color-options no)
 
 # When enabled, GIMP will not save an image if it has not been changed since
 # it was opened.  Possible values are yes and no.
@@ -720,19 +719,6 @@
 # Save the tool options when GIMP exits.  Possible values are yes and no.
 # 
 # (save-tool-options yes)
-
-# Use compact style for sliders.  Possible values are yes and no.
-# 
-# (compact-sliders yes)
-
-# Show a tooltip when the pointer hovers over an item.  Possible values are
-# yes and no.
-# 
-# (show-tooltips yes)
-
-# When enabled, menus can be torn off.  Possible values are yes and no.
-# 
-# (tearoff-menus yes)
 
 # When enabled, you can change keyboard shortcuts for menu items by hitting a
 # key combination while the menu item is highlighted.  Possible values are
@@ -788,11 +774,6 @@
 # 
 # (toolbox-groups yes)
 
-# Menu mode of grouped tools.  Possible values are click, hover and
-# hover-single-column.
-# 
-# (toolbox-group-menu-mode hover-single-column)
-
 # Sets the theme search path.  This is a colon-separated list of folders to
 # search.
 # 
@@ -800,7 +781,11 @@
 
 # The name of the theme to use.  This is a string value.
 # 
-# (theme "Dark")
+# (theme "Default")
+
+# The name of the theme to use.  Possible values are yes and no.
+# 
+# (prefer-dark-theme yes)
 
 # Sets the icon theme search path.  This is a colon-separated list of folders
 # to search.
@@ -811,10 +796,10 @@
 # 
 # (icon-theme "Symbolic")
 
-# The size of the icons to use.  Possible values are auto, theme, small,
-# medium, large and huge.
+# When enabled, symbolic icons will be preferred if available.  Possible
+# values are yes and no.
 # 
-# (icon-size auto)
+# (prefer-symbolic-icons yes)
 
 # When enabled, pressing F1 will open the help browser.  Possible values are
 # yes and no.
@@ -837,12 +822,7 @@
 # Sets the browser used by the help system.  Possible values are gimp and
 # web-browser.
 # 
-# (help-browser web-browser)
-
-# When enabled, a search of actions will also return inactive actions. 
-# Possible values are yes and no.
-# 
-# (search-show-unavailable-actions no)
+# (help-browser gimp)
 
 # The maximum number of actions saved in history.  This is an integer value.
 # 
@@ -857,7 +837,7 @@
 # The location of the online user manual. This is used if
 # 'user-manual-online' is enabled.  This is a string value.
 # 
-# (user-manual-online-uri "https://docs.gimp.org/2.10")
+# (user-manual-online-uri "https://docs.gimp.org/@GIMP_APP_VERSION@")
 
 # The window type hint that is set on dock windows and the toolbox window.
 # This may affect the way your window manager decorates and handles these
@@ -878,10 +858,19 @@
 # 
 # (playground-seamless-clone-tool no)
 
-# How to handle embedded color profiles when opening a file.  Possible values
-# are ask, keep and convert.
+# Enable the Paint Select tool.  Possible values are yes and no.
+# 
+# (playground-paint-select-tool no)
+
+# What to do when opening a file with an embedded ICC color profile.  Possible values
+# are ask, keep, convert-builtin and convert-preferred.
 # 
 # (color-profile-policy ask)
+
+# How to handle "Orientation" metadata when opening a file.  Possible values
+# are ask, keep and rotate.
+# 
+# (metadata-rotation-policy ask)
 
 # Sets the default folder path for all color profile file dialogs.  This is a
 # single filename.

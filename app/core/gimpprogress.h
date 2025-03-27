@@ -22,13 +22,9 @@
 #define __GIMP_PROGRESS_H__
 
 
-#define GIMP_TYPE_PROGRESS               (gimp_progress_get_type ())
-#define GIMP_IS_PROGRESS(obj)            (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_PROGRESS))
-#define GIMP_PROGRESS(obj)               (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_PROGRESS, GimpProgress))
-#define GIMP_PROGRESS_GET_INTERFACE(obj) (G_TYPE_INSTANCE_GET_INTERFACE ((obj), GIMP_TYPE_PROGRESS, GimpProgressInterface))
+#define GIMP_TYPE_PROGRESS (gimp_progress_get_type ())
+G_DECLARE_INTERFACE (GimpProgress, gimp_progress, GIMP, PROGRESS, GObject)
 
-
-typedef struct _GimpProgressInterface GimpProgressInterface;
 
 struct _GimpProgressInterface
 {
@@ -48,7 +44,7 @@ struct _GimpProgressInterface
   gdouble        (* get_value)     (GimpProgress        *progress);
   void           (* pulse)         (GimpProgress        *progress);
 
-  guint32        (* get_window_id) (GimpProgress        *progress);
+  GBytes       * (* get_window_id) (GimpProgress        *progress);
 
   gboolean       (* message)       (GimpProgress        *progress,
                                     Gimp                *gimp,
@@ -60,8 +56,6 @@ struct _GimpProgressInterface
   void           (* cancel)        (GimpProgress        *progress);
 };
 
-
-GType          gimp_progress_get_type         (void) G_GNUC_CONST;
 
 GimpProgress * gimp_progress_start            (GimpProgress        *progress,
                                                gboolean             cancellable,
@@ -80,7 +74,7 @@ void           gimp_progress_set_value        (GimpProgress        *progress,
 gdouble        gimp_progress_get_value        (GimpProgress        *progress);
 void           gimp_progress_pulse            (GimpProgress        *progress);
 
-guint32        gimp_progress_get_window_id    (GimpProgress        *progress);
+GBytes       * gimp_progress_get_window_id    (GimpProgress        *progress);
 
 gboolean       gimp_progress_message          (GimpProgress        *progress,
                                                Gimp                *gimp,

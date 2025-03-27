@@ -36,11 +36,11 @@
 #include <gio/gio.h>
 #include <glib/gstdio.h>
 
-#undef GIMP_DISABLE_DEPRECATED
 #include "gimpbasetypes.h"
 
 #define __GIMP_ENV_C__
 #include "gimpenv.h"
+#include "gimpenv-private.h"
 #include "gimpversion.h"
 #include "gimpreloc.h"
 
@@ -88,9 +88,6 @@
 static gchar * gimp_env_get_dir   (const gchar *gimp_env_name,
                                    const gchar *compile_time_dir,
                                    const gchar *relative_subdir);
-#ifdef G_OS_WIN32
-static gchar * get_special_folder (gint         csidl);
-#endif
 
 
 const guint gimp_major_version = GIMP_MAJOR_VERSION;
@@ -103,8 +100,9 @@ const guint gimp_micro_version = GIMP_MICRO_VERSION;
  * @plug_in: must be %TRUE if this function is called from a plug-in
  *
  * You don't need to care about this function. It is being called for
- * you automatically (by means of the MAIN() macro that every plug-in
- * runs). Calling it again will cause a fatal error.
+ * you automatically (by means of the [func@Gimp.MAIN] macro that every
+ * C plug-in runs or directly with [func@Gimp.main] in binding). Calling
+ * it again will cause a fatal error.
  *
  * Since: 2.4
  */
@@ -165,17 +163,44 @@ gimp_env_init (gboolean plug_in)
     }
 }
 
+#ifdef G_OS_WIN32
+
+static char *
+get_known_folder (REFKNOWNFOLDERID id)
+{
+  wchar_t *path_utf16 = NULL;
+  char    *path       = NULL;
+
+  if (SUCCEEDED (SHGetKnownFolderPath (id, KF_FLAG_DEFAULT, NULL, &path_utf16)))
+    path = g_utf16_to_utf8 (path_utf16, -1, NULL, NULL, NULL);
+
+  if (path_utf16)
+    CoTaskMemFree (path_utf16);
+
+  return path;
+}
+
+extern IMAGE_DOS_HEADER __ImageBase;
+
+static HMODULE
+this_module (void)
+{
+  return (HMODULE) &__ImageBase;
+}
+
+#endif
+
 /**
  * gimp_directory:
  *
  * Returns the user-specific GIMP settings directory. If the
- * environment variable GIMP2_DIRECTORY exists, it is used. If it is
+ * environment variable GIMP3_DIRECTORY exists, it is used. If it is
  * an absolute path, it is used as is.  If it is a relative path, it
  * is taken to be a subdirectory of the home directory. If it is a
  * relative path, and no home directory can be determined, it is taken
  * to be a subdirectory of gimp_data_directory().
  *
- * The usual case is that no GIMP2_DIRECTORY environment variable
+ * The usual case is that no GIMP3_DIRECTORY environment variable
  * exists, and then we use the GIMPDIR subdirectory of the local
  * configuration directory:
  *
@@ -211,17 +236,17 @@ gimp_directory (void)
 
   const gchar  *env_gimp_dir;
 
-  env_gimp_dir = g_getenv ("GIMP2_DIRECTORY");
+  env_gimp_dir = g_getenv ("GIMP3_DIRECTORY");
 
   if (gimp_dir)
     {
-      gboolean gimp2_directory_changed = FALSE;
+      gboolean gimp3_directory_changed = FALSE;
 
       /* We have constructed the gimp_dir already. We can return
        * gimp_dir unless some parameter gimp_dir depends on has
-       * changed. For now we just check for changes to GIMP2_DIRECTORY
+       * changed. For now we just check for changes to GIMP3_DIRECTORY
        */
-      gimp2_directory_changed =
+      gimp3_directory_changed =
         (env_gimp_dir == NULL &&
          last_env_gimp_dir != NULL) ||
         (env_gimp_dir != NULL &&
@@ -230,7 +255,7 @@ gimp_directory (void)
          last_env_gimp_dir != NULL &&
          strcmp (env_gimp_dir, last_env_gimp_dir) != 0);
 
-      if (! gimp2_directory_changed)
+      if (! gimp3_directory_changed)
         {
           return gimp_dir;
         }
@@ -242,7 +267,7 @@ gimp_directory (void)
         }
     }
 
-  /* Remember the GIMP2_DIRECTORY to next invocation so we can check
+  /* Remember the GIMP3_DIRECTORY to next invocation so we can check
    * if it changes
    */
   g_free (last_env_gimp_dir);
@@ -289,7 +314,7 @@ gimp_directory (void)
 
 #elif defined G_OS_WIN32
 
-      gchar *conf_dir = get_special_folder (CSIDL_APPDATA);
+      char *conf_dir = get_known_folder (&FOLDERID_RoamingAppData);
 
       gimp_dir = g_build_filename (conf_dir,
                                    GIMPDIR, GIMP_USER_VERSION, NULL);
@@ -308,56 +333,6 @@ gimp_directory (void)
 
   return gimp_dir;
 }
-
-#ifdef G_OS_WIN32
-
-/* Taken from glib 2.35 code. */
-static gchar *
-get_special_folder (int csidl)
-{
-  wchar_t      path[MAX_PATH+1];
-  HRESULT      hr;
-  LPITEMIDLIST pidl = NULL;
-  BOOL         b;
-  gchar       *retval = NULL;
-
-  hr = SHGetSpecialFolderLocation (NULL, csidl, &pidl);
-  if (hr == S_OK)
-    {
-      b = SHGetPathFromIDListW (pidl, path);
-      if (b)
-        retval = g_utf16_to_utf8 (path, -1, NULL, NULL, NULL);
-      CoTaskMemFree (pidl);
-    }
-
-  return retval;
-}
-
-static HMODULE libgimpbase_dll = NULL;
-
-/* Minimal DllMain that just stores the handle to this DLL */
-
-BOOL WINAPI /* Avoid silly "no previous prototype" gcc warning */
-DllMain (HINSTANCE hinstDLL,
-         DWORD     fdwReason,
-         LPVOID    lpvReserved);
-
-BOOL WINAPI
-DllMain (HINSTANCE hinstDLL,
-         DWORD     fdwReason,
-         LPVOID    lpvReserved)
-{
-  switch (fdwReason)
-    {
-    case DLL_PROCESS_ATTACH:
-      libgimpbase_dll = hinstDLL;
-      break;
-    }
-
-  return TRUE;
-}
-
-#endif
 
 /**
  * gimp_installation_directory:
@@ -390,7 +365,7 @@ gimp_installation_directory (void)
 
 #ifdef G_OS_WIN32
 
-  toplevel = g_win32_get_package_installation_directory_of_module (libgimpbase_dll);
+  toplevel = g_win32_get_package_installation_directory_of_module (this_module ());
   if (! toplevel)
     g_error ("g_win32_get_package_installation_directory_of_module() failed");
 
@@ -425,21 +400,12 @@ gimp_installation_directory (void)
 
         toplevel = g_strdup (basepath);
       }
-    else if (! strcmp (basename, "plug-ins"))
+    else if (! strcmp (dirname, "plug-ins") ||
+             ! strcmp (dirname, "extensions"))
       {
-        /*  same for plug-ins, go three levels up from prefix/lib/gimp/x.y  */
-
-        gchar *tmp  = g_path_get_dirname (basepath);
-        gchar *tmp2 = g_path_get_dirname (tmp);
-
-        toplevel = g_path_get_dirname (tmp2);
-
-        g_free (tmp);
-        g_free (tmp2);
-      }
-    else if (! strcmp (dirname, "plug-ins"))
-      {
-        /*  same for plug-ins in subdirectory, go three levels up from prefix/lib/gimp/x.y  */
+        /*  same for plug-ins and extensions in subdirectory, go three
+         *  levels up from prefix/lib/gimp/x.y
+         */
 
         gchar *tmp  = g_path_get_dirname (basepath);
         gchar *tmp2 = g_path_get_dirname (tmp);
@@ -450,6 +416,31 @@ gimp_installation_directory (void)
         g_free (tmp);
         g_free (tmp2);
         g_free (tmp3);
+      }
+    else if (strstr (basepath, "/Cellar/"))
+      {
+        /*  we are running from a Python.framework bundle built in homebrew
+         *  during the build phase
+         */
+
+        gchar *fulldir = g_strdup (basepath);
+        gchar *lastdir = g_path_get_basename (fulldir);
+        gchar *tmp_fulldir;
+
+        while (strcmp (lastdir, "Cellar"))
+          {
+            tmp_fulldir = g_path_get_dirname (fulldir);
+
+            g_free (lastdir);
+            g_free (fulldir);
+
+            fulldir = tmp_fulldir;
+            lastdir = g_path_get_basename (fulldir);
+          }
+        toplevel = g_path_get_dirname (fulldir);
+
+        g_free (fulldir);
+        g_free (lastdir);
       }
     else
       {
@@ -478,7 +469,7 @@ gimp_installation_directory (void)
  * gimp_data_directory:
  *
  * Returns the default top directory for GIMP data. If the environment
- * variable GIMP2_DATADIR exists, that is used.  It should be an
+ * variable GIMP3_DATADIR exists, that is used.  It should be an
  * absolute pathname.  Otherwise, on Unix the compile-time defined
  * directory is used. On Windows, the installation directory as
  * deduced from the executable's full filename is used.
@@ -508,7 +499,7 @@ gimp_data_directory (void)
                                      GIMP_DATA_VERSION,
                                      NULL);
 
-      gimp_data_dir = gimp_env_get_dir ("GIMP2_DATADIR", GIMPDATADIR, tmp);
+      gimp_data_dir = gimp_env_get_dir ("GIMP3_DATADIR", GIMPDATADIR, tmp);
       g_free (tmp);
     }
 
@@ -519,20 +510,21 @@ gimp_data_directory (void)
  * gimp_locale_directory:
  *
  * Returns the top directory for GIMP locale files. If the environment
- * variable GIMP2_LOCALEDIR exists, that is used.  It should be an
+ * variable GIMP3_LOCALEDIR exists, that is used.  It should be an
  * absolute pathname.  Otherwise, on Unix the compile-time defined
  * directory is used. On Windows, the installation directory as deduced
  * from the executable's full filename is used.
  *
  * The returned string is owned by GIMP and must not be modified or
- * freed. The returned string is in the encoding used for filenames by
- * the C library, which isn't necessarily UTF-8. (On Windows, unlike
- * the other similar functions here, the return value from this
- * function is in the system codepage, never in UTF-8. It can thus be
- * passed directly to the bindtextdomain() function from libintl which
- * does not handle UTF-8.)
+ * freed. The returned string encoding depends on the system where GIMP
+ * is running: on UNIX it's in the encoding used for filenames by
+ * the C library (which isn't necessarily UTF-8); on Windows it's UTF-8.
  *
- * Returns: The top directory for GIMP locale files.
+ * On UNIX the returned string can be passed directly to the bindtextdomain()
+ * function from libintl; on Windows the returned string can be converted to
+ * UTF-16 and passed to the wbindtextdomain() function from libintl.
+ *
+ * Returns: (type filename): The top directory for GIMP locale files.
  */
 const gchar *
 gimp_locale_directory (void)
@@ -545,20 +537,8 @@ gimp_locale_directory (void)
                                      "locale",
                                      NULL);
 
-      gimp_locale_dir = gimp_env_get_dir ("GIMP2_LOCALEDIR", LOCALEDIR, tmp);
+      gimp_locale_dir = gimp_env_get_dir ("GIMP3_LOCALEDIR", LOCALEDIR, tmp);
       g_free (tmp);
-
-#ifdef G_OS_WIN32
-      /* FIXME: g_win32_locale_filename_from_utf8() can actually return
-       * NULL (we had actual cases of this). Not sure exactly what
-       * gimp_locale_directory() should do when this happens. Anyway
-       * that's really broken, and something should be done some day
-       * about this!
-       */
-      tmp = g_win32_locale_filename_from_utf8 (gimp_locale_dir);
-      g_free (gimp_locale_dir);
-      gimp_locale_dir = tmp;
-#endif
     }
 
   return gimp_locale_dir;
@@ -568,7 +548,7 @@ gimp_locale_directory (void)
  * gimp_sysconf_directory:
  *
  * Returns the top directory for GIMP config files. If the environment
- * variable GIMP2_SYSCONFDIR exists, that is used.  It should be an
+ * variable GIMP3_SYSCONFDIR exists, that is used.  It should be an
  * absolute pathname.  Otherwise, on Unix the compile-time defined
  * directory is used. On Windows, the installation directory as deduced
  * from the executable's full filename is used.
@@ -595,7 +575,7 @@ gimp_sysconf_directory (void)
                                      GIMP_SYSCONF_VERSION,
                                      NULL);
 
-      gimp_sysconf_dir = gimp_env_get_dir ("GIMP2_SYSCONFDIR", GIMPSYSCONFDIR, tmp);
+      gimp_sysconf_dir = gimp_env_get_dir ("GIMP3_SYSCONFDIR", GIMPSYSCONFDIR, tmp);
       g_free (tmp);
     }
 
@@ -606,7 +586,7 @@ gimp_sysconf_directory (void)
  * gimp_plug_in_directory:
  *
  * Returns the default top directory for GIMP plug-ins and modules. If
- * the environment variable GIMP2_PLUGINDIR exists, that is used.  It
+ * the environment variable GIMP3_PLUGINDIR exists, that is used.  It
  * should be an absolute pathname. Otherwise, on Unix the compile-time
  * defined directory is used. On Windows, the installation directory
  * as deduced from the executable's full filename is used.
@@ -636,7 +616,7 @@ gimp_plug_in_directory (void)
                                      GIMP_PLUGIN_VERSION,
                                      NULL);
 
-      gimp_plug_in_dir = gimp_env_get_dir ("GIMP2_PLUGINDIR", PLUGINDIR, tmp);
+      gimp_plug_in_dir = gimp_env_get_dir ("GIMP3_PLUGINDIR", PLUGINDIR, tmp);
       g_free (tmp);
     }
 
@@ -647,7 +627,7 @@ gimp_plug_in_directory (void)
  * gimp_cache_directory:
  *
  * Returns the default top directory for GIMP cached files. If the
- * environment variable GIMP2_CACHEDIR exists, that is used.  It
+ * environment variable GIMP3_CACHEDIR exists, that is used.  It
  * should be an absolute pathname.  Otherwise, a subdirectory of the
  * directory returned by g_get_user_cache_dir() is used.
  *
@@ -678,7 +658,7 @@ gimp_cache_directory (void)
                                      GIMP_USER_VERSION,
                                      NULL);
 
-      gimp_cache_dir = gimp_env_get_dir ("GIMP2_CACHEDIR", NULL, tmp);
+      gimp_cache_dir = gimp_env_get_dir ("GIMP3_CACHEDIR", NULL, tmp);
       g_free (tmp);
     }
 
@@ -689,7 +669,7 @@ gimp_cache_directory (void)
  * gimp_temp_directory:
  *
  * Returns the default top directory for GIMP temporary files. If the
- * environment variable GIMP2_TEMPDIR exists, that is used.  It
+ * environment variable GIMP3_TEMPDIR exists, that is used.  It
  * should be an absolute pathname.  Otherwise, a subdirectory of the
  * directory returned by g_get_tmp_dir() is used.
  *
@@ -720,7 +700,7 @@ gimp_temp_directory (void)
                                      GIMP_USER_VERSION,
                                      NULL);
 
-      gimp_temp_dir = gimp_env_get_dir ("GIMP2_TEMPDIR", NULL, tmp);
+      gimp_temp_dir = gimp_env_get_dir ("GIMP3_TEMPDIR", NULL, tmp);
       g_free (tmp);
     }
 
@@ -748,20 +728,21 @@ gimp_child_file (const gchar *parent,
 }
 
 /**
- * gimp_directory_file:
+ * gimp_directory_file: (skip)
  * @first_element: the first element of a path to a file in the
  *                 user's GIMP directory, or %NULL.
  * @...: a %NULL terminated list of the remaining elements of the path
  *       to the file.
  *
- * Returns a #GFile in the user's GIMP directory, or the data
+ * Returns a #GFile in the user's GIMP directory, or the GIMP
  * directory itself if @first_element is %NULL.
  *
  * See also: gimp_directory().
  *
  * Since: 2.10
  *
- * Returns: a new @GFile for the path, Free with g_object_unref().
+ * Returns: (transfer full):
+ *          a new @GFile for the path, Free with g_object_unref().
  **/
 GFile *
 gimp_directory_file (const gchar *first_element,
@@ -778,7 +759,7 @@ gimp_directory_file (const gchar *first_element,
 }
 
 /**
- * gimp_installation_directory_file:
+ * gimp_installation_directory_file: (skip)
  * @first_element: the first element of a path to a file in the
  *                 top installation directory, or %NULL.
  * @...: a %NULL terminated list of the remaining elements of the path
@@ -791,7 +772,8 @@ gimp_directory_file (const gchar *first_element,
  *
  * Since: 2.10.10
  *
- * Returns: a new @GFile for the path, Free with g_object_unref().
+ * Returns: (transfer full):
+ *          a new @GFile for the path, Free with g_object_unref().
  **/
 GFile *
 gimp_installation_directory_file (const gchar *first_element,
@@ -808,7 +790,7 @@ gimp_installation_directory_file (const gchar *first_element,
 }
 
 /**
- * gimp_data_directory_file:
+ * gimp_data_directory_file: (skip)
  * @first_element: the first element of a path to a file in the
  *                 data directory, or %NULL.
  * @...: a %NULL terminated list of the remaining elements of the path
@@ -821,7 +803,8 @@ gimp_installation_directory_file (const gchar *first_element,
  *
  * Since: 2.10
  *
- * Returns: a new @GFile for the path, Free with g_object_unref().
+ * Returns: (transfer full):
+ *          a new @GFile for the path, Free with g_object_unref().
  **/
 GFile *
 gimp_data_directory_file (const gchar *first_element,
@@ -838,7 +821,7 @@ gimp_data_directory_file (const gchar *first_element,
 }
 
 /**
- * gimp_locale_directory_file:
+ * gimp_locale_directory_file: (skip)
  * @first_element: the first element of a path to a file in the
  *                 locale directory, or %NULL.
  * @...: a %NULL terminated list of the remaining elements of the path
@@ -851,7 +834,8 @@ gimp_data_directory_file (const gchar *first_element,
  *
  * Since: 2.10
  *
- * Returns: a new @GFile for the path, Free with g_object_unref().
+ * Returns: (transfer full):
+ *          a new @GFile for the path, Free with g_object_unref().
  **/
 GFile *
 gimp_locale_directory_file (const gchar *first_element,
@@ -881,7 +865,8 @@ gimp_locale_directory_file (const gchar *first_element,
  *
  * Since: 2.10
  *
- * Returns: a new @GFile for the path, Free with g_object_unref().
+ * Returns: (transfer full):
+ *          a new @GFile for the path, Free with g_object_unref().
  **/
 GFile *
 gimp_sysconf_directory_file (const gchar *first_element,
@@ -911,7 +896,8 @@ gimp_sysconf_directory_file (const gchar *first_element,
  *
  * Since: 2.10
  *
- * Returns: a new @GFile for the path, Free with g_object_unref().
+ * Returns: (transfer full):
+ *          a new @GFile for the path, Free with g_object_unref().
  **/
 GFile *
 gimp_plug_in_directory_file (const gchar *first_element,
@@ -928,67 +914,6 @@ gimp_plug_in_directory_file (const gchar *first_element,
 }
 
 /**
- * gimp_user_directory:
- * @type: the type of user directory to retrieve
- *
- * This procedure is deprecated! Use g_get_user_special_dir() instead.
- *
- * Returns: The path to the specified user directory, or %NULL if the
- *          logical ID was not found.
- *
- * Since: 2.4
- **/
-const gchar *
-gimp_user_directory (GimpUserDirectory type)
-{
-  return g_get_user_special_dir ((GUserDirectory) type);
-}
-
-/**
- * gimp_personal_rc_file:
- * @basename: The basename of a rc_file.
- *
- * Returns the name of a file in the user-specific GIMP settings directory.
- *
- * The returned string is newly allocated and should be freed with
- * g_free() after use. The returned string is in the encoding used for
- * filenames by GLib, which isn't necessarily UTF-8. (On Windows it
- * always is UTF-8.)
- *
- * Returns: The name of a file in the user-specific GIMP settings directory.
- **/
-gchar *
-gimp_personal_rc_file (const gchar *basename)
-{
-  return g_build_filename (gimp_directory (), basename, NULL);
-}
-
-/**
- * gimp_gtkrc:
- *
- * Returns the name of GIMP's application-specific gtkrc file.
- *
- * The returned string is owned by GIMP and must not be modified or
- * freed. The returned string is in the encoding used for filenames by
- * GLib, which isn't necessarily UTF-8. (On Windows it always is
- * UTF-8.)
- *
- * Returns: The name of GIMP's application-specific gtkrc file.
- **/
-const gchar *
-gimp_gtkrc (void)
-{
-  static gchar *gimp_gtkrc_filename = NULL;
-
-  if (! gimp_gtkrc_filename)
-    gimp_gtkrc_filename = g_build_filename (gimp_data_directory (),
-                                            "themes", "System", "gtkrc",
-                                            NULL);
-
-  return gimp_gtkrc_filename;
-}
-
-/**
  * gimp_path_runtime_fix:
  * @path: A pointer to a string (allocated with g_malloc) that is
  *        (or could be) a pathname.
@@ -1001,9 +926,8 @@ gimp_gtkrc (void)
  * and *@path is replaced with a pointer to a new string with the
  * run-time prefix spliced in.
  *
- * On Linux, it does the same thing, but only if BinReloc support is enabled.
- * On other Unices, it does nothing because those platforms don't have a
- * way to find out where our binary is.
+ * On Linux and other Unices, it does the same thing, but only if BinReloc
+ * support is enabled, and only if we are not running GIMP in-build directory.
  */
 static void
 gimp_path_runtime_fix (gchar **path)
@@ -1040,10 +964,15 @@ gimp_path_runtime_fix (gchar **path)
       *path = g_build_filename (gimp_installation_directory (), *path, NULL);
       g_free (p);
     }
-#else
+#elif defined (ENABLE_RELOCATABLE_RESOURCES)
   gchar *p;
 
-  if (strncmp (*path, PREFIX G_DIR_SEPARATOR_S,
+  /* XXX: I could actually test any of the other GIMP_TESTING_* environment
+   * variables. The goal is only to check if we are running GIMP from within the
+   * build directory. In such case, no substitution should happen.
+   */
+  if (! g_getenv ("GIMP_TESTING_PLUGINDIRS") &&
+      strncmp (*path, PREFIX G_DIR_SEPARATOR_S,
                strlen (PREFIX G_DIR_SEPARATOR_S)) == 0)
     {
       /* This is a compile-time entry. Replace the path with the
@@ -1063,10 +992,11 @@ gimp_path_runtime_fix (gchar **path)
  * @path:         A list of directories separated by #G_SEARCHPATH_SEPARATOR.
  * @max_paths:    The maximum number of directories to return.
  * @check:        %TRUE if you want the directories to be checked.
- * @check_failed: Returns a #GList of path elements for which the
- *                check failed.
+ * @check_failed: (element-type filename) (out callee-allocates):
+                  Returns a #GList of path elements for which the check failed.
  *
- * Returns: A #GList of all directories in @path.
+ * Returns: (element-type filename) (transfer full):
+            A #GList of all directories in @path.
  **/
 GList *
 gimp_path_parse (const gchar  *path,
@@ -1146,9 +1076,11 @@ gimp_path_parse (const gchar  *path,
 
 /**
  * gimp_path_to_str:
- * @path: A list of directories as returned by gimp_path_parse().
+ * @path: (element-type filename):
+ *        A list of directories as returned by gimp_path_parse().
  *
- * Returns: A searchpath string separated by #G_SEARCHPATH_SEPARATOR.
+ * Returns: (type filename) (transfer full):
+ *          A searchpath string separated by #G_SEARCHPATH_SEPARATOR.
  **/
 gchar *
 gimp_path_to_str (GList *path)
@@ -1180,7 +1112,8 @@ gimp_path_to_str (GList *path)
 
 /**
  * gimp_path_free:
- * @path: A list of directories as returned by gimp_path_parse().
+ * @path: (element-type filename):
+ *        A list of directories as returned by gimp_path_parse().
  *
  * This function frees the memory allocated for the list and the strings
  * it contains.
@@ -1193,7 +1126,8 @@ gimp_path_free (GList *path)
 
 /**
  * gimp_path_get_user_writable_dir:
- * @path: A list of directories as returned by gimp_path_parse().
+ * @path: (element-type filename):
+ *        A list of directories as returned by gimp_path_parse().
  *
  * Note that you have to g_free() the returned string.
  *
@@ -1223,7 +1157,7 @@ gimp_path_get_user_writable_dir (GList *path)
       /*  this is tricky:
        *  if a file is e.g. owned by the current user but not user-writable,
        *  the user has no permission to write to the file regardless
-       *  of his group's or other's write permissions
+       *  of their group's or other's write permissions
        */
       if (!err && S_ISDIR (filestat.st_mode) &&
 

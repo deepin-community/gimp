@@ -45,6 +45,8 @@ static void   gimp_display_bounds_changed_handler (GimpImage      *image,
 static void   gimp_display_flush_handler          (GimpImage      *image,
                                                    gboolean        invalidate_preview,
                                                    GimpDisplay    *display);
+static gboolean
+              gimp_display_flush_handler_idle     (gpointer user_data);
 
 
 /*  public functions  */
@@ -67,9 +69,12 @@ gimp_display_connect (GimpDisplay *display)
   g_signal_connect (image, "bounds-changed",
                     G_CALLBACK (gimp_display_bounds_changed_handler),
                     display);
-  g_signal_connect (image, "flush",
-                    G_CALLBACK (gimp_display_flush_handler),
-                    display);
+  g_signal_connect_swapped (image, "flush",
+                            G_CALLBACK (gimp_display_flush),
+                            display);
+  g_signal_connect_swapped (image, "selected-layers-changed",
+                            G_CALLBACK (gimp_display_flush),
+                            display);
 }
 
 void
@@ -84,7 +89,7 @@ gimp_display_disconnect (GimpDisplay *display)
   g_return_if_fail (GIMP_IS_IMAGE (image));
 
   g_signal_handlers_disconnect_by_func (image,
-                                        gimp_display_flush_handler,
+                                        gimp_display_flush,
                                         display);
   g_signal_handlers_disconnect_by_func (image,
                                         gimp_display_bounds_changed_handler,
@@ -124,5 +129,17 @@ gimp_display_flush_handler (GimpImage   *image,
                             gboolean     invalidate_preview,
                             GimpDisplay *display)
 {
+  g_idle_add_full (G_PRIORITY_LOW,
+                   (GSourceFunc) gimp_display_flush_handler_idle,
+                   g_object_ref (display), g_object_unref);
+}
+
+static gboolean
+gimp_display_flush_handler_idle (gpointer user_data)
+{
+  GimpDisplay *display = user_data;
+
   gimp_display_flush (display);
+
+  return G_SOURCE_REMOVE;
 }

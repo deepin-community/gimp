@@ -21,9 +21,10 @@
 
 void gimp_image_arrange_objects (GimpImage         *image,
                                  GList             *list,
-                                 GimpAlignmentType  alignment,
+                                 gdouble            align_x,
+                                 gdouble            align_y,
                                  GObject           *reference,
                                  GimpAlignmentType  reference_alignment,
-                                 gint               offset);
+                                 gboolean           align_contents);
 
 #endif  /*  __GIMP_IMAGE_ARRANGE_H__  */

@@ -36,7 +36,6 @@
 #include "core/gimpcontext.h"
 #include "core/gimpimage.h"
 #include "core/gimpitem.h"
-#include "core/gimpmarshal.h"
 #include "core/gimppickable.h"
 #include "core/gimppickable-auto-shrink.h"
 
@@ -172,7 +171,7 @@ struct _GimpToolRectanglePrivate
   gdouble                 x1, y1;
   gdouble                 x2, y2;
 
-  /* Integer coordinats of upper left corner and size. We must
+  /* Integer coordinates of upper left corner and size. We must
    * calculate this separately from the gdouble ones because sometimes
    * we don't want to affect the integer size (e.g. when moving the
    * rectangle), but that will be the case if we always calculate the
@@ -270,8 +269,8 @@ struct _GimpToolRectanglePrivate
   GimpCanvasItem         *highlight_handles[GIMP_N_TOOL_RECTANGLE_FUNCTIONS];
 
   /* Flags to prevent temporary changes to the Expand from center and Fixed
-     options for the rectangle select tool, ellipse select tool, and the crop
-     tool due to use of the modifier keys becoming latched. See issue #7954 and
+     options for the rectangle select tool, ellipse select tool and the crop
+     tool due to use of the modifier keys becoming latched See issue #7954 and
      MR !779. */
   gboolean                fixed_center_copy;
   gboolean                fixed_rule_active_copy;
@@ -480,8 +479,7 @@ gimp_tool_rectangle_class_init (GimpToolRectangleClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpToolRectangleClass, change_complete),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   g_object_class_install_property (object_class, PROP_X1,
@@ -712,8 +710,8 @@ gimp_tool_rectangle_init (GimpToolRectangle *rectangle)
 {
   rectangle->private = gimp_tool_rectangle_get_instance_private (rectangle);
 
-  rectangle->private->function                = GIMP_TOOL_RECTANGLE_CREATING;
-  rectangle->private->is_first                = TRUE;
+  rectangle->private->function = GIMP_TOOL_RECTANGLE_CREATING;
+  rectangle->private->is_first = TRUE;
   rectangle->private->modifier_toggle_allowed = FALSE;
 }
 
@@ -1417,12 +1415,13 @@ gimp_tool_rectangle_button_press (GimpToolWidget      *widget,
   gdouble                   snapped_x, snapped_y;
   gint                      snap_x, snap_y;
 
-  /* Prevent the latching of toggled modifiers (Ctrl and Shift) when the
+  /* prevent the latching of toggled modifiers (Ctrl and Shift) when the
      selection is cancelled whilst one or both of these modifiers are
-     being pressed (see issue #7954 and MR !799) */
-  private->fixed_center_copy       = private->fixed_center;
-  private->fixed_rule_active_copy  = private->fixed_rule_active;
+     being pressed  (see issue #7954 and MR !779) */
+  private->fixed_center_copy = private->fixed_center;
+  private->fixed_rule_active_copy = private->fixed_rule_active;
   private->modifier_toggle_allowed = TRUE;
+
 
   /* save existing shape in case of cancellation */
   private->saved_x1 = private->x1;
@@ -1515,12 +1514,14 @@ gimp_tool_rectangle_button_release (GimpToolWidget        *widget,
 
   gimp_tool_widget_set_snap_offsets (widget, 0, 0, 0, 0);
 
-  /* Prevent the latching of toggled modifiers (Ctrl and Shift) when the
-     selection is cancelled whilst one or both of these modifiers are
-     being pressed (see issue #7954 and MR !799) */
+ /* prevent the latching of toggled modifiers (Ctrl and Shift) when the
+    selection is cancelled whilst one or both of these modifiers are
+    being pressed  (see issue #7954 and MR !779) */
   private->modifier_toggle_allowed = FALSE;
   g_object_set (rectangle,
                 "fixed-center", private->fixed_center_copy,
+                NULL);
+  g_object_set (rectangle,
                 "fixed-rule-active", private->fixed_rule_active_copy,
                 NULL);
 
@@ -2021,8 +2022,10 @@ static void
 gimp_tool_rectangle_update_options (GimpToolRectangle *rectangle)
 {
   GimpToolRectanglePrivate *private = rectangle->private;
-  gdouble                   x1, y1;
-  gdouble                   x2, y2;
+  gdouble                   x1      = 0;
+  gdouble                   y1      = 0;
+  gdouble                   x2      = 0;
+  gdouble                   y2      = 0;
 
   gimp_tool_rectangle_get_public_rect (rectangle, &x1, &y1, &x2, &y2);
 
@@ -2157,7 +2160,10 @@ static void
 gimp_tool_rectangle_update_status (GimpToolRectangle *rectangle)
 {
   GimpToolRectanglePrivate *private = rectangle->private;
-  gdouble                   x1, y1, x2, y2;
+  gdouble                   x1      = 0;
+  gdouble                   y1      = 0;
+  gdouble                   x2      = 0;
+  gdouble                   y2      = 0;
 
   gimp_tool_rectangle_get_public_rect (rectangle, &x1, &y1, &x2, &y2);
 
@@ -2431,7 +2437,10 @@ gimp_tool_rectangle_coord_on_handle (GimpToolRectangle *rectangle,
 {
   GimpToolRectanglePrivate *private = rectangle->private;
   GimpDisplayShell         *shell;
-  gdouble                   x1, y1, x2, y2;
+  gdouble                   x1 = 0;
+  gdouble                   y1 = 0;
+  gdouble                   x2 = 0;
+  gdouble                   y2 = 0;
   gdouble                   rect_w, rect_h;
   gdouble                   handle_x          = 0;
   gdouble                   handle_y          = 0;
@@ -2833,7 +2842,10 @@ gimp_tool_rectangle_setup_snap_offsets (GimpToolRectangle *rectangle,
 {
   GimpToolWidget           *widget  = GIMP_TOOL_WIDGET (rectangle);
   GimpToolRectanglePrivate *private = rectangle->private;
-  gdouble                   x1, y1, x2, y2;
+  gdouble                   x1      = 0;
+  gdouble                   y1      = 0;
+  gdouble                   x2      = 0;
+  gdouble                   y2      = 0;
   gdouble                   coord_x, coord_y;
 
   gimp_tool_rectangle_get_public_rect (rectangle, &x1, &y1, &x2, &y2);
@@ -3765,14 +3777,29 @@ gimp_tool_rectangle_get_constraints (GimpToolRectangle       *rectangle,
     case GIMP_RECTANGLE_CONSTRAIN_DRAWABLE:
       if (image)
         {
-          GimpItem *item = GIMP_ITEM (gimp_image_get_active_drawable (image));
+          GList *items = gimp_image_get_selected_drawables (image);
+          GList *iter;
 
-          if (item)
+          if (items != NULL)
+            gimp_item_get_offset (items->data, min_x, min_y);
+
+          /* Min and max constraints are respectively the smallest and
+           * highest drawable coordinates.
+           */
+          for (iter = items; iter; iter = iter->next)
             {
-              gimp_item_get_offset (item, min_x, min_y);
-              *max_x = *min_x + gimp_item_get_width  (item);
-              *max_y = *min_y + gimp_item_get_height (item);
+              gint item_min_x;
+              gint item_min_y;
+
+              gimp_item_get_offset (iter->data, &item_min_x, &item_min_y);
+
+              *min_x = MIN (*min_x, item_min_x);
+              *min_y = MIN (*min_y, item_min_y);
+              *max_x = MAX (*max_x, item_min_x + gimp_item_get_width  (iter->data));
+              *max_y = MAX (*max_y, item_min_y + gimp_item_get_height (iter->data));
             }
+
+          g_list_free (items);
         }
       break;
 
@@ -3847,7 +3874,7 @@ gimp_tool_rectangle_update_int_rect (GimpToolRectangle *rectangle)
  * @ccoord_x_output:
  * @ccoord_x_output:
  *
- * Transforms a coordinate to better fit the public behaviour of the
+ * Transforms a coordinate to better fit the public behavior of the
  * rectangle.
  */
 static void
@@ -4072,17 +4099,35 @@ gimp_tool_rectangle_constraint_size_set (GimpToolRectangle *rectangle,
         {
         case GIMP_RECTANGLE_CONSTRAIN_DRAWABLE:
           {
-            GimpItem *item = GIMP_ITEM (gimp_image_get_active_layer (image));
+            GList *items = gimp_image_get_selected_layers (image);
+            GList *iter;
 
-            if (! item)
+            width  = 0.0;
+            height = 0.0;
+            for (iter = items; iter; iter = iter->next)
               {
-                width  = 1.0;
-                height = 1.0;
+                if (width == 0.0 || height == 0.0)
+                  {
+                    width  = gimp_item_get_width  (iter->data);
+                    height = gimp_item_get_height (iter->data);
+                  }
+                else if (width  != gimp_item_get_width  (iter->data) ||
+                         height != gimp_item_get_height (iter->data))
+                  {
+                    width  = 0.0;
+                    height = 0.0;
+                    break;
+                  }
               }
-            else
+
+            /* Set constraint to the selected layers' dimensions if all
+             * selected layers have the same dimension. Otherwise set to
+             * image dimensions.
+             */
+            if (width == 0.0 || height == 0.0)
               {
-                width  = gimp_item_get_width  (item);
-                height = gimp_item_get_height (item);
+                width  = gimp_image_get_width  (image);
+                height = gimp_image_get_height (image);
               }
           }
           break;
@@ -4150,7 +4195,10 @@ gimp_tool_rectangle_point_in_rectangle (GimpToolRectangle *rectangle,
                                         gdouble            x,
                                         gdouble            y)
 {
-  gdouble  x1, y1, x2, y2;
+  gdouble x1 = 0;
+  gdouble y1 = 0;
+  gdouble x2 = 0;
+  gdouble y2 = 0;
 
   g_return_val_if_fail (GIMP_IS_TOOL_RECTANGLE (rectangle), FALSE);
 
@@ -4175,11 +4223,12 @@ void
 gimp_tool_rectangle_frame_item (GimpToolRectangle *rectangle,
                                 GimpItem          *item)
 {
-  GimpDisplayShell *shell;
-  gint              offset_x;
-  gint              offset_y;
-  gint              width;
-  gint              height;
+  GimpDisplayShell      *shell;
+  gint                   offset_x;
+  gint                   offset_y;
+  gint                   width;
+  gint                   height;
+  GimpRectangleFunction  old_function;
 
   g_return_if_fail (GIMP_IS_TOOL_RECTANGLE (rectangle));
   g_return_if_fail (GIMP_IS_ITEM (item));
@@ -4195,6 +4244,7 @@ gimp_tool_rectangle_frame_item (GimpToolRectangle *rectangle,
 
   gimp_item_get_offset (item, &offset_x, &offset_y);
 
+  old_function = rectangle->private->function;
   gimp_tool_rectangle_set_function (rectangle, GIMP_TOOL_RECTANGLE_CREATING);
 
   g_object_set (rectangle,
@@ -4208,6 +4258,7 @@ gimp_tool_rectangle_frame_item (GimpToolRectangle *rectangle,
    * if this function is ever moved out of the text tool code.
    */
   gimp_tool_rectangle_set_constraint (rectangle, GIMP_RECTANGLE_CONSTRAIN_NONE);
+  gimp_tool_rectangle_set_function (rectangle, old_function);
 }
 
 void
@@ -4217,15 +4268,10 @@ gimp_tool_rectangle_auto_shrink (GimpToolRectangle *rectangle,
   GimpToolRectanglePrivate *private;
   GimpDisplayShell         *shell;
   GimpImage                *image;
-  GimpPickable             *pickable;
-  gint                      offset_x = 0;
-  gint                      offset_y = 0;
-  gint                      x1, y1;
-  gint                      x2, y2;
-  gint                      shrunk_x;
-  gint                      shrunk_y;
-  gint                      shrunk_width;
-  gint                      shrunk_height;
+  GList                    *pickables = NULL;
+  GList                    *iter;
+  gdouble                   new_x1, new_y1;
+  gdouble                   new_x2, new_y2;
 
   g_return_if_fail (GIMP_IS_TOOL_RECTANGLE (rectangle));
 
@@ -4235,58 +4281,84 @@ gimp_tool_rectangle_auto_shrink (GimpToolRectangle *rectangle,
   image = gimp_display_get_image (shell->display);
 
   if (shrink_merged)
-    {
-      pickable = GIMP_PICKABLE (image);
-
-      x1 = private->x1;
-      y1 = private->y1;
-      x2 = private->x2;
-      y2 = private->y2;
-    }
+    pickables = g_list_prepend (NULL, image);
   else
+    pickables = gimp_image_get_selected_drawables (image);
+
+  if (! pickables)
+    return;
+
+  new_x1 = new_y1 = G_MAXINT;
+  new_x2 = new_y2 = G_MININT;
+  for (iter = pickables; iter; iter = iter->next)
     {
-      pickable = GIMP_PICKABLE (gimp_image_get_active_drawable (image));
+      gint x1, y1;
+      gint x2, y2;
+      gint offset_x = 0;
+      gint offset_y = 0;
+      gint shrunk_x;
+      gint shrunk_y;
+      gint shrunk_width;
+      gint shrunk_height;
 
-      if (! pickable)
-        return;
+      if (GIMP_IS_IMAGE (iter->data))
+        {
+          x1 = private->x1;
+          y1 = private->y1;
+          x2 = private->x2;
+          y2 = private->y2;
+        }
+      else
+        {
+          gimp_item_get_offset (GIMP_ITEM (iter->data), &offset_x, &offset_y);
 
-      gimp_item_get_offset (GIMP_ITEM (pickable), &offset_x, &offset_y);
+          x1 = private->x1 - offset_x;
+          y1 = private->y1 - offset_y;
+          x2 = private->x2 - offset_x;
+          y2 = private->y2 - offset_y;
+        }
 
-      x1 = private->x1 - offset_x;
-      y1 = private->y1 - offset_y;
-      x2 = private->x2 - offset_x;
-      y2 = private->y2 - offset_y;
+      switch (gimp_pickable_auto_shrink (iter->data,
+                                         x1, y1, x2 - x1, y2 - y1,
+                                         &shrunk_x,
+                                         &shrunk_y,
+                                         &shrunk_width,
+                                         &shrunk_height))
+        {
+        case GIMP_AUTO_SHRINK_SHRINK:
+            {
+              new_x1 = MIN (new_x1, offset_x + shrunk_x);
+              new_y1 = MIN (new_y1, offset_y + shrunk_y);
+              new_x2 = MAX (new_x2, offset_x + shrunk_x + shrunk_width);
+              new_y2 = MAX (new_y2, offset_y + shrunk_y + shrunk_height);
+            }
+          break;
+
+        default:
+          break;
+        }
     }
 
-  switch (gimp_pickable_auto_shrink (pickable,
-                                     x1, y1, x2 - x1, y2 - y1,
-                                     &shrunk_x,
-                                     &shrunk_y,
-                                     &shrunk_width,
-                                     &shrunk_height))
+  if (new_x1 != G_MAXINT && new_y1 != G_MAXINT &&
+      new_x2 != G_MININT && new_y2 != G_MININT)
     {
-    case GIMP_AUTO_SHRINK_SHRINK:
-      {
-        GimpRectangleFunction original_function = private->function;
+      GimpRectangleFunction original_function = private->function;
 
-        private->function = GIMP_TOOL_RECTANGLE_AUTO_SHRINK;
+      private->function = GIMP_TOOL_RECTANGLE_AUTO_SHRINK;
 
-        private->x1 = offset_x + shrunk_x;
-        private->y1 = offset_y + shrunk_y;
-        private->x2 = offset_x + shrunk_x + shrunk_width;
-        private->y2 = offset_y + shrunk_y + shrunk_height;
+      private->x1 = new_x1;
+      private->y1 = new_y1;
+      private->x2 = new_x2;
+      private->y2 = new_y2;
 
-        gimp_tool_rectangle_update_int_rect (rectangle);
+      gimp_tool_rectangle_update_int_rect (rectangle);
 
-        gimp_tool_rectangle_change_complete (rectangle);
+      gimp_tool_rectangle_change_complete (rectangle);
 
-        private->function = original_function;
+      private->function = original_function;
 
-        gimp_tool_rectangle_update_options (rectangle);
-      }
-      break;
-
-    default:
-      break;
+      gimp_tool_rectangle_update_options (rectangle);
     }
+
+  g_list_free (pickables);
 }

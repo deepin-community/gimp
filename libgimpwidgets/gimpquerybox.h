@@ -35,7 +35,7 @@ G_BEGIN_DECLS
  * GimpQueryStringCallback:
  * @query_box: The query box.
  * @string:    The entered string.
- * @data:      The user data.
+ * @data: (closure): user data.
  *
  * Note that you must not g_free() the passed string.
  **/
@@ -47,7 +47,7 @@ typedef void (* GimpQueryStringCallback)  (GtkWidget   *query_box,
  * GimpQueryIntCallback:
  * @query_box: The query box.
  * @value:     The entered integer value.
- * @data:      The user data.
+ * @data: (closure): user data.
  *
  * The callback for an int query box.
  **/
@@ -59,7 +59,7 @@ typedef void (* GimpQueryIntCallback)     (GtkWidget   *query_box,
  * GimpQueryDoubleCallback:
  * @query_box: The query box.
  * @value:     The entered double value.
- * @data:      The user data.
+ * @data: (closure): user data.
  *
  * The callback for a double query box.
  **/
@@ -72,20 +72,20 @@ typedef void (* GimpQueryDoubleCallback)  (GtkWidget   *query_box,
  * @query_box: The query box.
  * @size:      The entered size in pixels.
  * @unit:      The selected unit from the #GimpUnitMenu.
- * @data:      The user data.
+ * @data: (closure): user data.
  *
  * The callback for a size query box.
  **/
 typedef void (* GimpQuerySizeCallback)    (GtkWidget   *query_box,
                                            gdouble      size,
-                                           GimpUnit     unit,
+                                           GimpUnit    *unit,
                                            gpointer     data);
 
 /**
  * GimpQueryBooleanCallback:
  * @query_box: The query box.
  * @value:     The entered boolean value.
- * @data:      The user data.
+ * @data: (closure): user data.
  *
  * The callback for a boolean query box.
  **/
@@ -98,7 +98,7 @@ typedef void (* GimpQueryBooleanCallback) (GtkWidget   *query_box,
  * GIMP_QUERY_BOX_VBOX:
  * @qbox: The query box.
  *
- * A macro to access the #GtkVBox in a #libgimpwidgets-gimpquerybox.
+ * A macro to access the vertical #GtkBox in a #libgimpwidgets-gimpquerybox.
  * Useful if you want to add more widgets.
  **/
 #define GIMP_QUERY_BOX_VBOX(qbox) g_object_get_data (G_OBJECT (qbox), \
@@ -115,7 +115,8 @@ GtkWidget * gimp_query_string_box  (const gchar              *title,
                                     GObject                  *object,
                                     const gchar              *signal,
                                     GimpQueryStringCallback   callback,
-                                    gpointer                  data);
+                                    gpointer                  data,
+                                    GDestroyNotify            data_destroy);
 
 GtkWidget * gimp_query_int_box     (const gchar              *title,
                                     GtkWidget                *parent,
@@ -128,7 +129,8 @@ GtkWidget * gimp_query_int_box     (const gchar              *title,
                                     GObject                  *object,
                                     const gchar              *signal,
                                     GimpQueryIntCallback      callback,
-                                    gpointer                  data);
+                                    gpointer                  data,
+                                    GDestroyNotify            data_destroy);
 
 GtkWidget * gimp_query_double_box  (const gchar              *title,
                                     GtkWidget                *parent,
@@ -142,7 +144,8 @@ GtkWidget * gimp_query_double_box  (const gchar              *title,
                                     GObject                  *object,
                                     const gchar              *signal,
                                     GimpQueryDoubleCallback   callback,
-                                    gpointer                  data);
+                                    gpointer                  data,
+                                    GDestroyNotify            data_destroy);
 
 GtkWidget * gimp_query_size_box    (const gchar              *title,
                                     GtkWidget                *parent,
@@ -153,13 +156,14 @@ GtkWidget * gimp_query_size_box    (const gchar              *title,
                                     gdouble                   lower,
                                     gdouble                   upper,
                                     gint                      digits,
-                                    GimpUnit                  unit,
+                                    GimpUnit                 *unit,
                                     gdouble                   resolution,
                                     gboolean                  dot_for_dot,
                                     GObject                  *object,
                                     const gchar              *signal,
                                     GimpQuerySizeCallback     callback,
-                                    gpointer                  data);
+                                    gpointer                  data,
+                                    GDestroyNotify            data_destroy);
 
 GtkWidget * gimp_query_boolean_box (const gchar              *title,
                                     GtkWidget                *parent,
@@ -172,7 +176,8 @@ GtkWidget * gimp_query_boolean_box (const gchar              *title,
                                     GObject                  *object,
                                     const gchar              *signal,
                                     GimpQueryBooleanCallback  callback,
-                                    gpointer                  data);
+                                    gpointer                  data,
+                                    GDestroyNotify            data_destroy);
 
 
 G_END_DECLS

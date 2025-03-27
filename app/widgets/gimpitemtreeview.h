@@ -29,6 +29,9 @@ typedef GimpContainer * (* GimpGetContainerFunc) (GimpImage *image);
 typedef GimpItem      * (* GimpGetItemFunc)      (GimpImage *image);
 typedef void            (* GimpSetItemFunc)      (GimpImage *image,
                                                   GimpItem  *item);
+typedef GList         * (* GimpGetItemsFunc)     (GimpImage *image);
+typedef void            (* GimpSetItemsFunc)     (GimpImage *image,
+                                                  GList     *items);
 typedef void            (* GimpAddItemFunc)      (GimpImage *image,
                                                   GimpItem  *item,
                                                   GimpItem  *parent,
@@ -39,6 +42,16 @@ typedef void            (* GimpRemoveItemFunc)   (GimpImage *image,
                                                   gboolean   push_undo,
                                                   GimpItem  *new_active);
 typedef GimpItem      * (* GimpNewItemFunc)      (GimpImage *image);
+
+
+typedef gboolean        (* GimpIsLockedFunc)     (GimpItem  *item);
+typedef gboolean        (* GimpCanLockFunc)      (GimpItem  *item);
+typedef void            (* GimpSetLockFunc)      (GimpItem  *item,
+                                                  gboolean   lock,
+                                                  gboolean   push_undo);
+typedef GimpUndo      * (*GimpUndoLockPush)      (GimpImage     *image,
+                                                  const gchar   *undo_desc,
+                                                  GimpItem      *item);
 
 
 #define GIMP_TYPE_ITEM_TREE_VIEW            (gimp_item_tree_view_get_type ())
@@ -72,8 +85,8 @@ struct _GimpItemTreeViewClass
 
   /*  virtual functions for manipulating the image's item tree  */
   GimpGetContainerFunc  get_container;
-  GimpGetItemFunc       get_active_item;
-  GimpSetItemFunc       set_active_item;
+  GimpGetItemsFunc      get_selected_items;
+  GimpSetItemsFunc      set_selected_items;
   GimpAddItemFunc       add_item;
   GimpRemoveItemFunc    remove_item;
   GimpNewItemFunc       new_item;
@@ -99,6 +112,20 @@ struct _GimpItemTreeViewClass
   const gchar          *lock_position_icon_name;
   const gchar          *lock_position_tooltip;
   const gchar          *lock_position_help_id;
+
+  /* lock visibility button appearance */
+  const gchar          *lock_visibility_icon_name;
+  const gchar          *lock_visibility_tooltip;
+  const gchar          *lock_visibility_help_id;
+
+  /* actions */
+
+  const gchar          *move_cursor_up_action;
+  const gchar          *move_cursor_down_action;
+  const gchar          *move_cursor_up_flat_action;
+  const gchar          *move_cursor_down_flat_action;
+  const gchar          *move_cursor_start_action;
+  const gchar          *move_cursor_end_action;
 };
 
 
@@ -107,6 +134,7 @@ GType       gimp_item_tree_view_get_type          (void) G_GNUC_CONST;
 GtkWidget * gimp_item_tree_view_new               (GType             view_type,
                                                    gint              view_size,
                                                    gint              view_border_width,
+                                                   gboolean          multiple_selection,
                                                    GimpImage        *image,
                                                    GimpMenuFactory  *menu_facotry,
                                                    const gchar      *menu_identifier,
@@ -119,7 +147,22 @@ GimpImage * gimp_item_tree_view_get_image         (GimpItemTreeView *view);
 void        gimp_item_tree_view_add_options       (GimpItemTreeView *view,
                                                    const gchar      *label,
                                                    GtkWidget        *options);
-GtkWidget * gimp_item_tree_view_get_lock_box      (GimpItemTreeView *view);
+void        gimp_item_tree_view_add_lock          (GimpItemTreeView *view,
+                                                   const gchar      *icon_name,
+                                                   GimpIsLockedFunc  is_locked,
+                                                   GimpCanLockFunc   can_lock,
+                                                   GimpSetLockFunc   lock,
+                                                   GimpUndoLockPush  undo_push,
+                                                   const gchar      *signal_name,
+                                                   GimpUndoType      undo_type,
+                                                   GimpUndoType      group_undo_type,
+                                                   const gchar      *undo_lock_label,
+                                                   const gchar      *undo_unlock_label,
+                                                   const gchar      *undo_exclusive_desc,
+                                                   const gchar      *tooltip,
+                                                   const gchar      *help_id);
+void        gimp_item_tree_view_blink_lock        (GimpItemTreeView *view,
+                                                   GimpItem         *item);
 
 GtkWidget * gimp_item_tree_view_get_new_button    (GimpItemTreeView *view);
 GtkWidget * gimp_item_tree_view_get_delete_button (GimpItemTreeView *view);

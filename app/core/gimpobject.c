@@ -27,7 +27,6 @@
 #include "core-types.h"
 
 #include "gimp-memsize.h"
-#include "gimpmarshal.h"
 #include "gimpobject.h"
 
 #include "gimp-debug.h"
@@ -43,9 +42,9 @@ enum
 enum
 {
   PROP_0,
-  PROP_NAME
+  PROP_NAME,
+  N_PROPS
 };
-
 
 struct _GimpObjectPrivate
 {
@@ -78,6 +77,7 @@ G_DEFINE_TYPE_WITH_CODE (GimpObject, gimp_object, G_TYPE_OBJECT,
 #define parent_class gimp_object_parent_class
 
 static guint object_signals[LAST_SIGNAL] = { 0 };
+static GParamSpec *object_props[N_PROPS] = { NULL, };
 
 
 static void
@@ -92,8 +92,7 @@ gimp_object_class_init (GimpObjectClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpObjectClass, disconnect),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_signals[NAME_CHANGED] =
@@ -101,8 +100,7 @@ gimp_object_class_init (GimpObjectClass *klass)
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpObjectClass, name_changed),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->constructed  = gimp_object_constructed;
@@ -115,12 +113,13 @@ gimp_object_class_init (GimpObjectClass *klass)
   klass->name_changed        = NULL;
   klass->get_memsize         = gimp_object_real_get_memsize;
 
-  g_object_class_install_property (object_class, PROP_NAME,
-                                   g_param_spec_string ("name",
-                                                        NULL, NULL,
-                                                        NULL,
-                                                        GIMP_PARAM_READWRITE |
-                                                        G_PARAM_CONSTRUCT));
+  object_props[PROP_NAME] = g_param_spec_string ("name",
+                                                 NULL, NULL,
+                                                 NULL,
+                                                 GIMP_PARAM_READWRITE |
+                                                 G_PARAM_CONSTRUCT);
+
+  g_object_class_install_properties (object_class, N_PROPS, object_props);
 }
 
 static void
@@ -209,7 +208,7 @@ gimp_object_get_property (GObject    *object,
 /**
  * gimp_object_set_name:
  * @object: a #GimpObject
- * @name: the @object's new name
+ * @name: the @object's new name (transfer none)
  *
  * Sets the @object's name. Takes care of freeing the old name and
  * emitting the ::name_changed signal if the old and new name differ.
@@ -229,13 +228,13 @@ gimp_object_set_name (GimpObject  *object,
   object->p->static_name = FALSE;
 
   gimp_object_name_changed (object);
-  g_object_notify (G_OBJECT (object), "name");
+  g_object_notify_by_pspec (G_OBJECT (object), object_props[PROP_NAME]);
 }
 
 /**
  * gimp_object_set_name_safe:
  * @object: a #GimpObject
- * @name: the @object's new name
+ * @name: the @object's new name (transfer none)
  *
  * A safe version of gimp_object_set_name() that takes care of
  * handling newlines and overly long names. The actual name set
@@ -256,9 +255,22 @@ gimp_object_set_name_safe (GimpObject  *object,
   object->p->static_name = FALSE;
 
   gimp_object_name_changed (object);
-  g_object_notify (G_OBJECT (object), "name");
+  g_object_notify_by_pspec (G_OBJECT (object), object_props[PROP_NAME]);
 }
 
+/**
+ * gimp_object_set_static_name:
+ * @object: a #GimpObject
+ * @name: the @object's new name as a static string
+ *
+ * Sets the @object's name.
+ * Takes care of freeing the old name (when it was not statically set)
+ * and emits the ::name_changed signal if the old and new name differ.
+ *
+ * This function is a variant of gimp_object_set_name() which assumes that
+ * the string is static and optimizes for this use case.
+ * Do not ever use this function with allocated strings.
+ **/
 void
 gimp_object_set_static_name (GimpObject  *object,
                              const gchar *name)
@@ -274,9 +286,23 @@ gimp_object_set_static_name (GimpObject  *object,
   object->p->static_name = TRUE;
 
   gimp_object_name_changed (object);
-  g_object_notify (G_OBJECT (object), "name");
+  g_object_notify_by_pspec (G_OBJECT (object), object_props[PROP_NAME]);
 }
 
+/**
+ * gimp_object_take_name:
+ * @object: a #GimpObject
+ * @name: the @object's new name (transfer full)
+ *
+ * Sets the @object's name. Takes care of freeing the old name and
+ * emitting the ::name_changed signal if the old and new name differ.
+ *
+ * Only use this function with GLib allocated strings.
+ *
+ * GimpObject will own the @name pointer and will dispose it when
+ * no longer needed or when it is the same as stored name.
+ * Calling code should *not* g_free() passed @name at all.
+ **/
 void
 gimp_object_take_name (GimpObject *object,
                        gchar      *name)
@@ -295,7 +321,7 @@ gimp_object_take_name (GimpObject *object,
   object->p->static_name = FALSE;
 
   gimp_object_name_changed (object);
-  g_object_notify (G_OBJECT (object), "name");
+  g_object_notify_by_pspec (G_OBJECT (object), object_props[PROP_NAME]);
 }
 
 /**
@@ -305,7 +331,7 @@ gimp_object_take_name (GimpObject *object,
  * This function gives access to the name of a GimpObject. The
  * returned name belongs to the object and must not be freed.
  *
- * Return value: a pointer to the @object's name
+ * Returns: a pointer to the @object's name
  **/
 const gchar *
 gimp_object_get_name (gconstpointer object)
@@ -372,7 +398,7 @@ gimp_object_name_free (GimpObject *object)
  * correct rules for the current locale. It caches the normalized
  * version of the object name to speed up subsequent calls.
  *
- * Return value: -1 if object1 compares before object2,
+ * Returns: -1 if object1 compares before object2,
  *                0 if they compare equal,
  *                1 if object1 compares after object2.
  **/

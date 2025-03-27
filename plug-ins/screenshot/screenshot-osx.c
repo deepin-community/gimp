@@ -74,42 +74,45 @@ screenshot_osx_get_capabilities (void)
 }
 
 GimpPDBStatusType
-screenshot_osx_shoot (ScreenshotValues  *shootvals,
-                      GdkScreen         *screen,
-                      gint32            *image_ID,
-                      GError           **error)
+screenshot_osx_shoot (ShootType   shoot_type,
+                      guint       select_delay,
+                      guint       screenshot_delay,
+                      gboolean    decorate,
+                      gboolean    show_cursor,
+                      GimpImage **image,
+                      GError    **error)
 {
   const gchar *mode    = " ";
   const gchar *cursor  = " ";
   gchar       *delay   = NULL;
-  gchar       *filename;
+  GFile       *tmpfile;
   gchar       *quoted;
   gchar       *command = NULL;
 
-  switch (shootvals->shoot_type)
+  switch (shoot_type)
     {
     case SHOOT_REGION:
-      if (shootvals->select_delay > 0)
-        screenshot_delay (shootvals->select_delay);
+      if (select_delay > 0)
+        screenshot_wait_delay (select_delay);
 
       mode = "-is";
       break;
 
     case SHOOT_WINDOW:
-      if (shootvals->select_delay > 0)
-        screenshot_delay (shootvals->select_delay);
+      if (select_delay > 0)
+        screenshot_wait_delay (select_delay);
 
-      if (shootvals->decorate)
+      if (decorate)
         mode = "-iwo";
       else
         mode = "-iw";
-      if (shootvals->show_cursor)
+      if (show_cursor)
         cursor = "-C";
       break;
 
     case SHOOT_ROOT:
       mode = " ";
-      if (shootvals->show_cursor)
+      if (show_cursor)
         cursor = "-C";
       break;
 
@@ -118,10 +121,10 @@ screenshot_osx_shoot (ScreenshotValues  *shootvals,
       break;
     }
 
-  delay = g_strdup_printf ("-T %i", shootvals->screenshot_delay);
+  delay = g_strdup_printf ("-T %i", screenshot_delay);
 
-  filename = gimp_temp_name ("png");
-  quoted   = g_shell_quote (filename);
+  tmpfile = gimp_temp_file ("png");
+  quoted  = g_shell_quote (g_file_peek_path (tmpfile));
 
   command = g_strjoin (" ",
                        "/usr/sbin/screencapture",
@@ -139,19 +142,16 @@ screenshot_osx_shoot (ScreenshotValues  *shootvals,
       /* don't attach a profile, screencapture attached one
        */
 
-      *image_ID = gimp_file_load (GIMP_RUN_NONINTERACTIVE,
-                                  filename, filename);
-      gimp_image_set_filename (*image_ID, "screenshot.png");
+      *image = gimp_file_load (GIMP_RUN_NONINTERACTIVE,
+                               tmpfile);
 
-      g_unlink (filename);
-      g_free (filename);
+      g_file_delete (tmpfile, NULL, NULL);
       g_free (command);
 
       return GIMP_PDB_SUCCESS;
    }
 
   g_free (command);
-  g_free (filename);
 
   return GIMP_PDB_EXECUTION_ERROR;
 }

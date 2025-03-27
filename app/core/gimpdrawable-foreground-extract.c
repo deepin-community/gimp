@@ -117,18 +117,15 @@ gimp_drawable_foreground_extract (GimpDrawable      *drawable,
                                   "y", 1.0 * off_y,
                                   NULL);
 
-      gegl_node_connect_to (trimap_node,   "output", pre, "input");
-      gegl_node_connect_to (pre,  "output", matting_node, "aux");
+      gegl_node_link (trimap_node, pre);
+      gegl_node_connect (pre,  "output", matting_node, "aux");
       gegl_node_link_many (input_node, matting_node, post, output_node, NULL);
     }
   else
     {
-      gegl_node_connect_to (input_node,   "output",
-                            matting_node, "input");
-      gegl_node_connect_to (trimap_node,  "output",
-                            matting_node, "aux");
-      gegl_node_connect_to (matting_node, "output",
-                            output_node,  "input");
+      gegl_node_connect (input_node,   "output", matting_node, "input");
+      gegl_node_connect (trimap_node,  "output", matting_node, "aux");
+      gegl_node_connect (matting_node, "output", output_node,  "input");
     }
 
   processor = gegl_node_new_processor (output_node, NULL);

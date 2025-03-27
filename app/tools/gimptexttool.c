@@ -35,6 +35,8 @@
 #include "core/gimpasyncset.h"
 #include "core/gimpcontext.h"
 #include "core/gimpdatafactory.h"
+#include "core/gimpdrawable-filters.h"
+#include "core/gimpdrawablefilter.h"
 #include "core/gimperror.h"
 #include "core/gimpimage.h"
 #include "core/gimp-palettes.h"
@@ -42,19 +44,21 @@
 #include "core/gimpimage-undo.h"
 #include "core/gimpimage-undo-push.h"
 #include "core/gimplayer-floating-selection.h"
-#include "core/gimpmarshal.h"
+#include "core/gimplist.h"
 #include "core/gimptoolinfo.h"
 #include "core/gimpundostack.h"
 
+#include "menus/menus.h"
+
 #include "text/gimptext.h"
-#include "text/gimptext-vectors.h"
+#include "text/gimptext-path.h"
 #include "text/gimptextlayer.h"
 #include "text/gimptextlayout.h"
 #include "text/gimptextundo.h"
 
 #include "vectors/gimpstroke.h"
-#include "vectors/gimpvectors.h"
-#include "vectors/gimpvectors-warp.h"
+#include "vectors/gimppath.h"
+#include "vectors/gimppath-warp.h"
 
 #include "widgets/gimpdialogfactory.h"
 #include "widgets/gimpdockcontainer.h"
@@ -191,7 +195,7 @@ static void    gimp_text_tool_buffer_end_edit   (GimpTextBuffer    *buffer,
 
 static void    gimp_text_tool_buffer_color_applied
                                                 (GimpTextBuffer    *buffer,
-                                                 const GimpRGB     *color,
+                                                 GeglColor         *color,
                                                  GimpTextTool      *text_tool);
 
 
@@ -276,7 +280,7 @@ gimp_text_tool_init (GimpTextTool *text_tool)
   gimp_tool_control_set_tool_cursor          (tool->control,
                                               GIMP_TOOL_CURSOR_TEXT);
   gimp_tool_control_set_action_object_1      (tool->control,
-                                              "context/context-font-select-set");
+                                              "context-font-select-set");
 }
 
 static void
@@ -289,7 +293,7 @@ gimp_text_tool_constructed (GObject *object)
 
   G_OBJECT_CLASS (parent_class)->constructed (object);
 
-  text_tool->proxy = g_object_new (GIMP_TYPE_TEXT, NULL);
+  text_tool->proxy = g_object_new (GIMP_TYPE_TEXT, "gimp", tool->tool_info->gimp, NULL);
 
   gimp_text_options_connect_text (options, text_tool->proxy);
 
@@ -313,7 +317,6 @@ gimp_text_tool_finalize (GObject *object)
 
   g_clear_object (&text_tool->proxy);
   g_clear_object (&text_tool->buffer);
-  g_clear_object (&text_tool->ui_manager);
 
   gimp_text_tool_editor_finalize (text_tool);
 
@@ -488,12 +491,15 @@ gimp_text_tool_button_press (GimpTool            *tool,
 
           if (text_layer && text_layer != text_tool->layer)
             {
+              GList *selection = g_list_prepend (NULL, text_layer);
+
               if (text_tool->image == image)
                 g_signal_handlers_block_by_func (image,
                                                  gimp_text_tool_layer_changed,
                                                  text_tool);
 
-              gimp_image_set_active_layer (image, GIMP_LAYER (text_layer));
+              gimp_image_set_selected_layers (image, selection);
+              g_list_free (selection);
 
               if (text_tool->image == image)
                 g_signal_handlers_unblock_by_func (image,
@@ -505,13 +511,25 @@ gimp_text_tool_button_press (GimpTool            *tool,
 
   if (gimp_image_coords_in_active_pickable (image, coords, FALSE, FALSE, FALSE))
     {
-      GimpDrawable *drawable = gimp_image_get_active_drawable (image);
-      GimpItem     *item     = GIMP_ITEM (drawable);
-      gdouble       x        = coords->x - gimp_item_get_offset_x (item);
-      gdouble       y        = coords->y - gimp_item_get_offset_y (item);
+      GList        *drawables = gimp_image_get_selected_drawables (image);
+      GimpDrawable *drawable  = NULL;
+      gdouble       x         = coords->x;
+      gdouble       y         = coords->y;
+
+      if (g_list_length (drawables) == 1)
+        {
+          GimpItem *item = GIMP_ITEM (drawables->data);
+
+          x = coords->x - gimp_item_get_offset_x (item);
+          y = coords->y - gimp_item_get_offset_y (item);
+
+          drawable = drawables->data;
+        }
+      g_list_free (drawables);
 
       /*  did the user click on a text layer?  */
-      if (gimp_text_tool_set_drawable (text_tool, drawable, TRUE))
+      if (drawable &&
+          gimp_text_tool_set_drawable (text_tool, drawable, TRUE))
         {
           if (press_type == GIMP_BUTTON_PRESS_NORMAL)
             {
@@ -822,45 +840,17 @@ gimp_text_tool_get_popup (GimpTool         *tool,
                                               coords->x,
                                               coords->y))
     {
-      if (! text_tool->ui_manager)
-        {
-          GimpDisplayShell  *shell = gimp_display_get_shell (tool->display);
-          GimpImageWindow   *image_window;
-          GimpDialogFactory *dialog_factory;
-          GtkWidget         *im_menu;
-          GList             *children;
+      GimpMenuFactory *menu_factory;
+      GimpUIManager   *ui_manager;
 
-          image_window   = gimp_display_shell_get_window (shell);
-          dialog_factory = gimp_dock_container_get_dialog_factory (GIMP_DOCK_CONTAINER (image_window));
+      menu_factory = menus_get_global_menu_factory (tool->tool_info->gimp);
+      ui_manager   = gimp_menu_factory_get_manager (menu_factory, "<TextTool>", text_tool);
 
-          text_tool->ui_manager =
-            gimp_menu_factory_manager_new (gimp_dialog_factory_get_menu_factory (dialog_factory),
-                                           "<TextTool>",
-                                           text_tool, FALSE);
-
-          im_menu = gimp_ui_manager_get_widget (text_tool->ui_manager,
-                                                "/text-tool-popup/text-tool-input-methods-menu");
-
-          if (GTK_IS_MENU_ITEM (im_menu))
-            im_menu = gtk_menu_item_get_submenu (GTK_MENU_ITEM (im_menu));
-
-          /*  hide the generated "empty" item  */
-          children = gtk_container_get_children (GTK_CONTAINER (im_menu));
-          while (children)
-            {
-              gtk_widget_hide (children->data);
-              children = g_list_remove (children, children->data);
-            }
-
-          gtk_im_multicontext_append_menuitems (GTK_IM_MULTICONTEXT (text_tool->im_context),
-                                                GTK_MENU_SHELL (im_menu));
-        }
-
-      gimp_ui_manager_update (text_tool->ui_manager, text_tool);
+      gimp_ui_manager_update (ui_manager, text_tool);
 
       *ui_path = "/text-tool-popup";
 
-      return text_tool->ui_manager;
+      return ui_manager;
     }
 
   return NULL;
@@ -1087,8 +1077,9 @@ gimp_text_tool_halt (GimpTextTool *text_tool)
   gimp_draw_tool_set_widget (GIMP_DRAW_TOOL (tool), NULL);
   g_clear_object (&text_tool->widget);
 
-  tool->display  = NULL;
-  tool->drawable = NULL;
+  tool->display   = NULL;
+  g_list_free (tool->drawables);
+  tool->drawables = NULL;
 }
 
 static void
@@ -1100,6 +1091,26 @@ gimp_text_tool_frame_item (GimpTextTool *text_tool)
 
   gimp_tool_rectangle_frame_item (GIMP_TOOL_RECTANGLE (text_tool->widget),
                                   GIMP_ITEM (text_tool->layer));
+
+  /* Update crop of any filters applied to text */
+  if (text_tool->layer)
+  {
+    GList         *list;
+    GimpDrawable  *drawable = GIMP_DRAWABLE (text_tool->layer);
+    GimpContainer *filters  = gimp_drawable_get_filters (drawable);
+
+    for (list = GIMP_LIST (filters)->queue->tail;
+         list; list = g_list_previous (list))
+      {
+        GimpDrawableFilter *filter = list->data;
+
+        /* TODO: Handle partial layer effect */
+        gimp_drawable_filter_set_region (filter, GIMP_FILTER_REGION_SELECTION);
+        gimp_drawable_filter_set_region (filter, GIMP_FILTER_REGION_DRAWABLE);
+      }
+    if (list)
+      g_list_free (list);
+  }
 
   text_tool->handle_rectangle_change_complete = TRUE;
 }
@@ -1152,7 +1163,7 @@ gimp_text_tool_rectangle_change_complete (GimpToolRectangle *rectangle,
       if ((x2 - x1) != gimp_item_get_width  (item) ||
           (y2 - y1) != gimp_item_get_height (item))
         {
-          GimpUnit  box_unit = text_tool->proxy->box_unit;
+          GimpUnit *box_unit = text_tool->proxy->box_unit;
           gdouble   xres, yres;
           gboolean  push_undo = TRUE;
           GimpUndo *undo;
@@ -1670,8 +1681,8 @@ gimp_text_tool_create_layer (GimpTextTool *text_tool,
 
   if (text_tool->text_box_fixed)
     {
-      GimpUnit box_unit = text_tool->proxy->box_unit;
-      gdouble  xres, yres;
+      GimpUnit *box_unit = text_tool->proxy->box_unit;
+      gdouble   xres, yres;
 
       gimp_image_get_resolution (image, &xres, &yres);
 
@@ -1750,7 +1761,7 @@ gimp_text_tool_confirm_dialog (GimpTextTool *text_tool)
       return;
     }
 
-  dialog = gimp_viewable_dialog_new (GIMP_VIEWABLE (text_tool->layer),
+  dialog = gimp_viewable_dialog_new (g_list_prepend (NULL, text_tool->layer),
                                      GIMP_CONTEXT (gimp_tool_get_options (tool)),
                                      _("Confirm Text Editing"),
                                      "gimp-text-tool-confirm",
@@ -1765,7 +1776,7 @@ gimp_text_tool_confirm_dialog (GimpTextTool *text_tool)
 
                                      NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            RESPONSE_NEW,
                                            GTK_RESPONSE_ACCEPT,
                                            GTK_RESPONSE_CANCEL,
@@ -1807,18 +1818,27 @@ static void
 gimp_text_tool_layer_changed (GimpImage    *image,
                               GimpTextTool *text_tool)
 {
-  GimpLayer *layer = gimp_image_get_active_layer (image);
+  GList *layers = gimp_image_get_selected_layers (image);
 
-  if (layer != GIMP_LAYER (text_tool->layer))
+  if (g_list_length (layers) != 1 || layers->data != text_tool->layer)
     {
       GimpTool    *tool    = GIMP_TOOL (text_tool);
       GimpDisplay *display = tool->display;
 
       if (display)
         {
+          GimpLayer *layer = NULL;
+
           gimp_tool_control (tool, GIMP_TOOL_ACTION_HALT, display);
 
-          if (gimp_text_tool_set_drawable (text_tool, GIMP_DRAWABLE (layer),
+          if (g_list_length (layers) == 1)
+            layer = layers->data;
+
+          /* The tool can only be started when a single layer is
+           * selected and this is a text layer.
+           */
+          if (layer &&
+              gimp_text_tool_set_drawable (text_tool, GIMP_DRAWABLE (layer),
                                            FALSE) &&
               GIMP_LAYER (text_tool->layer) == layer)
             {
@@ -1851,12 +1871,9 @@ gimp_text_tool_set_image (GimpTextTool *text_tool,
       g_signal_handlers_disconnect_by_func (text_tool->image,
                                             gimp_text_tool_layer_changed,
                                             text_tool);
-
-      g_object_remove_weak_pointer (G_OBJECT (text_tool->image),
-                                    (gpointer) &text_tool->image);
     }
 
-  text_tool->image = image;
+  g_set_weak_pointer (&text_tool->image, image);
 
   if (image)
     {
@@ -1864,10 +1881,7 @@ gimp_text_tool_set_image (GimpTextTool *text_tool,
       gdouble          xres;
       gdouble          yres;
 
-      g_object_add_weak_pointer (G_OBJECT (text_tool->image),
-                                 (gpointer) &text_tool->image);
-
-      g_signal_connect_object (text_tool->image, "active-layer-changed",
+      g_signal_connect_object (text_tool->image, "selected-layers-changed",
                                G_CALLBACK (gimp_text_tool_layer_changed),
                                text_tool, 0);
 
@@ -1988,11 +2002,10 @@ gimp_text_tool_buffer_end_edit (GimpTextBuffer *buffer,
 
 static void
 gimp_text_tool_buffer_color_applied (GimpTextBuffer *buffer,
-                                     const GimpRGB  *color,
+                                     GeglColor      *color,
                                      GimpTextTool   *text_tool)
 {
-  gimp_palettes_add_color_history (GIMP_TOOL (text_tool)->tool_info->gimp,
-                                   color);
+  gimp_palettes_add_color_history (GIMP_TOOL (text_tool)->tool_info->gimp, color);
 }
 
 
@@ -2017,7 +2030,7 @@ gimp_text_tool_ensure_layout (GimpTextTool *text_tool)
       gimp_image_get_resolution (image, &xres, &yres);
 
       text_tool->layout = gimp_text_layout_new (text_tool->layer->text,
-                                                xres, yres, &error);
+                                                image, xres, yres, &error);
       if (error)
         {
           gimp_message_literal (image->gimp, NULL, GIMP_MESSAGE_ERROR, error->message);
@@ -2112,7 +2125,8 @@ gimp_text_tool_apply (GimpTextTool *text_tool,
                                              GIMP_DRAWABLE (layer), TRUE);
         }
 
-      gimp_image_undo_push_text_layer (image, NULL, layer, pspec);
+      if (pspec)
+        gimp_image_undo_push_text_layer (image, NULL, layer, pspec);
     }
 
   gimp_text_tool_apply_list (text_tool, list);
@@ -2199,7 +2213,8 @@ gimp_text_tool_set_layer (GimpTextTool *text_tool,
               return FALSE;
             }
 
-          tool->drawable = GIMP_DRAWABLE (layer);
+          g_list_free (tool->drawables);
+          tool->drawables = g_list_prepend (NULL, GIMP_DRAWABLE (layer));
         }
     }
 
@@ -2298,52 +2313,68 @@ gimp_text_tool_paste_clipboard (GimpTextTool *text_tool)
 void
 gimp_text_tool_create_vectors (GimpTextTool *text_tool)
 {
-  GimpVectors *vectors;
+  GimpPath *path;
 
   g_return_if_fail (GIMP_IS_TEXT_TOOL (text_tool));
 
   if (! text_tool->text || ! text_tool->image)
     return;
 
-  vectors = gimp_text_vectors_new (text_tool->image, text_tool->text);
+  path = gimp_text_path_new (text_tool->image, text_tool->text);
 
   if (text_tool->layer)
     {
       gint x, y;
 
       gimp_item_get_offset (GIMP_ITEM (text_tool->layer), &x, &y);
-      gimp_item_translate (GIMP_ITEM (vectors), x, y, FALSE);
+      gimp_item_translate (GIMP_ITEM (path), x, y, FALSE);
     }
 
-  gimp_image_add_vectors (text_tool->image, vectors,
+  gimp_image_add_path (text_tool->image, path,
                           GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
 
   gimp_image_flush (text_tool->image);
 }
 
-void
-gimp_text_tool_create_vectors_warped (GimpTextTool *text_tool)
+gboolean
+gimp_text_tool_create_vectors_warped (GimpTextTool  *text_tool,
+                                      GError       **error)
 {
-  GimpVectors       *vectors0;
-  GimpVectors       *vectors;
+  GList             *vectors0;
+  GimpPath          *vectors;
   gdouble            box_width;
   gdouble            box_height;
   GimpTextDirection  dir;
   gdouble            offset = 0.0;
 
-  g_return_if_fail (GIMP_IS_TEXT_TOOL (text_tool));
+  g_return_val_if_fail (GIMP_IS_TEXT_TOOL (text_tool), FALSE);
 
   if (! text_tool->text || ! text_tool->image || ! text_tool->layer)
-    return;
+    {
+      if (! text_tool->text)
+        g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                             _("Text is required."));
+      if (! text_tool->image)
+        g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                             _("No image."));
+      if (! text_tool->layer)
+        g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                             _("No layer."));
+      return FALSE;
+    }
 
   box_width  = gimp_item_get_width  (GIMP_ITEM (text_tool->layer));
   box_height = gimp_item_get_height (GIMP_ITEM (text_tool->layer));
 
-  vectors0 = gimp_image_get_active_vectors (text_tool->image);
-  if (! vectors0)
-    return;
+  vectors0 = gimp_image_get_selected_paths (text_tool->image);
+  if (g_list_length (vectors0) != 1)
+    {
+      g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
+                           _("Exactly one path must be selected."));
+      return FALSE;
+    }
 
-  vectors = gimp_text_vectors_new (text_tool->image, text_tool->text);
+  vectors = gimp_text_path_new (text_tool->image, text_tool->text);
 
   offset = 0;
   dir = gimp_text_tool_get_direction (text_tool);
@@ -2360,7 +2391,7 @@ gimp_text_tool_create_vectors_warped (GimpTextTool *text_tool)
       {
         GimpStroke *stroke = NULL;
 
-        while ((stroke = gimp_vectors_stroke_get_next (vectors, stroke)))
+        while ((stroke = gimp_path_stroke_get_next (vectors, stroke)))
           {
             gimp_stroke_rotate (stroke, 0, 0, 270);
             gimp_stroke_translate (stroke, 0, box_width);
@@ -2370,14 +2401,16 @@ gimp_text_tool_create_vectors_warped (GimpTextTool *text_tool)
       break;
     }
 
-  gimp_vectors_warp_vectors (vectors0, vectors, offset);
+  gimp_path_warp_path (vectors0->data, vectors, offset);
 
   gimp_item_set_visible (GIMP_ITEM (vectors), TRUE, FALSE);
 
-  gimp_image_add_vectors (text_tool->image, vectors,
-                          GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
+  gimp_image_add_path (text_tool->image, vectors,
+                       GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
 
   gimp_image_flush (text_tool->image);
+
+  return TRUE;
 }
 
 GimpTextDirection

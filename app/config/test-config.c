@@ -23,6 +23,7 @@
 #include "stdlib.h"
 #include "string.h"
 
+#include <gegl.h>
 #include <gio/gio.h>
 
 #include "libgimpbase/gimpbase.h"
@@ -50,7 +51,7 @@ main (int   argc,
 {
   GimpConfig  *grid;
   GimpConfig  *grid2;
-  const gchar *filename = "foorc";
+  GFile       *file = g_file_new_for_path ("foorc");
   gchar       *header;
   gchar       *result;
   GList       *list;
@@ -70,6 +71,7 @@ main (int   argc,
     }
 
   units_init ();
+  gegl_init (&argc, &argv);
 
   g_print ("\nTesting GimpConfig ...\n");
 
@@ -82,10 +84,11 @@ main (int   argc,
   g_print (" done.\n");
 
   g_print (" Serializing %s to '%s' ...",
-           g_type_name (G_TYPE_FROM_INSTANCE (grid)), filename);
+           g_type_name (G_TYPE_FROM_INSTANCE (grid)),
+           gimp_file_get_utf8_name (file));
 
   if (! gimp_config_serialize_to_file (grid,
-                                       filename,
+                                       file,
                                        "foorc", "end of foorc",
                                        NULL, &error))
     {
@@ -98,8 +101,10 @@ main (int   argc,
                     G_CALLBACK (notify_callback),
                     NULL);
 
-  g_print (" Deserializing from '%s' ...\n", filename);
-  if (! gimp_config_deserialize_file (grid, filename, NULL, &error))
+  g_print (" Deserializing from '%s' ...\n",
+           gimp_file_get_utf8_name (file));
+
+  if (! gimp_config_deserialize_file (grid, file, NULL, &error))
     {
       g_print ("%s\n", error->message);
       return EXIT_FAILURE;
@@ -136,7 +141,10 @@ main (int   argc,
   g_object_unref (grid2);
 
   g_print (" Deserializing from gimpconfig.c (should fail) ...");
-  if (! gimp_config_deserialize_file (grid, "gimpconfig.c", NULL, &error))
+
+  if (! gimp_config_deserialize_file (grid,
+                                      g_file_new_for_path ("gimpconfig.c"),
+                                      NULL, &error))
     {
       g_print (" OK, failed. The error was:\n %s\n", error->message);
       g_error_free (error);
@@ -238,41 +246,11 @@ output_unknown_token (const gchar *key,
 }
 
 
-/* minimal dummy units implementation  */
-
-static const gchar *
-unit_get_identifier (GimpUnit unit)
-{
-  switch (unit)
-    {
-    case GIMP_UNIT_PIXEL:
-      return "pixels";
-    case GIMP_UNIT_INCH:
-      return "inches";
-    case GIMP_UNIT_MM:
-      return "millimeters";
-    case GIMP_UNIT_POINT:
-      return "points";
-    case GIMP_UNIT_PICA:
-      return "picas";
-    default:
-      return NULL;
-    }
-}
-
-static gint
-unit_get_number_of_units (void)
-{
-  return GIMP_UNIT_END;
-}
-
 static void
 units_init (void)
 {
-  GimpUnitVtable vtable;
-
-  vtable.unit_get_number_of_units = unit_get_number_of_units;
-  vtable.unit_get_identifier      = unit_get_identifier;
+  /* Empty dummy units implementation  */
+  GimpUnitVtable vtable = { 0 };
 
   gimp_base_init (&vtable);
 }

@@ -156,43 +156,16 @@ HELP
   if (gimp_pdb_item_is_attached (GIMP_ITEM (drawable), NULL,
                                  GIMP_PDB_ITEM_CONTENT, error) &&
       gimp_pdb_item_is_not_group (GIMP_ITEM (drawable), error))
-    floating_sel_attach (layer, drawable);
+    {
+      /* see layer-new */
+      if (gimp_drawable_is_gray (GIMP_DRAWABLE (layer)) &&
+          GIMP_IS_LAYER (drawable))
+        gimp_layer_fix_format_space (layer, TRUE, FALSE);
+
+      floating_sel_attach (layer, drawable);
+    }
   else
     success = FALSE;
-}
-CODE
-    );
-}
-
-sub floating_sel_rigor {
-    &std_pdb_deprecated ();
-
-    @inargs = (
-	{ name => 'floating_sel', type => 'layer', dead => 1,
-	  desc => 'The floating selection' },
-	{ name => 'undo', type => 'boolean', dead => 1 }
-    );
-
-    %invoke = (
-	code => <<'CODE'
-{
-}
-CODE
-    );
-}
-
-sub floating_sel_relax {
-    &std_pdb_deprecated ();
-
-    @inargs = (
-	{ name => 'floating_sel', type => 'layer', dead => 1,
-	  desc => 'The floating selection' },
-	{ name => 'undo', type => 'boolean', dead => 1 }
-    );
-
-    %invoke = (
-	code => <<'CODE'
-{
 }
 CODE
     );
@@ -208,9 +181,7 @@ CODE
 @procs = qw(floating_sel_remove
             floating_sel_anchor
             floating_sel_to_layer
-            floating_sel_attach
-            floating_sel_rigor
-            floating_sel_relax);
+            floating_sel_attach);
 
 %exports = (app => [@procs], lib => [@procs]);
 

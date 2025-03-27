@@ -91,29 +91,28 @@ void               action_message          (GimpDisplay          *display,
   if (! widget) \
     return
 
-
-#define return_if_no_drawable(image,drawable,data) \
+#define return_if_no_drawables(image,drawables,data) \
   return_if_no_image (image,data); \
-  drawable = gimp_image_get_active_drawable (image); \
-  if (! drawable) \
+  drawables = gimp_image_get_selected_drawables (image); \
+  if (! drawables) \
     return
 
-#define return_if_no_layer(image,layer,data) \
+#define return_if_no_layers(image,layers,data) \
   return_if_no_image (image,data); \
-  layer = gimp_image_get_active_layer (image); \
-  if (! layer) \
+  layers = gimp_image_get_selected_layers (image); \
+  if (! layers) \
     return
 
-#define return_if_no_channel(image,channel,data) \
+#define return_if_no_channels(image,channels,data) \
   return_if_no_image (image,data); \
-  channel = gimp_image_get_active_channel (image); \
-  if (! channel) \
+  channels = gimp_image_get_selected_channels (image); \
+  if (! channels) \
     return
 
-#define return_if_no_vectors(image,vectors,data) \
+#define return_if_no_paths(image,paths,data) \
   return_if_no_image (image,data); \
-  vectors = gimp_image_get_active_vectors (image); \
-  if (! vectors) \
+  paths = gimp_image_get_selected_paths (image); \
+  if (! paths) \
     return
 
 

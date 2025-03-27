@@ -44,6 +44,7 @@
 #include "tools/gimp-tools.h"
 #include "tools/gimpcoloroptions.h"
 #include "tools/gimpforegroundselectoptions.h"
+#include "tools/gimppaintselectoptions.h"
 #include "tools/gimprectangleoptions.h"
 #include "tools/gimptool.h"
 #include "tools/gimptoolcontrol.h"
@@ -62,14 +63,6 @@ static void   tools_activate_enum_action (const gchar *action_desc,
                                           GVariant    *value);
 
 
-/*  local variables  */
-
-/* this is a hack to allow GimpToolButton to activate a tool-selection action
- * without initializing the tool
- */
-static gint tools_select_cmd_initialize_blocked = 0;
-
-
 /*  public functions  */
 
 void
@@ -80,7 +73,6 @@ tools_select_cmd_callback (GimpAction *action,
   Gimp              *gimp;
   GimpToolInfo      *tool_info;
   GimpContext       *context;
-  GimpDisplay       *display;
   const gchar       *tool_name;
   gboolean           set_transform_type = FALSE;
   GimpTransformType  transform_type;
@@ -110,8 +102,7 @@ tools_select_cmd_callback (GimpAction *action,
 
   /*  always allocate a new tool when selected from the image menu
    */
-  if (gimp_context_get_tool (context) != tool_info ||
-      tools_select_cmd_initialize_blocked)
+  if (gimp_context_get_tool (context) != tool_info)
     {
       gimp_context_set_tool (context, tool_info);
     }
@@ -127,28 +118,6 @@ tools_select_cmd_callback (GimpAction *action,
       gimp_transform_tool_set_type (GIMP_TRANSFORM_TOOL (tool),
                                     transform_type);
     }
-
-  if (! tools_select_cmd_initialize_blocked)
-    {
-      display = gimp_context_get_display (context);
-
-      if (display && gimp_display_get_image (display))
-        tool_manager_initialize_active (gimp, display);
-    }
-}
-
-void
-tools_select_cmd_block_initialize (void)
-{
-  tools_select_cmd_initialize_blocked++;
-}
-
-void
-tools_select_cmd_unblock_initialize (void)
-{
-  g_return_if_fail (tools_select_cmd_initialize_blocked > 0);
-
-  tools_select_cmd_initialize_blocked--;
 }
 
 void
@@ -172,6 +141,35 @@ tools_color_average_radius_cmd_callback (GimpAction *action,
                               G_OBJECT (tool_info->tool_options),
                               "average-radius",
                               1.0, 1.0, 10.0, 0.1, FALSE);
+    }
+}
+
+void
+tools_paintbrush_pixel_size_cmd_callback (GimpAction *action,
+                                          GVariant   *value,
+                                          gpointer    data)
+{
+  GimpContext          *context;
+  GimpToolInfo         *tool_info;
+  gdouble               dvalue;
+  return_if_no_context (context, data);
+
+  dvalue = g_variant_get_double (value);
+  tool_info = gimp_context_get_tool (context);
+
+  if (tool_info && GIMP_IS_PAINT_OPTIONS (tool_info->tool_options))
+    {
+      GParamSpec *pspec;
+
+      pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (tool_info->tool_options),
+                                            "brush-size");
+      dvalue = CLAMP (dvalue,
+                      G_PARAM_SPEC_DOUBLE (pspec)->minimum,
+                      G_PARAM_SPEC_DOUBLE (pspec)->maximum);
+
+      g_object_set (G_OBJECT (tool_info->tool_options),
+                    "brush-size", dvalue,
+                    NULL);
     }
 }
 
@@ -316,6 +314,35 @@ tools_paintbrush_force_cmd_callback (GimpAction *action,
                               G_OBJECT (tool_info->tool_options),
                               "brush-force",
                               0.001, 0.01, 0.1, 0.1, FALSE);
+    }
+}
+
+void
+tools_ink_blob_pixel_size_cmd_callback (GimpAction *action,
+                                        GVariant   *value,
+                                        gpointer    data)
+{
+  GimpContext          *context;
+  GimpToolInfo         *tool_info;
+  gdouble               dvalue;
+  return_if_no_context (context, data);
+
+  dvalue = g_variant_get_double (value);
+  tool_info = gimp_context_get_tool (context);
+
+  if (tool_info && GIMP_IS_INK_OPTIONS (tool_info->tool_options))
+    {
+      GParamSpec *pspec;
+
+      pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (tool_info->tool_options),
+                                            "size");
+      dvalue = CLAMP (dvalue,
+                      G_PARAM_SPEC_DOUBLE (pspec)->minimum,
+                      G_PARAM_SPEC_DOUBLE (pspec)->maximum);
+
+      g_object_set (G_OBJECT (tool_info->tool_options),
+                    "size", dvalue,
+                    NULL);
     }
 }
 
@@ -467,6 +494,42 @@ tools_mybrush_radius_cmd_callback (GimpAction *action,
 }
 
 void
+tools_mybrush_pixel_size_cmd_callback (GimpAction *action,
+                                       GVariant   *value,
+                                       gpointer    data)
+{
+  GimpContext          *context;
+  GimpToolInfo         *tool_info;
+  gdouble               dvalue;
+  return_if_no_context (context, data);
+
+  dvalue = g_variant_get_double (value);
+  /* Dividing by 2.0 because the parameter is the size of the brush,
+   * hence the diameter and this tool uses the radius as parameter.
+   * Furthermore MyPaint brush radius is stored as a natural logarithm
+   * radius.
+   */
+  dvalue = log (dvalue / 2.0);
+
+  tool_info = gimp_context_get_tool (context);
+
+  if (tool_info && GIMP_IS_MYBRUSH_OPTIONS (tool_info->tool_options))
+    {
+      GParamSpec *pspec;
+
+      pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (tool_info->tool_options),
+                                            "radius");
+      dvalue = CLAMP (dvalue,
+                      G_PARAM_SPEC_DOUBLE (pspec)->minimum,
+                      G_PARAM_SPEC_DOUBLE (pspec)->maximum);
+
+      g_object_set (G_OBJECT (tool_info->tool_options),
+                    "radius", dvalue,
+                    NULL);
+    }
+}
+
+void
 tools_mybrush_hardness_cmd_callback (GimpAction *action,
                                      GVariant   *value,
                                      gpointer    data)
@@ -535,6 +598,35 @@ tools_transform_preview_opacity_cmd_callback (GimpAction *action,
                               G_OBJECT (tool_info->tool_options),
                               "preview-opacity",
                               0.01, 0.1, 0.5, 0.1, FALSE);
+    }
+}
+
+void
+tools_warp_effect_pixel_size_cmd_callback (GimpAction *action,
+                                           GVariant   *value,
+                                           gpointer    data)
+{
+  GimpContext          *context;
+  GimpToolInfo         *tool_info;
+  gdouble               dvalue;
+  return_if_no_context (context, data);
+
+  dvalue = g_variant_get_double (value);
+  tool_info = gimp_context_get_tool (context);
+
+  if (tool_info && GIMP_IS_WARP_OPTIONS (tool_info->tool_options))
+    {
+      GParamSpec *pspec;
+
+      pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (tool_info->tool_options),
+                                            "effect-size");
+      dvalue = CLAMP (dvalue,
+                      G_PARAM_SPEC_DOUBLE (pspec)->minimum,
+                      G_PARAM_SPEC_DOUBLE (pspec)->maximum);
+
+      g_object_set (G_OBJECT (tool_info->tool_options),
+                    "effect-size", dvalue,
+                    NULL);
     }
 }
 
@@ -741,6 +833,35 @@ tools_force_cmd_callback (GimpAction *action,
 }
 
 void
+tools_paint_select_pixel_size_cmd_callback (GimpAction *action,
+                                            GVariant   *value,
+                                            gpointer    data)
+{
+  GimpContext          *context;
+  GimpToolInfo         *tool_info;
+  gdouble               dvalue;
+  return_if_no_context (context, data);
+
+  dvalue = g_variant_get_double (value);
+  tool_info = gimp_context_get_tool (context);
+
+  if (tool_info && GIMP_IS_PAINT_SELECT_OPTIONS (tool_info->tool_options))
+    {
+      GParamSpec *pspec;
+
+      pspec = g_object_class_find_property (G_OBJECT_GET_CLASS (tool_info->tool_options),
+                                            "stroke-width");
+      dvalue = CLAMP (dvalue,
+                      G_PARAM_SPEC_INT (pspec)->minimum,
+                      G_PARAM_SPEC_INT (pspec)->maximum);
+
+      g_object_set (G_OBJECT (tool_info->tool_options),
+                    "stroke-width", (gint) dvalue,
+                    NULL);
+    }
+}
+
+void
 tools_object_1_cmd_callback (GimpAction *action,
                              GVariant   *value,
                              gpointer    data)
@@ -791,23 +912,15 @@ static void
 tools_activate_enum_action (const gchar *action_desc,
                             GVariant    *value)
 {
-  gchar *group_name;
-  gchar *action_name;
-
-  group_name  = g_strdup (action_desc);
-  action_name = strchr (group_name, '/');
-
-  if (action_name)
+  if (action_desc)
     {
       GList      *managers;
       GimpAction *action;
 
-      *action_name++ = '\0';
-
       managers = gimp_ui_managers_from_name ("<Image>");
 
       action = gimp_ui_manager_find_action (managers->data,
-                                            group_name, action_name);
+                                            NULL, action_desc);
 
       if (GIMP_IS_ENUM_ACTION (action) &&
           GIMP_ENUM_ACTION (action)->value_variable)
@@ -815,6 +928,4 @@ tools_activate_enum_action (const gchar *action_desc,
           gimp_action_emit_activate (GIMP_ACTION (action), value);
         }
     }
-
-  g_free (group_name);
 }

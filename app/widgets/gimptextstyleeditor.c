@@ -34,6 +34,7 @@
 #include "core/gimpcontext.h"
 
 #include "text/gimptext.h"
+#include "text/gimpfont.h"
 
 #include "gimpcolorpanel.h"
 #include "gimpcontainerentry.h"
@@ -126,7 +127,8 @@ G_DEFINE_TYPE (GimpTextStyleEditor, gimp_text_style_editor,
 static void
 gimp_text_style_editor_class_init (GimpTextStyleEditorClass *klass)
 {
-  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  GObjectClass   *object_class = G_OBJECT_CLASS (klass);
+  GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
   object_class->constructed  = gimp_text_style_editor_constructed;
   object_class->dispose      = gimp_text_style_editor_dispose;
@@ -179,13 +181,15 @@ gimp_text_style_editor_class_init (GimpTextStyleEditorClass *klass)
                                                         1.0,
                                                         GIMP_PARAM_READWRITE |
                                                         G_PARAM_CONSTRUCT));
+
+  gtk_widget_class_set_css_name (widget_class, "GimpTextStyleEditor");
 }
 
 static void
 gimp_text_style_editor_init (GimpTextStyleEditor *editor)
 {
   GtkWidget *image;
-  GimpRGB    color;
+  GeglColor *color;
 
   gtk_orientable_set_orientation (GTK_ORIENTABLE (editor),
                                   GTK_ORIENTATION_VERTICAL);
@@ -207,9 +211,8 @@ gimp_text_style_editor_init (GimpTextStyleEditor *editor)
                            _("Change font of selected text"), NULL);
 
   editor->size_entry =
-    gimp_size_entry_new (1, 0, "%a", TRUE, FALSE, FALSE, 10,
+    gimp_size_entry_new (1, gimp_unit_pixel (), "%a", TRUE, FALSE, FALSE, 10,
                          GIMP_SIZE_ENTRY_UPDATE_SIZE);
-  gtk_table_set_col_spacing (GTK_TABLE (editor->size_entry), 1, 0);
   gtk_box_pack_start (GTK_BOX (editor->upper_hbox), editor->size_entry,
                       FALSE, FALSE, 0);
   gtk_widget_show (editor->size_entry);
@@ -244,11 +247,12 @@ gimp_text_style_editor_init (GimpTextStyleEditor *editor)
   gtk_container_add (GTK_CONTAINER (editor->clear_button), image);
   gtk_widget_show (image);
 
-  gimp_rgba_set (&color, 0.0, 0.0, 0.0, 1.0);
+  color = gegl_color_new ("black");
   editor->color_button = gimp_color_panel_new (_("Change color of selected text"),
-                                               &color,
+                                               color,
                                                GIMP_COLOR_AREA_FLAT, 20, 20);
   gimp_widget_set_fully_opaque (editor->color_button, TRUE);
+  g_object_unref (color);
 
   gtk_box_pack_end (GTK_BOX (editor->lower_hbox), editor->color_button,
                     FALSE, FALSE, 0);
@@ -261,8 +265,8 @@ gimp_text_style_editor_init (GimpTextStyleEditor *editor)
                     G_CALLBACK (gimp_text_style_editor_color_changed),
                     editor);
 
-  editor->kerning_adjustment =
-    GTK_ADJUSTMENT (gtk_adjustment_new (0.0, -1000.0, 1000.0, 1.0, 10.0, 0.0));
+  editor->kerning_adjustment = gtk_adjustment_new (0.0, -1000.0, 1000.0,
+                                                   1.0, 10.0, 0.0);
   editor->kerning_spinbutton =
     gimp_spin_button_new (editor->kerning_adjustment, 1.0, 1);
   gtk_entry_set_width_chars (GTK_ENTRY (editor->kerning_spinbutton), 5);
@@ -277,8 +281,8 @@ gimp_text_style_editor_init (GimpTextStyleEditor *editor)
                     G_CALLBACK (gimp_text_style_editor_kerning_changed),
                     editor);
 
-  editor->baseline_adjustment =
-    GTK_ADJUSTMENT (gtk_adjustment_new (0.0, -1000.0, 1000.0, 1.0, 10.0, 0.0));
+  editor->baseline_adjustment = gtk_adjustment_new (0.0, -1000.0, 1000.0,
+                                                    1.0, 10.0, 0.0);
   editor->baseline_spinbutton =
     gimp_spin_button_new (editor->baseline_adjustment, 1.0, 1);
   gtk_entry_set_width_chars (GTK_ENTRY (editor->baseline_spinbutton), 5);
@@ -386,6 +390,13 @@ gimp_text_style_editor_dispose (GObject *object)
     {
       g_signal_handlers_disconnect_by_func (editor->buffer,
                                             gimp_text_style_editor_update,
+                                            editor);
+    }
+
+  if (editor->context)
+    {
+      g_signal_handlers_disconnect_by_func (editor->context,
+                                            gimp_text_style_editor_font_changed,
                                             editor);
     }
 
@@ -558,7 +569,7 @@ gimp_text_style_editor_list_tags (GimpTextStyleEditor  *editor,
         gdouble     points;
 
         points = gimp_units_to_points (pixels,
-                                       GIMP_UNIT_PIXEL,
+                                       gimp_unit_pixel (),
                                        editor->resolution_y);
         tag = gimp_text_buffer_get_size_tag (editor->buffer,
                                              PANGO_SCALE * points);
@@ -585,22 +596,23 @@ gimp_text_style_editor_list_tags (GimpTextStyleEditor  *editor,
   }
 
   {
-    GList   *list;
-    GimpRGB  color;
+    GList     *list;
+    GeglColor *color;
 
     for (list = editor->buffer->color_tags; list; list = g_list_next (list))
       *remove_tags = g_list_prepend (*remove_tags, list->data);
 
-    gimp_color_button_get_color (GIMP_COLOR_BUTTON (editor->color_button),
-                                 &color);
+    color = gimp_color_button_get_color (GIMP_COLOR_BUTTON (editor->color_button));
 
     if (TRUE) /* FIXME should have "inconsistent" state as for font and size */
       {
         GtkTextTag *tag;
 
-        tag = gimp_text_buffer_get_color_tag (editor->buffer, &color);
+        tag = gimp_text_buffer_get_color_tag (editor->buffer, color);
         tags = g_list_prepend (tags, tag);
       }
+
+    g_object_unref (color);
   }
 
   *remove_tags = g_list_reverse (*remove_tags);
@@ -713,7 +725,7 @@ gimp_text_style_editor_set_default_font (GimpTextStyleEditor *editor)
                                    gimp_text_style_editor_font_changed,
                                    editor);
 
-  gimp_context_set_font_name (editor->context, editor->text->font);
+  gimp_context_set_font (editor->context, editor->text->font);
 
   g_signal_handlers_unblock_by_func (editor->context,
                                      gimp_text_style_editor_font_changed,
@@ -730,13 +742,14 @@ gimp_text_style_editor_color_changed (GimpColorButton     *button,
 
   if (gtk_text_buffer_get_has_selection (buffer))
     {
-      GtkTextIter start, end;
-      GimpRGB     color;
+      GeglColor   *color;
+      GtkTextIter  start, end;
 
       gtk_text_buffer_get_selection_bounds (buffer, &start, &end);
+      color = gimp_color_button_get_color (button);
+      gimp_text_buffer_set_color (editor->buffer, &start, &end, color);
 
-      gimp_color_button_get_color (button, &color);
-      gimp_text_buffer_set_color (editor->buffer, &start, &end, &color);
+      g_object_unref (color);
     }
 
   insert_tags = gimp_text_style_editor_list_tags (editor, &remove_tags);
@@ -747,19 +760,21 @@ static void
 gimp_text_style_editor_set_color (GimpTextStyleEditor *editor,
                                   GtkTextTag          *color_tag)
 {
-  GimpRGB color;
-
-  gimp_rgba_set (&color, 0.0, 0.0, 0.0, 1.0);
+  GeglColor *color = NULL;
 
   if (color_tag)
     gimp_text_tag_get_fg_color (color_tag, &color);
+
+  if (! color)
+    color = gegl_color_new ("black");
 
   g_signal_handlers_block_by_func (editor->color_button,
                                    gimp_text_style_editor_color_changed,
                                    editor);
 
   gimp_color_button_set_color (GIMP_COLOR_BUTTON (editor->color_button),
-                               &color);
+                               color);
+  g_clear_object (&color);
 
   /* FIXME should have "inconsistent" state as for font and size */
 
@@ -775,8 +790,7 @@ gimp_text_style_editor_set_default_color (GimpTextStyleEditor *editor)
                                    gimp_text_style_editor_color_changed,
                                    editor);
 
-  gimp_color_button_set_color (GIMP_COLOR_BUTTON (editor->color_button),
-                               &editor->text->color);
+  gimp_color_button_set_color (GIMP_COLOR_BUTTON (editor->color_button), editor->text->color);
 
   g_signal_handlers_unblock_by_func (editor->color_button,
                                      gimp_text_style_editor_color_changed,
@@ -839,21 +853,24 @@ gimp_text_style_editor_size_changed (GimpSizeEntry       *entry,
   GtkTextBuffer *buffer = GTK_TEXT_BUFFER (editor->buffer);
   GList         *insert_tags;
   GList         *remove_tags;
+  GtkTextIter    start, end;
+  gdouble        points;
+
+  points = gimp_units_to_points (gimp_size_entry_get_refval (entry, 0),
+                                 gimp_unit_pixel (), editor->resolution_y);
 
   if (gtk_text_buffer_get_has_selection (buffer))
     {
-      GtkTextIter start, end;
-      gdouble     points;
-
       gtk_text_buffer_get_selection_bounds (buffer, &start, &end);
-
-      points = gimp_units_to_points (gimp_size_entry_get_refval (entry, 0),
-                                     GIMP_UNIT_PIXEL,
-                                     editor->resolution_y);
-
-      gimp_text_buffer_set_size (editor->buffer, &start, &end,
-                                 PANGO_SCALE * points);
     }
+  else
+    {
+      gtk_text_buffer_get_iter_at_offset (buffer, &start, 0);
+      gtk_text_buffer_get_iter_at_offset (buffer, &end, -1);
+    }
+
+  gimp_text_buffer_set_size (editor->buffer, &start, &end,
+                             PANGO_SCALE * points);
 
   insert_tags = gimp_text_style_editor_list_tags (editor, &remove_tags);
   gimp_text_buffer_set_insert_tags (editor->buffer, insert_tags, remove_tags);
@@ -874,7 +891,7 @@ gimp_text_style_editor_set_size (GimpTextStyleEditor *editor,
                                    editor);
 
   pixels = gimp_units_to_pixels ((gdouble) size / PANGO_SCALE,
-                                 GIMP_UNIT_POINT,
+                                 gimp_unit_point (),
                                  editor->resolution_y);
   gimp_size_entry_set_refval (GIMP_SIZE_ENTRY (editor->size_entry), 0, pixels);
 
@@ -942,10 +959,17 @@ gimp_text_style_editor_set_baseline (GimpTextStyleEditor *editor,
                                    gimp_text_style_editor_baseline_changed,
                                    editor);
 
-  gtk_adjustment_set_value (editor->baseline_adjustment,
-                            (gdouble) baseline / PANGO_SCALE);
-  /* make sure the "" really gets replaced */
-  gtk_adjustment_value_changed (editor->baseline_adjustment);
+  if (gtk_adjustment_get_value (editor->baseline_adjustment) !=
+      (gdouble) baseline / PANGO_SCALE)
+    {
+      gtk_adjustment_set_value (editor->baseline_adjustment,
+                                (gdouble) baseline / PANGO_SCALE);
+    }
+  else
+    {
+      /* make sure the "" really gets replaced */
+      g_signal_emit_by_name (editor->baseline_adjustment, "value-changed");
+    }
 
   g_signal_handlers_unblock_by_func (editor->baseline_adjustment,
                                      gimp_text_style_editor_baseline_changed,
@@ -985,10 +1009,17 @@ gimp_text_style_editor_set_kerning (GimpTextStyleEditor *editor,
                                    gimp_text_style_editor_kerning_changed,
                                    editor);
 
-  gtk_adjustment_set_value (editor->kerning_adjustment,
-                            (gdouble) kerning / PANGO_SCALE);
-  /* make sure the "" really gets replaced */
-  gtk_adjustment_value_changed (editor->kerning_adjustment);
+  if (gtk_adjustment_get_value (editor->baseline_adjustment) !=
+      (gdouble) kerning / PANGO_SCALE)
+    {
+      gtk_adjustment_set_value (editor->kerning_adjustment,
+                                (gdouble) kerning / PANGO_SCALE);
+    }
+  else
+    {
+      /* make sure the "" really gets replaced */
+      g_signal_emit_by_name (editor->kerning_adjustment, "value-changed");
+    }
 
   g_signal_handlers_unblock_by_func (editor->kerning_adjustment,
                                      gimp_text_style_editor_kerning_changed,
@@ -1282,7 +1313,7 @@ gimp_text_style_editor_update_idle (GimpTextStyleEditor *editor)
 
   if (editor->context->font_name &&
       g_strcmp0 (editor->context->font_name,
-                 gimp_object_get_name (gimp_context_get_font (editor->context))))
+                 gimp_font_get_lookup_name (gimp_context_get_font (editor->context))))
     {
       /* A font is set, but is unavailable; change the help text. */
       gchar *help_text;

@@ -51,41 +51,9 @@ typedef enum
 } GimpColorTransformFlags;
 
 
-#define GIMP_TYPE_COLOR_TRANSFORM            (gimp_color_transform_get_type ())
-#define GIMP_COLOR_TRANSFORM(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_COLOR_TRANSFORM, GimpColorTransform))
-#define GIMP_COLOR_TRANSFORM_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_COLOR_TRANSFORM, GimpColorTransformClass))
-#define GIMP_IS_COLOR_TRANSFORM(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_COLOR_TRANSFORM))
-#define GIMP_IS_COLOR_TRANSFORM_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_COLOR_TRANSFORM))
-#define GIMP_COLOR_TRANSFORM_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_COLOR_TRANSFORM, GimpColorTransformClass))
+#define GIMP_TYPE_COLOR_TRANSFORM (gimp_color_transform_get_type ())
+G_DECLARE_FINAL_TYPE (GimpColorTransform, gimp_color_transform, GIMP, COLOR_TRANSFORM, GObject)
 
-
-typedef struct _GimpColorTransformClass   GimpColorTransformClass;
-typedef struct _GimpColorTransformPrivate GimpColorTransformPrivate;
-
-struct _GimpColorTransform
-{
-  GObject                    parent_instance;
-
-  GimpColorTransformPrivate *priv;
-};
-
-struct _GimpColorTransformClass
-{
-  GObjectClass  parent_class;
-
-  /* signals */
-  void (* progress) (GimpColorTransform *transform,
-                     gdouble             fraction);
-
-  /* Padding for future expansion */
-  void (* _gimp_reserved1) (void);
-  void (* _gimp_reserved2) (void);
-  void (* _gimp_reserved3) (void);
-  void (* _gimp_reserved4) (void);
-};
-
-
-GType   gimp_color_transform_get_type (void) G_GNUC_CONST;
 
 GimpColorTransform *
         gimp_color_transform_new              (GimpColorProfile         *src_profile,

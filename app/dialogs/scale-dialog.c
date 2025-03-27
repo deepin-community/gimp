@@ -45,7 +45,7 @@ typedef struct _ScaleDialog ScaleDialog;
 struct _ScaleDialog
 {
   GimpViewable          *viewable;
-  GimpUnit               unit;
+  GimpUnit              *unit;
   GimpInterpolationType  interpolation;
   GtkWidget             *box;
   GtkWidget             *combo;
@@ -73,7 +73,7 @@ scale_dialog_new (GimpViewable          *viewable,
                   GtkWidget             *parent,
                   GimpHelpFunc           help_func,
                   const gchar           *help_id,
-                  GimpUnit               unit,
+                  GimpUnit              *unit,
                   GimpInterpolationType  interpolation,
                   GimpScaleCallback      callback,
                   gpointer               user_data)
@@ -128,7 +128,7 @@ scale_dialog_new (GimpViewable          *viewable,
 
   gimp_image_get_resolution (image, &xres, &yres);
 
-  dialog = gimp_viewable_dialog_new (viewable, context,
+  dialog = gimp_viewable_dialog_new (g_list_prepend (NULL, viewable), context,
                                      title, role, GIMP_ICON_OBJECT_SCALE, title,
                                      parent,
                                      help_func, help_id,
@@ -139,7 +139,7 @@ scale_dialog_new (GimpViewable          *viewable,
 
                                      NULL);
 
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+  gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                            RESPONSE_RESET,
                                            GTK_RESPONSE_OK,
                                            GTK_RESPONSE_CANCEL,
@@ -221,9 +221,9 @@ scale_dialog_response (GtkWidget   *dialog,
                        gint         response_id,
                        ScaleDialog *private)
 {
-  GimpUnit  unit          = private->unit;
+  GimpUnit *unit          = private->unit;
   gint      interpolation = private->interpolation;
-  GimpUnit  resolution_unit;
+  GimpUnit *resolution_unit;
   gint      width, height;
   gdouble   xres, yres;
 

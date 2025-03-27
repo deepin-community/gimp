@@ -48,26 +48,21 @@
 #define WIDTH_REQUEST   200
 
 
-typedef struct _GimpImageComboBoxClass GimpImageComboBoxClass;
-
 struct _GimpImageComboBox
 {
   GimpIntComboBox          parent_instance;
 
   GimpImageConstraintFunc  constraint;
   gpointer                 data;
+  GDestroyNotify           data_destroy;
 };
 
-struct _GimpImageComboBoxClass
-{
-  GimpIntComboBoxClass  parent_class;
-};
 
+static void  gimp_image_combo_box_finalize  (GObject                 *object);
 
 static void  gimp_image_combo_box_populate  (GimpImageComboBox       *combo_box);
 static void  gimp_image_combo_box_model_add (GtkListStore            *store,
-                                             gint                     num_images,
-                                             gint32                  *images,
+                                             GList                   *images,
                                              GimpImageConstraintFunc  constraint,
                                              gpointer                 data);
 
@@ -87,11 +82,16 @@ static const GtkTargetEntry target = { "application/x-gimp-image-id", 0 };
 
 G_DEFINE_TYPE (GimpImageComboBox, gimp_image_combo_box, GIMP_TYPE_INT_COMBO_BOX)
 
+#define parent_class gimp_image_combo_box_parent_class
+
 
 static void
 gimp_image_combo_box_class_init (GimpImageComboBoxClass *klass)
 {
+  GObjectClass   *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
+
+  object_class->finalize           = gimp_image_combo_box_finalize;
 
   widget_class->drag_data_received = gimp_image_combo_box_drag_data_received;
 }
@@ -107,10 +107,22 @@ gimp_image_combo_box_init (GimpImageComboBox *combo_box)
                      GDK_ACTION_COPY);
 }
 
+static void
+gimp_image_combo_box_finalize (GObject *object)
+{
+  GimpImageComboBox *combo = GIMP_IMAGE_COMBO_BOX (object);
+
+  if (combo->data_destroy)
+    combo->data_destroy (combo->data);
+
+  G_OBJECT_CLASS (parent_class)->finalize (object);
+}
+
 /**
  * gimp_image_combo_box_new:
- * @constraint: a #GimpImageConstraintFunc or %NULL
- * @data:       a pointer that is passed to @constraint
+ * @constraint: (nullable):       A #GimpImageConstraintFunc or %NULL
+ * @data: (closure constraint):   A pointer that is passed to @constraint
+ * @data_destroy: (destroy data): Destroy function for @data.
  *
  * Creates a new #GimpIntComboBox filled with all currently opened
  * images. If a @constraint function is specified, it is called for
@@ -122,13 +134,14 @@ gimp_image_combo_box_init (GimpImageComboBox *combo_box)
  * active image ID and gimp_int_combo_box_get_active() to retrieve the
  * ID of the selected image.
  *
- * Return value: a new #GimpIntComboBox.
+ * Returns: a new #GimpIntComboBox.
  *
  * Since: 2.2
  **/
 GtkWidget *
 gimp_image_combo_box_new (GimpImageConstraintFunc constraint,
-                          gpointer                data)
+                          gpointer                data,
+                          GDestroyNotify          data_destroy)
 {
   GimpImageComboBox *combo_box;
 
@@ -137,8 +150,9 @@ gimp_image_combo_box_new (GimpImageConstraintFunc constraint,
                             "ellipsize",     PANGO_ELLIPSIZE_MIDDLE,
                             NULL);
 
-  combo_box->constraint = constraint;
-  combo_box->data       = data;
+  combo_box->constraint   = constraint;
+  combo_box->data         = data;
+  combo_box->data_destroy = data_destroy;
 
   gimp_image_combo_box_populate (combo_box);
 
@@ -154,19 +168,17 @@ gimp_image_combo_box_populate (GimpImageComboBox *combo_box)
 {
   GtkTreeModel *model;
   GtkTreeIter   iter;
-  gint32       *images;
-  gint          num_images;
+  GList        *images;
 
   model = gtk_combo_box_get_model (GTK_COMBO_BOX (combo_box));
 
-  images = gimp_image_list (&num_images);
+  images = gimp_list_images ();
 
-  gimp_image_combo_box_model_add (GTK_LIST_STORE (model),
-                                  num_images, images,
+  gimp_image_combo_box_model_add (GTK_LIST_STORE (model), images,
                                   combo_box->constraint,
                                   combo_box->data);
 
-  g_free (images);
+  g_list_free (images);
 
   if (gtk_tree_model_get_iter_first (model, &iter))
     gtk_combo_box_set_active_iter (GTK_COMBO_BOX (combo_box), &iter);
@@ -174,33 +186,35 @@ gimp_image_combo_box_populate (GimpImageComboBox *combo_box)
 
 static void
 gimp_image_combo_box_model_add (GtkListStore            *store,
-                                gint                     num_images,
-                                gint32                  *images,
+                                GList                   *images,
                                 GimpImageConstraintFunc  constraint,
                                 gpointer                 data)
 {
   GtkTreeIter  iter;
-  gint         i;
+  GList       *list;
 
-  for (i = 0; i < num_images; i++)
+  for (list = images; list; list = g_list_next (list))
     {
-      if (! constraint || (* constraint) (images[i], data))
+      GimpImage *image    = list->data;
+      gint32     image_id = gimp_image_get_id (image);
+
+      if (! constraint || constraint (image, data))
         {
-          gchar     *image_name = gimp_image_get_name (images[i]);
+          gchar     *image_name = gimp_image_get_name (image);
           gchar     *label;
           GdkPixbuf *thumb;
 
-          label = g_strdup_printf ("%s-%d", image_name, images[i]);
+          label = g_strdup_printf ("%s-%d", image_name, image_id);
 
           g_free (image_name);
 
-          thumb = gimp_image_get_thumbnail (images[i],
+          thumb = gimp_image_get_thumbnail (image,
                                             THUMBNAIL_SIZE, THUMBNAIL_SIZE,
                                             GIMP_PIXBUF_SMALL_CHECKS);
 
           gtk_list_store_append (store, &iter);
           gtk_list_store_set (store, &iter,
-                              GIMP_INT_STORE_VALUE,  images[i],
+                              GIMP_INT_STORE_VALUE,  image_id,
                               GIMP_INT_STORE_LABEL,  label,
                               GIMP_INT_STORE_PIXBUF, thumb,
                               -1);
@@ -257,7 +271,7 @@ gimp_image_combo_box_changed (GimpImageComboBox *combo_box)
   if (gimp_int_combo_box_get_active (GIMP_INT_COMBO_BOX (combo_box),
                                      &image_ID))
     {
-      if (! gimp_image_is_valid (image_ID))
+      if (! gimp_image_get_by_id (image_ID))
         {
           GtkTreeModel *model;
 

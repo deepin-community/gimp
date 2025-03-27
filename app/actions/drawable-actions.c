@@ -42,13 +42,13 @@
 static const GimpActionEntry drawable_actions[] =
 {
   { "drawable-equalize", NULL,
-    NC_("drawable-action", "_Equalize"), NULL,
+    NC_("drawable-action", "_Equalize"), NULL, { NULL },
     NC_("drawable-action", "Automatic contrast enhancement"),
     drawable_equalize_cmd_callback,
     GIMP_HELP_LAYER_EQUALIZE },
 
   { "drawable-levels-stretch", NULL,
-    NC_("drawable-action", "_White Balance"), NULL,
+    NC_("drawable-action", "_White Balance"), NULL, { NULL },
     NC_("drawable-action", "Automatic white balance correction"),
     drawable_levels_stretch_cmd_callback,
     GIMP_HELP_LAYER_WHITE_BALANCE }
@@ -57,29 +57,23 @@ static const GimpActionEntry drawable_actions[] =
 static const GimpToggleActionEntry drawable_toggle_actions[] =
 {
   { "drawable-visible", GIMP_ICON_VISIBLE,
-    NC_("drawable-action", "Toggle Drawable _Visibility"), NULL, NULL,
+    NC_("drawable-action", "Toggle Drawables _Visibility"), NULL, { NULL }, NULL,
     drawable_visible_cmd_callback,
     FALSE,
     GIMP_HELP_LAYER_VISIBLE },
 
-  { "drawable-linked", GIMP_ICON_LINKED,
-    NC_("drawable-action", "Toggle Drawable _Linked State"), NULL, NULL,
-    drawable_linked_cmd_callback,
-    FALSE,
-    GIMP_HELP_LAYER_LINKED },
-
-  { "drawable-lock-content", NULL /* GIMP_ICON_LOCK */,
-    NC_("drawable-action", "L_ock Pixels of Drawable"), NULL,
+  { "drawable-lock-content", GIMP_ICON_LOCK_CONTENT,
+    NC_("drawable-action", "L_ock Pixels of Drawables"), NULL, { NULL },
     NC_("drawable-action",
-        "Keep the pixels on this drawable from being modified"),
+        "Keep the pixels on selected drawables from being modified"),
     drawable_lock_content_cmd_callback,
     FALSE,
     GIMP_HELP_LAYER_LOCK_PIXELS },
 
-  { "drawable-lock-position", GIMP_ICON_TOOL_MOVE,
-    NC_("drawable-action", "L_ock Position of Drawable"), NULL,
+  { "drawable-lock-position", GIMP_ICON_LOCK_POSITION,
+    NC_("drawable-action", "L_ock Position of Drawables"), NULL, { NULL },
     NC_("drawable-action",
-        "Keep the position on this drawable from being modified"),
+        "Keep the position on selected drawables from being modified"),
     drawable_lock_position_cmd_callback,
     FALSE,
     GIMP_HELP_LAYER_LOCK_POSITION },
@@ -88,13 +82,13 @@ static const GimpToggleActionEntry drawable_toggle_actions[] =
 static const GimpEnumActionEntry drawable_flip_actions[] =
 {
   { "drawable-flip-horizontal", GIMP_ICON_OBJECT_FLIP_HORIZONTAL,
-    NC_("drawable-action", "Flip _Horizontally"), NULL,
+    NC_("drawable-action", "Flip _Horizontally"), NULL, { NULL },
     NC_("drawable-action", "Flip drawable horizontally"),
     GIMP_ORIENTATION_HORIZONTAL, FALSE,
     GIMP_HELP_LAYER_FLIP_HORIZONTAL },
 
   { "drawable-flip-vertical", GIMP_ICON_OBJECT_FLIP_VERTICAL,
-    NC_("drawable-action", "Flip _Vertically"), NULL,
+    NC_("drawable-action", "Flip _Vertically"), NULL, { NULL },
     NC_("drawable-action", "Flip drawable vertically"),
     GIMP_ORIENTATION_VERTICAL, FALSE,
     GIMP_HELP_LAYER_FLIP_VERTICAL }
@@ -103,21 +97,21 @@ static const GimpEnumActionEntry drawable_flip_actions[] =
 static const GimpEnumActionEntry drawable_rotate_actions[] =
 {
   { "drawable-rotate-90", GIMP_ICON_OBJECT_ROTATE_90,
-    NC_("drawable-action", "Rotate 90° _clockwise"), NULL,
+    NC_("drawable-action", "Rotate 90° _clockwise"), NULL, { NULL },
     NC_("drawable-action", "Rotate drawable 90 degrees to the right"),
-    GIMP_ROTATE_90, FALSE,
+    GIMP_ROTATE_DEGREES90, FALSE,
     GIMP_HELP_LAYER_ROTATE_90 },
 
   { "drawable-rotate-180", GIMP_ICON_OBJECT_ROTATE_180,
-    NC_("drawable-action", "Rotate _180°"), NULL,
+    NC_("drawable-action", "Rotate _180°"), NULL, { NULL },
     NC_("drawable-action", "Turn drawable upside-down"),
-    GIMP_ROTATE_180, FALSE,
+    GIMP_ROTATE_DEGREES180, FALSE,
     GIMP_HELP_LAYER_ROTATE_180 },
 
   { "drawable-rotate-270", GIMP_ICON_OBJECT_ROTATE_270,
-    NC_("drawable-action", "Rotate 90° counter-clock_wise"), NULL,
+    NC_("drawable-action", "Rotate 90° counter-clock_wise"), NULL, { NULL },
     NC_("drawable-action", "Rotate drawable 90 degrees to the left"),
-    GIMP_ROTATE_270, FALSE,
+    GIMP_ROTATE_DEGREES270, FALSE,
     GIMP_HELP_LAYER_ROTATE_270 }
 };
 
@@ -157,75 +151,95 @@ void
 drawable_actions_update (GimpActionGroup *group,
                          gpointer         data)
 {
-  GimpImage    *image;
-  GimpDrawable *drawable     = NULL;
-  gboolean      is_rgb       = FALSE;
-  gboolean      visible      = FALSE;
-  gboolean      linked       = FALSE;
-  gboolean      locked       = FALSE;
-  gboolean      can_lock     = FALSE;
-  gboolean      locked_pos   = FALSE;
-  gboolean      can_lock_pos = FALSE;
-  gboolean      writable     = FALSE;
-  gboolean      movable      = FALSE;
-  gboolean      children     = FALSE;
+  GimpImage *image;
+  GList     *drawables     = NULL;
+  GList     *iter;
+  gboolean   has_visible   = FALSE;
+  gboolean   locked        = TRUE;
+  gboolean   can_lock      = FALSE;
+  gboolean   locked_pos    = TRUE;
+  gboolean   can_lock_pos  = FALSE;
+  gboolean   all_rgb       = TRUE;
+  gboolean   all_writable  = TRUE;
+  gboolean   all_movable   = TRUE;
+  gboolean   none_children = TRUE;
 
   image = action_data_get_image (data);
 
   if (image)
     {
-      drawable = gimp_image_get_active_drawable (image);
+      drawables = gimp_image_get_selected_drawables (image);
 
-      if (drawable)
+      for (iter = drawables; iter; iter = iter->next)
         {
           GimpItem *item;
 
-          is_rgb = gimp_drawable_is_rgb (drawable);
+          if (gimp_item_get_visible (iter->data))
+            has_visible = TRUE;
 
-          if (GIMP_IS_LAYER_MASK (drawable))
-            item = GIMP_ITEM (gimp_layer_mask_get_layer (GIMP_LAYER_MASK (drawable)));
+          if (gimp_item_can_lock_content (iter->data))
+            {
+              if (! gimp_item_get_lock_content (iter->data))
+                locked = FALSE;
+              can_lock = TRUE;
+            }
+
+          if (gimp_item_can_lock_position (iter->data))
+            {
+              if (! gimp_item_get_lock_position (iter->data))
+                locked_pos = FALSE;
+              can_lock_pos = TRUE;
+            }
+
+          if (gimp_viewable_get_children (GIMP_VIEWABLE (iter->data)))
+            none_children = FALSE;
+
+          if (! gimp_drawable_is_rgb (iter->data))
+            all_rgb = FALSE;
+
+          if (GIMP_IS_LAYER_MASK (iter->data))
+            item = GIMP_ITEM (gimp_layer_mask_get_layer (GIMP_LAYER_MASK (iter->data)));
           else
-            item = GIMP_ITEM (drawable);
+            item = GIMP_ITEM (iter->data);
 
-          visible       = gimp_item_get_visible (item);
-          linked        = gimp_item_get_linked (item);
-          locked        = gimp_item_get_lock_content (item);
-          can_lock      = gimp_item_can_lock_content (item);
-          writable      = ! gimp_item_is_content_locked (item);
-          locked_pos    = gimp_item_get_lock_position (item);
-          can_lock_pos  = gimp_item_can_lock_position (item);
-          movable       = ! gimp_item_is_position_locked (item);
+          if (gimp_item_is_content_locked (item, NULL))
+            all_writable = FALSE;
 
-          if (gimp_viewable_get_children (GIMP_VIEWABLE (drawable)))
-            children = TRUE;
+          if (gimp_item_is_position_locked (item, NULL))
+            all_movable = FALSE;
+
+          if (has_visible && ! locked && ! locked_pos &&
+              ! none_children && ! all_rgb &&
+              ! all_writable && ! all_movable)
+            break;
         }
     }
 
 #define SET_SENSITIVE(action,condition) \
-        gimp_action_group_set_action_sensitive (group, action, (condition) != 0)
+        gimp_action_group_set_action_sensitive (group, action, (condition) != 0, NULL)
 #define SET_ACTIVE(action,condition) \
         gimp_action_group_set_action_active (group, action, (condition) != 0)
 
-  SET_SENSITIVE ("drawable-equalize",       writable && !children);
-  SET_SENSITIVE ("drawable-levels-stretch", writable && !children && is_rgb);
+  SET_SENSITIVE ("drawable-equalize",       drawables && all_writable && none_children);
+  SET_SENSITIVE ("drawable-levels-stretch", drawables && all_writable && none_children && all_rgb);
 
-  SET_SENSITIVE ("drawable-visible",       drawable);
-  SET_SENSITIVE ("drawable-linked",        drawable);
+  SET_SENSITIVE ("drawable-visible",       drawables);
   SET_SENSITIVE ("drawable-lock-content",  can_lock);
   SET_SENSITIVE ("drawable-lock-position", can_lock_pos);
 
-  SET_ACTIVE ("drawable-visible",       visible);
-  SET_ACTIVE ("drawable-linked",        linked);
+  SET_ACTIVE ("drawable-visible",       has_visible);
   SET_ACTIVE ("drawable-lock-content",  locked);
   SET_ACTIVE ("drawable-lock-position", locked_pos);
 
-  SET_SENSITIVE ("drawable-flip-horizontal", writable && movable);
-  SET_SENSITIVE ("drawable-flip-vertical",   writable && movable);
+  SET_SENSITIVE ("drawable-flip-horizontal", drawables && all_writable && all_movable);
+  SET_SENSITIVE ("drawable-flip-vertical",   drawables && all_writable && all_movable);
 
-  SET_SENSITIVE ("drawable-rotate-90",  writable && movable);
-  SET_SENSITIVE ("drawable-rotate-180", writable && movable);
-  SET_SENSITIVE ("drawable-rotate-270", writable && movable);
+  SET_SENSITIVE ("drawable-rotate-90",  drawables && all_writable && all_movable);
+  SET_SENSITIVE ("drawable-rotate-180", drawables && all_writable && all_movable);
+  SET_SENSITIVE ("drawable-rotate-270", drawables && all_writable && all_movable);
 
 #undef SET_SENSITIVE
 #undef SET_ACTIVE
+
+  g_list_free (drawables);
 }

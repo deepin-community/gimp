@@ -331,7 +331,7 @@ gimp_dbus_service_process_idle (GimpDBusService *service)
 {
   IdleData *data;
 
-  if (! service->gimp->initialized || ! service->gimp->restored)
+  if (! gimp_is_restored (service->gimp))
     {
       if (! service->timeout_source)
         {
@@ -366,8 +366,8 @@ gimp_dbus_service_process_idle (GimpDBusService *service)
     {
       if (data->file)
         file_open_from_command_line (service->gimp, data->file, data->as_new,
-                                     NULL, /* FIXME monitor */
-                                     0 /* FIXME monitor */);
+                                     NULL /* FIXME monitor */);
+
       if (data->command)
         {
           const gchar *commands[2] = {data->command, 0};

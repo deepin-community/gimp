@@ -28,19 +28,22 @@
 #define PSD_DEBUG 3
 #define IFDBG(level) if (PSD_DEBUG >= level)
 
-/* Set to FALSE to suppress pop-up warnings about lossy file conversions */
+/* Set to FALSE to suppress pop-up warnings about lossy blend mode conversions */
 #define CONVERSION_WARNINGS             FALSE
 
 #define LOAD_PROC                       "file-psd-load"
 #define LOAD_MERGED_PROC                "file-psd-load-merged"
 #define LOAD_THUMB_PROC                 "file-psd-load-thumb"
-#define SAVE_PROC                       "file-psd-save"
+#define EXPORT_PROC                     "file-psd-export"
+#define LOAD_METADATA_PROC              "file-psd-load-metadata"
 #define PLUG_IN_BINARY                  "file-psd"
 #define PLUG_IN_ROLE                    "gimp-file-psd"
 
 #define GIMP_PARASITE_COMMENT           "gimp-comment"
 
 #define PSD_PARASITE_DUOTONE_DATA       "psd-duotone-data"
+#define PSD_PARASITE_CLIPPING_PATH      "psd-clipping-path"
+#define PSD_PARASITE_PATH_FLATNESS      "psd-path-flatness"
 
 /* Copied from app/base/gimpimage-quick-mask.h - internal identifier for quick mask channel */
 #define GIMP_IMAGE_QUICK_MASK_NAME      "Qmask"
@@ -48,7 +51,8 @@
 #define MAX_RAW_SIZE    0               /* FIXME all images are raw if 0 */
 
 /* PSD spec defines */
-#define MAX_CHANNELS    56              /* Photoshop CS to CS3 support 56 channels */
+/* Although the spec still says 56 there is a test image with more so let's go a little higher to 99 */
+#define MAX_CHANNELS    99              /* Photoshop CS to CS3 support 56 channels */
 
 /* PSD spec constants */
 
@@ -134,13 +138,15 @@
 #define PSD_LFX_BEVEL           "bevl"          /* Effects layer - bevel (PS5) */
 
 /* Placed Layer */
-#define PSD_LPL_PLACE_LAYER     "plLd"          /* Placed layer (?) */
+#define PSD_LPL_PLACE_LAYER     "PlLd"          /* Placed layer (?) (based on PSD files, not specification) */
 #define PSD_LPL_PLACE_LAYER_NEW "SoLd"          /* Placed layer (PS10) */
+#define PSD_SMART_OBJECT_LAYER  "SoLE"          /* Smart Object Layer (CC2015) */
 
 /* Linked Layer */
-#define PSD_LLL_LINKED_LAYER    "lnkD"          /* Linked layer (?) */
-#define PSD_LLL_LINKED_LAYER_2  "lnk2"          /* Linked layer 2nd key */
-#define PSD_LLL_LINKED_LAYER_3  "lnk3"          /* Linked layer 3rd key */
+#define PSD_LLL_LINKED_LAYER     "lnkD"         /* Linked layer (?) */
+#define PSD_LLL_LINKED_LAYER_2   "lnk2"         /* Linked layer 2nd key */
+#define PSD_LLL_LINKED_LAYER_3   "lnk3"         /* Linked layer 3rd key */
+#define PSD_LLL_LINKED_LAYER_EXT "lnkE"         /* Linked layer external */
 
 /* Merged Transparency */
 #define PSD_LMT_MERGE_TRANS     "Mtrn"          /* Merged transparency save flag (?) */
@@ -488,7 +494,7 @@ typedef struct {
 typedef struct
 {
   gint16        channel_id;             /* Channel ID */
-  guint32       data_len;               /* Layer left */
+  guint64       data_len;               /* Layer left */
 } ChannelLengthInfo;
 
 /* PSD Layer flags */
@@ -574,10 +580,118 @@ typedef struct
   gchar                 *info; /* Text information */
 } PSDText;
 
+typedef struct
+{
+  guint32    size;
+  guint32    ver;
+  guchar     visible;
+  guint16    unused;
+} PSDLayerStyleCommon;
+
+typedef struct
+{
+  guint32    size;
+  guint32    ver;
+  guint32    blur;
+  guint32    intensity;
+  gint32     angle;
+  guint32    distance;
+  guint16    color[5];
+  gchar      blendsig[4];
+  guint32    effect;
+  guchar     effecton;
+  guchar     anglefx;
+  guchar     opacity;
+  guint16    natcolor[5];
+} PSDLayerStyleShadow;
+
+typedef struct
+{
+  guint32    size;
+  guint32    ver;
+  guint32    blur;
+  guint32    intensity;
+  guint16    color[5];
+  gchar      blendsig[4];
+  guint32    effect;
+  guchar     effecton;
+  guchar     opacity;
+  /* Version 2 only */
+  guchar     invert; /* Inner Glow Only */
+  guint16    natcolor[5];
+} PSDLayerStyleGlow;
+
+typedef struct
+{
+  guint32    size;
+  guint32    ver;
+  gint32     angle;
+  guint32    strength;
+  guint32    blur;
+  guint32    highlightsig;
+  guint32    highlighteffect;
+  guint32    shadowsig;
+  guint32    shadoweffect;
+  guint16    highlightcolor[5];
+  guint16    shadowcolor[5];
+  guchar     style;
+  guchar     highlightopacity;
+  guchar     shadowopacity;
+  guchar     enabled;
+  guchar     global;
+  guchar     direction;
+  /* Version 2 only */
+  guint16    highlightnatcolor[5];
+  guint16    shadownatcolor[5];
+} PSDLayerStyleBevel;
+
+typedef struct
+{
+  guint32    size;
+  guint32    ver;
+  gchar      blend[4];
+  guint16    color[5];
+  guchar     opacity;
+  guchar     enabled;
+  guint16    natcolor[5];
+} PSDLayerStyleSolidFill;
+
+/* Older PSD Layer Styles format */
+typedef struct
+{
+  guint16 version;
+  guint16 count;
+
+  PSDLayerStyleCommon        cmns; /* Common State */
+  PSDLayerStyleShadow        dsdw; /* Drop Shadow */
+  PSDLayerStyleShadow        isdw; /* Inner Shadow */
+  PSDLayerStyleGlow          oglw; /* Outer Glow */
+  PSDLayerStyleGlow          iglw; /* Inner Glow */
+  PSDLayerStyleBevel         bevl; /* Bevel */
+  PSDLayerStyleSolidFill     sofi; /* Solid Fill */
+} PSDLayerStyles;
+
+/* Partially or Unsupported Features */
+typedef struct
+{
+  gboolean show_gui;
+  gboolean duotone_mode;
+
+  gboolean adjustment_layer;
+  gboolean fill_layer;
+  gboolean text_layer;
+  gboolean linked_layer;
+  gboolean vector_mask;
+  gboolean smart_object;
+  gboolean stroke;
+  gboolean layer_effect;
+  gboolean layer_comp;
+  gboolean psd_metadata;
+} PSDSupport;
+
 /* PSD Layer data structure */
 typedef struct
 {
-  gboolean              drop;                   /* Do not add layer to GIMP image */
   gint32                top;                    /* Layer top */
   gint32                left;                   /* Layer left */
   gint32                bottom;                 /* Layer bottom */
@@ -591,9 +705,9 @@ typedef struct
   guchar                clipping_group_type;    /* Used to track group needed for clipping (1 = group start, 2 = group end) */
   guchar                flags;                  /* Layer flags */
   guchar                filler;                 /* Filler */
-  guint32               extra_len;              /* Extra data length */
+  guint64               extra_len;              /* Extra data length */
   gchar                *name;                   /* Layer name */
-  guint32               mask_len;               /* Layer mask data length */
+  guint64               mask_len;               /* Layer mask data length */
   LayerMask             layer_mask;             /* Layer mask data */
   LayerMaskExtra        layer_mask_extra;       /* Layer mask extra data */
   LayerFlags            layer_flags;            /* Layer flags */
@@ -601,6 +715,9 @@ typedef struct
   guint32               id;                     /* Layer ID (Tattoo) */
   guchar                group_type;             /* 0 -> not a group; 1 -> open folder; 2 -> closed folder; 3 -> end of group */
   guint16               color_tag[4];           /* 4 * 16 bit color components */
+  PSDLayerStyles       *layer_styles;           /* Older format of layer styles */
+
+  PSDSupport           *unsupported_features;
 } PSDlayer;
 
 /* PSD Channel data structure */
@@ -616,7 +733,7 @@ typedef struct
 /* PSD Channel data structure */
 typedef struct
 {
-  GimpRGB       gimp_color;             /* Gimp RGB color */
+  GeglColor    *gimp_color;             /* Gimp RGB color */
   gint16        opacity;                /* Opacity */
   guchar        ps_mode;                /* PS mode flag */
   guchar        ps_kind;                /* PS type flag */
@@ -630,8 +747,8 @@ typedef struct
   gchar         type[4];                /* Image resource type */
   gint16        id;                     /* Image resource ID */
   gchar         name[256];              /* Image resource name (pascal string) */
-  guint32       data_start;             /* Image resource data start */
-  guint32       data_len;               /* Image resource data length */
+  guint64       data_start;             /* Image resource data start */
+  guint64       data_len;               /* Image resource data length */
 } PSDimageres;
 
 /* PSD Layer Resource data structure */
@@ -639,8 +756,9 @@ typedef struct
 {
   gchar         sig[4];                 /* Layer resource signature */
   gchar         key[4];                 /* Layer resource key */
-  guint32       data_start;             /* Layer resource data start */
-  guint32       data_len;               /* Layer resource data length */
+  guint64       data_start;             /* Layer resource data start */
+  guint64       data_len;               /* Layer resource data length */
+  gboolean      ibm_pc_format;          /* If layers are saved in little endian format */
 } PSDlayerres;
 
 /* PSD File data structures */
@@ -648,6 +766,7 @@ typedef struct
 {
   gboolean              merged_image_only;      /* Whether to load only the merged image data */
 
+  guint16               version;                /* Version 1 (PSD) or 2 (PSB) */
   guint16               channels;               /* Number of channels: 1- 56 */
   gboolean              transparency;           /* Image has merged transparency alpha channel */
   guint32               rows;                   /* Number of rows: 1 - 30000 */
@@ -659,17 +778,18 @@ typedef struct
   guchar               *color_map;              /* Color map data */
   guint32               color_map_len;          /* Color map data length */
   guint32               color_map_entries;      /* Color map number of entries */
-  guint32               image_res_start;        /* Image resource block start address */
-  guint32               image_res_len;          /* Image resource block length */
-  guint32               mask_layer_start;       /* Mask & layer block start address */
-  guint32               mask_layer_len;         /* Mask & layer block length */
+  guint64               image_res_start;        /* Image resource block start address */
+  guint64               image_res_len;          /* Image resource block length */
+  guint64               mask_layer_start;       /* Mask & layer block start address */
+  guint64               mask_layer_len;         /* Mask & layer block length */
   gint16                num_layers;             /* Number of layers */
-  guint32               layer_data_start;       /* Layer pixel data start */
-  guint32               layer_data_len;         /* Layer pixel data length */
-  guint32               merged_image_start;     /* Merged image pixel data block start address */
-  guint32               merged_image_len;       /* Merged image pixel data block length */
+  guint64               layer_data_start;       /* Layer pixel data start */
+  guint64               layer_data_len;         /* Layer pixel data length */
+  guint64               merged_image_start;     /* Merged image pixel data block start address */
+  guint64               merged_image_len;       /* Merged image pixel data block length */
   gboolean              no_icc;                 /* Do not use ICC profile */
-  guint16               layer_state;            /* Active layer number counting from bottom up */
+  guint16               layer_state;            /* Active layer index counting from bottom up */
+  GList                *layer_selection;        /* Selected layer IDs (GIMP layer tattoos) */
   GPtrArray            *alpha_names;            /* Alpha channel names */
   PSDchanneldata      **alpha_display_info;     /* Alpha channel display info */
   guint16               alpha_display_count;    /* Number of alpha channel display info recs */
@@ -680,6 +800,9 @@ typedef struct
   GimpColorProfile     *cmyk_profile;
   gpointer              cmyk_transform;
   gpointer              cmyk_transform_alpha;
+
+  gboolean              ibm_pc_format;          /* If layers are saved in little endian format */
+  PSDSupport           *unsupported_features;
 } PSDimage;
 
 /* Public functions */

@@ -84,12 +84,12 @@ plug_in_run_cmd_callback (GimpAction *action,
 
   switch (procedure->proc_type)
     {
-    case GIMP_EXTENSION:
+    case GIMP_PDB_PROC_TYPE_PERSISTENT:
       args = procedure_commands_get_run_mode_arg (procedure);
       break;
 
-    case GIMP_PLUGIN:
-    case GIMP_TEMPORARY:
+    case GIMP_PDB_PROC_TYPE_PLUGIN:
+    case GIMP_PDB_PROC_TYPE_TEMPORARY:
       if (GIMP_IS_DATA_FACTORY_VIEW (data) ||
           GIMP_IS_BUFFER_VIEW (data))
         {
@@ -119,16 +119,16 @@ plug_in_run_cmd_callback (GimpAction *action,
         {
           GimpItemTreeView *view = GIMP_ITEM_TREE_VIEW (data);
           GimpImage        *image;
-          GimpItem         *item;
+          GList            *items;
 
           image = gimp_item_tree_view_get_image (view);
 
           if (image)
-            item = GIMP_ITEM_TREE_VIEW_GET_CLASS (view)->get_active_item (image);
+            items = GIMP_ITEM_TREE_VIEW_GET_CLASS (view)->get_selected_items (image);
           else
-            item = NULL;
+            items = NULL;
 
-          args = procedure_commands_get_item_args (procedure, image, item);
+          args = procedure_commands_get_items_args (procedure, image, items);
         }
       else
         {
@@ -138,7 +138,7 @@ plug_in_run_cmd_callback (GimpAction *action,
         }
       break;
 
-    case GIMP_INTERNAL:
+    case GIMP_PDB_PROC_TYPE_INTERNAL:
       g_warning ("Unhandled procedure type.");
       break;
     }
@@ -152,7 +152,7 @@ plug_in_run_cmd_callback (GimpAction *action,
         {
           /* remember only image plug-ins */
           if (procedure->num_args >= 2 &&
-              GIMP_IS_PARAM_SPEC_IMAGE_ID (procedure->args[1]))
+              GIMP_IS_PARAM_SPEC_IMAGE (procedure->args[1]))
             {
               gimp_filter_history_add (gimp, procedure);
             }
@@ -187,7 +187,7 @@ plug_in_reset_all_cmd_callback (GimpAction *action,
 
                                         NULL);
 
-      gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
+      gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
                                                GTK_RESPONSE_OK,
                                                GTK_RESPONSE_CANCEL,
                                                -1);

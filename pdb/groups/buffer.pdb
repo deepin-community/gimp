@@ -16,7 +16,7 @@
 
 # "Perlized" from C source by Manish Singh <yosh@gimp.org>
 
-sub buffers_get_list {
+sub buffers_get_name_list {
     $blurb = 'Retrieve a complete listing of the available buffers.';
 
     $help = <<'HELP';
@@ -26,22 +26,20 @@ HELP
     &mitch_pdb_misc('2005', '2.4');
 
     @inargs = (
-	{ name => 'filter', type => 'string', null_ok => 1,
+	{ name => 'filter', type => 'string', none_ok => 1,
           desc => 'An optional regular expression used to filter the list' }
     );
 
     @outargs = (
-	{ name => 'buffer_list', type => 'stringarray',
-	  desc => 'The list of buffer names',
-	  array => { name => 'num_buffers',
-		     desc => 'The number of buffers' } }
+	{ name => 'buffer_list', type => 'strv',
+	  desc => 'The list of buffer names' }
     );
 
     %invoke = (
 	code => <<'CODE'
 {
   buffer_list = gimp_container_get_filtered_name_array (gimp->named_buffers,
-                                                        filter, &num_buffers);
+                                                        filter);
 }
 CODE
     );
@@ -215,7 +213,7 @@ sub buffer_get_image_type {
     );
 
     @outargs = (
-	{ name => 'image_type', type => 'enum GimpImageBaseType',
+	{ name => 'image_type', type => 'enum GimpImageType',
           desc => "The buffer image type" }
     );
 
@@ -242,7 +240,7 @@ CODE
               "core/gimpcontainer-filter.h"
 	      "gimppdb-utils.h");
 
-@procs = qw(buffers_get_list
+@procs = qw(buffers_get_name_list
             buffer_rename
             buffer_delete
 	    buffer_get_width

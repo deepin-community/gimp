@@ -22,6 +22,8 @@
 
 #include "config.h"
 
+#include "stamp-pdbgen.h"
+
 #include "gimp.h"
 
 
@@ -36,7 +38,7 @@
 
 /**
  * gimp_help:
- * @help_domain: The help domain in which help_id is registered.
+ * @help_domain: (nullable): The help domain in which help_id is registered.
  * @help_id: The help page's ID.
  *
  * Load a help page.
@@ -54,19 +56,23 @@ gboolean
 gimp_help (const gchar *help_domain,
            const gchar *help_id)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-help",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, help_domain,
-                                    GIMP_PDB_STRING, help_id,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, help_domain,
+                                          G_TYPE_STRING, help_id,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-help",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }

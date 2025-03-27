@@ -116,23 +116,8 @@ union _GimpControllerEvent
 };
 
 
-#define GIMP_TYPE_CONTROLLER            (gimp_controller_get_type ())
-#define GIMP_CONTROLLER(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_CONTROLLER, GimpController))
-#define GIMP_CONTROLLER_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_CONTROLLER, GimpControllerClass))
-#define GIMP_IS_CONTROLLER(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_CONTROLLER))
-#define GIMP_IS_CONTROLLER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_CONTROLLER))
-#define GIMP_CONTROLLER_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_CONTROLLER, GimpControllerClass))
-
-
-typedef struct _GimpControllerClass GimpControllerClass;
-
-struct _GimpController
-{
-  GObject   parent_instance;
-
-  gchar    *name;
-  gchar    *state;
-};
+#define GIMP_TYPE_CONTROLLER (gimp_controller_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpController, gimp_controller, GIMP, CONTROLLER, GObject)
 
 struct _GimpControllerClass
 {
@@ -141,6 +126,7 @@ struct _GimpControllerClass
   const gchar  *name;
   const gchar  *help_domain;
   const gchar  *help_id;
+  const gchar  *icon_name;
 
   /*  virtual functions  */
   gint          (* get_n_events)    (GimpController            *controller);
@@ -153,16 +139,20 @@ struct _GimpControllerClass
   gboolean      (* event)           (GimpController            *controller,
                                      const GimpControllerEvent *event);
 
-  const gchar  *icon_name;
-
   /* Padding for future expansion */
+  void (* _gimp_reserved0) (void);
+  void (* _gimp_reserved1) (void);
   void (* _gimp_reserved2) (void);
   void (* _gimp_reserved3) (void);
   void (* _gimp_reserved4) (void);
+  void (* _gimp_reserved5) (void);
+  void (* _gimp_reserved6) (void);
+  void (* _gimp_reserved7) (void);
+  void (* _gimp_reserved8) (void);
+  void (* _gimp_reserved9) (void);
 };
 
 
-GType            gimp_controller_get_type        (void) G_GNUC_CONST;
 GimpController * gimp_controller_new             (GType           controller_type);
 
 gint             gimp_controller_get_n_events    (GimpController *controller);

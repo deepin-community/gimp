@@ -24,16 +24,6 @@
 #include <gegl.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
-#ifdef G_OS_WIN32
-#include <shlobj.h>
-
-/* Constant available since Shell32.dll 5.0 */
-#ifndef CSIDL_LOCAL_APPDATA
-#define CSIDL_LOCAL_APPDATA 0x001c
-#endif
-
-#endif
-
 #include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
 #include "libgimpconfig/gimpconfig.h"
@@ -52,7 +42,7 @@
 
 
 #define GIMP_DEFAULT_BRUSH         "2. Hardness 050"
-#define GIMP_DEFAULT_DYNAMICS      "Dynamics Off"
+#define GIMP_DEFAULT_DYNAMICS      "Pressure Size"
 #define GIMP_DEFAULT_PATTERN       "Pine"
 #define GIMP_DEFAULT_PALETTE       "Default"
 #define GIMP_DEFAULT_GRADIENT      "FG to BG (RGB)"
@@ -66,6 +56,8 @@ enum
 {
   PROP_0,
   PROP_LANGUAGE,
+  PROP_PREV_LANGUAGE,
+  PROP_CONFIG_VERSION,
   PROP_INTERPOLATION_TYPE,
   PROP_DEFAULT_THRESHOLD,
   PROP_PLUG_IN_PATH,
@@ -102,6 +94,7 @@ enum
   PROP_GLOBAL_PALETTE,
   PROP_GLOBAL_GRADIENT,
   PROP_GLOBAL_FONT,
+  PROP_GLOBAL_EXPAND,
   PROP_DEFAULT_IMAGE,
   PROP_DEFAULT_GRID,
   PROP_UNDO_LEVELS,
@@ -123,6 +116,8 @@ enum
   PROP_IMPORT_RAW_PLUG_IN,
   PROP_EXPORT_FILE_TYPE,
   PROP_EXPORT_COLOR_PROFILE,
+  PROP_EXPORT_COMMENT,
+  PROP_EXPORT_THUMBNAIL,
   PROP_EXPORT_METADATA_EXIF,
   PROP_EXPORT_METADATA_XMP,
   PROP_EXPORT_METADATA_IPTC,
@@ -136,6 +131,7 @@ enum
 #ifdef G_OS_WIN32
   PROP_WIN32_POINTER_INPUT_API,
 #endif
+  PROP_ITEMS_SELECT_METHOD,
 
   /* ignored, only for backward compatibility: */
   PROP_INSTALL_COLORMAP,
@@ -167,34 +163,6 @@ G_DEFINE_TYPE (GimpCoreConfig, gimp_core_config, GIMP_TYPE_GEGL_CONFIG)
 
 #define parent_class gimp_core_config_parent_class
 
-#ifdef G_OS_WIN32
-/*
- * Taken from glib 2.35 code / gimpenv.c.
- * Only temporary until the user-font folder detection can go upstream
- * in fontconfig!
- * XXX
- */
-static gchar *
-get_special_folder (int csidl)
-{
-  wchar_t      path[MAX_PATH+1];
-  HRESULT      hr;
-  LPITEMIDLIST pidl = NULL;
-  BOOL         b;
-  gchar       *retval = NULL;
-
-  hr = SHGetSpecialFolderLocation (NULL, csidl, &pidl);
-  if (hr == S_OK)
-    {
-      b = SHGetPathFromIDListW (pidl, path);
-      if (b)
-        retval = g_utf16_to_utf8 (path, -1, NULL, NULL, NULL);
-      CoTaskMemFree (pidl);
-    }
-
-  return retval;
-}
-#endif
 
 static void
 gimp_core_config_class_init (GimpCoreConfigClass *klass)
@@ -202,8 +170,10 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
   gchar        *path;
   gchar        *mypaint_brushes;
-  GimpRGB       red          = { 1.0, 0, 0, 0.5 };
+  GeglColor    *red          = gegl_color_new ("red");
   guint64       undo_size;
+
+  gimp_color_set_alpha (red, 0.5);
 
   object_class->finalize     = gimp_core_config_finalize;
   object_class->set_property = gimp_core_config_set_property;
@@ -216,6 +186,32 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
                            NULL,  /* take from environment */
                            GIMP_PARAM_STATIC_STRINGS |
                            GIMP_CONFIG_PARAM_RESTART);
+
+  /* The language which was being used previously. If the "language"
+   * property was at default (i.e. System language), this
+   * must map to the actually used language for UI display, because if
+   * this changed (for whatever reasons, e.g. changed environment
+   * variables, or actually changing system language), we want to reload
+   * plug-ins.
+   */
+  GIMP_CONFIG_PROP_STRING (object_class, PROP_PREV_LANGUAGE,
+                           "prev-language",
+                           "Language used in previous run",
+                           NULL, NULL,
+                           GIMP_PARAM_STATIC_STRINGS);
+
+  /* This is the version of the config files, which must map to the
+   * version of GIMP. It is used right now only to detect the last run
+   * version in order to detect an update. It could be used later also
+   * to have more fine-grained config updates (not just on minor
+   * versions as we do now, but also on changes in micro versions).
+   */
+  GIMP_CONFIG_PROP_STRING (object_class, PROP_CONFIG_VERSION,
+                           "config-version",
+                           "Version of GIMP config files",
+                           CONFIG_VERSION_BLURB,
+                           NULL,
+                           GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_INTERPOLATION_TYPE,
                          "interpolation-type",
@@ -428,36 +424,6 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
   g_free (path);
 
   path = gimp_config_build_data_path ("fonts");
-#if defined G_OS_WIN32
-  /* XXX: since a Windows 10 update, build 17704, Microsoft added the
-   * concept of user-installed fonts (until now it was only possible to
-   * have system-wide fonts! How weird is that?).
-   * A feature request at fontconfig is also done, but until this gets
-   * implemented upstream, let's add the folder ourselves in GIMP's
-   * default list of folders.
-   * See: https://gitlab.gnome.org/GNOME/gimp/issues/2949
-   * Also: https://gitlab.freedesktop.org/fontconfig/fontconfig/issues/144
-   */
-    {
-      gchar *user_fonts_dir = get_special_folder (CSIDL_LOCAL_APPDATA);
-
-      if (user_fonts_dir)
-        {
-          gchar *path2;
-          gchar *tmp;
-
-          path2 = g_build_filename (user_fonts_dir,
-                                    "Microsoft", "Windows", "Fonts", NULL);
-          g_free (user_fonts_dir);
-
-          /* G_SEARCHPATH_SEPARATOR-separated list of folders. */
-          tmp = g_strconcat (path2, G_SEARCHPATH_SEPARATOR_S, path, NULL);
-          g_free (path2);
-          g_free (path);
-          path = tmp;
-        }
-    }
-#endif
   GIMP_CONFIG_PROP_PATH (object_class, PROP_FONT_PATH,
                          "font-path",
                          "Font path",
@@ -570,6 +536,13 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
                             "global-font",
                             "Global font",
                             GLOBAL_FONT_BLURB,
+                            TRUE,
+                            GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_GLOBAL_EXPAND,
+                            "global-expand",
+                            "Global expand",
+                            GLOBAL_EXPAND_BLURB,
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS);
 
@@ -733,12 +706,12 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS);
 
-  GIMP_CONFIG_PROP_RGB (object_class, PROP_QUICK_MASK_COLOR,
-                        "quick-mask-color",
-                        "Quick mask color",
-                        QUICK_MASK_COLOR_BLURB,
-                        TRUE, &red,
-                        GIMP_PARAM_STATIC_STRINGS);
+  GIMP_CONFIG_PROP_COLOR (object_class, PROP_QUICK_MASK_COLOR,
+                          "quick-mask-color",
+                          "Quick mask color",
+                          QUICK_MASK_COLOR_BLURB,
+                          TRUE, red,
+                          GIMP_PARAM_STATIC_STRINGS);
 
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_IMPORT_PROMOTE_FLOAT,
                             "import-promote-float",
@@ -785,6 +758,20 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS);
 
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_EXPORT_COMMENT,
+                            "export-comment",
+                            "Export Comment",
+                            EXPORT_COMMENT_BLURB,
+                            TRUE,
+                            GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_EXPORT_THUMBNAIL,
+                            "export-thumbnail",
+                            "Export Thumbnail",
+                            EXPORT_THUMBNAIL_BLURB,
+                            TRUE,
+                            GIMP_PARAM_STATIC_STRINGS);
+
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_EXPORT_METADATA_EXIF,
                             "export-metadata-exif",
                             "Export Exif metadata",
@@ -824,10 +811,18 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
                          "Pointer Input API",
                          WIN32_POINTER_INPUT_API_BLURB,
                          GIMP_TYPE_WIN32_POINTER_INPUT_API,
-                         GIMP_WIN32_POINTER_INPUT_API_WINTAB,
+                         GIMP_WIN32_POINTER_INPUT_API_WINDOWS_INK,
                          GIMP_PARAM_STATIC_STRINGS |
                          GIMP_CONFIG_PARAM_RESTART);
 #endif
+
+  GIMP_CONFIG_PROP_ENUM (object_class, PROP_ITEMS_SELECT_METHOD,
+                         "items-select-method",
+                         _("Pattern syntax for searching and selecting items:"),
+                         ITEMS_SELECT_METHOD_BLURB,
+                         GIMP_TYPE_SELECT_METHOD,
+                         GIMP_SELECT_PLAIN_TEXT,
+                         GIMP_PARAM_STATIC_STRINGS);
 
   /*  only for backward compatibility:  */
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_INSTALL_COLORMAP,
@@ -843,11 +838,18 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
                         27, 256, 144,
                         GIMP_PARAM_STATIC_STRINGS |
                         GIMP_CONFIG_PARAM_IGNORE);
+
+  g_object_unref (red);
 }
 
 static void
 gimp_core_config_init (GimpCoreConfig *config)
 {
+  GeglColor *red = gegl_color_new ("red");
+
+  gimp_color_set_alpha (red, 0.5);
+  config->quick_mask_color = red;
+
   config->default_image = g_object_new (GIMP_TYPE_TEMPLATE,
                                         "name",    "Default Image",
                                         "comment", GIMP_DEFAULT_COMMENT,
@@ -875,6 +877,7 @@ gimp_core_config_finalize (GObject *object)
   GimpCoreConfig *core_config = GIMP_CORE_CONFIG (object);
 
   g_free (core_config->language);
+  g_free (core_config->prev_language);
   g_free (core_config->plug_in_path);
   g_free (core_config->module_path);
   g_free (core_config->interpreter_path);
@@ -883,6 +886,8 @@ gimp_core_config_finalize (GObject *object)
   g_free (core_config->brush_path_writable);
   g_free (core_config->dynamics_path);
   g_free (core_config->dynamics_path_writable);
+  g_free (core_config->mypaint_brush_path);
+  g_free (core_config->mypaint_brush_path_writable);
   g_free (core_config->pattern_path);
   g_free (core_config->pattern_path_writable);
   g_free (core_config->palette_path);
@@ -895,6 +900,7 @@ gimp_core_config_finalize (GObject *object)
   g_free (core_config->font_path_writable);
   g_free (core_config->default_brush);
   g_free (core_config->default_dynamics);
+  g_free (core_config->default_mypaint_brush);
   g_free (core_config->default_pattern);
   g_free (core_config->default_palette);
   g_free (core_config->default_gradient);
@@ -905,10 +911,12 @@ gimp_core_config_finalize (GObject *object)
 
   g_clear_pointer (&core_config->last_known_release, g_free);
   g_clear_pointer (&core_config->last_release_comment, g_free);
+  g_clear_pointer (&core_config->config_version, g_free);
 
   g_clear_object (&core_config->default_image);
   g_clear_object (&core_config->default_grid);
   g_clear_object (&core_config->color_management);
+  g_clear_object (&core_config->quick_mask_color);
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -926,6 +934,10 @@ gimp_core_config_set_property (GObject      *object,
     case PROP_LANGUAGE:
       g_free (core_config->language);
       core_config->language = g_value_dup_string (value);
+      break;
+    case PROP_PREV_LANGUAGE:
+      g_free (core_config->prev_language);
+      core_config->prev_language = g_value_dup_string (value);
       break;
     case PROP_INTERPOLATION_TYPE:
       core_config->interpolation_type = g_value_get_enum (value);
@@ -1063,6 +1075,9 @@ gimp_core_config_set_property (GObject      *object,
     case PROP_GLOBAL_FONT:
       core_config->global_font = g_value_get_boolean (value);
       break;
+    case PROP_GLOBAL_EXPAND:
+      core_config->global_expand = g_value_get_boolean (value);
+      break;
     case PROP_DEFAULT_IMAGE:
       if (g_value_get_object (value))
         gimp_config_sync (g_value_get_object (value) ,
@@ -1126,14 +1141,22 @@ gimp_core_config_set_property (GObject      *object,
       core_config->last_revision = g_value_get_int (value);
       break;
     case PROP_LAST_KNOWN_RELEASE:
-      g_clear_pointer (&core_config->last_known_release, g_free);
-      core_config->last_known_release = g_value_dup_string (value);
+      if (core_config->last_known_release != g_value_get_string (value))
+        {
+          g_clear_pointer (&core_config->last_known_release, g_free);
+          core_config->last_known_release = g_value_dup_string (value);
+        }
+      break;
+    case PROP_CONFIG_VERSION:
+      g_clear_pointer (&core_config->config_version, g_free);
+      core_config->config_version = g_value_dup_string (value);
       break;
     case PROP_SAVE_DOCUMENT_HISTORY:
       core_config->save_document_history = g_value_get_boolean (value);
       break;
     case PROP_QUICK_MASK_COLOR:
-      gimp_value_get_rgb (value, &core_config->quick_mask_color);
+      g_clear_object (&core_config->quick_mask_color);
+      core_config->quick_mask_color = gegl_color_duplicate (g_value_get_object (value));
       break;
     case PROP_IMPORT_PROMOTE_FLOAT:
       core_config->import_promote_float = g_value_get_boolean (value);
@@ -1153,6 +1176,12 @@ gimp_core_config_set_property (GObject      *object,
       break;
     case PROP_EXPORT_COLOR_PROFILE:
       core_config->export_color_profile = g_value_get_boolean (value);
+      break;
+    case PROP_EXPORT_COMMENT:
+      core_config->export_comment = g_value_get_boolean (value);
+      break;
+    case PROP_EXPORT_THUMBNAIL:
+      core_config->export_thumbnail = g_value_get_boolean (value);
       break;
     case PROP_EXPORT_METADATA_EXIF:
       core_config->export_metadata_exif = g_value_get_boolean (value);
@@ -1190,6 +1219,9 @@ gimp_core_config_set_property (GObject      *object,
       }
       break;
 #endif
+    case PROP_ITEMS_SELECT_METHOD:
+      core_config->items_select_method = g_value_get_enum (value);
+      break;
 
     case PROP_INSTALL_COLORMAP:
     case PROP_MIN_COLORS:
@@ -1214,6 +1246,9 @@ gimp_core_config_get_property (GObject    *object,
     {
     case PROP_LANGUAGE:
       g_value_set_string (value, core_config->language);
+      break;
+    case PROP_PREV_LANGUAGE:
+      g_value_set_string (value, core_config->prev_language);
       break;
     case PROP_INTERPOLATION_TYPE:
       g_value_set_enum (value, core_config->interpolation_type);
@@ -1323,6 +1358,9 @@ gimp_core_config_get_property (GObject    *object,
     case PROP_GLOBAL_FONT:
       g_value_set_boolean (value, core_config->global_font);
       break;
+    case PROP_GLOBAL_EXPAND:
+      g_value_set_boolean (value, core_config->global_expand);
+      break;
     case PROP_DEFAULT_IMAGE:
       g_value_set_object (value, core_config->default_image);
       break;
@@ -1380,11 +1418,14 @@ gimp_core_config_get_property (GObject    *object,
     case PROP_LAST_KNOWN_RELEASE:
       g_value_set_string (value, core_config->last_known_release);
       break;
+    case PROP_CONFIG_VERSION:
+      g_value_set_string (value, core_config->config_version);
+      break;
     case PROP_SAVE_DOCUMENT_HISTORY:
       g_value_set_boolean (value, core_config->save_document_history);
       break;
     case PROP_QUICK_MASK_COLOR:
-      gimp_value_set_rgb (value, &core_config->quick_mask_color);
+      g_value_set_object (value, core_config->quick_mask_color);
       break;
     case PROP_IMPORT_PROMOTE_FLOAT:
       g_value_set_boolean (value, core_config->import_promote_float);
@@ -1404,6 +1445,12 @@ gimp_core_config_get_property (GObject    *object,
     case PROP_EXPORT_COLOR_PROFILE:
       g_value_set_boolean (value, core_config->export_color_profile);
       break;
+    case PROP_EXPORT_COMMENT:
+      g_value_set_boolean (value, core_config->export_comment);
+      break;
+    case PROP_EXPORT_THUMBNAIL:
+      g_value_set_boolean (value, core_config->export_thumbnail);
+      break;
     case PROP_EXPORT_METADATA_EXIF:
       g_value_set_boolean (value, core_config->export_metadata_exif);
       break;
@@ -1421,6 +1468,9 @@ gimp_core_config_get_property (GObject    *object,
       g_value_set_enum (value, core_config->win32_pointer_input_api);
       break;
 #endif
+    case PROP_ITEMS_SELECT_METHOD:
+      g_value_set_enum (value, core_config->items_select_method);
+      break;
 
     case PROP_INSTALL_COLORMAP:
     case PROP_MIN_COLORS:

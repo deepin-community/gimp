@@ -23,6 +23,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "widgets-types.h"
@@ -56,44 +57,41 @@ struct _GimpToolPalettePrivate
 
   GtkWidget   *group;
   GHashTable  *buttons;
-
-  gint         tool_rows;
-  gint         tool_columns;
 };
 
 #define GET_PRIVATE(p) ((GimpToolPalettePrivate *) gimp_tool_palette_get_instance_private ((GimpToolPalette *) (p)))
 
 
-static void       gimp_tool_palette_finalize                  (GObject          *object);
+static void     gimp_tool_palette_finalize            (GObject         *object);
 
-static void       gimp_tool_palette_size_allocate             (GtkWidget        *widget,
-                                                               GtkAllocation    *allocation);
-static void       gimp_tool_palette_style_set                 (GtkWidget        *widget,
-                                                               GtkStyle         *previous_style);
+static GtkSizeRequestMode
+                gimp_tool_palette_get_request_mode    (GtkWidget       *widget);
+static void     gimp_tool_palette_get_preferred_width (GtkWidget       *widget,
+                                                       gint            *min_width,
+                                                       gint            *pref_width);
+static void     gimp_tool_palette_get_preferred_height(GtkWidget       *widget,
+                                                       gint            *min_width,
+                                                       gint            *pref_width);
+static void     gimp_tool_palette_height_for_width    (GtkWidget       *widget,
+                                                       gint             width,
+                                                       gint            *min_height,
+                                                       gint            *pref_height);
+static void     gimp_tool_palette_style_updated       (GtkWidget       *widget);
 
-static void       gimp_tool_palette_tool_add                  (GimpContainer    *container,
-                                                               GimpToolItem     *tool_item,
-                                                               GimpToolPalette  *palette);
-static void       gimp_tool_palette_tool_remove               (GimpContainer    *container,
-                                                               GimpToolItem     *tool_item,
-                                                               GimpToolPalette  *palette);
-static void       gimp_tool_palette_tool_reorder              (GimpContainer    *container,
-                                                               GimpToolItem     *tool_item,
-                                                               gint              index,
-                                                               GimpToolPalette  *palette);
+static void     gimp_tool_palette_tool_add            (GimpContainer   *container,
+                                                       GimpToolItem    *tool_item,
+                                                       GimpToolPalette *palette);
+static void     gimp_tool_palette_tool_remove         (GimpContainer   *container,
+                                                       GimpToolItem    *tool_item,
+                                                       GimpToolPalette *palette);
+static void     gimp_tool_palette_tool_reorder        (GimpContainer   *container,
+                                                       GimpToolItem    *tool_item,
+                                                       gint             index,
+                                                       GimpToolPalette *palette);
 
-static void       gimp_tool_palette_config_menu_mode_notify   (GimpGuiConfig    *config,
-                                                               const GParamSpec *pspec,
-                                                               GimpToolPalette  *palette);
-static void       gimp_tool_palette_config_size_changed       (GimpGuiConfig    *config,
-                                                               GimpToolPalette  *palette);
-
-static void       gimp_tool_palette_add_button                (GimpToolPalette *palette,
-                                                               GimpToolItem    *tool_item,
-                                                               gint             index);
-
-static gboolean   gimp_tool_palette_get_show_menu_on_hover    (GimpToolPalette *palette);
-static void       gimp_tool_palette_update_show_menu_on_hover (GimpToolPalette *palette);
+static void     gimp_tool_palette_add_button          (GimpToolPalette *palette,
+                                                       GimpToolItem    *tool_item,
+                                                       gint             index);
 
 
 G_DEFINE_TYPE_WITH_PRIVATE (GimpToolPalette, gimp_tool_palette,
@@ -108,10 +106,13 @@ gimp_tool_palette_class_init (GimpToolPaletteClass *klass)
   GObjectClass   *object_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
-  object_class->finalize      = gimp_tool_palette_finalize;
+  object_class->finalize                       = gimp_tool_palette_finalize;
 
-  widget_class->size_allocate = gimp_tool_palette_size_allocate;
-  widget_class->style_set     = gimp_tool_palette_style_set;
+  widget_class->get_request_mode               = gimp_tool_palette_get_request_mode;
+  widget_class->get_preferred_width            = gimp_tool_palette_get_preferred_width;
+  widget_class->get_preferred_height           = gimp_tool_palette_get_preferred_height;
+  widget_class->get_preferred_height_for_width = gimp_tool_palette_height_for_width;
+  widget_class->style_updated                  = gimp_tool_palette_style_updated;
 
   gtk_widget_class_install_style_property (widget_class,
                                            g_param_spec_enum ("tool-icon-size",
@@ -145,99 +146,145 @@ gimp_tool_palette_finalize (GObject *object)
 
   g_clear_pointer (&private->buttons, g_hash_table_unref);
 
-  if (private->toolbox)
-    {
-      GimpContext *context = gimp_toolbox_get_context (private->toolbox);
-
-      if (context)
-        {
-          g_signal_handlers_disconnect_by_func (
-            context->gimp->config,
-            G_CALLBACK (gimp_tool_palette_config_menu_mode_notify),
-            object);
-          g_signal_handlers_disconnect_by_func (
-            context->gimp->config,
-            G_CALLBACK (gimp_tool_palette_config_size_changed),
-            object);
-        }
-    }
-
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
-static void
-gimp_tool_palette_size_allocate (GtkWidget     *widget,
-                                 GtkAllocation *allocation)
+static GtkSizeRequestMode
+gimp_tool_palette_get_request_mode (GtkWidget *widget)
 {
-  GimpToolPalette        *palette = GIMP_TOOL_PALETTE (widget);
-  GimpToolPalettePrivate *private = GET_PRIVATE (widget);
-  gint                    button_width;
-  gint                    button_height;
+  return GTK_SIZE_REQUEST_HEIGHT_FOR_WIDTH;
+}
 
-  GTK_WIDGET_CLASS (parent_class)->size_allocate (widget, allocation);
+static gint
+gimp_tool_palette_get_n_tools (GimpToolPalette *palette,
+                               gint            *button_width,
+                               gint            *button_height,
+                               gint            *min_columns,
+                               gint            *min_rows)
+{
+  GimpToolPalettePrivate *private = GET_PRIVATE (palette);
+  GimpToolItem           *tool_item;
+  GHashTableIter          iter;
+  GdkMonitor             *monitor;
+  GdkRectangle            workarea;
+  gint                    n_tools;
+  gint                    max_rows;
+  gint                    max_columns;
 
-  if (gimp_tool_palette_get_button_size (palette,
-                                         &button_width, &button_height))
+  if (! gimp_tool_palette_get_button_size (palette,
+                                           button_width, button_height))
     {
-      GimpToolItem   *tool_item;
-      GHashTableIter  iter;
-      gint            n_tools;
-      gint            tool_rows;
-      gint            tool_columns;
-
-      n_tools = 0;
-
-      g_hash_table_iter_init (&iter, private->buttons);
-
-      while (g_hash_table_iter_next (&iter, (gpointer *) &tool_item, NULL))
-        {
-          if (gimp_tool_item_get_visible (tool_item))
-            n_tools++;
-        }
-
-      tool_columns = MAX (1, (allocation->width / button_width));
-      tool_rows    = n_tools / tool_columns;
-
-      if (n_tools % tool_columns)
-        tool_rows++;
-
-      if (private->tool_rows    != tool_rows  ||
-          private->tool_columns != tool_columns)
-        {
-          private->tool_rows    = tool_rows;
-          private->tool_columns = tool_columns;
-
-          gtk_widget_set_size_request (widget, -1,
-                                       tool_rows * button_height);
-
-          gimp_tool_palette_update_show_menu_on_hover (palette);
-        }
+      /* arbitrary values, just to simplify our callers */
+      *button_width  = 24;
+      *button_height = 24;
     }
+
+  n_tools = 0;
+
+  g_hash_table_iter_init (&iter, private->buttons);
+
+  while (g_hash_table_iter_next (&iter, (gpointer *) &tool_item, NULL))
+    {
+      if (gimp_tool_item_get_visible (tool_item))
+        n_tools++;
+    }
+
+  monitor = gimp_widget_get_monitor (GTK_WIDGET (palette));
+  gdk_monitor_get_workarea (monitor, &workarea);
+
+  max_columns = (workarea.width  * 0.9) / *button_width;
+  max_rows    = (workarea.height * 0.7) / *button_height;
+
+  *min_columns = MAX (1, n_tools / max_rows);
+  *min_rows    = MAX (1, n_tools / max_columns);
+
+  return n_tools;
 }
 
 static void
-gimp_tool_palette_style_set (GtkWidget *widget,
-                             GtkStyle  *previous_style)
+gimp_tool_palette_get_preferred_width (GtkWidget *widget,
+                                       gint      *min_width,
+                                       gint      *pref_width)
+{
+  gint button_width;
+  gint button_height;
+  gint min_columns;
+  gint min_rows;
+
+  gimp_tool_palette_get_n_tools (GIMP_TOOL_PALETTE (widget),
+                                 &button_width, &button_height,
+                                 &min_columns, &min_rows);
+
+  *min_width  = min_columns * button_width;
+  *pref_width = min_columns * button_width;
+}
+
+static void
+gimp_tool_palette_get_preferred_height (GtkWidget *widget,
+                                        gint      *min_height,
+                                        gint      *pref_height)
+{
+  gint button_width;
+  gint button_height;
+  gint min_columns;
+  gint min_rows;
+
+  gimp_tool_palette_get_n_tools (GIMP_TOOL_PALETTE (widget),
+                                 &button_width, &button_height,
+                                 &min_columns, &min_rows);
+
+  *min_height  = min_rows * button_height;
+  *pref_height = min_rows * button_height;
+}
+
+static void
+gimp_tool_palette_height_for_width (GtkWidget *widget,
+                                    gint       width,
+                                    gint      *min_height,
+                                    gint      *pref_height)
+{
+  gint n_tools;
+  gint button_width;
+  gint button_height;
+  gint min_columns;
+  gint min_rows;
+  gint tool_columns;
+  gint tool_rows;
+
+  n_tools = gimp_tool_palette_get_n_tools (GIMP_TOOL_PALETTE (widget),
+                                           &button_width, &button_height,
+                                           &min_columns, &min_rows);
+
+  tool_columns = MAX (min_columns, width / button_width);
+  tool_rows    = n_tools / tool_columns;
+
+  if (n_tools % tool_columns)
+    tool_rows++;
+
+  *min_height = *pref_height = tool_rows * button_height;
+}
+
+static void
+gimp_tool_palette_style_updated (GtkWidget *widget)
 {
   GimpToolPalettePrivate *private = GET_PRIVATE (widget);
-  Gimp                   *gimp;
   GtkWidget              *tool_button;
   GHashTableIter          iter;
   GtkReliefStyle          relief;
+  GtkIconSize             tool_icon_size;
 
-  GTK_WIDGET_CLASS (parent_class)->style_set (widget, previous_style);
+  GTK_WIDGET_CLASS (parent_class)->style_updated (widget);
 
   if (! gimp_toolbox_get_context (private->toolbox))
     return;
 
-  gimp = gimp_toolbox_get_context (private->toolbox)->gimp;
-
   gtk_widget_style_get (widget,
-                        "button-relief", &relief,
+                        "button-relief",  &relief,
+                        "tool-icon-size", &tool_icon_size,
                         NULL);
 
-  gimp_tool_palette_config_size_changed (GIMP_GUI_CONFIG (gimp->config),
-                                         GIMP_TOOL_PALETTE (widget));
+  gtk_tool_palette_set_icon_size (GTK_TOOL_PALETTE (widget),
+                                  tool_icon_size);
 
   g_hash_table_iter_init (&iter, private->buttons);
 
@@ -273,20 +320,6 @@ gimp_tool_palette_set_toolbox (GimpToolPalette *palette,
 
   private = GET_PRIVATE (palette);
 
-  if (private->toolbox)
-    {
-      context = gimp_toolbox_get_context (private->toolbox);
-
-      g_signal_handlers_disconnect_by_func (
-        GIMP_GUI_CONFIG (context->gimp->config),
-        G_CALLBACK (gimp_tool_palette_config_menu_mode_notify),
-        palette);
-      g_signal_handlers_disconnect_by_func (
-        GIMP_GUI_CONFIG (context->gimp->config),
-        G_CALLBACK (gimp_tool_palette_config_size_changed),
-        palette);
-    }
-
   private->toolbox = toolbox;
 
   context = gimp_toolbox_get_context (toolbox);
@@ -316,19 +349,18 @@ gimp_tool_palette_set_toolbox (GimpToolPalette *palette,
                            G_CALLBACK (gimp_tool_palette_tool_reorder),
                            palette, 0);
 
-  g_signal_connect (GIMP_GUI_CONFIG (context->gimp->config),
-                    "notify::toolbox-group-menu-mode",
-                    G_CALLBACK (gimp_tool_palette_config_menu_mode_notify),
-                    palette);
-  gimp_tool_palette_update_show_menu_on_hover (palette);
-
-  /* Update the toolbox icon size on config change. */
-  g_signal_connect (GIMP_GUI_CONFIG (context->gimp->config),
-                    "size-changed",
-                    G_CALLBACK (gimp_tool_palette_config_size_changed),
-                    palette);
-  gimp_tool_palette_config_size_changed (GIMP_GUI_CONFIG (context->gimp->config),
-                                         palette);
+  g_signal_connect_object (GIMP_GUI_CONFIG (context->gimp->config),
+                           "notify::theme",
+                           G_CALLBACK (gimp_tool_palette_style_updated),
+                           palette, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+  g_signal_connect_object (GIMP_GUI_CONFIG (context->gimp->config),
+                           "notify::override-theme-icon-size",
+                           G_CALLBACK (gimp_tool_palette_style_updated),
+                           palette, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
+  g_signal_connect_object (GIMP_GUI_CONFIG (context->gimp->config),
+                           "notify::custom-icon-size",
+                           G_CALLBACK (gimp_tool_palette_style_updated),
+                           palette, G_CONNECT_AFTER | G_CONNECT_SWAPPED);
 }
 
 gboolean
@@ -352,7 +384,7 @@ gimp_tool_palette_get_button_size (GimpToolPalette *palette,
     {
       GtkRequisition button_requisition;
 
-      gtk_widget_size_request (tool_button, &button_requisition);
+      gtk_widget_get_preferred_size (tool_button, &button_requisition, NULL);
 
       *width  = button_requisition.width;
       *height = button_requisition.height;
@@ -415,49 +447,6 @@ gimp_tool_palette_tool_reorder (GimpContainer   *container,
 }
 
 static void
-gimp_tool_palette_config_menu_mode_notify (GimpGuiConfig    *config,
-                                           const GParamSpec *pspec,
-                                           GimpToolPalette  *palette)
-{
-  gimp_tool_palette_update_show_menu_on_hover (palette);
-}
-
-static void
-gimp_tool_palette_config_size_changed (GimpGuiConfig   *config,
-                                       GimpToolPalette *palette)
-{
-  GimpIconSize size;
-  GtkIconSize  tool_icon_size;
-
-  size = gimp_gui_config_detect_icon_size (config);
-  /* Match GimpIconSize with GtkIconSize for the toolbox icons. */
-  switch (size)
-    {
-    case GIMP_ICON_SIZE_SMALL:
-      tool_icon_size = GTK_ICON_SIZE_SMALL_TOOLBAR;
-      break;
-    case GIMP_ICON_SIZE_MEDIUM:
-      tool_icon_size = GTK_ICON_SIZE_LARGE_TOOLBAR;
-      break;
-    case GIMP_ICON_SIZE_LARGE:
-      tool_icon_size = GTK_ICON_SIZE_DND;
-      break;
-    case GIMP_ICON_SIZE_HUGE:
-      tool_icon_size = GTK_ICON_SIZE_DIALOG;
-      break;
-    default:
-      /* GIMP_ICON_SIZE_DEFAULT:
-       * let's use the size set by the theme. */
-      gtk_widget_style_get (GTK_WIDGET (palette),
-                            "tool-icon-size", &tool_icon_size,
-                            NULL);
-      break;
-    }
-
-  gtk_tool_palette_set_icon_size (GTK_TOOL_PALETTE (palette), tool_icon_size);
-}
-
-static void
 gimp_tool_palette_add_button (GimpToolPalette *palette,
                               GimpToolItem    *tool_item,
                               gint             index)
@@ -470,9 +459,6 @@ gimp_tool_palette_add_button (GimpToolPalette *palette,
   tool_button = gimp_tool_button_new (private->toolbox, tool_item);
   gtk_tool_item_group_insert (GTK_TOOL_ITEM_GROUP (private->group),
                               tool_button, index);
-  gimp_tool_button_set_show_menu_on_hover (
-    GIMP_TOOL_BUTTON (tool_button),
-    gimp_tool_palette_get_show_menu_on_hover (palette));
   gtk_widget_show (GTK_WIDGET (tool_button));
 
   g_object_bind_property (tool_item,   "shown",
@@ -491,52 +477,4 @@ gimp_tool_palette_add_button (GimpToolPalette *palette,
   gtk_button_set_relief (GTK_BUTTON (button), relief);
 
   g_hash_table_insert (private->buttons, tool_item, tool_button);
-}
-
-static gboolean
-gimp_tool_palette_get_show_menu_on_hover (GimpToolPalette *palette)
-{
-  GimpToolPalettePrivate *private = GET_PRIVATE (palette);
-
-  if (private->toolbox)
-    {
-      GimpContext *context = gimp_toolbox_get_context (private->toolbox);
-
-      if (context)
-        {
-          GimpGuiConfig *config = GIMP_GUI_CONFIG (context->gimp->config);
-
-          switch (config->toolbox_group_menu_mode)
-            {
-            case GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_CLICK:
-              return FALSE;
-
-            case GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_HOVER:
-              return TRUE;
-
-            case GIMP_TOOL_GROUP_MENU_MODE_SHOW_ON_HOVER_SINGLE_COLUMN:
-              return private->tool_columns == 1;
-            }
-        }
-    }
-
-  return FALSE;
-}
-
-static void
-gimp_tool_palette_update_show_menu_on_hover (GimpToolPalette *palette)
-{
-  GimpToolPalettePrivate *private = GET_PRIVATE (palette);
-  GHashTableIter          iter;
-  GimpToolButton         *tool_button;
-  gboolean                show_menu_on_hover;
-
-  show_menu_on_hover = gimp_tool_palette_get_show_menu_on_hover (palette);
-
-  g_hash_table_iter_init (&iter, private->buttons);
-
-  while (g_hash_table_iter_next (&iter, NULL, (gpointer *) &tool_button))
-    {
-      gimp_tool_button_set_show_menu_on_hover (tool_button, show_menu_on_hover);
-    }
 }

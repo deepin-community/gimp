@@ -41,10 +41,9 @@ struct _GimpTagPopup
   GimpComboTagEntry *combo_entry;
 
   GtkWidget         *frame;
-  GtkWidget         *alignment;
+  GtkWidget         *border_area;
   GtkWidget         *tag_area;
 
-  PangoContext      *context;
   PangoLayout       *layout;
 
   PopupTagData      *tag_data;
@@ -63,8 +62,10 @@ struct _GimpTagPopup
   gboolean           arrows_visible;
   gboolean           upper_arrow_prelight;
   gboolean           lower_arrow_prelight;
-  GtkStateType       upper_arrow_state;
-  GtkStateType       lower_arrow_state;
+  GtkStateFlags      upper_arrow_state;
+  GtkStateFlags      lower_arrow_state;
+
+  gboolean           smooth_scrolling;
 };
 
 struct _GimpTagPopupClass
@@ -77,7 +78,8 @@ GType       gimp_tag_popup_get_type (void) G_GNUC_CONST;
 
 GtkWidget * gimp_tag_popup_new      (GimpComboTagEntry *entry);
 
-void        gimp_tag_popup_show     (GimpTagPopup      *popup);
+void        gimp_tag_popup_show     (GimpTagPopup      *popup,
+                                     GdkEvent          *event);
 
 
 #endif  /*  __GIMP_TAG_POPUP_H__  */

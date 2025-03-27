@@ -150,7 +150,7 @@ gimp_clipboard_exit (Gimp *gimp)
  * Tests if there's an image in the clipboard. If the global image cut
  * buffer of @gimp is empty, this function returns %NULL.
  *
- * Return value: %TRUE if there's an image in the clipboard, %FALSE otherwise
+ * Returns: %TRUE if there's an image in the clipboard, %FALSE otherwise
  **/
 gboolean
 gimp_clipboard_has_image (Gimp *gimp)
@@ -189,7 +189,7 @@ gimp_clipboard_has_image (Gimp *gimp)
  * similar to gtk_clipboard_wait_is_text_available(). The same caveats
  * apply here.
  *
- * Return value: %TRUE if there's image data in the clipboard, %FALSE otherwise
+ * Returns: %TRUE if there's image data in the clipboard, %FALSE otherwise
  **/
 gboolean
 gimp_clipboard_has_buffer (Gimp *gimp)
@@ -226,7 +226,7 @@ gimp_clipboard_has_buffer (Gimp *gimp)
  * This is done in a main-loop similar to
  * gtk_clipboard_wait_is_text_available(). The same caveats apply here.
  *
- * Return value: %TRUE if there's SVG data in the clipboard, %FALSE otherwise
+ * Returns: %TRUE if there's SVG data in the clipboard, %FALSE otherwise
  **/
 gboolean
 gimp_clipboard_has_svg (Gimp *gimp)
@@ -263,7 +263,7 @@ gimp_clipboard_has_svg (Gimp *gimp)
  * This is done in a main-loop similar to
  * gtk_clipboard_wait_is_text_available(). The same caveats apply here.
  *
- * Return value: %TRUE if there's curve data in the clipboard, %FALSE otherwise
+ * Returns: %TRUE if there's curve data in the clipboard, %FALSE otherwise
  **/
 gboolean
 gimp_clipboard_has_curve (Gimp *gimp)
@@ -302,7 +302,7 @@ gimp_clipboard_has_curve (Gimp *gimp)
  * The returned #GimpObject needs to be unref'ed when it's no longer
  * needed.
  *
- * Return value: a reference to a #GimpObject or %NULL if there's no
+ * Returns: (nullable): a reference to a #GimpObject or %NULL if there's no
  *               image or buffer in the clipboard
  **/
 GimpObject *
@@ -329,7 +329,7 @@ gimp_clipboard_get_object (Gimp *gimp)
  * The returned #GimpImage needs to be unref'ed when it's no longer
  * needed.
  *
- * Return value: a reference to a #GimpImage or %NULL if there's no
+ * Returns: (nullable): a reference to a #GimpImage or %NULL if there's no
  *               image in the clipboard
  **/
 GimpImage *
@@ -388,7 +388,7 @@ gimp_clipboard_get_image (Gimp *gimp)
  * The returned #GimpBuffer needs to be unref'ed when it's no longer
  * needed.
  *
- * Return value: a reference to a #GimpBuffer or %NULL if there's no
+ * Returns: (nullable): a reference to a #GimpBuffer or %NULL if there's no
  *               image data
  **/
 GimpBuffer *
@@ -454,7 +454,7 @@ gimp_clipboard_get_buffer (Gimp *gimp)
  *
  * The returned data needs to be freed when it's no longer needed.
  *
- * Return value: a reference to a #GimpBuffer or %NULL if there's no
+ * Returns: (nullable): a reference to a #GimpBuffer or %NULL if there's no
  *               image data
  **/
 gchar *
@@ -493,7 +493,7 @@ gimp_clipboard_get_svg (Gimp  *gimp,
               stream = gimp_selection_data_get_stream (data, svg_length);
 
               if (stream)
-                svg = g_memdup (stream, *svg_length);
+                svg = g_memdup2 (stream, *svg_length);
 
               gtk_selection_data_free (data);
             }
@@ -524,7 +524,7 @@ gimp_clipboard_get_svg (Gimp  *gimp,
  *
  * The returned curve needs to be unref'ed when it's no longer needed.
  *
- * Return value: a reference to a #GimpCurve or %NULL if there's no
+ * Returns: (nullable): a reference to a #GimpCurve or %NULL if there's no
  *               curve data
  **/
 GimpCurve *
@@ -576,7 +576,7 @@ gimp_clipboard_get_curve (Gimp *gimp)
 /**
  * gimp_clipboard_set_image:
  * @gimp:  pointer to #Gimp
- * @image: a #GimpImage, or %NULL.
+ * @image: (nullable): a #GimpImage, or %NULL.
  *
  * Offers the image in %GDK_SELECTION_CLIPBOARD.
  **/
@@ -626,7 +626,7 @@ gimp_clipboard_set_image (Gimp      *gimp,
 /**
  * gimp_clipboard_set_buffer:
  * @gimp:   pointer to #Gimp
- * @buffer: a #GimpBuffer, or %NULL.
+ * @buffer: (nullable): a #GimpBuffer, or %NULL.
  *
  * Offers the buffer in %GDK_SELECTION_CLIPBOARD.
  **/
@@ -674,7 +674,7 @@ gimp_clipboard_set_buffer (Gimp       *gimp,
 /**
  * gimp_clipboard_set_svg:
  * @gimp: pointer to #Gimp
- * @svg: a string containing the SVG data, or %NULL
+ * @svg: (nullable): a string containing the SVG data, or %NULL
  *
  * Offers SVG data in %GDK_SELECTION_CLIPBOARD.
  **/
@@ -749,7 +749,7 @@ gimp_clipboard_set_text (Gimp        *gimp,
 /**
  * gimp_clipboard_set_curve:
  * @gimp: pointer to #Gimp
- * @curve: a #GimpCurve, or %NULL
+ * @curve: (nullable): a #GimpCurve, or %NULL
  *
  * Offers curve data in %GDK_SELECTION_CLIPBOARD.
  **/

@@ -87,6 +87,9 @@ struct _GimpLayerClass
   void          (* show_mask_changed)         (GimpLayer              *layer);
 
   /*  virtual functions  */
+  gboolean      (* is_alpha_locked)           (GimpLayer              *layer,
+                                               GimpLayer             **locked_layer);
+
   void          (* translate)                 (GimpLayer              *layer,
                                                gint                    offset_x,
                                                gint                    offset_y);
@@ -125,6 +128,7 @@ struct _GimpLayerClass
   void          (* convert_type)              (GimpLayer              *layer,
                                                GimpImage              *dest_image,
                                                const Babl             *new_format,
+                                               GimpColorProfile       *src_profile,
                                                GimpColorProfile       *dest_profile,
                                                GeglDitherMethod        layer_dither_type,
                                                GeglDitherMethod        mask_dither_type,
@@ -143,6 +147,10 @@ struct _GimpLayerClass
 /*  function declarations  */
 
 GType           gimp_layer_get_type            (void) G_GNUC_CONST;
+
+void            gimp_layer_fix_format_space    (GimpLayer            *layer,
+                                                gboolean              copy_buffer,
+                                                gboolean              push_undo);
 
 GimpLayer     * gimp_layer_get_parent          (GimpLayer            *layer);
 
@@ -232,6 +240,8 @@ void            gimp_layer_set_lock_alpha      (GimpLayer            *layer,
                                                 gboolean              push_undo);
 gboolean        gimp_layer_get_lock_alpha      (GimpLayer            *layer);
 gboolean        gimp_layer_can_lock_alpha      (GimpLayer            *layer);
+gboolean        gimp_layer_is_alpha_locked     (GimpLayer            *layer,
+                                                GimpLayer           **locked_layer);
 
 
 /*  protected  */

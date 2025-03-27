@@ -62,6 +62,8 @@ gimp_airbrush_tool_register (GimpToolRegisterCallback  callback,
                 GIMP_TYPE_AIRBRUSH_OPTIONS,
                 gimp_airbrush_options_gui,
                 GIMP_PAINT_OPTIONS_CONTEXT_MASK |
+                GIMP_CONTEXT_PROP_MASK_EXPAND   |
+                GIMP_CONTEXT_PROP_MASK_PATTERN  |
                 GIMP_CONTEXT_PROP_MASK_GRADIENT,
                 "gimp-airbrush-tool",
                 _("Airbrush"),
@@ -134,17 +136,14 @@ gimp_airbrush_options_gui (GimpToolOptions *tool_options)
 
   button = gimp_prop_check_button_new (config, "motion-only", NULL);
   gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
-  scale = gimp_prop_spin_scale_new (config, "rate", NULL,
+  scale = gimp_prop_spin_scale_new (config, "rate",
                                     1.0, 10.0, 1);
   gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
-  scale = gimp_prop_spin_scale_new (config, "flow", NULL,
+  scale = gimp_prop_spin_scale_new (config, "flow",
                                     1.0, 10.0, 1);
   gtk_box_pack_start (GTK_BOX (vbox), scale, FALSE, FALSE, 0);
-  gtk_widget_show (scale);
 
   return vbox;
 }

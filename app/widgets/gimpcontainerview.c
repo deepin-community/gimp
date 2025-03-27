@@ -25,6 +25,7 @@
 #include <gegl.h>
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
 
 #include "widgets-types.h"
@@ -44,9 +45,8 @@
 
 enum
 {
-  SELECT_ITEM,
+  SELECT_ITEMS,
   ACTIVATE_ITEM,
-  CONTEXT_ITEM,
   LAST_SIGNAL
 };
 
@@ -91,6 +91,10 @@ static void   gimp_container_view_real_set_selection_mode (GimpContainerView *vi
 static void   gimp_container_view_clear_items      (GimpContainerView  *view);
 static void   gimp_container_view_real_clear_items (GimpContainerView  *view);
 
+static gint  gimp_container_view_real_get_selected (GimpContainerView  *view,
+                                                    GList             **list,
+                                                    GList             **paths);
+
 static void   gimp_container_view_add_container    (GimpContainerView  *view,
                                                     GimpContainer      *container);
 static void   gimp_container_view_add_foreach      (GimpViewable       *viewable,
@@ -132,13 +136,16 @@ static void   gimp_container_view_viewable_dropped (GtkWidget          *widget,
                                                     gint                y,
                                                     GimpViewable       *viewable,
                                                     gpointer            data);
+static void gimp_container_view_button_viewables_dropped (GtkWidget *widget,
+                                                          gint        x,
+                                                          gint        y,
+                                                          GList      *viewables,
+                                                          gpointer    data);
 static void  gimp_container_view_button_viewable_dropped (GtkWidget    *widget,
                                                           gint          x,
                                                           gint          y,
                                                           GimpViewable *viewable,
                                                           gpointer      data);
-static gint  gimp_container_view_real_get_selected (GimpContainerView    *view,
-                                                    GList               **list);
 
 
 G_DEFINE_INTERFACE (GimpContainerView, gimp_container_view, GTK_TYPE_WIDGET)
@@ -150,15 +157,15 @@ static guint view_signals[LAST_SIGNAL] = { 0 };
 static void
 gimp_container_view_default_init (GimpContainerViewInterface *iface)
 {
-  view_signals[SELECT_ITEM] =
-    g_signal_new ("select-item",
+  view_signals[SELECT_ITEMS] =
+    g_signal_new ("select-items",
                   G_TYPE_FROM_INTERFACE (iface),
                   G_SIGNAL_RUN_LAST,
-                  G_STRUCT_OFFSET (GimpContainerViewInterface, select_item),
+                  G_STRUCT_OFFSET (GimpContainerViewInterface, select_items),
                   NULL, NULL,
-                  gimp_marshal_BOOLEAN__OBJECT_POINTER,
+                  NULL,
                   G_TYPE_BOOLEAN, 2,
-                  GIMP_TYPE_OBJECT,
+                  G_TYPE_POINTER,
                   G_TYPE_POINTER);
 
   view_signals[ACTIVATE_ITEM] =
@@ -172,26 +179,14 @@ gimp_container_view_default_init (GimpContainerViewInterface *iface)
                   GIMP_TYPE_OBJECT,
                   G_TYPE_POINTER);
 
-  view_signals[CONTEXT_ITEM] =
-    g_signal_new ("context-item",
-                  G_TYPE_FROM_INTERFACE (iface),
-                  G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (GimpContainerViewInterface, context_item),
-                  NULL, NULL,
-                  gimp_marshal_VOID__OBJECT_POINTER,
-                  G_TYPE_NONE, 2,
-                  GIMP_TYPE_OBJECT,
-                  G_TYPE_POINTER);
-
-  iface->select_item        = NULL;
+  iface->select_items       = NULL;
   iface->activate_item      = NULL;
-  iface->context_item       = NULL;
 
   iface->set_container      = gimp_container_view_real_set_container;
   iface->set_context        = gimp_container_view_real_set_context;
   iface->set_selection_mode = gimp_container_view_real_set_selection_mode;
   iface->insert_item        = NULL;
-  iface->insert_item_after  = NULL;
+  iface->insert_items_after = NULL;
   iface->remove_item        = NULL;
   iface->reorder_item       = NULL;
   iface->rename_item        = NULL;
@@ -273,46 +268,6 @@ gimp_container_view_private_finalize (GimpContainerViewPrivate *private)
   g_slice_free (GimpContainerViewPrivate, private);
 }
 
-static GimpContainerViewPrivate *
-gimp_container_view_get_private (GimpContainerView *view)
-{
-  GimpContainerViewPrivate *private;
-
-  static GQuark private_key = 0;
-
-  g_return_val_if_fail (GIMP_IS_CONTAINER_VIEW (view), NULL);
-
-  if (! private_key)
-    private_key = g_quark_from_static_string ("gimp-container-view-private");
-
-  private = g_object_get_qdata ((GObject *) view, private_key);
-
-  if (! private)
-    {
-      GimpContainerViewInterface *view_iface;
-
-      view_iface = GIMP_CONTAINER_VIEW_GET_INTERFACE (view);
-
-      private = g_slice_new0 (GimpContainerViewPrivate);
-
-      private->view_border_width = 1;
-
-      private->item_hash = g_hash_table_new_full (g_direct_hash,
-                                                  g_direct_equal,
-                                                  NULL,
-                                                  view_iface->insert_data_free);
-
-      g_object_set_qdata_full ((GObject *) view, private_key, private,
-                               (GDestroyNotify) gimp_container_view_private_finalize);
-
-      g_signal_connect (view, "destroy",
-                        G_CALLBACK (gimp_container_view_private_dispose),
-                        private);
-    }
-
-  return private;
-}
-
 /**
  * gimp_container_view_install_properties:
  * @klass: the class structure for a type deriving from #GObject
@@ -375,56 +330,9 @@ gimp_container_view_set_container (GimpContainerView *view,
 
   if (container != private->container)
     {
-      GIMP_CONTAINER_VIEW_GET_INTERFACE (view)->set_container (view, container);
+      GIMP_CONTAINER_VIEW_GET_IFACE (view)->set_container (view, container);
 
       g_object_notify (G_OBJECT (view), "container");
-    }
-}
-
-static void
-gimp_container_view_real_set_container (GimpContainerView *view,
-                                        GimpContainer     *container)
-{
-  GimpContainerViewPrivate *private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
-
-  if (private->container)
-    {
-      if (private->context)
-        gimp_container_view_disconnect_context (view);
-
-      gimp_container_view_select_item (view, NULL);
-
-      /* freeze/thaw is only supported for the toplevel container */
-      g_signal_handlers_disconnect_by_func (private->container,
-                                            gimp_container_view_freeze,
-                                            view);
-      g_signal_handlers_disconnect_by_func (private->container,
-                                            gimp_container_view_thaw,
-                                            view);
-
-      if (! gimp_container_frozen (private->container))
-        gimp_container_view_remove_container (view, private->container);
-    }
-
-  private->container = container;
-
-  if (private->container)
-    {
-      if (! gimp_container_frozen (private->container))
-        gimp_container_view_add_container (view, private->container);
-
-      /* freeze/thaw is only supported for the toplevel container */
-      g_signal_connect_object (private->container, "freeze",
-                               G_CALLBACK (gimp_container_view_freeze),
-                               view,
-                               G_CONNECT_SWAPPED);
-      g_signal_connect_object (private->container, "thaw",
-                               G_CALLBACK (gimp_container_view_thaw),
-                               view,
-                               G_CONNECT_SWAPPED);
-
-      if (private->context)
-        gimp_container_view_connect_context (view);
     }
 }
 
@@ -453,30 +361,9 @@ gimp_container_view_set_context (GimpContainerView *view,
 
   if (context != private->context)
     {
-      GIMP_CONTAINER_VIEW_GET_INTERFACE (view)->set_context (view, context);
+      GIMP_CONTAINER_VIEW_GET_IFACE (view)->set_context (view, context);
 
       g_object_notify (G_OBJECT (view), "context");
-    }
-}
-
-static void
-gimp_container_view_real_set_context (GimpContainerView *view,
-                                      GimpContext       *context)
-{
-  GimpContainerViewPrivate *private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
-
-  if (private->context &&
-      private->container)
-    {
-      gimp_container_view_disconnect_context (view);
-    }
-
-  g_set_object (&private->context, context);
-
-  if (private->context &&
-      private->container)
-    {
-      gimp_container_view_connect_context (view);
     }
 }
 
@@ -496,16 +383,7 @@ gimp_container_view_set_selection_mode (GimpContainerView *view,
   g_return_if_fail (mode == GTK_SELECTION_SINGLE ||
                     mode == GTK_SELECTION_MULTIPLE);
 
-  GIMP_CONTAINER_VIEW_GET_INTERFACE (view)->set_selection_mode (view, mode);
-}
-
-static void
-gimp_container_view_real_set_selection_mode (GimpContainerView *view,
-                                             GtkSelectionMode   mode)
-{
-  GimpContainerViewPrivate *private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
-
-  private->selection_mode = mode;
+  GIMP_CONTAINER_VIEW_GET_IFACE (view)->set_selection_mode (view, mode);
 }
 
 gint
@@ -545,7 +423,7 @@ gimp_container_view_set_view_size (GimpContainerView *view,
       private->view_size         = view_size;
       private->view_border_width = view_border_width;
 
-      GIMP_CONTAINER_VIEW_GET_INTERFACE (view)->set_view_size (view);
+      GIMP_CONTAINER_VIEW_GET_IFACE (view)->set_view_size (view);
 
       g_object_freeze_notify (G_OBJECT (view));
       g_object_notify (G_OBJECT (view), "view-size");
@@ -614,6 +492,10 @@ gimp_container_view_enable_dnd (GimpContainerView *view,
   g_return_if_fail (GIMP_IS_CONTAINER_VIEW (view));
   g_return_if_fail (GTK_IS_BUTTON (button));
 
+  gimp_dnd_viewable_list_dest_add (GTK_WIDGET (button),
+                                   children_type,
+                                   gimp_container_view_button_viewables_dropped,
+                                   view);
   gimp_dnd_viewable_dest_add (GTK_WIDGET (button),
                               children_type,
                               gimp_container_view_button_viewable_dropped,
@@ -621,25 +503,44 @@ gimp_container_view_enable_dnd (GimpContainerView *view,
 }
 
 gboolean
-gimp_container_view_select_item (GimpContainerView *view,
-                                 GimpViewable      *viewable)
+gimp_container_view_select_items (GimpContainerView *view,
+                                  GList             *viewables)
 {
   GimpContainerViewPrivate *private;
   gboolean                  success = FALSE;
-  gpointer                  insert_data;
 
   g_return_val_if_fail (GIMP_IS_CONTAINER_VIEW (view), FALSE);
-  g_return_val_if_fail (viewable == NULL || GIMP_IS_VIEWABLE (viewable), FALSE);
 
   private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
 
   if (gimp_container_frozen (private->container))
     return TRUE;
 
-  insert_data = g_hash_table_lookup (private->item_hash, viewable);
+  g_signal_emit (view, view_signals[SELECT_ITEMS], 0,
+                 viewables, NULL, &success);
 
-  g_signal_emit (view, view_signals[SELECT_ITEM], 0,
-                 viewable, insert_data, &success);
+  return success;
+}
+
+/* Mostly a convenience function calling the more generic
+ * gimp_container_view_select_items().
+ * This is to be used when you want to select one viewable only (or
+ * because the container this is called from only handles single
+ * selection anyway).
+ */
+gboolean
+gimp_container_view_select_item (GimpContainerView *view,
+                                 GimpViewable      *viewable)
+{
+  GList    *viewables = NULL;
+  gboolean  success;
+
+  if (viewable)
+    viewables = g_list_prepend (viewables, viewable);
+
+  success = gimp_container_view_select_items (view, viewables);
+
+  g_list_free (viewables);
 
   return success;
 }
@@ -665,27 +566,6 @@ gimp_container_view_activate_item (GimpContainerView *view,
                  viewable, insert_data);
 }
 
-void
-gimp_container_view_context_item (GimpContainerView *view,
-                                  GimpViewable      *viewable)
-{
-  GimpContainerViewPrivate *private;
-  gpointer                  insert_data;
-
-  g_return_if_fail (GIMP_IS_CONTAINER_VIEW (view));
-  g_return_if_fail (GIMP_IS_VIEWABLE (viewable));
-
-  private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
-
-  if (gimp_container_frozen (private->container))
-    return;
-
-  insert_data = g_hash_table_lookup (private->item_hash, viewable);
-
-  g_signal_emit (view, view_signals[CONTEXT_ITEM], 0,
-                 viewable, insert_data);
-}
-
 gpointer
 gimp_container_view_lookup (GimpContainerView *view,
                             GimpViewable      *viewable)
@@ -702,6 +582,27 @@ gimp_container_view_lookup (GimpContainerView *view,
   private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
 
   return g_hash_table_lookup (private->item_hash, viewable);
+}
+
+gboolean
+gimp_container_view_contains (GimpContainerView *view,
+                              GList             *viewables)
+{
+  GimpContainerViewPrivate *private;
+  GList                    *iter;
+
+  g_return_val_if_fail (GIMP_IS_CONTAINER_VIEW (view), FALSE);
+  g_return_val_if_fail (viewables, FALSE);
+
+  private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
+
+  for (iter = viewables; iter; iter = iter->next)
+    {
+      if (! g_hash_table_contains (private->item_hash, iter->data))
+        return FALSE;
+    }
+
+  return TRUE;
 }
 
 gboolean
@@ -766,64 +667,63 @@ gimp_container_view_item_selected (GimpContainerView *view,
 
 gboolean
 gimp_container_view_multi_selected (GimpContainerView *view,
-                                    GList             *items)
+                                    GList             *items,
+                                    GList             *items_data)
 {
-  guint                     selected_count;
-  gboolean                  success = FALSE;
+  gboolean success = FALSE;
 
   g_return_val_if_fail (GIMP_IS_CONTAINER_VIEW (view), FALSE);
 
-  selected_count = g_list_length (items);
-
-  if (selected_count == 0)
-    {
-      /* do nothing */
-    }
-  else if (selected_count == 1)
-    {
-      success = gimp_container_view_item_selected (view, items->data);
-    }
-  else
-    {
-      success = FALSE;
-      g_signal_emit (view, view_signals[SELECT_ITEM], 0,
-                     NULL, items, &success);
-    }
+  g_signal_emit (view, view_signals[SELECT_ITEMS], 0,
+                 items, items_data, &success);
 
   return success;
 }
 
+/**
+ * gimp_container_view_get_selected:
+ * @view:
+ * @items:
+ * @items_data:
+ *
+ * Get the selected items in @view.
+ *
+ * If @items is not %NULL, fills it with a newly allocated #GList of the
+ * selected items.
+ * If @items_data is not %NULL and if the implementing class associates
+ * data to its contents, it will be filled with a newly allocated #GList
+ * of the same size as @items, or will be %NULL otherwise. It is up to
+ * the class to decide what type of data is passed along.
+ *
+ * Note that by default, the interface only implements some basic single
+ * selection. Override select_items() signal to get more complete
+ * selection support.
+ *
+ * Returns: the number of selected items.
+ */
 gint
 gimp_container_view_get_selected (GimpContainerView  *view,
-                                  GList             **list)
+                                  GList             **items,
+                                  GList             **items_data)
 {
   g_return_val_if_fail (GIMP_IS_CONTAINER_VIEW (view), 0);
 
-  return GIMP_CONTAINER_VIEW_GET_INTERFACE (view)->get_selected (view, list);
+  return GIMP_CONTAINER_VIEW_GET_IFACE (view)->get_selected (view, items, items_data);
 }
 
-static gint
-gimp_container_view_real_get_selected (GimpContainerView    *view,
-                                       GList               **list)
+gboolean
+gimp_container_view_is_item_selected (GimpContainerView *view,
+                                      GimpViewable      *viewable)
 {
-  GimpContainerViewPrivate *private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
-  GType                     children_type;
-  GimpObject               *object;
+  GList    *items;
+  gboolean  found;
 
-  if (list)
-    *list = NULL;
+  gimp_container_view_get_selected (view, &items, NULL);
+  found = (g_list_find (items, viewable) != NULL);
 
-  if (! private->container || ! private->context)
-    return 0;
+  g_list_free (items);
 
-  children_type = gimp_container_get_children_type (private->container);
-  object = gimp_context_get_by_type (private->context,
-                                     children_type);
-
-  if (list && object)
-    *list = g_list_append (*list, object);
-
-  return object ? 1 : 0;
+  return found;
 }
 
 void
@@ -834,16 +734,6 @@ gimp_container_view_item_activated (GimpContainerView *view,
   g_return_if_fail (GIMP_IS_VIEWABLE (viewable));
 
   gimp_container_view_activate_item (view, viewable);
-}
-
-void
-gimp_container_view_item_context (GimpContainerView *view,
-                                  GimpViewable      *viewable)
-{
-  g_return_if_fail (GIMP_IS_CONTAINER_VIEW (view));
-  g_return_if_fail (GIMP_IS_VIEWABLE (viewable));
-
-  gimp_container_view_context_item (view, viewable);
 }
 
 void
@@ -871,7 +761,8 @@ gimp_container_view_set_property (GObject      *object,
     case GIMP_CONTAINER_VIEW_PROP_VIEW_SIZE:
     case GIMP_CONTAINER_VIEW_PROP_VIEW_BORDER_WIDTH:
       {
-        gint size, border;
+        gint size;
+        gint border = 0;
 
         size = gimp_container_view_get_view_size (view, &border);
 
@@ -914,7 +805,8 @@ gimp_container_view_get_property (GObject    *object,
     case GIMP_CONTAINER_VIEW_PROP_VIEW_SIZE:
     case GIMP_CONTAINER_VIEW_PROP_VIEW_BORDER_WIDTH:
       {
-        gint size, border;
+        gint size;
+        gint border = 0;
 
         size = gimp_container_view_get_view_size (view, &border);
 
@@ -930,10 +822,131 @@ gimp_container_view_get_property (GObject    *object,
     }
 }
 
+
+/*  Private functions  */
+
+
+static GimpContainerViewPrivate *
+gimp_container_view_get_private (GimpContainerView *view)
+{
+  GimpContainerViewPrivate *private;
+
+  static GQuark private_key = 0;
+
+  g_return_val_if_fail (GIMP_IS_CONTAINER_VIEW (view), NULL);
+
+  if (! private_key)
+    private_key = g_quark_from_static_string ("gimp-container-view-private");
+
+  private = g_object_get_qdata ((GObject *) view, private_key);
+
+  if (! private)
+    {
+      GimpContainerViewInterface *view_iface;
+
+      view_iface = GIMP_CONTAINER_VIEW_GET_IFACE (view);
+
+      private = g_slice_new0 (GimpContainerViewPrivate);
+
+      private->view_border_width = 1;
+
+      private->item_hash = g_hash_table_new_full (g_direct_hash,
+                                                  g_direct_equal,
+                                                  NULL,
+                                                  view_iface->insert_data_free);
+
+      g_object_set_qdata_full ((GObject *) view, private_key, private,
+                               (GDestroyNotify) gimp_container_view_private_finalize);
+
+      g_signal_connect (view, "destroy",
+                        G_CALLBACK (gimp_container_view_private_dispose),
+                        private);
+    }
+
+  return private;
+}
+
+static void
+gimp_container_view_real_set_container (GimpContainerView *view,
+                                        GimpContainer     *container)
+{
+  GimpContainerViewPrivate *private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
+
+  if (private->container)
+    {
+      if (private->context)
+        gimp_container_view_disconnect_context (view);
+
+      gimp_container_view_select_items (view, NULL);
+
+      /* freeze/thaw is only supported for the toplevel container */
+      g_signal_handlers_disconnect_by_func (private->container,
+                                            gimp_container_view_freeze,
+                                            view);
+      g_signal_handlers_disconnect_by_func (private->container,
+                                            gimp_container_view_thaw,
+                                            view);
+
+      if (! gimp_container_frozen (private->container))
+        gimp_container_view_remove_container (view, private->container);
+    }
+
+  private->container = container;
+
+  if (private->container)
+    {
+      if (! gimp_container_frozen (private->container))
+        gimp_container_view_add_container (view, private->container);
+
+      /* freeze/thaw is only supported for the toplevel container */
+      g_signal_connect_object (private->container, "freeze",
+                               G_CALLBACK (gimp_container_view_freeze),
+                               view,
+                               G_CONNECT_SWAPPED);
+      g_signal_connect_object (private->container, "thaw",
+                               G_CALLBACK (gimp_container_view_thaw),
+                               view,
+                               G_CONNECT_SWAPPED);
+
+      if (private->context)
+        gimp_container_view_connect_context (view);
+    }
+}
+
+static void
+gimp_container_view_real_set_context (GimpContainerView *view,
+                                      GimpContext       *context)
+{
+  GimpContainerViewPrivate *private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
+
+  if (private->context &&
+      private->container)
+    {
+      gimp_container_view_disconnect_context (view);
+    }
+
+  g_set_object (&private->context, context);
+
+  if (private->context &&
+      private->container)
+    {
+      gimp_container_view_connect_context (view);
+    }
+}
+
+static void
+gimp_container_view_real_set_selection_mode (GimpContainerView *view,
+                                             GtkSelectionMode   mode)
+{
+  GimpContainerViewPrivate *private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
+
+  private->selection_mode = mode;
+}
+
 static void
 gimp_container_view_clear_items (GimpContainerView *view)
 {
-  GIMP_CONTAINER_VIEW_GET_INTERFACE (view)->clear_items (view);
+  GIMP_CONTAINER_VIEW_GET_IFACE (view)->clear_items (view);
 }
 
 static void
@@ -942,6 +955,55 @@ gimp_container_view_real_clear_items (GimpContainerView *view)
   GimpContainerViewPrivate *private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
 
   g_hash_table_remove_all (private->item_hash);
+}
+
+static gint
+gimp_container_view_real_get_selected (GimpContainerView  *view,
+                                       GList             **items,
+                                       GList             **items_data)
+{
+  GimpContainerViewPrivate *private = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
+  GType                     children_type;
+  GimpObject               *object;
+
+  if (items)
+    *items = NULL;
+
+  /* In base interface, @items_data just stays NULL. We don't have a
+   * concept for it. Classes implementing this interface may want to
+   * store and pass data for their items, but they will have to
+   * implement themselves which data, and pass through with this
+   * parameter.
+   */
+  if (items_data)
+    *items_data = NULL;
+
+  if (! private->container || ! private->context)
+    return 0;
+
+  children_type = gimp_container_get_children_type (private->container);
+  if (gimp_context_type_to_property (children_type) == -1)
+    {
+      /* If you experience this warning, it means you should implement
+       * your own definition for get_selected() because the default one
+       * won't work for you (only made for context properties).
+       */
+      g_warning ("%s: TODO: implement GimpContainerViewInterface's get_selected() for type '%s'.\n",
+                 G_STRFUNC, g_type_name (G_OBJECT_TYPE (view)));
+      return 0;
+    }
+
+  object = gimp_context_get_by_type (private->context,
+                                     children_type);
+
+  /* Base interface provides the API for multi-selection but only
+   * implements single selection. Classes must implement their own
+   * multi-selection.
+   */
+  if (items && object)
+    *items = g_list_append (*items, object);
+
+  return object ? 1 : 0;
 }
 
 static void
@@ -968,7 +1030,7 @@ gimp_container_view_add_container (GimpContainerView *view,
                                    G_CALLBACK (gimp_container_view_name_changed),
                                    view);
 
-      if (GIMP_CONTAINER_VIEW_GET_INTERFACE (view)->expand_item)
+      if (GIMP_CONTAINER_VIEW_GET_IFACE (view)->expand_item)
         {
           private->expanded_changed_handler =
             gimp_tree_handler_connect (container,
@@ -1005,7 +1067,7 @@ gimp_container_view_add_foreach (GimpViewable      *viewable,
   gpointer                    parent_insert_data = NULL;
   gpointer                    insert_data;
 
-  view_iface = GIMP_CONTAINER_VIEW_GET_INTERFACE (view);
+  view_iface = GIMP_CONTAINER_VIEW_GET_IFACE (view);
   private    = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
 
   parent = gimp_viewable_get_parent (viewable);
@@ -1017,9 +1079,6 @@ gimp_container_view_add_foreach (GimpViewable      *viewable,
                                          parent_insert_data, -1);
 
   g_hash_table_insert (private->item_hash, viewable, insert_data);
-
-  if (view_iface->insert_item_after)
-    view_iface->insert_item_after (view, viewable, insert_data);
 
   children = gimp_viewable_get_children (viewable);
 
@@ -1040,7 +1099,7 @@ gimp_container_view_add (GimpContainerView *view,
   gpointer                    insert_data;
   gint                        index;
 
-  view_iface = GIMP_CONTAINER_VIEW_GET_INTERFACE (view);
+  view_iface = GIMP_CONTAINER_VIEW_GET_IFACE (view);
   private    = GIMP_CONTAINER_VIEW_GET_PRIVATE (view);
 
   index = gimp_container_get_child_index (container,
@@ -1056,8 +1115,8 @@ gimp_container_view_add (GimpContainerView *view,
 
   g_hash_table_insert (private->item_hash, viewable, insert_data);
 
-  if (view_iface->insert_item_after)
-    view_iface->insert_item_after (view, viewable, insert_data);
+  if (view_iface->insert_items_after)
+    view_iface->insert_items_after (view);
 
   children = gimp_viewable_get_children (viewable);
 
@@ -1132,9 +1191,7 @@ gimp_container_view_remove (GimpContainerView *view,
 
   if (insert_data)
     {
-      GIMP_CONTAINER_VIEW_GET_INTERFACE (view)->remove_item (view,
-                                                             viewable,
-                                                             insert_data);
+      GIMP_CONTAINER_VIEW_GET_IFACE (view)->remove_item (view, viewable, insert_data);
 
       g_hash_table_remove (private->item_hash, viewable);
     }
@@ -1153,7 +1210,7 @@ gimp_container_view_reorder (GimpContainerView *view,
 
   if (insert_data)
     {
-      GIMP_CONTAINER_VIEW_GET_INTERFACE (view)->reorder_item (view,
+      GIMP_CONTAINER_VIEW_GET_IFACE (view)->reorder_item (view,
                                                               viewable,
                                                               new_index,
                                                               insert_data);
@@ -1205,7 +1262,7 @@ gimp_container_view_name_changed (GimpViewable      *viewable,
 
   if (insert_data)
     {
-      GIMP_CONTAINER_VIEW_GET_INTERFACE (view)->rename_item (view,
+      GIMP_CONTAINER_VIEW_GET_IFACE (view)->rename_item (view,
                                                              viewable,
                                                              insert_data);
     }
@@ -1222,7 +1279,7 @@ gimp_container_view_expanded_changed (GimpViewable      *viewable,
 
   if (insert_data)
     {
-      GIMP_CONTAINER_VIEW_GET_INTERFACE (view)->expand_item (view,
+      GIMP_CONTAINER_VIEW_GET_IFACE (view)->expand_item (view,
                                                              viewable,
                                                              insert_data);
     }
@@ -1291,8 +1348,23 @@ gimp_container_view_context_changed (GimpContext       *context,
                                      GimpViewable      *viewable,
                                      GimpContainerView *view)
 {
-  if (! gimp_container_view_select_item (view, viewable))
-    g_warning ("%s: select_item() failed (should not happen)", G_STRFUNC);
+  GList *viewables = NULL;
+
+  if (viewable)
+    viewables = g_list_prepend (viewables, viewable);
+
+  g_signal_handlers_block_by_func (context,
+                                   gimp_container_view_context_changed,
+                                   view);
+
+  if (! gimp_container_view_select_items (view, viewables))
+    g_warning ("%s: select_items() failed (should not happen)", G_STRFUNC);
+
+  g_signal_handlers_unblock_by_func (context,
+                                     gimp_container_view_context_changed,
+                                     view);
+
+  g_list_free (viewables);
 }
 
 static void
@@ -1313,6 +1385,23 @@ gimp_container_view_viewable_dropped (GtkWidget    *widget,
 }
 
 static void
+gimp_container_view_button_viewables_dropped (GtkWidget *widget,
+                                              gint        x,
+                                              gint        y,
+                                              GList      *viewables,
+                                              gpointer    data)
+{
+  GimpContainerView *view = GIMP_CONTAINER_VIEW (data);
+
+  if (viewables)
+    {
+      gimp_container_view_multi_selected (view, viewables, NULL);
+
+      gtk_button_clicked (GTK_BUTTON (widget));
+    }
+}
+
+static void
 gimp_container_view_button_viewable_dropped (GtkWidget    *widget,
                                              gint          x,
                                              gint          y,
@@ -1328,4 +1417,3 @@ gimp_container_view_button_viewable_dropped (GtkWidget    *widget,
       gtk_button_clicked (GTK_BUTTON (widget));
     }
 }
-

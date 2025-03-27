@@ -23,15 +23,15 @@
 
 
 typedef void (* GimpFillCallback) (GtkWidget       *dialog,
-                                   GimpItem        *item,
-                                   GimpDrawable    *drawable,
+                                   GList           *items,
+                                   GList           *drawables,
                                    GimpContext     *context,
                                    GimpFillOptions *options,
                                    gpointer         user_data);
 
 
-GtkWidget * fill_dialog_new (GimpItem         *item,
-                             GimpDrawable     *drawable,
+GtkWidget * fill_dialog_new (GList            *items,
+                             GList            *drawables,
                              GimpContext      *context,
                              const gchar      *title,
                              const gchar      *icon_name,

@@ -34,6 +34,7 @@
 #include "gimplayer.h"
 #include "gimplayer-floating-selection.h"
 #include "gimplayermask.h"
+#include "gimpselection.h"
 
 #include "gimp-intl.h"
 
@@ -69,7 +70,13 @@ floating_sel_attach (GimpLayer    *layer,
        *  to the drawable
        */
       if (drawable == (GimpDrawable *) floating_sel)
-        drawable = gimp_image_get_active_drawable (image);
+        {
+          GList *drawables = gimp_image_get_selected_drawables (image);
+
+          g_return_if_fail (g_list_length (drawables) == 1);
+          drawable = drawables->data;
+          g_list_free (drawables);
+        }
     }
 
   gimp_layer_set_lock_alpha (layer, TRUE, FALSE);
@@ -211,6 +218,7 @@ floating_sel_activate_drawable (GimpLayer *layer)
 {
   GimpImage    *image;
   GimpDrawable *drawable;
+  GList        *selected_drawables = NULL;
 
   g_return_if_fail (GIMP_IS_LAYER (layer));
   g_return_if_fail (gimp_layer_is_floating_sel (layer));
@@ -224,16 +232,21 @@ floating_sel_activate_drawable (GimpLayer *layer)
     {
       GimpLayerMask *mask = GIMP_LAYER_MASK (drawable);
 
-      gimp_image_set_active_layer (image, gimp_layer_mask_get_layer (mask));
+      selected_drawables = g_list_prepend (NULL, gimp_layer_mask_get_layer (mask));
+      gimp_image_set_selected_layers (image, selected_drawables);
     }
-  else if (GIMP_IS_CHANNEL (drawable))
+  else if (GIMP_IS_CHANNEL (drawable) && ! GIMP_IS_SELECTION (drawable))
     {
-      gimp_image_set_active_channel (image, GIMP_CHANNEL (drawable));
+      selected_drawables = g_list_prepend (NULL, drawable);
+      gimp_image_set_selected_channels (image, selected_drawables);
     }
-  else
+  else if (! GIMP_IS_SELECTION (drawable))
     {
-      gimp_image_set_active_layer (image, GIMP_LAYER (drawable));
+      selected_drawables = g_list_prepend (NULL, drawable);
+      gimp_image_set_selected_layers (image, selected_drawables);
     }
+
+  g_list_free (selected_drawables);
 }
 
 const GimpBoundSeg *

@@ -1,11 +1,12 @@
 
 /* Generated data (by gimp-mkenums) */
 
+#include "stamp-display-enums.h"
 #include "config.h"
 #include <gio/gio.h>
 #include "libgimpbase/gimpbase.h"
 #include "display-enums.h"
-#include"gimp-intl.h"
+#include "gimp-intl.h"
 
 /* enumerations from "display-enums.h" */
 GType
@@ -191,6 +192,8 @@ gimp_handle_type_get_type (void)
     { GIMP_HANDLE_FILLED_DIAMOND, "GIMP_HANDLE_FILLED_DIAMOND", "filled-diamond" },
     { GIMP_HANDLE_CROSS, "GIMP_HANDLE_CROSS", "cross" },
     { GIMP_HANDLE_CROSSHAIR, "GIMP_HANDLE_CROSSHAIR", "crosshair" },
+    { GIMP_HANDLE_DROP, "GIMP_HANDLE_DROP", "drop" },
+    { GIMP_HANDLE_FILLED_DROP, "GIMP_HANDLE_FILLED_DROP", "filled-drop" },
     { 0, NULL, NULL }
   };
 
@@ -207,6 +210,8 @@ gimp_handle_type_get_type (void)
     { GIMP_HANDLE_FILLED_DIAMOND, "GIMP_HANDLE_FILLED_DIAMOND", NULL },
     { GIMP_HANDLE_CROSS, "GIMP_HANDLE_CROSS", NULL },
     { GIMP_HANDLE_CROSSHAIR, "GIMP_HANDLE_CROSSHAIR", NULL },
+    { GIMP_HANDLE_DROP, "GIMP_HANDLE_DROP", NULL },
+    { GIMP_HANDLE_FILLED_DROP, "GIMP_HANDLE_FILLED_DROP", NULL },
     { 0, NULL, NULL }
   };
 
@@ -581,6 +586,53 @@ gimp_zoom_focus_get_type (void)
     {
       type = g_enum_register_static ("GimpZoomFocus", values);
       gimp_type_set_translation_context (type, "zoom-focus");
+      gimp_enum_set_value_descriptions (type, descs);
+    }
+
+  return type;
+}
+
+GType
+gimp_modifier_action_get_type (void)
+{
+  static const GEnumValue values[] =
+  {
+    { GIMP_MODIFIER_ACTION_NONE, "GIMP_MODIFIER_ACTION_NONE", "none" },
+    { GIMP_MODIFIER_ACTION_PANNING, "GIMP_MODIFIER_ACTION_PANNING", "panning" },
+    { GIMP_MODIFIER_ACTION_ZOOMING, "GIMP_MODIFIER_ACTION_ZOOMING", "zooming" },
+    { GIMP_MODIFIER_ACTION_ROTATING, "GIMP_MODIFIER_ACTION_ROTATING", "rotating" },
+    { GIMP_MODIFIER_ACTION_STEP_ROTATING, "GIMP_MODIFIER_ACTION_STEP_ROTATING", "step-rotating" },
+    { GIMP_MODIFIER_ACTION_LAYER_PICKING, "GIMP_MODIFIER_ACTION_LAYER_PICKING", "layer-picking" },
+    { GIMP_MODIFIER_ACTION_MENU, "GIMP_MODIFIER_ACTION_MENU", "menu" },
+    { GIMP_MODIFIER_ACTION_ACTION, "GIMP_MODIFIER_ACTION_ACTION", "action" },
+    { GIMP_MODIFIER_ACTION_BRUSH_PIXEL_SIZE, "GIMP_MODIFIER_ACTION_BRUSH_PIXEL_SIZE", "brush-pixel-size" },
+    { GIMP_MODIFIER_ACTION_BRUSH_RADIUS_PIXEL_SIZE, "GIMP_MODIFIER_ACTION_BRUSH_RADIUS_PIXEL_SIZE", "brush-radius-pixel-size" },
+    { GIMP_MODIFIER_ACTION_TOOL_OPACITY, "GIMP_MODIFIER_ACTION_TOOL_OPACITY", "tool-opacity" },
+    { 0, NULL, NULL }
+  };
+
+  static const GimpEnumDesc descs[] =
+  {
+    { GIMP_MODIFIER_ACTION_NONE, NC_("modifier-action", "No action"), NULL },
+    { GIMP_MODIFIER_ACTION_PANNING, NC_("modifier-action", "Pan"), NULL },
+    { GIMP_MODIFIER_ACTION_ZOOMING, NC_("modifier-action", "Zoom"), NULL },
+    { GIMP_MODIFIER_ACTION_ROTATING, NC_("modifier-action", "Rotate View"), NULL },
+    { GIMP_MODIFIER_ACTION_STEP_ROTATING, NC_("modifier-action", "Rotate View by 15 degree steps"), NULL },
+    { GIMP_MODIFIER_ACTION_LAYER_PICKING, NC_("modifier-action", "Pick a layer"), NULL },
+    { GIMP_MODIFIER_ACTION_MENU, NC_("modifier-action", "Display the menu"), NULL },
+    { GIMP_MODIFIER_ACTION_ACTION, NC_("modifier-action", "Custom action"), NULL },
+    { GIMP_MODIFIER_ACTION_BRUSH_PIXEL_SIZE, NC_("modifier-action", "Change brush size in canvas pixels"), NULL },
+    { GIMP_MODIFIER_ACTION_BRUSH_RADIUS_PIXEL_SIZE, NC_("modifier-action", "Change brush radius' size in canvas pixels"), NULL },
+    { GIMP_MODIFIER_ACTION_TOOL_OPACITY, NC_("modifier-action", "Change tool opacity"), NULL },
+    { 0, NULL, NULL }
+  };
+
+  static GType type = 0;
+
+  if (G_UNLIKELY (! type))
+    {
+      type = g_enum_register_static ("GimpModifierAction", values);
+      gimp_type_set_translation_context (type, "modifier-action");
       gimp_enum_set_value_descriptions (type, descs);
     }
 

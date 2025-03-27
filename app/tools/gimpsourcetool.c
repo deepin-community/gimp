@@ -116,6 +116,8 @@ static void
 gimp_source_tool_init (GimpSourceTool *source)
 {
   source->show_source_outline = TRUE;
+
+  gimp_paint_tool_enable_multi_paint (GIMP_PAINT_TOOL (source));
 }
 
 static gboolean
@@ -155,7 +157,8 @@ gimp_source_tool_control (GimpTool       *tool,
                           GimpToolAction  action,
                           GimpDisplay    *display)
 {
-  GimpSourceTool *source_tool = GIMP_SOURCE_TOOL (tool);
+  GimpSourceTool    *source_tool = GIMP_SOURCE_TOOL (tool);
+  GimpSourceOptions *options     = GIMP_SOURCE_TOOL_GET_OPTIONS (tool);
 
   switch (action)
     {
@@ -165,8 +168,10 @@ gimp_source_tool_control (GimpTool       *tool,
 
     case GIMP_TOOL_ACTION_HALT:
       gimp_source_tool_set_src_display (source_tool, NULL);
-      g_object_set (GIMP_PAINT_TOOL (tool)->core,
-                    "src-drawable", NULL,
+      g_object_set (options,
+                    "src-drawables", NULL,
+                    "src-x",         0,
+                    "src-y",         0,
                     NULL);
       break;
 
@@ -185,11 +190,12 @@ gimp_source_tool_button_press (GimpTool            *tool,
                                GimpButtonPressType  press_type,
                                GimpDisplay         *display)
 {
-  GimpPaintTool  *paint_tool  = GIMP_PAINT_TOOL (tool);
-  GimpSourceTool *source_tool = GIMP_SOURCE_TOOL (tool);
-  GimpSourceCore *source      = GIMP_SOURCE_CORE (paint_tool->core);
-  GdkModifierType extend_mask = gimp_get_extend_selection_mask ();
-  GdkModifierType toggle_mask = gimp_get_toggle_behavior_mask ();
+  GimpPaintTool     *paint_tool  = GIMP_PAINT_TOOL (tool);
+  GimpSourceTool    *source_tool = GIMP_SOURCE_TOOL (tool);
+  GimpSourceCore    *source      = GIMP_SOURCE_CORE (paint_tool->core);
+  GimpSourceOptions *options     = GIMP_SOURCE_TOOL_GET_OPTIONS (tool);
+  GdkModifierType    extend_mask = gimp_get_extend_selection_mask ();
+  GdkModifierType    toggle_mask = gimp_get_toggle_behavior_mask ();
 
   gimp_draw_tool_pause (GIMP_DRAW_TOOL (tool));
 
@@ -207,8 +213,10 @@ gimp_source_tool_button_press (GimpTool            *tool,
   GIMP_TOOL_CLASS (parent_class)->button_press (tool, coords, time, state,
                                                 press_type, display);
 
-  source_tool->src_x = source->src_x;
-  source_tool->src_y = source->src_y;
+  g_object_get (options,
+                "src-x", &source_tool->src_x,
+                "src-y", &source_tool->src_y,
+                NULL);
 
   gimp_draw_tool_resume (GIMP_DRAW_TOOL (tool));
 }
@@ -220,16 +228,17 @@ gimp_source_tool_motion (GimpTool         *tool,
                          GdkModifierType   state,
                          GimpDisplay      *display)
 {
-  GimpSourceTool *source_tool = GIMP_SOURCE_TOOL (tool);
-  GimpPaintTool  *paint_tool  = GIMP_PAINT_TOOL (tool);
-  GimpSourceCore *source      = GIMP_SOURCE_CORE (paint_tool->core);
+  GimpSourceTool    *source_tool = GIMP_SOURCE_TOOL (tool);
+  GimpSourceOptions *options     = GIMP_SOURCE_TOOL_GET_OPTIONS (tool);
 
   gimp_draw_tool_pause (GIMP_DRAW_TOOL (tool));
 
   GIMP_TOOL_CLASS (parent_class)->motion (tool, coords, time, state, display);
 
-  source_tool->src_x = source->src_x;
-  source_tool->src_y = source->src_y;
+  g_object_get (options,
+                "src-x", &source_tool->src_x,
+                "src-y", &source_tool->src_y,
+                NULL);
 
   gimp_draw_tool_resume (GIMP_DRAW_TOOL (tool));
 }
@@ -300,7 +309,7 @@ gimp_source_tool_cursor_update (GimpTool         *tool,
         {
           cursor = GIMP_CURSOR_CROSSHAIR_SMALL;
         }
-      else if (! GIMP_SOURCE_CORE (GIMP_PAINT_TOOL (tool)->core)->src_drawable)
+      else if (! options->src_drawables)
         {
           modifier = GIMP_CURSOR_MODIFIER_BAD;
         }
@@ -339,7 +348,7 @@ gimp_source_tool_oper_update (GimpTool         *tool,
 
   if (gimp_source_core_use_source (source, options))
     {
-      if (source->src_drawable == NULL)
+      if (options->src_drawables == NULL)
         {
           GdkModifierType toggle_mask = gimp_get_toggle_behavior_mask ();
 
@@ -359,8 +368,10 @@ gimp_source_tool_oper_update (GimpTool         *tool,
         {
           gimp_draw_tool_pause (GIMP_DRAW_TOOL (tool));
 
-          source_tool->src_x = source->src_x;
-          source_tool->src_y = source->src_y;
+          g_object_get (options,
+                        "src-x", &source_tool->src_x,
+                        "src-y", &source_tool->src_y,
+                        NULL);
 
           if (! source->first_stroke)
             {
@@ -398,20 +409,16 @@ gimp_source_tool_draw (GimpDrawTool *draw_tool)
   GIMP_DRAW_TOOL_CLASS (parent_class)->draw (draw_tool);
 
   if (gimp_source_core_use_source (source, options) &&
-      source->src_drawable && source_tool->src_display)
+      options->src_drawables && source_tool->src_display)
     {
       GimpDisplayShell *src_shell;
-      gint              off_x;
-      gint              off_y;
       gdouble           src_x;
       gdouble           src_y;
 
       src_shell = gimp_display_get_shell (source_tool->src_display);
 
-      gimp_item_get_offset (GIMP_ITEM (source->src_drawable), &off_x, &off_y);
-
-      src_x = source_tool->src_x + off_x + 0.5;
-      src_y = source_tool->src_y + off_y + 0.5;
+      src_x = (gdouble) source_tool->src_x + 0.5;
+      src_y = (gdouble) source_tool->src_y + 0.5;
 
       if (source_tool->src_outline)
         {

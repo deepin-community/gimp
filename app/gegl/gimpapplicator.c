@@ -139,8 +139,7 @@ gimp_applicator_new (GeglNode *parent)
   gimp_gegl_mode_node_set_opacity (applicator->mode_node,
                                    applicator->opacity);
 
-  gegl_node_connect_to (applicator->input_node, "output",
-                        applicator->mode_node,  "input");
+  gegl_node_link (applicator->input_node, applicator->mode_node);
 
   applicator->apply_offset_node =
     gegl_node_new_child (applicator->node,
@@ -151,8 +150,8 @@ gimp_applicator_new (GeglNode *parent)
                        applicator->apply_offset_node,
                        NULL);
 
-  gegl_node_connect_to (applicator->apply_offset_node, "output",
-                        applicator->mode_node,         "aux");
+  gegl_node_connect (applicator->apply_offset_node, "output",
+                     applicator->mode_node,         "aux");
 
   applicator->mask_node =
     gegl_node_new_child (applicator->node,
@@ -164,8 +163,7 @@ gimp_applicator_new (GeglNode *parent)
                          "operation", "gegl:translate",
                          NULL);
 
-  gegl_node_connect_to (applicator->mask_node,        "output",
-                        applicator->mask_offset_node, "input");
+  gegl_node_link (applicator->mask_node, applicator->mask_offset_node);
   /* don't connect the the mask offset node to mode's aux2 yet */
 
   applicator->affect_node =
@@ -197,8 +195,8 @@ gimp_applicator_new (GeglNode *parent)
                        applicator->output_node,
                        NULL);
 
-  gegl_node_connect_to (applicator->mode_node,   "output",
-                        applicator->affect_node, "aux");
+  gegl_node_connect (applicator->mode_node,   "output",
+                     applicator->affect_node, "aux");
 
   return applicator;
 }
@@ -320,8 +318,8 @@ gimp_applicator_set_mask_buffer (GimpApplicator *applicator,
 
   if (mask_buffer)
     {
-      gegl_node_connect_to (applicator->mask_offset_node, "output",
-                            applicator->mode_node,        "aux2");
+      gegl_node_connect (applicator->mask_offset_node, "output",
+                         applicator->mode_node,        "aux2");
     }
   else
     {
@@ -380,14 +378,13 @@ gimp_applicator_set_apply_buffer (GimpApplicator *applicator,
 
       if (! applicator->apply_buffer)
         {
-          gegl_node_connect_to (applicator->apply_src_node,    "output",
-                                applicator->apply_offset_node, "input");
+          gegl_node_connect (applicator->apply_src_node,    "output",
+                             applicator->apply_offset_node, "input");
         }
     }
   else if (applicator->apply_buffer)
     {
-      gegl_node_connect_to (applicator->aux_node,          "output",
-                            applicator->apply_offset_node, "input");
+      gegl_node_link (applicator->aux_node, applicator->apply_offset_node);
     }
 
   applicator->apply_buffer = apply_buffer;
@@ -469,14 +466,18 @@ gimp_applicator_set_affect (GimpApplicator    *applicator,
     }
 }
 
-void
+gboolean
 gimp_applicator_set_output_format (GimpApplicator *applicator,
                                    const Babl     *format)
 {
-  g_return_if_fail (GIMP_IS_APPLICATOR (applicator));
+  gboolean changed = FALSE;
+
+  g_return_val_if_fail (GIMP_IS_APPLICATOR (applicator), FALSE);
 
   if (applicator->output_format != format)
     {
+      changed = TRUE;
+
       if (format)
         {
           if (! applicator->output_format)
@@ -502,6 +503,8 @@ gimp_applicator_set_output_format (GimpApplicator *applicator,
 
       applicator->output_format = format;
     }
+
+  return changed;
 }
 
 const Babl *
@@ -602,8 +605,8 @@ gimp_applicator_set_crop (GimpApplicator      *applicator,
                              "height",    rect->height,
                              NULL);
 
-              gegl_node_connect_to (applicator->input_node, "output",
-                                    applicator->crop_node,  "aux");
+              gegl_node_connect (applicator->input_node, "output",
+                                 applicator->crop_node,  "aux");
             }
           else
             {

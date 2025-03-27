@@ -22,13 +22,25 @@
 
 #include <gtk/gtk.h>
 
-#include "widgets-types.h"
+#include "libgimpbase/gimpbase.h"
 
-#include "core/gimpmarshal.h"
+#include "widgets-types.h"
 
 #include "gimpaction.h"
 #include "gimpaction-history.h"
 #include "gimpenumaction.h"
+
+
+/**
+ * GimpEnumAction:
+ *
+ * An action storing an enum value.
+ *
+ * Note that several actions with different values of the same enum type are not
+ * exclusive. GimpEnumAction-s are simple on-activate actions and are not
+ * stateful. If you want a stateful group of actions whose state is represented
+ * by an enum type, you are instead looking for GimpRadioAction.
+ */
 
 
 enum
@@ -39,19 +51,23 @@ enum
 };
 
 
-static void   gimp_enum_action_set_property (GObject      *object,
-                                             guint         prop_id,
-                                             const GValue *value,
-                                             GParamSpec   *pspec);
-static void   gimp_enum_action_get_property (GObject      *object,
-                                             guint         prop_id,
-                                             GValue       *value,
-                                             GParamSpec   *pspec);
+static void   gimp_enum_action_g_action_iface_init (GActionInterface *iface);
 
-static void   gimp_enum_action_activate     (GtkAction    *action);
+static void   gimp_enum_action_set_property        (GObject          *object,
+                                                    guint             prop_id,
+                                                    const GValue     *value,
+                                                    GParamSpec       *pspec);
+static void   gimp_enum_action_get_property        (GObject          *object,
+                                                    guint             prop_id,
+                                                    GValue           *value,
+                                                    GParamSpec       *pspec);
+
+static void   gimp_enum_action_activate            (GAction          *action,
+                                                    GVariant         *parameter);
 
 
-G_DEFINE_TYPE (GimpEnumAction, gimp_enum_action, GIMP_TYPE_ACTION_IMPL)
+G_DEFINE_TYPE_WITH_CODE (GimpEnumAction, gimp_enum_action, GIMP_TYPE_ACTION_IMPL,
+                         G_IMPLEMENT_INTERFACE (G_TYPE_ACTION, gimp_enum_action_g_action_iface_init))
 
 #define parent_class gimp_enum_action_parent_class
 
@@ -59,13 +75,10 @@ G_DEFINE_TYPE (GimpEnumAction, gimp_enum_action, GIMP_TYPE_ACTION_IMPL)
 static void
 gimp_enum_action_class_init (GimpEnumActionClass *klass)
 {
-  GObjectClass   *object_class = G_OBJECT_CLASS (klass);
-  GtkActionClass *action_class = GTK_ACTION_CLASS (klass);
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   object_class->set_property = gimp_enum_action_set_property;
   object_class->get_property = gimp_enum_action_get_property;
-
-  action_class->activate     = gimp_enum_action_activate;
 
   g_object_class_install_property (object_class, PROP_VALUE,
                                    g_param_spec_int ("value",
@@ -78,6 +91,12 @@ gimp_enum_action_class_init (GimpEnumActionClass *klass)
                                                          NULL, NULL,
                                                          FALSE,
                                                          GIMP_PARAM_READWRITE));
+}
+
+static void
+gimp_enum_action_g_action_iface_init (GActionInterface *iface)
+{
+  iface->activate = gimp_enum_action_activate;
 }
 
 static void
@@ -132,21 +151,25 @@ gimp_enum_action_set_property (GObject      *object,
 GimpEnumAction *
 gimp_enum_action_new (const gchar *name,
                       const gchar *label,
+                      const gchar *short_label,
                       const gchar *tooltip,
                       const gchar *icon_name,
                       const gchar *help_id,
                       gint         value,
-                      gboolean     value_variable)
+                      gboolean     value_variable,
+                      GimpContext *context)
 {
   GimpEnumAction *action;
 
   action = g_object_new (GIMP_TYPE_ENUM_ACTION,
                          "name",           name,
                          "label",          label,
+                         "short-label",    short_label,
                          "tooltip",        tooltip,
                          "icon-name",      icon_name,
                          "value",          value,
                          "value-variable", value_variable,
+                         "context",        context,
                          NULL);
 
   gimp_action_set_help_id (GIMP_ACTION (action), help_id);
@@ -155,7 +178,8 @@ gimp_enum_action_new (const gchar *name,
 }
 
 static void
-gimp_enum_action_activate (GtkAction *action)
+gimp_enum_action_activate (GAction  *action,
+                           GVariant *parameter)
 {
   GimpEnumAction *enum_action = GIMP_ENUM_ACTION (action);
 

@@ -22,7 +22,7 @@
 
 #include "config.h"
 
-#include <string.h>
+#include "stamp-pdbgen.h"
 
 #include "gimp.h"
 
@@ -39,11 +39,11 @@
 /**
  * gimp_context_push:
  *
- * Pushes a context to the top of the plug-in's context stack.
+ * Pushes a context onto the top of the plug-in's context stack.
  *
- * This procedure creates a new context by copying the current context.
- * This copy becomes the new current context for the calling plug-in
- * until it is popped again using gimp_context_pop().
+ * Creates a new context by copying the current context. The copy
+ * becomes the new current context for the calling plug-in until it is
+ * popped again using gimp_context_pop().
  *
  * Returns: TRUE on success.
  *
@@ -52,17 +52,21 @@
 gboolean
 gimp_context_push (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-push",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-push",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -72,10 +76,10 @@ gimp_context_push (void)
  *
  * Pops the topmost context from the plug-in's context stack.
  *
- * This procedure removes the topmost context from the plug-in's
- * context stack. The context that was active before the corresponding
- * call to gimp_context_push() becomes the new current context of the
- * plug-in.
+ * Removes the topmost context from the plug-in's context stack. The
+ * next context on the stack becomes the new current context of the
+ * plug-in, that is, the context that was active before the
+ * corresponding call to gimp_context_push()
  *
  * Returns: TRUE on success.
  *
@@ -84,17 +88,21 @@ gimp_context_push (void)
 gboolean
 gimp_context_pop (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-pop",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-pop",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -104,11 +112,10 @@ gimp_context_pop (void)
  *
  * Reset context settings to their default values.
  *
- * This procedure resets context settings used by various procedures to
- * their default value. This procedure will usually be called after a
- * context push so that a script which calls procedures affected by
- * context settings will not be affected by changes in the global
- * context.
+ * Resets context settings used by various procedures to their default
+ * value. You should usually call this after a context push so that a
+ * script which calls procedures affected by context settings will not
+ * be affected by changes in the global context.
  *
  * Returns: TRUE on success.
  *
@@ -117,65 +124,61 @@ gimp_context_pop (void)
 gboolean
 gimp_context_set_defaults (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-defaults",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-defaults",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_context_list_paint_methods:
- * @num_paint_methods: The number of the available paint methods.
- * @paint_methods: The names of the available paint methods.
+ * @paint_methods: (out) (array zero-terminated=1) (transfer full): The names of the available paint methods.
  *
  * Lists the available paint methods.
  *
- * This procedure lists the names of the available paint methods. Any
- * of the results can be used for gimp_context_set_paint_method().
+ * Lists the names of the available paint methods. Any of the names can
+ * be used for gimp_context_set_paint_method().
  *
  * Returns: TRUE on success.
  *
  * Since: 2.4
  **/
 gboolean
-gimp_context_list_paint_methods (gint    *num_paint_methods,
-                                 gchar ***paint_methods)
+gimp_context_list_paint_methods (gchar ***paint_methods)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
-  gint i;
 
-  return_vals = gimp_run_procedure ("gimp-context-list-paint-methods",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  *num_paint_methods = 0;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-list-paint-methods",
+                                               args);
+  gimp_value_array_unref (args);
+
   *paint_methods = NULL;
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
   if (success)
-    {
-      *num_paint_methods = return_vals[1].data.d_int32;
-      if (*num_paint_methods > 0)
-        {
-          *paint_methods = g_new0 (gchar *, *num_paint_methods + 1);
-          for (i = 0; i < *num_paint_methods; i++)
-            (*paint_methods)[i] = g_strdup (return_vals[2].data.d_stringarray[i]);
-        }
-    }
+    *paint_methods = GIMP_VALUES_DUP_STRV (return_vals, 1);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -183,30 +186,34 @@ gimp_context_list_paint_methods (gint    *num_paint_methods,
 /**
  * gimp_context_get_paint_method:
  *
- * Retrieve the currently active paint method.
+ * Get the currently active paint method.
  *
- * This procedure returns the name of the currently active paint
- * method.
+ * Returns the name of the currently active paint method.
  *
- * Returns: The name of the active paint method.
+ * Returns: (transfer full): The name of the active paint method.
+ *          The returned value must be freed with g_free().
  *
  * Since: 2.4
  **/
 gchar *
 gimp_context_get_paint_method (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar *name = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-paint-method",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    name = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-paint-method",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    name = GIMP_VALUES_DUP_STRING (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return name;
 }
@@ -215,14 +222,12 @@ gimp_context_get_paint_method (void)
  * gimp_context_set_paint_method:
  * @name: The name of the paint method.
  *
- * Set the specified paint method as the active paint method.
+ * Set the active paint method.
  *
- * This procedure allows the active paint method to be set by
- * specifying its name. The name is simply a string which corresponds
- * to one of the names of the available paint methods. If there is no
- * matching method found, this procedure will return an error.
- * Otherwise, the specified method becomes active and will be used in
- * all subsequent paint operations.
+ * Sets the active paint method to the named paint method. The paint
+ * method will be used in all subsequent paint operations. The name
+ * should be a name of an available paint method. Returns an error if
+ * no matching paint method is found.
  *
  * Returns: TRUE on success.
  *
@@ -231,18 +236,22 @@ gimp_context_get_paint_method (void)
 gboolean
 gimp_context_set_paint_method (const gchar *name)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-paint-method",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-paint-method",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -250,9 +259,9 @@ gimp_context_set_paint_method (const gchar *name)
 /**
  * gimp_context_get_stroke_method:
  *
- * Retrieve the currently active stroke method.
+ * Get the currently active stroke method.
  *
- * This procedure returns the currently active stroke method.
+ * Returns the currently active stroke method.
  *
  * Returns: The active stroke method.
  *
@@ -261,18 +270,22 @@ gimp_context_set_paint_method (const gchar *name)
 GimpStrokeMethod
 gimp_context_get_stroke_method (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpStrokeMethod stroke_method = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-stroke-method",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    stroke_method = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-stroke-method",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    stroke_method = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return stroke_method;
 }
@@ -281,11 +294,10 @@ gimp_context_get_stroke_method (void)
  * gimp_context_set_stroke_method:
  * @stroke_method: The new stroke method.
  *
- * Set the specified stroke method as the active stroke method.
+ * Set the active stroke method.
  *
- * This procedure set the specified stroke method as the active stroke
- * method. The new method will be used in all subsequent stroke
- * operations.
+ * Sets the active stroke method. The method will be used in all
+ * subsequent stroke operations.
  *
  * Returns: TRUE on success.
  *
@@ -294,55 +306,60 @@ gimp_context_get_stroke_method (void)
 gboolean
 gimp_context_set_stroke_method (GimpStrokeMethod stroke_method)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-stroke-method",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, stroke_method,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_STROKE_METHOD, stroke_method,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-stroke-method",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_context_get_foreground:
- * @foreground: The foreground color.
  *
  * Get the current GIMP foreground color.
  *
- * This procedure returns the current GIMP foreground color. The
- * foreground color is used in a variety of tools such as paint tools,
- * blending, and bucket fill.
+ * Returns the current GIMP foreground color. The foreground color is
+ * used in a variety of tools such as paint tools, blending, and bucket
+ * fill.
  *
- * Returns: TRUE on success.
+ * Returns: (transfer full): The foreground color.
  *
  * Since: 2.2
  **/
-gboolean
-gimp_context_get_foreground (GimpRGB *foreground)
+GeglColor *
+gimp_context_get_foreground (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GeglColor *foreground = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-foreground",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-foreground",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (success)
-    *foreground = return_vals[1].data.d_color;
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    foreground = g_value_dup_object (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
-  return success;
+  return foreground;
 }
 
 /**
@@ -351,66 +368,71 @@ gimp_context_get_foreground (GimpRGB *foreground)
  *
  * Set the current GIMP foreground color.
  *
- * This procedure sets the current GIMP foreground color. After this is
- * set, operations which use foreground such as paint tools, blending,
- * and bucket fill will use the new value.
+ * Sets the current GIMP foreground color. After this is set,
+ * operations which use foreground such as paint tools, blending, and
+ * bucket fill will use the new value.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.2
  **/
 gboolean
-gimp_context_set_foreground (const GimpRGB *foreground)
+gimp_context_set_foreground (GeglColor *foreground)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-foreground",
-                                    &nreturn_vals,
-                                    GIMP_PDB_COLOR, foreground,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GEGL_TYPE_COLOR, foreground,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-foreground",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_context_get_background:
- * @background: The background color.
  *
  * Get the current GIMP background color.
  *
- * This procedure returns the current GIMP background color. The
- * background color is used in a variety of tools such as blending,
- * erasing (with non-alpha images), and image filling.
+ * Returns the current GIMP background color. The background color is
+ * used in a variety of tools such as blending, erasing (with non-alpha
+ * images), and image filling.
  *
- * Returns: TRUE on success.
+ * Returns: (transfer full): The background color.
  *
  * Since: 2.2
  **/
-gboolean
-gimp_context_get_background (GimpRGB *background)
+GeglColor *
+gimp_context_get_background (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GeglColor *background = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-background",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-background",
+                                               args);
+  gimp_value_array_unref (args);
 
-  if (success)
-    *background = return_vals[1].data.d_color;
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    background = g_value_dup_object (gimp_value_array_index (return_vals, 1));
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
-  return success;
+  return background;
 }
 
 /**
@@ -419,30 +441,33 @@ gimp_context_get_background (GimpRGB *background)
  *
  * Set the current GIMP background color.
  *
- * This procedure sets the current GIMP background color. After this is
- * set, operations which use background such as blending, filling
- * images, clearing, and erasing (in non-alpha images) will use the new
- * value.
+ * Sets the current GIMP background color. After this is set,
+ * operations which use background such as blending, filling images,
+ * clearing, and erasing (in non-alpha images) will use the new value.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.2
  **/
 gboolean
-gimp_context_set_background (const GimpRGB *background)
+gimp_context_set_background (GeglColor *background)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-background",
-                                    &nreturn_vals,
-                                    GIMP_PDB_COLOR, background,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GEGL_TYPE_COLOR, background,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-background",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -453,8 +478,8 @@ gimp_context_set_background (const GimpRGB *background)
  * Set the current GIMP foreground and background colors to black and
  * white.
  *
- * This procedure sets the current GIMP foreground and background
- * colors to their initial default values, black and white.
+ * Sets the current GIMP foreground and background colors to their
+ * initial default values, black and white.
  *
  * Returns: TRUE on success.
  *
@@ -463,17 +488,21 @@ gimp_context_set_background (const GimpRGB *background)
 gboolean
 gimp_context_set_default_colors (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-default-colors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-default-colors",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -483,9 +512,9 @@ gimp_context_set_default_colors (void)
  *
  * Swap the current GIMP foreground and background colors.
  *
- * This procedure swaps the current GIMP foreground and background
- * colors, so that the new foreground color becomes the old background
- * color and vice versa.
+ * Swaps the current GIMP foreground and background colors, so that the
+ * new foreground color becomes the old background color and vice
+ * versa.
  *
  * Returns: TRUE on success.
  *
@@ -494,17 +523,21 @@ gimp_context_set_default_colors (void)
 gboolean
 gimp_context_swap_colors (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-swap-colors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-swap-colors",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -514,8 +547,8 @@ gimp_context_swap_colors (void)
  *
  * Get the opacity.
  *
- * This procedure returns the opacity setting. The return value is a
- * floating point number between 0 and 100.
+ * Returns the opacity setting. The return value is a floating point
+ * number between 0 and 100.
  *
  * Returns: The opacity.
  *
@@ -524,18 +557,22 @@ gimp_context_swap_colors (void)
 gdouble
 gimp_context_get_opacity (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble opacity = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-opacity",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    opacity = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-opacity",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    opacity = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return opacity;
 }
@@ -546,8 +583,8 @@ gimp_context_get_opacity (void)
  *
  * Set the opacity.
  *
- * This procedure modifies the opacity setting. The value should be a
- * floating point number between 0 and 100.
+ * Modifies the opacity setting. The value should be a floating point
+ * number between 0 and 100.
  *
  * Returns: TRUE on success.
  *
@@ -556,18 +593,22 @@ gimp_context_get_opacity (void)
 gboolean
 gimp_context_set_opacity (gdouble opacity)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-opacity",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, opacity,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, opacity,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-opacity",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -577,9 +618,8 @@ gimp_context_set_opacity (gdouble opacity)
  *
  * Get the paint mode.
  *
- * This procedure returns the paint-mode setting. The return value is
- * an integer which corresponds to the values listed in the argument
- * description.
+ * Returns the paint-mode setting. The return value is an integer which
+ * corresponds to the values listed in the argument description.
  *
  * Returns: The paint mode.
  *
@@ -588,18 +628,22 @@ gimp_context_set_opacity (gdouble opacity)
 GimpLayerMode
 gimp_context_get_paint_mode (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpLayerMode paint_mode = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-paint-mode",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    paint_mode = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-paint-mode",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    paint_mode = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return paint_mode;
 }
@@ -610,7 +654,7 @@ gimp_context_get_paint_mode (void)
  *
  * Set the paint mode.
  *
- * This procedure modifies the paint_mode setting.
+ * Modifies the paint_mode setting.
  *
  * Returns: TRUE on success.
  *
@@ -619,18 +663,22 @@ gimp_context_get_paint_mode (void)
 gboolean
 gimp_context_set_paint_mode (GimpLayerMode paint_mode)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-paint-mode",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, paint_mode,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_LAYER_MODE, paint_mode,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-paint-mode",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -640,7 +688,7 @@ gimp_context_set_paint_mode (GimpLayerMode paint_mode)
  *
  * Get the line width setting.
  *
- * This procedure returns the line width setting.
+ * Returns the line width setting.
  *
  * Returns: The line width setting.
  *
@@ -649,18 +697,22 @@ gimp_context_set_paint_mode (GimpLayerMode paint_mode)
 gdouble
 gimp_context_get_line_width (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble line_width = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-line-width",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    line_width = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-line-width",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    line_width = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return line_width;
 }
@@ -671,7 +723,7 @@ gimp_context_get_line_width (void)
  *
  * Set the line width setting.
  *
- * This procedure modifies the line width setting for stroking lines.
+ * Modifies the line width setting for stroking lines.
  *
  * This setting affects the following procedures:
  * gimp_drawable_edit_stroke_selection(),
@@ -684,18 +736,22 @@ gimp_context_get_line_width (void)
 gboolean
 gimp_context_set_line_width (gdouble line_width)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-line-width",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, line_width,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, line_width,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-line-width",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -705,27 +761,31 @@ gimp_context_set_line_width (gdouble line_width)
  *
  * Get the line width unit setting.
  *
- * This procedure returns the line width unit setting.
+ * Returns the line width unit setting.
  *
- * Returns: The line width unit setting.
+ * Returns: (transfer none): The line width unit setting.
  *
  * Since: 2.10
  **/
-GimpUnit
+GimpUnit *
 gimp_context_get_line_width_unit (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  GimpUnit line_width_unit = 0;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpUnit *line_width_unit = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-line-width-unit",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    line_width_unit = return_vals[1].data.d_unit;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-line-width-unit",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    line_width_unit = GIMP_VALUES_GET_UNIT (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return line_width_unit;
 }
@@ -736,8 +796,7 @@ gimp_context_get_line_width_unit (void)
  *
  * Set the line width unit setting.
  *
- * This procedure modifies the line width unit setting for stroking
- * lines.
+ * Modifies the line width unit setting for stroking lines.
  *
  * This setting affects the following procedures:
  * gimp_drawable_edit_stroke_selection(),
@@ -748,20 +807,24 @@ gimp_context_get_line_width_unit (void)
  * Since: 2.10
  **/
 gboolean
-gimp_context_set_line_width_unit (GimpUnit line_width_unit)
+gimp_context_set_line_width_unit (GimpUnit *line_width_unit)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-line-width-unit",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, line_width_unit,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_UNIT, line_width_unit,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-line-width-unit",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -771,7 +834,7 @@ gimp_context_set_line_width_unit (GimpUnit line_width_unit)
  *
  * Get the line cap style setting.
  *
- * This procedure returns the line cap style setting.
+ * Returns the line cap style setting.
  *
  * Returns: The line cap style setting.
  *
@@ -780,18 +843,22 @@ gimp_context_set_line_width_unit (GimpUnit line_width_unit)
 GimpCapStyle
 gimp_context_get_line_cap_style (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpCapStyle cap_style = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-line-cap-style",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    cap_style = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-line-cap-style",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    cap_style = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return cap_style;
 }
@@ -802,8 +869,7 @@ gimp_context_get_line_cap_style (void)
  *
  * Set the line cap style setting.
  *
- * This procedure modifies the line cap style setting for stroking
- * lines.
+ * Modifies the line cap style setting for stroking lines.
  *
  * This setting affects the following procedures:
  * gimp_drawable_edit_stroke_selection(),
@@ -816,18 +882,22 @@ gimp_context_get_line_cap_style (void)
 gboolean
 gimp_context_set_line_cap_style (GimpCapStyle cap_style)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-line-cap-style",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, cap_style,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_CAP_STYLE, cap_style,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-line-cap-style",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -837,7 +907,7 @@ gimp_context_set_line_cap_style (GimpCapStyle cap_style)
  *
  * Get the line join style setting.
  *
- * This procedure returns the line join style setting.
+ * Returns the line join style setting.
  *
  * Returns: The line join style setting.
  *
@@ -846,18 +916,22 @@ gimp_context_set_line_cap_style (GimpCapStyle cap_style)
 GimpJoinStyle
 gimp_context_get_line_join_style (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpJoinStyle join_style = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-line-join-style",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    join_style = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-line-join-style",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    join_style = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return join_style;
 }
@@ -868,9 +942,7 @@ gimp_context_get_line_join_style (void)
  *
  * Set the line join style setting.
  *
- * This procedure modifies the line join style setting for stroking
- * lines.
- *
+ * Modifies the line join style setting for stroking lines.
  * This setting affects the following procedures:
  * gimp_drawable_edit_stroke_selection(),
  * gimp_drawable_edit_stroke_item().
@@ -882,18 +954,22 @@ gimp_context_get_line_join_style (void)
 gboolean
 gimp_context_set_line_join_style (GimpJoinStyle join_style)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-line-join-style",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, join_style,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_JOIN_STYLE, join_style,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-line-join-style",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -903,7 +979,7 @@ gimp_context_set_line_join_style (GimpJoinStyle join_style)
  *
  * Get the line miter limit setting.
  *
- * This procedure returns the line miter limit setting.
+ * Returns the line miter limit setting.
  *
  * Returns: The line miter limit setting.
  *
@@ -912,18 +988,22 @@ gimp_context_set_line_join_style (GimpJoinStyle join_style)
 gdouble
 gimp_context_get_line_miter_limit (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble miter_limit = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-line-miter-limit",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    miter_limit = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-line-miter-limit",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    miter_limit = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return miter_limit;
 }
@@ -934,8 +1014,7 @@ gimp_context_get_line_miter_limit (void)
  *
  * Set the line miter limit setting.
  *
- * This procedure modifies the line miter limit setting for stroking
- * lines.
+ * Modifies the line miter limit setting for stroking lines.
  * A mitered join is converted to a bevelled join if the miter would
  * extend to a distance of more than (miter-limit * line-width) from
  * the actual join point.
@@ -951,18 +1030,22 @@ gimp_context_get_line_miter_limit (void)
 gboolean
 gimp_context_set_line_miter_limit (gdouble miter_limit)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-line-miter-limit",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, miter_limit,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, miter_limit,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-line-miter-limit",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -972,7 +1055,7 @@ gimp_context_set_line_miter_limit (gdouble miter_limit)
  *
  * Get the line dash offset setting.
  *
- * This procedure returns the line dash offset setting.
+ * Returns the line dash offset setting.
  *
  * Returns: The line dash offset setting.
  *
@@ -981,18 +1064,22 @@ gimp_context_set_line_miter_limit (gdouble miter_limit)
 gdouble
 gimp_context_get_line_dash_offset (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble dash_offset = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-line-dash-offset",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    dash_offset = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-line-dash-offset",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    dash_offset = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return dash_offset;
 }
@@ -1003,8 +1090,7 @@ gimp_context_get_line_dash_offset (void)
  *
  * Set the line dash offset setting.
  *
- * This procedure modifies the line dash offset setting for stroking
- * lines.
+ * Modifies the line dash offset setting for stroking lines.
  *
  * This setting affects the following procedures:
  * gimp_drawable_edit_stroke_selection(),
@@ -1017,62 +1103,66 @@ gimp_context_get_line_dash_offset (void)
 gboolean
 gimp_context_set_line_dash_offset (gdouble dash_offset)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-line-dash-offset",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, dash_offset,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, dash_offset,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-line-dash-offset",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_context_get_line_dash_pattern:
- * @num_dashes: The number of dashes in the dash_pattern array.
- * @dashes: The line dash pattern setting.
+ * @num_dashes: (out): The number of dashes in the dash_pattern array.
+ * @dashes: (out) (array length=num_dashes) (element-type gdouble) (transfer full): The line dash pattern setting.
  *
  * Get the line dash pattern setting.
  *
- * This procedure returns the line dash pattern setting.
+ * Returns the line dash pattern setting.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.10
  **/
 gboolean
-gimp_context_get_line_dash_pattern (gint     *num_dashes,
+gimp_context_get_line_dash_pattern (gsize    *num_dashes,
                                     gdouble **dashes)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-line-dash-pattern",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-line-dash-pattern",
+                                               args);
+  gimp_value_array_unref (args);
 
   *num_dashes = 0;
   *dashes = NULL;
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
   if (success)
     {
-      *num_dashes = return_vals[1].data.d_int32;
-      *dashes = g_new (gdouble, *num_dashes);
-      memcpy (*dashes,
-              return_vals[2].data.d_floatarray,
-              *num_dashes * sizeof (gdouble));
+      *dashes = GIMP_VALUES_DUP_DOUBLE_ARRAY (return_vals, 1, num_dashes);
     }
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1080,19 +1170,18 @@ gimp_context_get_line_dash_pattern (gint     *num_dashes,
 /**
  * gimp_context_set_line_dash_pattern:
  * @num_dashes: The number of dashes in the dash_pattern array.
- * @dashes: The line dash pattern setting.
+ * @dashes: (array length=num_dashes) (element-type gdouble): The line dash pattern setting.
  *
  * Set the line dash pattern setting.
  *
- * This procedure modifies the line dash pattern setting for stroking
- * lines.
+ * Modifies the line dash pattern setting for stroking lines.
  *
  * The unit of the dash pattern segments is the actual line width used
  * for the stroke operation, in other words a segment length of 1.0
  * results in a square segment shape (or gap shape).
  *
  * This setting affects the following procedures:
- * gimp_drawable_edit_stroke_selection_(),
+ * gimp_drawable_edit_stroke_selection(),
  * gimp_drawable_edit_stroke_item().
  *
  * Returns: TRUE on success.
@@ -1100,22 +1189,26 @@ gimp_context_get_line_dash_pattern (gint     *num_dashes,
  * Since: 2.10
  **/
 gboolean
-gimp_context_set_line_dash_pattern (gint           num_dashes,
+gimp_context_set_line_dash_pattern (gsize          num_dashes,
                                     const gdouble *dashes)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-line-dash-pattern",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, num_dashes,
-                                    GIMP_PDB_FLOATARRAY, dashes,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_DOUBLE_ARRAY, NULL,
+                                          G_TYPE_NONE);
+  gimp_value_set_double_array (gimp_value_array_index (args, 0), dashes, num_dashes);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-line-dash-pattern",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1123,66 +1216,71 @@ gimp_context_set_line_dash_pattern (gint           num_dashes,
 /**
  * gimp_context_get_brush:
  *
- * Retrieve the currently active brush.
+ * Get the currently active brush.
  *
- * This procedure returns the name of the currently active brush. All
- * paint operations and stroke operations use this brush to control the
- * application of paint to the image.
+ * Returns the currently active brush. All paint and stroke operations
+ * use this brush.
  *
- * Returns: The name of the active brush.
+ * Returns: (transfer none): The active brush.
  *
  * Since: 2.2
  **/
-gchar *
+GimpBrush *
 gimp_context_get_brush (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *name = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpBrush *brush = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-brush",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    name = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-brush",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    brush = GIMP_VALUES_GET_BRUSH (return_vals, 1);
 
-  return name;
+  gimp_value_array_unref (return_vals);
+
+  return brush;
 }
 
 /**
  * gimp_context_set_brush:
- * @name: The name of the brush.
+ * @brush: The brush.
  *
- * Set the specified brush as the active brush.
+ * Set the active brush.
  *
- * This procedure allows the active brush to be set by specifying its
- * name. The name is simply a string which corresponds to one of the
- * names of the installed brushes. If there is no matching brush found,
- * this procedure will return an error. Otherwise, the specified brush
- * becomes active and will be used in all subsequent paint operations.
+ * Sets the active brush in the current context. The brush will be used
+ * in subsequent paint and stroke operations. Returns an error when the
+ * brush data was uninstalled since the brush object was created.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.2
  **/
 gboolean
-gimp_context_set_brush (const gchar *name)
+gimp_context_set_brush (GimpBrush *brush)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-brush",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_BRUSH, brush,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-brush",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1201,18 +1299,22 @@ gimp_context_set_brush (const gchar *name)
 gdouble
 gimp_context_get_brush_size (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble size = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-brush-size",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    size = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-brush-size",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    size = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return size;
 }
@@ -1232,18 +1334,22 @@ gimp_context_get_brush_size (void)
 gboolean
 gimp_context_set_brush_size (gdouble size)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-brush-size",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, size,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, size,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-brush-size",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1263,17 +1369,21 @@ gimp_context_set_brush_size (gdouble size)
 gboolean
 gimp_context_set_brush_default_size (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-brush-default-size",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-brush-default-size",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1292,18 +1402,22 @@ gimp_context_set_brush_default_size (void)
 gdouble
 gimp_context_get_brush_aspect_ratio (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble aspect = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-brush-aspect-ratio",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    aspect = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-brush-aspect-ratio",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    aspect = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return aspect;
 }
@@ -1323,18 +1437,22 @@ gimp_context_get_brush_aspect_ratio (void)
 gboolean
 gimp_context_set_brush_aspect_ratio (gdouble aspect)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-brush-aspect-ratio",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, aspect,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, aspect,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-brush-aspect-ratio",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1353,18 +1471,22 @@ gimp_context_set_brush_aspect_ratio (gdouble aspect)
 gdouble
 gimp_context_get_brush_angle (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble angle = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-brush-angle",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    angle = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-brush-angle",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    angle = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return angle;
 }
@@ -1384,18 +1506,22 @@ gimp_context_get_brush_angle (void)
 gboolean
 gimp_context_set_brush_angle (gdouble angle)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-brush-angle",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, angle,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, angle,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-brush-angle",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1415,18 +1541,22 @@ gimp_context_set_brush_angle (gdouble angle)
 gdouble
 gimp_context_get_brush_spacing (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble spacing = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-brush-spacing",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    spacing = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-brush-spacing",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    spacing = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return spacing;
 }
@@ -1447,18 +1577,22 @@ gimp_context_get_brush_spacing (void)
 gboolean
 gimp_context_set_brush_spacing (gdouble spacing)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-brush-spacing",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, spacing,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, spacing,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-brush-spacing",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1478,17 +1612,21 @@ gimp_context_set_brush_spacing (gdouble spacing)
 gboolean
 gimp_context_set_brush_default_spacing (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-brush-default-spacing",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-brush-default-spacing",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1507,18 +1645,22 @@ gimp_context_set_brush_default_spacing (void)
 gdouble
 gimp_context_get_brush_hardness (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble hardness = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-brush-hardness",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    hardness = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-brush-hardness",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    hardness = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return hardness;
 }
@@ -1538,18 +1680,22 @@ gimp_context_get_brush_hardness (void)
 gboolean
 gimp_context_set_brush_hardness (gdouble hardness)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-brush-hardness",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, hardness,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, hardness,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-brush-hardness",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1569,17 +1715,21 @@ gimp_context_set_brush_hardness (gdouble hardness)
 gboolean
 gimp_context_set_brush_default_hardness (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-brush-default-hardness",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-brush-default-hardness",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1598,18 +1748,22 @@ gimp_context_set_brush_default_hardness (void)
 gdouble
 gimp_context_get_brush_force (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble force = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-brush-force",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    force = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-brush-force",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    force = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return force;
 }
@@ -1629,86 +1783,244 @@ gimp_context_get_brush_force (void)
 gboolean
 gimp_context_set_brush_force (gdouble force)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-brush-force",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, force,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, force,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-brush-force",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
- * gimp_context_get_dynamics:
+ * gimp_context_get_dynamics_name:
  *
- * Retrieve the currently active paint dynamics.
+ * Get the currently active paint dynamics.
  *
- * This procedure returns the name of the currently active paint
- * dynamics. All paint operations and stroke operations use this paint
- * dynamics to control the application of paint to the image.
+ * Returns the name of the currently active paint dynamics. If enabled,
+ * all paint operations and stroke operations use this paint dynamics
+ * to control the application of paint to the image. If disabled, the
+ * dynamics will be ignored during paint actions.
+ * See gimp_context_are_dynamics_enabled() to enquire whether dynamics
+ * are used or ignored.
  *
- * Returns: The name of the active paint dynamics.
+ * Returns: (transfer full): The name of the active paint dynamics.
+ *          The returned value must be freed with g_free().
  *
  * Since: 2.8
  **/
 gchar *
-gimp_context_get_dynamics (void)
+gimp_context_get_dynamics_name (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar *name = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-dynamics",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    name = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-dynamics-name",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    name = GIMP_VALUES_DUP_STRING (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return name;
 }
 
 /**
- * gimp_context_set_dynamics:
- * @name: The name of the paint dynamics.
+ * gimp_context_set_dynamics_name:
+ * @name: A name of a paint dynamics.
  *
- * Set the specified paint dynamics as the active paint dynamics.
+ * Set the active paint dynamics.
  *
- * This procedure allows the active paint dynamics to be set by
- * specifying its name. The name is simply a string which corresponds
- * to one of the names of the installed paint dynamics. If there is no
- * matching paint dynamics found, this procedure will return an error.
- * Otherwise, the specified paint dynamics becomes active and will be
- * used in all subsequent paint operations.
+ * Sets the active paint dynamics. The paint dynamics will be used in
+ * all subsequent paint operations when dynamics are enabled. The name
+ * should be a name of an installed paint dynamics. Returns an error if
+ * no matching paint dynamics is found.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.8
  **/
 gboolean
-gimp_context_set_dynamics (const gchar *name)
+gimp_context_set_dynamics_name (const gchar *name)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-dynamics",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-dynamics-name",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_context_are_dynamics_enabled:
+ *
+ * Whether the currently active paint dynamics will be applied to
+ * painting.
+ *
+ * Returns whether the currently active paint dynamics (as returned by
+ * gimp_context_get_dynamics()) is enabled.
+ *
+ * Returns: Whether dynamics enabled or disabled.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_context_are_dynamics_enabled (void)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean enabled = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-are-dynamics-enabled",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    enabled = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return enabled;
+}
+
+/**
+ * gimp_context_enable_dynamics:
+ * @enable: Whether to enable or disable dynamics.
+ *
+ * Enables paint dynamics using the active paint dynamics.
+ *
+ * Enables the active paint dynamics to be used in all subsequent paint
+ * operations.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_context_enable_dynamics (gboolean enable)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_BOOLEAN, enable,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-enable-dynamics",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_context_get_emulate_brush_dynamics:
+ *
+ * Retrieve the currently active stroke option's emulate brush dynamics
+ * setting.
+ *
+ * This procedure returns the emulate brush dynamics property of the
+ * currently active stroke options.
+ *
+ * Returns: The emulate brush dynamics setting.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_context_get_emulate_brush_dynamics (void)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean emulate_dynamics = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-emulate-brush-dynamics",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    emulate_dynamics = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return emulate_dynamics;
+}
+
+/**
+ * gimp_context_set_emulate_brush_dynamics:
+ * @emulate_dynamics: The new emulate brush dynamics setting.
+ *
+ * Set the stroke option's emulate brush dynamics setting.
+ *
+ * This procedure sets the specified emulate brush dynamics setting.
+ * The new method will be used in all subsequent stroke operations.
+ *
+ * Returns: TRUE on success.
+ *
+ * Since: 3.0
+ **/
+gboolean
+gimp_context_set_emulate_brush_dynamics (gboolean emulate_dynamics)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_BOOLEAN, emulate_dynamics,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-emulate-brush-dynamics",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1716,46 +2028,48 @@ gimp_context_set_dynamics (const gchar *name)
 /**
  * gimp_context_get_mypaint_brush:
  *
- * Retrieve the currently active MyPaint brush.
+ * Get the currently active MyPaint brush.
  *
- * This procedure returns the name of the currently active MyPaint
- * brush.
+ * Returns the name of the currently active MyPaint brush.
  *
- * Returns: The name of the active MyPaint brush.
+ * Returns: (transfer full): The name of the active MyPaint brush.
+ *          The returned value must be freed with g_free().
  *
  * Since: 2.10
  **/
 gchar *
 gimp_context_get_mypaint_brush (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gchar *name = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-mypaint-brush",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    name = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-mypaint-brush",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    name = GIMP_VALUES_DUP_STRING (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return name;
 }
 
 /**
  * gimp_context_set_mypaint_brush:
- * @name: The name of the MyPaint brush.
+ * @name: A name of a MyPaint brush.
  *
- * Set the specified MyPaint brush as the active MyPaint brush.
+ * Set a MyPaint brush as the active MyPaint brush.
  *
- * This procedure allows the active MyPaint brush to be set by
- * specifying its name. The name is simply a string which corresponds
- * to one of the names of the installed MyPaint brushes. If there is no
- * matching MyPaint brush found, this procedure will return an error.
- * Otherwise, the specified MyPaint brush becomes active and will be
- * used in all subsequent MyPaint paint operations.
+ * Sets the active MyPaint brush to the named MyPaint brush. The brush
+ * will be used in all subsequent MyPaint paint operations. The name
+ * should be a name of an installed MyPaint brush. Returns an error if
+ * no matching MyPaint brush is found.
  *
  * Returns: TRUE on success.
  *
@@ -1764,18 +2078,22 @@ gimp_context_get_mypaint_brush (void)
 gboolean
 gimp_context_set_mypaint_brush (const gchar *name)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-mypaint-brush",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, name,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-mypaint-brush",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1783,67 +2101,73 @@ gimp_context_set_mypaint_brush (const gchar *name)
 /**
  * gimp_context_get_pattern:
  *
- * Retrieve the currently active pattern.
+ * Get the currently active pattern.
  *
- * This procedure returns name of the the currently active pattern. All
- * clone and bucket-fill operations with patterns will use this pattern
- * to control the application of paint to the image.
+ * Returns the active pattern in the current context. All clone and
+ * bucket-fill operations with patterns will use this pattern to
+ * control the application of paint to the image.
  *
- * Returns: The name of the active pattern.
+ * Returns: (transfer none): The active pattern.
  *
  * Since: 2.2
  **/
-gchar *
+GimpPattern *
 gimp_context_get_pattern (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *name = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpPattern *pattern = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-pattern",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    name = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-pattern",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    pattern = GIMP_VALUES_GET_PATTERN (return_vals, 1);
 
-  return name;
+  gimp_value_array_unref (return_vals);
+
+  return pattern;
 }
 
 /**
  * gimp_context_set_pattern:
- * @name: The name of the pattern.
+ * @pattern: The pattern.
  *
- * Set the specified pattern as the active pattern.
+ * Set the active pattern.
  *
- * This procedure allows the active pattern to be set by specifying its
- * name. The name is simply a string which corresponds to one of the
- * names of the installed patterns. If there is no matching pattern
- * found, this procedure will return an error. Otherwise, the specified
- * pattern becomes active and will be used in all subsequent paint
- * operations.
+ * Sets the active pattern in the current context. The pattern will be
+ * used in subsequent fill operations using a pattern. Returns an error
+ * when the pattern data was uninstalled since the pattern object was
+ * created.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.2
  **/
 gboolean
-gimp_context_set_pattern (const gchar *name)
+gimp_context_set_pattern (GimpPattern *pattern)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-pattern",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_PATTERN, pattern,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-pattern",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1851,65 +2175,70 @@ gimp_context_set_pattern (const gchar *name)
 /**
  * gimp_context_get_gradient:
  *
- * Retrieve the currently active gradient.
+ * Get the currently active gradient.
  *
- * This procedure returns the name of the currently active gradient.
+ * Returns the currently active gradient.
  *
- * Returns: The name of the active gradient.
+ * Returns: (transfer none): The active gradient.
  *
  * Since: 2.2
  **/
-gchar *
+GimpGradient *
 gimp_context_get_gradient (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *name = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpGradient *gradient = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-gradient",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    name = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-gradient",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    gradient = GIMP_VALUES_GET_GRADIENT (return_vals, 1);
 
-  return name;
+  gimp_value_array_unref (return_vals);
+
+  return gradient;
 }
 
 /**
  * gimp_context_set_gradient:
- * @name: The name of the gradient.
+ * @gradient: The gradient.
  *
- * Sets the specified gradient as the active gradient.
+ * Sets the active gradient.
  *
- * This procedure lets you set the specified gradient as the active or
- * \"current\" one. The name is simply a string which corresponds to
- * one of the loaded gradients. If no matching gradient is found, this
- * procedure will return an error. Otherwise, the specified gradient
- * will become active and will be used for subsequent custom gradient
- * operations.
+ * Sets the active gradient in the current context. The gradient will
+ * be used in subsequent gradient operations. Returns an error when the
+ * gradient data was uninstalled since the gradient object was created.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.2
  **/
 gboolean
-gimp_context_set_gradient (const gchar *name)
+gimp_context_set_gradient (GimpGradient *gradient)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-gradient",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_GRADIENT, gradient,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-gradient",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1919,9 +2248,8 @@ gimp_context_set_gradient (const gchar *name)
  *
  * Sets the built-in FG-BG RGB gradient as the active gradient.
  *
- * This procedure sets the built-in FG-BG RGB gradient as the active
- * gradient. The gradient will be used for subsequent gradient
- * operations.
+ * Sets the built-in FG-BG RGB gradient as the active gradient. The
+ * gradient will be used for subsequent gradient operations.
  *
  * Returns: TRUE on success.
  *
@@ -1930,17 +2258,21 @@ gimp_context_set_gradient (const gchar *name)
 gboolean
 gimp_context_set_gradient_fg_bg_rgb (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-gradient-fg-bg-rgb",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-gradient-fg-bg-rgb",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1950,9 +2282,8 @@ gimp_context_set_gradient_fg_bg_rgb (void)
  *
  * Sets the built-in FG-BG HSV (cw) gradient as the active gradient.
  *
- * This procedure sets the built-in FG-BG HSV (cw) gradient as the
- * active gradient. The gradient will be used for subsequent gradient
- * operations.
+ * Sets the built-in FG-BG HSV (cw) gradient as the active gradient.
+ * The gradient will be used for subsequent gradient operations.
  *
  * Returns: TRUE on success.
  *
@@ -1961,17 +2292,21 @@ gimp_context_set_gradient_fg_bg_rgb (void)
 gboolean
 gimp_context_set_gradient_fg_bg_hsv_cw (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-gradient-fg-bg-hsv-cw",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-gradient-fg-bg-hsv-cw",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -1981,9 +2316,8 @@ gimp_context_set_gradient_fg_bg_hsv_cw (void)
  *
  * Sets the built-in FG-BG HSV (ccw) gradient as the active gradient.
  *
- * This procedure sets the built-in FG-BG HSV (ccw) gradient as the
- * active gradient. The gradient will be used for subsequent gradient
- * operations.
+ * Sets the built-in FG-BG HSV (ccw) gradient as the active gradient.
+ * The gradient will be used for subsequent gradient operations.
  *
  * Returns: TRUE on success.
  *
@@ -1992,17 +2326,21 @@ gimp_context_set_gradient_fg_bg_hsv_cw (void)
 gboolean
 gimp_context_set_gradient_fg_bg_hsv_ccw (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-gradient-fg-bg-hsv-ccw",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-gradient-fg-bg-hsv-ccw",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2012,9 +2350,8 @@ gimp_context_set_gradient_fg_bg_hsv_ccw (void)
  *
  * Sets the built-in FG-Transparent gradient as the active gradient.
  *
- * This procedure sets the built-in FG-Transparent gradient as the
- * active gradient. The gradient will be used for subsequent gradient
- * operations.
+ * Sets the built-in FG-Transparent gradient as the active gradient.
+ * The gradient will be used for subsequent gradient operations.
  *
  * Returns: TRUE on success.
  *
@@ -2023,17 +2360,21 @@ gimp_context_set_gradient_fg_bg_hsv_ccw (void)
 gboolean
 gimp_context_set_gradient_fg_transparent (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-gradient-fg-transparent",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-gradient-fg-transparent",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2053,18 +2394,22 @@ gimp_context_set_gradient_fg_transparent (void)
 GimpGradientBlendColorSpace
 gimp_context_get_gradient_blend_color_space (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpGradientBlendColorSpace blend_color_space = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-gradient-blend-color-space",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    blend_color_space = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-gradient-blend-color-space",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    blend_color_space = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return blend_color_space;
 }
@@ -2085,18 +2430,22 @@ gimp_context_get_gradient_blend_color_space (void)
 gboolean
 gimp_context_set_gradient_blend_color_space (GimpGradientBlendColorSpace blend_color_space)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-gradient-blend-color-space",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, blend_color_space,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_GRADIENT_BLEND_COLOR_SPACE, blend_color_space,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-gradient-blend-color-space",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2115,18 +2464,22 @@ gimp_context_set_gradient_blend_color_space (GimpGradientBlendColorSpace blend_c
 GimpRepeatMode
 gimp_context_get_gradient_repeat_mode (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpRepeatMode repeat_mode = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-gradient-repeat-mode",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    repeat_mode = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-gradient-repeat-mode",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    repeat_mode = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return repeat_mode;
 }
@@ -2146,18 +2499,22 @@ gimp_context_get_gradient_repeat_mode (void)
 gboolean
 gimp_context_set_gradient_repeat_mode (GimpRepeatMode repeat_mode)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-gradient-repeat-mode",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, repeat_mode,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_REPEAT_MODE, repeat_mode,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-gradient-repeat-mode",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2177,18 +2534,22 @@ gimp_context_set_gradient_repeat_mode (GimpRepeatMode repeat_mode)
 gboolean
 gimp_context_get_gradient_reverse (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean reverse = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-gradient-reverse",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    reverse = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-gradient-reverse",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    reverse = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return reverse;
 }
@@ -2209,18 +2570,22 @@ gimp_context_get_gradient_reverse (void)
 gboolean
 gimp_context_set_gradient_reverse (gboolean reverse)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-gradient-reverse",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, reverse,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_BOOLEAN, reverse,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-gradient-reverse",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2228,65 +2593,70 @@ gimp_context_set_gradient_reverse (gboolean reverse)
 /**
  * gimp_context_get_palette:
  *
- * Retrieve the currently active palette.
+ * Get the currently active palette.
  *
- * This procedure returns the name of the the currently active palette.
+ * Returns the currently active palette.
  *
- * Returns: The name of the active palette.
+ * Returns: (transfer none): The active palette.
  *
  * Since: 2.2
  **/
-gchar *
+GimpPalette *
 gimp_context_get_palette (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *name = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpPalette *palette = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-palette",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    name = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-palette",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    palette = GIMP_VALUES_GET_PALETTE (return_vals, 1);
 
-  return name;
+  gimp_value_array_unref (return_vals);
+
+  return palette;
 }
 
 /**
  * gimp_context_set_palette:
- * @name: The name of the palette.
+ * @palette: The palette.
  *
- * Set the specified palette as the active palette.
+ * Set the active palette.
  *
- * This procedure allows the active palette to be set by specifying its
- * name. The name is simply a string which corresponds to one of the
- * names of the installed palettes. If no matching palette is found,
- * this procedure will return an error. Otherwise, the specified
- * palette becomes active and will be used in all subsequent palette
- * operations.
+ * Sets the active palette in the current context. The palette will be
+ * used in subsequent paint operations. Returns an error when the
+ * palette data was uninstalled since the palette object was created.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.2
  **/
 gboolean
-gimp_context_set_palette (const gchar *name)
+gimp_context_set_palette (GimpPalette *palette)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-palette",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_PALETTE, palette,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-palette",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2294,64 +2664,70 @@ gimp_context_set_palette (const gchar *name)
 /**
  * gimp_context_get_font:
  *
- * Retrieve the currently active font.
+ * Get the currently active font.
  *
- * This procedure returns the name of the currently active font.
+ * Returns the currently active font.
  *
- * Returns: The name of the active font.
+ * Returns: (transfer none): The active font.
  *
  * Since: 2.2
  **/
-gchar *
+GimpFont *
 gimp_context_get_font (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gchar *name = NULL;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpFont *font = NULL;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-font",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    name = g_strdup (return_vals[1].data.d_string);
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-font",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    font = GIMP_VALUES_GET_FONT (return_vals, 1);
 
-  return name;
+  gimp_value_array_unref (return_vals);
+
+  return font;
 }
 
 /**
  * gimp_context_set_font:
- * @name: The name of the font.
+ * @font: The font.
  *
- * Set the specified font as the active font.
+ * Set the active font.
  *
- * This procedure allows the active font to be set by specifying its
- * name. The name is simply a string which corresponds to one of the
- * names of the installed fonts. If no matching font is found, this
- * procedure will return an error. Otherwise, the specified font
- * becomes active and will be used in all subsequent font operations.
+ * Sets the active font in the current context. The font will be used
+ * in subsequent text operations. Returns an error when the font data
+ * was uninstalled since the font object was created.
  *
  * Returns: TRUE on success.
  *
  * Since: 2.2
  **/
 gboolean
-gimp_context_set_font (const gchar *name)
+gimp_context_set_font (GimpFont *font)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-font",
-                                    &nreturn_vals,
-                                    GIMP_PDB_STRING, name,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_FONT, font,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-font",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2361,7 +2737,7 @@ gimp_context_set_font (const gchar *name)
  *
  * Get the antialias setting.
  *
- * This procedure returns the antialias setting.
+ * Returns the antialias setting.
  *
  * Returns: The antialias setting.
  *
@@ -2370,18 +2746,22 @@ gimp_context_set_font (const gchar *name)
 gboolean
 gimp_context_get_antialias (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean antialias = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-antialias",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    antialias = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-antialias",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    antialias = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return antialias;
 }
@@ -2392,11 +2772,10 @@ gimp_context_get_antialias (void)
  *
  * Set the antialias setting.
  *
- * This procedure modifies the antialias setting. If antialiasing is
- * turned on, the edges of selected region will contain intermediate
- * values which give the appearance of a sharper, less pixelized edge.
- * This should be set as TRUE most of the time unless a binary-only
- * selection is wanted.
+ * Modifies the antialias setting. If antialiasing is turned on, the
+ * edges of selected region will contain intermediate values which give
+ * the appearance of a sharper, less pixelized edge. This should be set
+ * as TRUE most of the time unless a binary-only selection is wanted.
  *
  * This setting affects the following procedures:
  * gimp_image_select_color(), gimp_image_select_contiguous_color(),
@@ -2412,18 +2791,22 @@ gimp_context_get_antialias (void)
 gboolean
 gimp_context_set_antialias (gboolean antialias)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-antialias",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, antialias,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_BOOLEAN, antialias,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-antialias",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2433,7 +2816,7 @@ gimp_context_set_antialias (gboolean antialias)
  *
  * Get the feather setting.
  *
- * This procedure returns the feather setting.
+ * Returns the feather setting.
  *
  * Returns: The feather setting.
  *
@@ -2442,18 +2825,22 @@ gimp_context_set_antialias (gboolean antialias)
 gboolean
 gimp_context_get_feather (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean feather = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-feather",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    feather = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-feather",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    feather = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return feather;
 }
@@ -2464,9 +2851,9 @@ gimp_context_get_feather (void)
  *
  * Set the feather setting.
  *
- * This procedure modifies the feather setting. If the feather option
- * is enabled, selections will be blurred before combining. The blur is
- * a gaussian blur; its radii can be controlled using
+ * Modifies the feather setting. If the feather option is enabled,
+ * selections will be blurred before combining. The blur is a gaussian
+ * blur; its radii can be controlled using
  * gimp_context_set_feather_radius().
  *
  * This setting affects the following procedures:
@@ -2482,30 +2869,34 @@ gimp_context_get_feather (void)
 gboolean
 gimp_context_set_feather (gboolean feather)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-feather",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, feather,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_BOOLEAN, feather,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-feather",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
 
 /**
  * gimp_context_get_feather_radius:
- * @feather_radius_x: The horizontal feather radius.
- * @feather_radius_y: The vertical feather radius.
+ * @feather_radius_x: (out): The horizontal feather radius.
+ * @feather_radius_y: (out): The vertical feather radius.
  *
  * Get the feather radius setting.
  *
- * This procedure returns the feather radius setting.
+ * Returns the feather radius setting.
  *
  * Returns: TRUE on success.
  *
@@ -2515,26 +2906,30 @@ gboolean
 gimp_context_get_feather_radius (gdouble *feather_radius_x,
                                  gdouble *feather_radius_y)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-feather-radius",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-feather-radius",
+                                               args);
+  gimp_value_array_unref (args);
 
   *feather_radius_x = 0.0;
   *feather_radius_y = 0.0;
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
   if (success)
     {
-      *feather_radius_x = return_vals[1].data.d_float;
-      *feather_radius_y = return_vals[2].data.d_float;
+      *feather_radius_x = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+      *feather_radius_y = GIMP_VALUES_GET_DOUBLE (return_vals, 2);
     }
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2546,7 +2941,7 @@ gimp_context_get_feather_radius (gdouble *feather_radius_x,
  *
  * Set the feather radius setting.
  *
- * This procedure modifies the feather radius setting.
+ * Modifies the feather radius setting.
  *
  * This setting affects all procedures that are affected by
  * gimp_context_set_feather().
@@ -2559,19 +2954,23 @@ gboolean
 gimp_context_set_feather_radius (gdouble feather_radius_x,
                                  gdouble feather_radius_y)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-feather-radius",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, feather_radius_x,
-                                    GIMP_PDB_FLOAT, feather_radius_y,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, feather_radius_x,
+                                          G_TYPE_DOUBLE, feather_radius_y,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-feather-radius",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2581,7 +2980,7 @@ gimp_context_set_feather_radius (gdouble feather_radius_x,
  *
  * Get the sample merged setting.
  *
- * This procedure returns the sample merged setting.
+ * Returns the sample merged setting.
  *
  * Returns: The sample merged setting.
  *
@@ -2590,18 +2989,22 @@ gimp_context_set_feather_radius (gdouble feather_radius_x,
 gboolean
 gimp_context_get_sample_merged (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean sample_merged = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-sample-merged",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    sample_merged = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-sample-merged",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    sample_merged = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return sample_merged;
 }
@@ -2612,13 +3015,12 @@ gimp_context_get_sample_merged (void)
  *
  * Set the sample merged setting.
  *
- * This procedure modifies the sample merged setting. If an operation
- * depends on the colors of the pixels present in a drawable, like when
- * doing a seed fill, this setting controls whether the pixel data from
- * the specified drawable is used ('sample-merged' is FALSE), or the
- * pixel data from the composite image ('sample-merged' is TRUE. This
- * is equivalent to sampling for colors after merging all visible
- * layers).
+ * Modifies the sample merged setting. If an operation depends on the
+ * colors of the pixels present in a drawable, like when doing a seed
+ * fill, this setting controls whether the pixel data from the given
+ * drawable is used ('sample-merged' is FALSE), or the pixel data from
+ * the composite image ('sample-merged' is TRUE. This is equivalent to
+ * sampling for colors after merging all visible layers).
  *
  * This setting affects the following procedures:
  * gimp_image_select_color(), gimp_image_select_contiguous_color(),
@@ -2631,18 +3033,22 @@ gimp_context_get_sample_merged (void)
 gboolean
 gimp_context_set_sample_merged (gboolean sample_merged)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-sample-merged",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, sample_merged,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_BOOLEAN, sample_merged,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-sample-merged",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2652,7 +3058,7 @@ gimp_context_set_sample_merged (gboolean sample_merged)
  *
  * Get the sample criterion setting.
  *
- * This procedure returns the sample criterion setting.
+ * Returns the sample criterion setting.
  *
  * Returns: The sample criterion setting.
  *
@@ -2661,18 +3067,22 @@ gimp_context_set_sample_merged (gboolean sample_merged)
 GimpSelectCriterion
 gimp_context_get_sample_criterion (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpSelectCriterion sample_criterion = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-sample-criterion",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    sample_criterion = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-sample-criterion",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    sample_criterion = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return sample_criterion;
 }
@@ -2683,11 +3093,10 @@ gimp_context_get_sample_criterion (void)
  *
  * Set the sample criterion setting.
  *
- * This procedure modifies the sample criterion setting. If an
- * operation depends on the colors of the pixels present in a drawable,
- * like when doing a seed fill, this setting controls how color
- * similarity is determined. SELECT_CRITERION_COMPOSITE is the default
- * value.
+ * Modifies the sample criterion setting. If an operation depends on
+ * the colors of the pixels present in a drawable, like when doing a
+ * seed fill, this setting controls how color similarity is determined.
+ * SELECT_CRITERION_COMPOSITE is the default value.
  *
  * This setting affects the following procedures:
  * gimp_image_select_color(), gimp_image_select_contiguous_color(),
@@ -2700,18 +3109,22 @@ gimp_context_get_sample_criterion (void)
 gboolean
 gimp_context_set_sample_criterion (GimpSelectCriterion sample_criterion)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-sample-criterion",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, sample_criterion,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_SELECT_CRITERION, sample_criterion,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-sample-criterion",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2721,7 +3134,7 @@ gimp_context_set_sample_criterion (GimpSelectCriterion sample_criterion)
  *
  * Get the sample threshold setting.
  *
- * This procedure returns the sample threshold setting.
+ * Returns the sample threshold setting.
  *
  * Returns: The sample threshold setting.
  *
@@ -2730,18 +3143,22 @@ gimp_context_set_sample_criterion (GimpSelectCriterion sample_criterion)
 gdouble
 gimp_context_get_sample_threshold (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble sample_threshold = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-sample-threshold",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    sample_threshold = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-sample-threshold",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    sample_threshold = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return sample_threshold;
 }
@@ -2752,12 +3169,11 @@ gimp_context_get_sample_threshold (void)
  *
  * Set the sample threshold setting.
  *
- * This procedure modifies the sample threshold setting. If an
- * operation depends on the colors of the pixels present in a drawable,
- * like when doing a seed fill, this setting controls what is
- * \"sufficiently close\" to be considered a similar color. If the
- * sample threshold has not been set explicitly, the default threshold
- * set in gimprc will be used.
+ * Modifies the sample threshold setting. If an operation depends on
+ * the colors of the pixels present in a drawable, like when doing a
+ * seed fill, this setting controls what is \"sufficiently close\" to
+ * be considered a similar color. If the sample threshold has not been
+ * set explicitly, the default threshold set in gimprc will be used.
  *
  * This setting affects the following procedures:
  * gimp_image_select_color(), gimp_image_select_contiguous_color(),
@@ -2770,18 +3186,22 @@ gimp_context_get_sample_threshold (void)
 gboolean
 gimp_context_set_sample_threshold (gdouble sample_threshold)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-sample-threshold",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, sample_threshold,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, sample_threshold,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-sample-threshold",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2791,8 +3211,8 @@ gimp_context_set_sample_threshold (gdouble sample_threshold)
  *
  * Get the sample threshold setting as an integer value.
  *
- * This procedure returns the sample threshold setting as an integer
- * value. See gimp_context_get_sample_threshold().
+ * Returns the sample threshold setting as an integer value. See
+ * gimp_context_get_sample_threshold().
  *
  * Returns: The sample threshold setting.
  *
@@ -2801,18 +3221,22 @@ gimp_context_set_sample_threshold (gdouble sample_threshold)
 gint
 gimp_context_get_sample_threshold_int (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gint sample_threshold = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-sample-threshold-int",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    sample_threshold = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-sample-threshold-int",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    sample_threshold = GIMP_VALUES_GET_INT (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return sample_threshold;
 }
@@ -2823,8 +3247,8 @@ gimp_context_get_sample_threshold_int (void)
  *
  * Set the sample threshold setting as an integer value.
  *
- * This procedure modifies the sample threshold setting as an integer
- * value. See gimp_context_set_sample_threshold().
+ * Modifies the sample threshold setting as an integer value. See
+ * gimp_context_set_sample_threshold().
  *
  * Returns: TRUE on success.
  *
@@ -2833,18 +3257,22 @@ gimp_context_get_sample_threshold_int (void)
 gboolean
 gimp_context_set_sample_threshold_int (gint sample_threshold)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-sample-threshold-int",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, sample_threshold,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, sample_threshold,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-sample-threshold-int",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2854,7 +3282,7 @@ gimp_context_set_sample_threshold_int (gint sample_threshold)
  *
  * Get the sample transparent setting.
  *
- * This procedure returns the sample transparent setting.
+ * Returns the sample transparent setting.
  *
  * Returns: The sample transparent setting.
  *
@@ -2863,18 +3291,22 @@ gimp_context_set_sample_threshold_int (gint sample_threshold)
 gboolean
 gimp_context_get_sample_transparent (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean sample_transparent = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-sample-transparent",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    sample_transparent = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-sample-transparent",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    sample_transparent = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return sample_transparent;
 }
@@ -2885,11 +3317,11 @@ gimp_context_get_sample_transparent (void)
  *
  * Set the sample transparent setting.
  *
- * This procedure modifies the sample transparent setting. If an
- * operation depends on the colors of the pixels present in a drawable,
- * like when doing a seed fill, this setting controls whether
- * transparency is considered to be a unique selectable color. When
- * this setting is TRUE, transparent areas can be selected or filled.
+ * Modifies the sample transparent setting. If an operation depends on
+ * the colors of the pixels present in a drawable, like when doing a
+ * seed fill, this setting controls whether transparency is considered
+ * to be a unique selectable color. When this setting is TRUE,
+ * transparent areas can be selected or filled.
  *
  * This setting affects the following procedures:
  * gimp_image_select_color(), gimp_image_select_contiguous_color(),
@@ -2902,18 +3334,22 @@ gimp_context_get_sample_transparent (void)
 gboolean
 gimp_context_set_sample_transparent (gboolean sample_transparent)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-sample-transparent",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, sample_transparent,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_BOOLEAN, sample_transparent,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-sample-transparent",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2923,7 +3359,7 @@ gimp_context_set_sample_transparent (gboolean sample_transparent)
  *
  * Get the diagonal neighbors setting.
  *
- * This procedure returns the diagonal neighbors setting.
+ * Returns the diagonal neighbors setting.
  *
  * Returns: The diagonal neighbors setting.
  *
@@ -2932,18 +3368,22 @@ gimp_context_set_sample_transparent (gboolean sample_transparent)
 gboolean
 gimp_context_get_diagonal_neighbors (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean diagonal_neighbors = FALSE;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-diagonal-neighbors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    diagonal_neighbors = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-diagonal-neighbors",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    diagonal_neighbors = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return diagonal_neighbors;
 }
@@ -2954,12 +3394,12 @@ gimp_context_get_diagonal_neighbors (void)
  *
  * Set the diagonal neighbors setting.
  *
- * This procedure modifies the diagonal neighbors setting. If the
- * affected region of an operation is based on a seed point, like when
- * doing a seed fill, then, when this setting is TRUE, all eight
- * neighbors of each pixel are considered when calculating the affected
- * region; in contrast, when this setting is FALSE, only the four
- * orthogonal neighbors of each pixel are considered.
+ * Modifies the diagonal neighbors setting. If the affected region of
+ * an operation is based on a seed point, like when doing a seed fill,
+ * then, when this setting is TRUE, all eight neighbors of each pixel
+ * are considered when calculating the affected region; in contrast,
+ * when this setting is FALSE, only the four orthogonal neighbors of
+ * each pixel are considered.
  *
  * This setting affects the following procedures:
  * gimp_image_select_contiguous_color(),
@@ -2972,18 +3412,22 @@ gimp_context_get_diagonal_neighbors (void)
 gboolean
 gimp_context_set_diagonal_neighbors (gboolean diagonal_neighbors)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-diagonal-neighbors",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, diagonal_neighbors,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_BOOLEAN, diagonal_neighbors,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-diagonal-neighbors",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -2993,8 +3437,8 @@ gimp_context_set_diagonal_neighbors (gboolean diagonal_neighbors)
  *
  * Get the distance metric used in some computations.
  *
- * This procedure returns the distance metric in the current context.
- * See gimp_context_set_distance_metric() to know more about its usage.
+ * Returns the distance metric in the current context. See
+ * gimp_context_set_distance_metric() to know more about its usage.
  *
  * Returns: The distance metric.
  *
@@ -3003,18 +3447,22 @@ gimp_context_set_diagonal_neighbors (gboolean diagonal_neighbors)
 GeglDistanceMetric
 gimp_context_get_distance_metric (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GeglDistanceMetric metric = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-distance-metric",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    metric = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-distance-metric",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    metric = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return metric;
 }
@@ -3025,10 +3473,10 @@ gimp_context_get_distance_metric (void)
  *
  * Set the distance metric used in some computations.
  *
- * This procedure modifies the distance metric used in some
- * computations, such as gimp_drawable_edit_gradient_fill(). In
- * particular, it does not change the metric used in generic distance
- * computation on canvas, as in the Measure tool.
+ * Modifies the distance metric used in some computations, such as
+ * gimp_drawable_edit_gradient_fill(). In particular, it does not
+ * change the metric used in generic distance computation on canvas, as
+ * in the Measure tool.
  *
  * This setting affects the following procedures:
  * gimp_drawable_edit_gradient_fill().
@@ -3040,18 +3488,22 @@ gimp_context_get_distance_metric (void)
 gboolean
 gimp_context_set_distance_metric (GeglDistanceMetric metric)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-distance-metric",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, metric,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GEGL_TYPE_DISTANCE_METRIC, metric,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-distance-metric",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -3061,9 +3513,9 @@ gimp_context_set_distance_metric (GeglDistanceMetric metric)
  *
  * Get the interpolation type.
  *
- * This procedure returns the interpolation setting. The return value
- * is an integer which corresponds to the values listed in the argument
- * description. If the interpolation has not been set explicitly by
+ * Returns the interpolation setting. The return value is an integer
+ * which corresponds to the values listed in the argument description.
+ * If the interpolation has not been set explicitly by
  * gimp_context_set_interpolation(), the default interpolation set in
  * gimprc will be used.
  *
@@ -3074,18 +3526,22 @@ gimp_context_set_distance_metric (GeglDistanceMetric metric)
 GimpInterpolationType
 gimp_context_get_interpolation (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpInterpolationType interpolation = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-interpolation",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    interpolation = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-interpolation",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    interpolation = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return interpolation;
 }
@@ -3096,7 +3552,7 @@ gimp_context_get_interpolation (void)
  *
  * Set the interpolation type.
  *
- * This procedure modifies the interpolation setting.
+ * Modifies the interpolation setting.
  *
  * This setting affects affects the following procedures:
  * gimp_item_transform_flip(), gimp_item_transform_perspective(),
@@ -3112,18 +3568,22 @@ gimp_context_get_interpolation (void)
 gboolean
 gimp_context_set_interpolation (GimpInterpolationType interpolation)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-interpolation",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, interpolation,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_INTERPOLATION_TYPE, interpolation,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-interpolation",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -3133,9 +3593,8 @@ gimp_context_set_interpolation (GimpInterpolationType interpolation)
  *
  * Get the transform direction.
  *
- * This procedure returns the transform direction. The return value is
- * an integer which corresponds to the values listed in the argument
- * description.
+ * Returns the transform direction. The return value is an integer
+ * which corresponds to the values listed in the argument description.
  *
  * Returns: The transform direction.
  *
@@ -3144,18 +3603,22 @@ gimp_context_set_interpolation (GimpInterpolationType interpolation)
 GimpTransformDirection
 gimp_context_get_transform_direction (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpTransformDirection transform_direction = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-transform-direction",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    transform_direction = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-transform-direction",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    transform_direction = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return transform_direction;
 }
@@ -3166,7 +3629,7 @@ gimp_context_get_transform_direction (void)
  *
  * Set the transform direction.
  *
- * This procedure modifies the transform direction setting.
+ * Modifies the transform direction setting.
  *
  * This setting affects affects the following procedures:
  * gimp_item_transform_flip(), gimp_item_transform_perspective(),
@@ -3181,18 +3644,22 @@ gimp_context_get_transform_direction (void)
 gboolean
 gimp_context_set_transform_direction (GimpTransformDirection transform_direction)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-transform-direction",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, transform_direction,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_TRANSFORM_DIRECTION, transform_direction,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-transform-direction",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -3202,9 +3669,8 @@ gimp_context_set_transform_direction (GimpTransformDirection transform_direction
  *
  * Get the transform resize type.
  *
- * This procedure returns the transform resize setting. The return
- * value is an integer which corresponds to the values listed in the
- * argument description.
+ * Returns the transform resize setting. The return value is an integer
+ * which corresponds to the values listed in the argument description.
  *
  * Returns: The transform resize type.
  *
@@ -3213,18 +3679,22 @@ gimp_context_set_transform_direction (GimpTransformDirection transform_direction
 GimpTransformResize
 gimp_context_get_transform_resize (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpTransformResize transform_resize = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-transform-resize",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    transform_resize = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-transform-resize",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    transform_resize = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return transform_resize;
 }
@@ -3235,10 +3705,10 @@ gimp_context_get_transform_resize (void)
  *
  * Set the transform resize type.
  *
- * This procedure modifies the transform resize setting. When
- * transforming pixels, if the result of a transform operation has a
- * different size than the original area, this setting determines how
- * the resulting area is sized.
+ * Modifies the transform resize setting. When transforming pixels, if
+ * the result of a transform operation has a different size than the
+ * original area, this setting determines how the resulting area is
+ * sized.
  *
  * This setting affects affects the following procedures:
  * gimp_item_transform_flip(), gimp_item_transform_flip_simple(),
@@ -3254,71 +3724,22 @@ gimp_context_get_transform_resize (void)
 gboolean
 gimp_context_set_transform_resize (GimpTransformResize transform_resize)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-transform-resize",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, transform_resize,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_TRANSFORM_RESIZE, transform_resize,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-transform-resize",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
 
-  return success;
-}
-
-/**
- * gimp_context_get_transform_recursion:
- *
- * Deprecated: There is no replacement for this procedure.
- *
- * Returns: This returns always 3 and is meaningless.
- **/
-gint
-gimp_context_get_transform_recursion (void)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gint transform_recursion = 0;
-
-  return_vals = gimp_run_procedure ("gimp-context-get-transform-recursion",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
-
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    transform_recursion = return_vals[1].data.d_int32;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
-
-  return transform_recursion;
-}
-
-/**
- * gimp_context_set_transform_recursion:
- * @transform_recursion: This parameter is ignored.
- *
- * Deprecated: There is no replacement for this procedure.
- *
- * Returns: TRUE on success.
- **/
-gboolean
-gimp_context_set_transform_recursion (gint transform_recursion)
-{
-  GimpParam *return_vals;
-  gint nreturn_vals;
-  gboolean success = TRUE;
-
-  return_vals = gimp_run_procedure ("gimp-context-set-transform-recursion",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, transform_recursion,
-                                    GIMP_PDB_END);
-
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
-
-  gimp_destroy_params (return_vals, nreturn_vals);
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -3337,18 +3758,22 @@ gimp_context_set_transform_recursion (gint transform_recursion)
 gdouble
 gimp_context_get_ink_size (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble size = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-ink-size",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    size = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-ink-size",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    size = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return size;
 }
@@ -3368,18 +3793,22 @@ gimp_context_get_ink_size (void)
 gboolean
 gimp_context_set_ink_size (gdouble size)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-ink-size",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, size,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, size,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-ink-size",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -3398,18 +3827,22 @@ gimp_context_set_ink_size (gdouble size)
 gdouble
 gimp_context_get_ink_angle (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble angle = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-ink-angle",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    angle = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-ink-angle",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    angle = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return angle;
 }
@@ -3429,18 +3862,22 @@ gimp_context_get_ink_angle (void)
 gboolean
 gimp_context_set_ink_angle (gdouble angle)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-ink-angle",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, angle,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, angle,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-ink-angle",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -3459,18 +3896,22 @@ gimp_context_set_ink_angle (gdouble angle)
 gdouble
 gimp_context_get_ink_size_sensitivity (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble size = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-ink-size-sensitivity",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    size = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-ink-size-sensitivity",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    size = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return size;
 }
@@ -3490,18 +3931,22 @@ gimp_context_get_ink_size_sensitivity (void)
 gboolean
 gimp_context_set_ink_size_sensitivity (gdouble size)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-ink-size-sensitivity",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, size,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, size,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-ink-size-sensitivity",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -3520,18 +3965,22 @@ gimp_context_set_ink_size_sensitivity (gdouble size)
 gdouble
 gimp_context_get_ink_tilt_sensitivity (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble tilt = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-ink-tilt-sensitivity",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    tilt = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-ink-tilt-sensitivity",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    tilt = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return tilt;
 }
@@ -3551,18 +4000,22 @@ gimp_context_get_ink_tilt_sensitivity (void)
 gboolean
 gimp_context_set_ink_tilt_sensitivity (gdouble tilt)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-ink-tilt-sensitivity",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, tilt,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, tilt,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-ink-tilt-sensitivity",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -3581,18 +4034,22 @@ gimp_context_set_ink_tilt_sensitivity (gdouble tilt)
 gdouble
 gimp_context_get_ink_speed_sensitivity (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble speed = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-ink-speed-sensitivity",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    speed = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-ink-speed-sensitivity",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    speed = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return speed;
 }
@@ -3612,18 +4069,22 @@ gimp_context_get_ink_speed_sensitivity (void)
 gboolean
 gimp_context_set_ink_speed_sensitivity (gdouble speed)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-ink-speed-sensitivity",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, speed,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, speed,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-ink-speed-sensitivity",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -3642,18 +4103,22 @@ gimp_context_set_ink_speed_sensitivity (gdouble speed)
 GimpInkBlobType
 gimp_context_get_ink_blob_type (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   GimpInkBlobType type = 0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-ink-blob-type",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    type = return_vals[1].data.d_int32;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-ink-blob-type",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    type = GIMP_VALUES_GET_ENUM (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return type;
 }
@@ -3673,18 +4138,22 @@ gimp_context_get_ink_blob_type (void)
 gboolean
 gimp_context_set_ink_blob_type (GimpInkBlobType type)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-ink-blob-type",
-                                    &nreturn_vals,
-                                    GIMP_PDB_INT32, type,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          GIMP_TYPE_INK_BLOB_TYPE, type,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-ink-blob-type",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -3703,18 +4172,22 @@ gimp_context_set_ink_blob_type (GimpInkBlobType type)
 gdouble
 gimp_context_get_ink_blob_aspect_ratio (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble aspect = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-ink-blob-aspect-ratio",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    aspect = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-ink-blob-aspect-ratio",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    aspect = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return aspect;
 }
@@ -3734,18 +4207,22 @@ gimp_context_get_ink_blob_aspect_ratio (void)
 gboolean
 gimp_context_set_ink_blob_aspect_ratio (gdouble aspect)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-ink-blob-aspect-ratio",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, aspect,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, aspect,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-ink-blob-aspect-ratio",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
 }
@@ -3764,18 +4241,22 @@ gimp_context_set_ink_blob_aspect_ratio (gdouble aspect)
 gdouble
 gimp_context_get_ink_blob_angle (void)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gdouble angle = 0.0;
 
-  return_vals = gimp_run_procedure ("gimp-context-get-ink-blob-angle",
-                                    &nreturn_vals,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_NONE);
 
-  if (return_vals[0].data.d_status == GIMP_PDB_SUCCESS)
-    angle = return_vals[1].data.d_float;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-ink-blob-angle",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    angle = GIMP_VALUES_GET_DOUBLE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
 
   return angle;
 }
@@ -3795,18 +4276,58 @@ gimp_context_get_ink_blob_angle (void)
 gboolean
 gimp_context_set_ink_blob_angle (gdouble angle)
 {
-  GimpParam *return_vals;
-  gint nreturn_vals;
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
   gboolean success = TRUE;
 
-  return_vals = gimp_run_procedure ("gimp-context-set-ink-blob-angle",
-                                    &nreturn_vals,
-                                    GIMP_PDB_FLOAT, angle,
-                                    GIMP_PDB_END);
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_DOUBLE, angle,
+                                          G_TYPE_NONE);
 
-  success = return_vals[0].data.d_status == GIMP_PDB_SUCCESS;
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-set-ink-blob-angle",
+                                               args);
+  gimp_value_array_unref (args);
 
-  gimp_destroy_params (return_vals, nreturn_vals);
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
 
   return success;
+}
+
+/**
+ * _gimp_context_get_resource:
+ * @type_name: The name of the resource type.
+ *
+ * Get the currently active resource for a type.
+ *
+ * Returns the currently active resource for the given type name.
+ *
+ * Returns: (transfer none): The active resource.
+ *
+ * Since: 3.0
+ **/
+GimpResource *
+_gimp_context_get_resource (const gchar *type_name)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  GimpResource *resource = NULL;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, type_name,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-context-get-resource",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    resource = GIMP_VALUES_GET_RESOURCE (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return resource;
 }

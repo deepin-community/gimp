@@ -30,18 +30,8 @@
 #include "gimpdashpattern.h"
 
 
-GType
-gimp_dash_pattern_get_type (void)
-{
-  static GType type = 0;
-
-  if (! type)
-    type = g_boxed_type_register_static ("GimpDashPattern",
-                                         (GBoxedCopyFunc) gimp_dash_pattern_copy,
-                                         (GBoxedFreeFunc) gimp_dash_pattern_free);
-
-  return type;
-}
+typedef GArray GimpDashPattern;
+G_DEFINE_BOXED_TYPE (GimpDashPattern, gimp_dash_pattern, gimp_dash_pattern_copy, gimp_dash_pattern_free)
 
 GArray *
 gimp_dash_pattern_new_from_preset (GimpDashPreset preset)
@@ -305,7 +295,7 @@ gimp_dash_pattern_from_double_array (gint           n_dashes,
 
 gdouble *
 gimp_dash_pattern_to_double_array (GArray *pattern,
-                                   gint   *n_dashes)
+                                   gsize  *n_dashes)
 {
   if (pattern != NULL && pattern->len > 0)
     {

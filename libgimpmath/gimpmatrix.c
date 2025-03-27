@@ -49,27 +49,7 @@
 
 static GimpMatrix2 * matrix2_copy                  (const GimpMatrix2 *matrix);
 
-/**
- * gimp_matrix2_get_type:
- *
- * Reveals the object type
- *
- * Returns: the #GType for Matrix2 objects
- *
- * Since: 2.4
- **/
-GType
-gimp_matrix2_get_type (void)
-{
-  static GType matrix_type = 0;
-
-  if (!matrix_type)
-    matrix_type = g_boxed_type_register_static ("GimpMatrix2",
-                                               (GBoxedCopyFunc) matrix2_copy,
-                                               (GBoxedFreeFunc) g_free);
-
-  return matrix_type;
-}
+G_DEFINE_BOXED_TYPE (GimpMatrix2, gimp_matrix2, matrix2_copy, g_free)
 
 
 /*
@@ -193,7 +173,7 @@ gimp_param_matrix2_values_cmp (GParamSpec   *pspec,
  * Creates a param spec to hold a #GimpMatrix2 value.
  * See g_param_spec_internal() for more information.
  *
- * Returns: a newly allocated #GParamSpec instance
+ * Returns: (transfer full): a newly allocated #GParamSpec instance
  *
  * Since: 2.4
  **/
@@ -220,7 +200,7 @@ gimp_param_spec_matrix2 (const gchar       *name,
 static GimpMatrix2 *
 matrix2_copy (const GimpMatrix2 *matrix)
 {
-  return (GimpMatrix2 *) g_memdup (matrix, sizeof (GimpMatrix2));
+  return (GimpMatrix2 *) g_memdup2 (matrix, sizeof (GimpMatrix2));
 }
 
 
@@ -241,27 +221,26 @@ gimp_matrix2_identity (GimpMatrix2 *matrix)
 
 /**
  * gimp_matrix2_mult:
- * @matrix1: The first input matrix.
- * @matrix2: The second input matrix which will be overwritten by the result.
+ * @left: The first input matrix.
+ * @right: The second input matrix which will be overwritten by the result.
  *
  * Multiplies two matrices and puts the result into the second one.
  */
 void
-gimp_matrix2_mult (const GimpMatrix2 *matrix1,
-                   GimpMatrix2       *matrix2)
+gimp_matrix2_mult (const GimpMatrix2 *left,
+                   GimpMatrix2       *right)
 {
-  GimpMatrix2  tmp;
+  gdouble r00 = right->coeff[0][0];
+  gdouble r01 = right->coeff[0][1];
 
-  tmp.coeff[0][0] = (matrix1->coeff[0][0] * matrix2->coeff[0][0] +
-                     matrix1->coeff[0][1] * matrix2->coeff[1][0]);
-  tmp.coeff[0][1] = (matrix1->coeff[0][0] * matrix2->coeff[0][1] +
-                     matrix1->coeff[0][1] * matrix2->coeff[1][1]);
-  tmp.coeff[1][0] = (matrix1->coeff[1][0] * matrix2->coeff[0][0] +
-                     matrix1->coeff[1][1] * matrix2->coeff[1][0]);
-  tmp.coeff[1][1] = (matrix1->coeff[1][0] * matrix2->coeff[0][1] +
-                     matrix1->coeff[1][1] * matrix2->coeff[1][1]);
-
-  *matrix2 = tmp;
+  right->coeff[0][0] = (left->coeff[0][0] * r00 +
+                        left->coeff[0][1] * right->coeff[1][0]);
+  right->coeff[0][1] = (left->coeff[0][0] * r01 +
+                        left->coeff[0][1] * right->coeff[1][1]);
+  right->coeff[1][0] = (left->coeff[1][0] * r00 +
+                        left->coeff[1][1] * right->coeff[1][0]);
+  right->coeff[1][1] = (left->coeff[1][0] * r01 +
+                        left->coeff[1][1] * right->coeff[1][1]);
 }
 
 /**
@@ -312,8 +291,8 @@ gimp_matrix2_invert (GimpMatrix2 *matrix)
  * @matrix: The transformation matrix.
  * @x: The source X coordinate.
  * @y: The source Y coordinate.
- * @newx: The transformed X coordinate.
- * @newy: The transformed Y coordinate.
+ * @newx: (out): The transformed X coordinate.
+ * @newy: (out): The transformed Y coordinate.
  *
  * Transforms a point in 2D as specified by the transformation matrix.
  *
@@ -333,27 +312,7 @@ gimp_matrix2_transform_point (const GimpMatrix2 *matrix,
 
 static GimpMatrix3 * matrix3_copy                  (const GimpMatrix3 *matrix);
 
-/**
- * gimp_matrix3_get_type:
- *
- * Reveals the object type
- *
- * Returns: the #GType for Matrix3 objects
- *
- * Since: 2.8
- **/
-GType
-gimp_matrix3_get_type (void)
-{
-  static GType matrix_type = 0;
-
-  if (!matrix_type)
-    matrix_type = g_boxed_type_register_static ("GimpMatrix3",
-                                               (GBoxedCopyFunc) matrix3_copy,
-                                               (GBoxedFreeFunc) g_free);
-
-  return matrix_type;
-}
+G_DEFINE_BOXED_TYPE (GimpMatrix3, gimp_matrix3, matrix3_copy, g_free)
 
 
 /*
@@ -477,7 +436,7 @@ gimp_param_matrix3_values_cmp (GParamSpec   *pspec,
  * Creates a param spec to hold a #GimpMatrix3 value.
  * See g_param_spec_internal() for more information.
  *
- * Returns: a newly allocated #GParamSpec instance
+ * Returns: (transfer full): a newly allocated #GParamSpec instance
  *
  * Since: 2.8
  **/
@@ -503,7 +462,7 @@ gimp_param_spec_matrix3 (const gchar       *name,
 static GimpMatrix3 *
 matrix3_copy (const GimpMatrix3 *matrix)
 {
-  return (GimpMatrix3 *) g_memdup (matrix, sizeof (GimpMatrix3));
+  return (GimpMatrix3 *) g_memdup2 (matrix, sizeof (GimpMatrix3));
 }
 
 
@@ -559,34 +518,36 @@ gimp_matrix3_transform_point (const GimpMatrix3 *matrix,
 
 /**
  * gimp_matrix3_mult:
- * @matrix1: The first input matrix.
- * @matrix2: The second input matrix which will be overwritten by the result.
+ * @left: The first input matrix.
+ * @right: The second input matrix which will be overwritten by the result.
  *
  * Multiplies two matrices and puts the result into the second one.
  */
 void
-gimp_matrix3_mult (const GimpMatrix3 *matrix1,
-                   GimpMatrix3       *matrix2)
+gimp_matrix3_mult (const GimpMatrix3 *left,
+                   GimpMatrix3       *right)
 {
-  gint         i, j;
-  GimpMatrix3  tmp;
-  gdouble      t1, t2, t3;
+  gint    i;
+  gdouble li0, li1, li2;
+  gdouble r00 = right->coeff[0][0];
+  gdouble r01 = right->coeff[0][1];
+  gdouble r02 = right->coeff[0][2];
+  gdouble r10 = right->coeff[1][0];
+  gdouble r11 = right->coeff[1][1];
+  gdouble r12 = right->coeff[1][2];
+  gdouble r20 = right->coeff[2][0];
+  gdouble r21 = right->coeff[2][1];
+  gdouble r22 = right->coeff[2][2];
 
   for (i = 0; i < 3; i++)
     {
-      t1 = matrix1->coeff[i][0];
-      t2 = matrix1->coeff[i][1];
-      t3 = matrix1->coeff[i][2];
-
-      for (j = 0; j < 3; j++)
-        {
-          tmp.coeff[i][j]  = t1 * matrix2->coeff[0][j];
-          tmp.coeff[i][j] += t2 * matrix2->coeff[1][j];
-          tmp.coeff[i][j] += t3 * matrix2->coeff[2][j];
-        }
+      li0 = left->coeff[i][0];
+      li1 = left->coeff[i][1];
+      li2 = left->coeff[i][2];
+      right->coeff[i][0] = li0 * r00 + li1 * r10 + li2 * r20;
+      right->coeff[i][1] = li0 * r01 + li1 * r11 + li2 * r21;
+      right->coeff[i][2] = li0 * r02 + li1 * r12 + li2 * r22;
     }
-
-  *matrix2 = tmp;
 }
 
 /**
@@ -758,19 +719,15 @@ gimp_matrix3_affine (GimpMatrix3 *matrix,
 gdouble
 gimp_matrix3_determinant (const GimpMatrix3 *matrix)
 {
-  gdouble determinant;
-
-  determinant  = (matrix->coeff[0][0] *
-                  (matrix->coeff[1][1] * matrix->coeff[2][2] -
-                   matrix->coeff[1][2] * matrix->coeff[2][1]));
-  determinant -= (matrix->coeff[1][0] *
-                  (matrix->coeff[0][1] * matrix->coeff[2][2] -
-                   matrix->coeff[0][2] * matrix->coeff[2][1]));
-  determinant += (matrix->coeff[2][0] *
-                  (matrix->coeff[0][1] * matrix->coeff[1][2] -
-                   matrix->coeff[0][2] * matrix->coeff[1][1]));
-
-  return determinant;
+  gdouble m01 = matrix->coeff[0][1];
+  gdouble m02 = matrix->coeff[0][2];
+  gdouble m11 = matrix->coeff[1][1];
+  gdouble m12 = matrix->coeff[1][2];
+  gdouble m21 = matrix->coeff[2][1];
+  gdouble m22 = matrix->coeff[2][2];
+  return  matrix->coeff[0][0] * (m11 * m22 - m12 * m21)
+        - matrix->coeff[1][0] * (m01 * m22 - m02 * m21)
+        + matrix->coeff[2][0] * (m01 * m12 - m02 * m11);
 }
 
 /**
@@ -782,44 +739,40 @@ gimp_matrix3_determinant (const GimpMatrix3 *matrix)
 void
 gimp_matrix3_invert (GimpMatrix3 *matrix)
 {
-  GimpMatrix3 inv;
-  gdouble     det;
+  gdouble det;
+  gdouble m00 = matrix->coeff[0][0];
+  gdouble m01 = matrix->coeff[0][1];
+  gdouble m02 = matrix->coeff[0][2];
+  gdouble m10 = matrix->coeff[1][0];
+  gdouble m11 = matrix->coeff[1][1];
+  gdouble m12 = matrix->coeff[1][2];
+  gdouble m20 = matrix->coeff[2][0];
+  gdouble m21 = matrix->coeff[2][1];
+  gdouble m22 = matrix->coeff[2][2];
 
-  det = gimp_matrix3_determinant (matrix);
+  /* To avoid redundant access to the coefficients, inline the determinant
+   * formula.
+   *
+   * See: https://gitlab.gnome.org/GNOME/gimp/-/merge_requests/880#note_1727051
+   */
+  det =   m00 * (m11 * m22 - m12 * m21)
+        - m10 * (m01 * m22 - m02 * m21)
+        + m20 * (m01 * m12 - m02 * m11);
 
   if (det == 0.0)
     return;
 
   det = 1.0 / det;
 
-  inv.coeff[0][0] =   (matrix->coeff[1][1] * matrix->coeff[2][2] -
-                       matrix->coeff[1][2] * matrix->coeff[2][1]) * det;
-
-  inv.coeff[1][0] = - (matrix->coeff[1][0] * matrix->coeff[2][2] -
-                       matrix->coeff[1][2] * matrix->coeff[2][0]) * det;
-
-  inv.coeff[2][0] =   (matrix->coeff[1][0] * matrix->coeff[2][1] -
-                       matrix->coeff[1][1] * matrix->coeff[2][0]) * det;
-
-  inv.coeff[0][1] = - (matrix->coeff[0][1] * matrix->coeff[2][2] -
-                       matrix->coeff[0][2] * matrix->coeff[2][1]) * det;
-
-  inv.coeff[1][1] =   (matrix->coeff[0][0] * matrix->coeff[2][2] -
-                       matrix->coeff[0][2] * matrix->coeff[2][0]) * det;
-
-  inv.coeff[2][1] = - (matrix->coeff[0][0] * matrix->coeff[2][1] -
-                       matrix->coeff[0][1] * matrix->coeff[2][0]) * det;
-
-  inv.coeff[0][2] =   (matrix->coeff[0][1] * matrix->coeff[1][2] -
-                       matrix->coeff[0][2] * matrix->coeff[1][1]) * det;
-
-  inv.coeff[1][2] = - (matrix->coeff[0][0] * matrix->coeff[1][2] -
-                       matrix->coeff[0][2] * matrix->coeff[1][0]) * det;
-
-  inv.coeff[2][2] =   (matrix->coeff[0][0] * matrix->coeff[1][1] -
-                       matrix->coeff[0][1] * matrix->coeff[1][0]) * det;
-
-  *matrix = inv;
+  matrix->coeff[0][0] =   (m11 * m22 - m12 * m21) * det;
+  matrix->coeff[1][0] = - (m10 * m22 - m12 * m20) * det;
+  matrix->coeff[2][0] =   (m10 * m21 - m11 * m20) * det;
+  matrix->coeff[0][1] = - (m01 * m22 - m02 * m21) * det;
+  matrix->coeff[1][1] =   (m00 * m22 - m02 * m20) * det;
+  matrix->coeff[2][1] = - (m00 * m21 - m01 * m20) * det;
+  matrix->coeff[0][2] =   (m01 * m12 - m02 * m11) * det;
+  matrix->coeff[1][2] = - (m00 * m12 - m02 * m10) * det;
+  matrix->coeff[2][2] =   (m00 * m11 - m01 * m10) * det;
 }
 
 
@@ -982,39 +935,45 @@ gimp_matrix4_identity (GimpMatrix4 *matrix)
 
 /**
  * gimp_matrix4_mult:
- * @matrix1: The first input matrix.
- * @matrix2: The second input matrix which will be overwritten by the result.
+ * @left: The first input matrix.
+ * @right: The second input matrix which will be overwritten by the result.
  *
  * Multiplies two matrices and puts the result into the second one.
  *
  * Since: 2.10.16
  */
 void
-gimp_matrix4_mult (const GimpMatrix4 *matrix1,
-                   GimpMatrix4       *matrix2)
+gimp_matrix4_mult (const GimpMatrix4 *left,
+                   GimpMatrix4       *right)
 {
   GimpMatrix4 result = {};
-  gint        i, j, k;
+  gint        i, j;
+  gdouble     li0, li1, li2, li3;
 
   for (i = 0; i < 4; i++)
     {
+      li0 = left->coeff[i][0];
+      li1 = left->coeff[i][1];
+      li2 = left->coeff[i][2];
+      li3 = left->coeff[i][3];
       for (j = 0; j < 4; j++)
         {
-          for (k = 0; k < 4; k++)
-            result.coeff[i][j] += matrix1->coeff[i][k] * matrix2->coeff[k][j];
+          result.coeff[i][j] =   li0 * right->coeff[0][j]
+                               + li1 * right->coeff[1][j]
+                               + li2 * right->coeff[2][j]
+                               + li3 * right->coeff[3][j];
         }
     }
 
-  *matrix2 = result;
+  *right = result;
 }
 
 /**
  * gimp_matrix4_to_deg:
  * @matrix:
- * @a:
- * @b:
- * @c:
- *
+ * @a: (out):
+ * @b: (out):
+ * @c: (out):
  *
  **/
 void
@@ -1034,9 +993,9 @@ gimp_matrix4_to_deg (const GimpMatrix4 *matrix,
  * @x: The source X coordinate.
  * @y: The source Y coordinate.
  * @z: The source Z coordinate.
- * @newx: The transformed X coordinate.
- * @newy: The transformed Y coordinate.
- * @newz: The transformed Z coordinate.
+ * @newx: (out): The transformed X coordinate.
+ * @newy: (out): The transformed Y coordinate.
+ * @newz: (out): The transformed Z coordinate.
  *
  * Transforms a point in 3D as specified by the transformation matrix.
  *

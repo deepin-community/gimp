@@ -22,49 +22,43 @@
 void   items_visible_cmd_callback          (GimpAction   *action,
                                             GVariant     *value,
                                             GimpImage    *image,
-                                            GimpItem     *item);
-void   items_linked_cmd_callback           (GimpAction   *action,
-                                            GVariant     *value,
-                                            GimpImage    *image,
-                                            GimpItem     *item);
+                                            GList        *items);
 void   items_lock_content_cmd_callback     (GimpAction   *action,
                                             GVariant     *value,
                                             GimpImage    *image,
-                                            GimpItem     *item);
+                                            GList        *items);
 void   items_lock_position_cmd_callback    (GimpAction   *action,
                                             GVariant     *value,
                                             GimpImage    *image,
-                                            GimpItem     *item);
+                                            GList        *items);
 
 void   items_color_tag_cmd_callback        (GimpAction   *action,
                                             GimpImage    *image,
-                                            GimpItem     *item,
+                                            GList        *items,
                                             GimpColorTag  color_tag);
 
 void   items_fill_cmd_callback             (GimpAction   *action,
                                             GimpImage    *image,
-                                            GimpItem     *item,
-                                            const gchar  *dialog_key,
+                                            GList        *items,
                                             const gchar  *dialog_title,
                                             const gchar  *dialog_icon_name,
                                             const gchar  *dialog_help_id,
                                             gpointer      data);
 void   items_fill_last_vals_cmd_callback   (GimpAction   *action,
                                             GimpImage    *image,
-                                            GimpItem     *item,
+                                            GList        *items,
                                             gpointer      data);
 
 void   items_stroke_cmd_callback           (GimpAction   *action,
                                             GimpImage    *image,
-                                            GimpItem     *item,
-                                            const gchar  *dialog_key,
+                                            GList        *items,
                                             const gchar  *dialog_title,
                                             const gchar  *dialog_icon_name,
                                             const gchar  *dialog_help_id,
                                             gpointer      data);
 void   items_stroke_last_vals_cmd_callback (GimpAction   *action,
                                             GimpImage    *image,
-                                            GimpItem     *item,
+                                            GList        *items,
                                             gpointer      data);
 
 

@@ -35,6 +35,8 @@
 #include "core/gimpimage.h"
 #include "core/gimptoolinfo.h"
 
+#include "menus/menus.h"
+
 #include "text/gimptext.h"
 #include "text/gimptextlayout.h"
 
@@ -191,6 +193,9 @@ gimp_text_tool_editor_start (GimpTextTool *text_tool)
   g_signal_connect (options, "notify::use-editor",
                     G_CALLBACK (gimp_text_tool_options_notify),
                     text_tool);
+  g_signal_connect (options, "notify::show-on-canvas",
+                    G_CALLBACK (gimp_text_tool_options_notify),
+                    text_tool);
 
   if (! text_tool->style_overlay)
     {
@@ -207,7 +212,7 @@ gimp_text_tool_editor_start (GimpTextTool *text_tool)
                                       0, 0,
                                       GIMP_HANDLE_ANCHOR_CENTER, 0, 0);
       gimp_overlay_box_set_child_opacity (GIMP_OVERLAY_BOX (shell->canvas),
-                                          text_tool->style_overlay, 0.7);
+                                          text_tool->style_overlay, 0.85);
 
       if (text_tool->image)
         gimp_image_get_resolution (text_tool->image, &xres, &yres);
@@ -221,11 +226,14 @@ gimp_text_tool_editor_start (GimpTextTool *text_tool)
                                                             xres, yres);
       gtk_container_add (GTK_CONTAINER (text_tool->style_overlay),
                          text_tool->style_editor);
-      gtk_widget_show (text_tool->style_editor);
+
+      if (options->show_on_canvas)
+        gtk_widget_show (text_tool->style_editor);
     }
 
   gimp_text_tool_editor_position (text_tool);
-  gtk_widget_show (text_tool->style_overlay);
+  if (options->show_on_canvas)
+    gtk_widget_show (text_tool->style_overlay);
 }
 
 void
@@ -238,7 +246,8 @@ gimp_text_tool_editor_position (GimpTextTool *text_tool)
       GtkRequisition    requisition;
       gdouble           x, y;
 
-      gtk_widget_size_request (text_tool->style_overlay, &requisition);
+      gtk_widget_get_preferred_size (text_tool->style_overlay,
+                                     &requisition, NULL);
 
       g_object_get (text_tool->widget,
                     "x1", &x,
@@ -477,7 +486,7 @@ gimp_text_tool_editor_key_press (GimpTextTool *text_tool,
 
   gimp_text_tool_ensure_proxy (text_tool);
 
-  if (gtk_bindings_activate_event (GTK_OBJECT (text_tool->proxy_text_view),
+  if (gtk_bindings_activate_event (G_OBJECT (text_tool->proxy_text_view),
                                    kevent))
     {
       GIMP_LOG (TEXT_EDITING, "binding handled event");
@@ -535,7 +544,7 @@ gimp_text_tool_editor_key_release (GimpTextTool *text_tool,
 
   gimp_text_tool_ensure_proxy (text_tool);
 
-  if (gtk_bindings_activate_event (GTK_OBJECT (text_tool->proxy_text_view),
+  if (gtk_bindings_activate_event (G_OBJECT (text_tool->proxy_text_view),
                                    kevent))
     {
       GIMP_LOG (TEXT_EDITING, "binding handled event");
@@ -1325,6 +1334,13 @@ gimp_text_tool_options_notify (GimpTextOptions *options,
             gtk_widget_destroy (text_tool->editor_dialog);
         }
     }
+  else if (! strcmp (param_name, "show-on-canvas"))
+    {
+      gtk_widget_set_visible (text_tool->style_editor,
+                              options->show_on_canvas);
+      gtk_widget_set_visible (text_tool->style_overlay,
+                              options->show_on_canvas);
+    }
 }
 
 static void
@@ -1351,20 +1367,17 @@ gimp_text_tool_editor_dialog (GimpTextTool *text_tool)
   if (text_tool->image)
     gimp_image_get_resolution (text_tool->image, &xres, &yres);
 
-  text_tool->editor_dialog =
-    gimp_text_options_editor_new (parent, tool->tool_info->gimp, options,
-                                  gimp_dialog_factory_get_menu_factory (dialog_factory),
-                                  _("GIMP Text Editor"),
-                                  text_tool->proxy, text_tool->buffer,
-                                  xres, yres);
-
-  g_object_add_weak_pointer (G_OBJECT (text_tool->editor_dialog),
-                             (gpointer) &text_tool->editor_dialog);
+  g_set_weak_pointer
+    (&text_tool->editor_dialog,
+     gimp_text_options_editor_new (parent, tool->tool_info->gimp, options,
+                                   menus_get_global_menu_factory (tool->tool_info->gimp),
+                                   _("GIMP Text Editor"),
+                                   text_tool->proxy, text_tool->buffer,
+                                   xres, yres));
 
   gimp_dialog_factory_add_foreign (dialog_factory,
                                    "gimp-text-tool-dialog",
                                    text_tool->editor_dialog,
-                                   gtk_widget_get_screen (GTK_WIDGET (image_window)),
                                    gimp_widget_get_monitor (GTK_WIDGET (image_window)));
 
   g_signal_connect (text_tool->editor_dialog, "destroy",
@@ -1522,8 +1535,9 @@ gimp_text_tool_im_preedit_changed (GtkIMContext *context,
       attr_iter = pango_attr_list_get_iterator (attrs);
       do
         {
-          gint attr_start;
-          gint attr_end;
+          const gchar *valid_preedit_end;
+          gint         attr_start;
+          gint         attr_end;
 
           pango_attr_iterator_range (attr_iter, &attr_start, &attr_end);
           if (attr_start < strlen (text_tool->preedit_string))
@@ -1541,10 +1555,23 @@ gimp_text_tool_im_preedit_changed (GtkIMContext *context,
 
               gtk_text_buffer_begin_user_action (buffer);
 
+              /*
+               * Returned attribute end by pango_attr_iterator_range()
+               * may be G_MAXINT to mean the string end, though somehow
+               * we only encountered this in Wayland. Anyway let's take
+               * this possibility into account.
+               */
+              if (attr_end > strlen (text_tool->preedit_string))
+                attr_end = strlen (text_tool->preedit_string);
+
+              /* Double check encoding validity. */
+              if (! g_utf8_validate (text_tool->preedit_string + attr_start, attr_end - attr_start, &valid_preedit_end))
+                g_warning ("%s: preedit string is not valid UTF-8.", G_STRFUNC);
+
               /* Insert the preedit chunk at current cursor position. */
               gtk_text_buffer_insert_at_cursor (GTK_TEXT_BUFFER (text_tool->buffer),
                                                 text_tool->preedit_string + attr_start,
-                                                attr_end - attr_start);
+                                                valid_preedit_end - text_tool->preedit_string - attr_start);
               gtk_text_buffer_get_iter_at_mark (buffer, &start,
                                                 start_mark);
               gtk_text_buffer_delete_mark (buffer, start_mark);
@@ -1570,24 +1597,21 @@ gimp_text_tool_im_preedit_changed (GtkIMContext *context,
                         case PANGO_ATTR_FOREGROUND:
                             {
                               PangoAttrColor *color_attr = (PangoAttrColor *) attr;
-                              GimpRGB         color;
+                              GeglColor      *color;
 
-                              color.r = (gdouble) color_attr->color.red / 65535.0;
-                              color.g = (gdouble) color_attr->color.green / 65535.0;
-                              color.b = (gdouble) color_attr->color.blue / 65535.0;
+                              color = gegl_color_new (NULL);
+                              gegl_color_set_pixel (color, babl_format ("R'G'B' u16"), &color_attr->color);
 
                               if (attr->klass->type == PANGO_ATTR_BACKGROUND)
-                                {
-                                  gimp_text_buffer_set_preedit_bg_color (text_tool->buffer,
-                                                                         &start, &end,
-                                                                         &color);
-                                }
+                                gimp_text_buffer_set_preedit_bg_color (text_tool->buffer,
+                                                                       &start, &end,
+                                                                       color);
                               else
-                                {
-                                  gimp_text_buffer_set_preedit_color (text_tool->buffer,
-                                                                      &start, &end,
-                                                                      &color);
-                                }
+                                gimp_text_buffer_set_preedit_color (text_tool->buffer,
+                                                                    &start, &end,
+                                                                    color);
+
+                              g_object_unref (color);
                             }
                           break;
                         default:

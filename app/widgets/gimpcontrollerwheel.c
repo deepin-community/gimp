@@ -21,7 +21,6 @@
 #include "config.h"
 
 #include <gegl.h>
-#undef GDK_MULTIHEAD_SAFE /* for gdk_keymap_get_default() */
 #include <gtk/gtk.h>
 
 #include "libgimpwidgets/gimpwidgets.h"
@@ -190,7 +189,7 @@ gimp_controller_wheel_init (GimpControllerWheel *wheel)
 
   if (! events_initialized)
     {
-      GdkKeymap *keymap = gdk_keymap_get_default ();
+      GdkKeymap *keymap = gdk_keymap_get_for_display (gdk_display_get_default ());
       gint       i;
 
       for (i = 0; i < G_N_ELEMENTS (wheel_events); i++)
@@ -261,18 +260,42 @@ gboolean
 gimp_controller_wheel_scroll (GimpControllerWheel  *wheel,
                               const GdkEventScroll *sevent)
 {
-  gint i;
+  GdkScrollDirection direction;
+  GdkModifierType    state;
+  gint               i;
 
   g_return_val_if_fail (GIMP_IS_CONTROLLER_WHEEL (wheel), FALSE);
   g_return_val_if_fail (sevent != NULL, FALSE);
+
+  gdk_event_get_state ((const GdkEvent *) sevent, &state);
+
+  if (! gdk_event_get_scroll_direction ((const GdkEvent *) sevent, &direction))
+    {
+      gdouble dx = 0.0;
+      gdouble dy = 0.0;
+
+      if (! gdk_event_get_scroll_deltas ((const GdkEvent *) sevent, &dx, &dy))
+        return FALSE;
+
+      if (dy <= -1.0)
+        direction = GDK_SCROLL_UP;
+      else if (dy >= 1.0)
+        direction = GDK_SCROLL_DOWN;
+      else if (dx <= -1.0)
+        direction = GDK_SCROLL_LEFT;
+      else if (dx >= 1.0)
+        direction = GDK_SCROLL_RIGHT;
+      else
+        return FALSE;
+    }
 
   /*  start with the last event because the last ones in the
    *  up,down,left,right groups have the most keyboard modifiers
    */
   for (i = G_N_ELEMENTS (wheel_events) - 1; i >= 0; i--)
     {
-      if (wheel_events[i].direction == sevent->direction &&
-          (wheel_events[i].modifiers & sevent->state) ==
+      if (wheel_events[i].direction == direction &&
+          (wheel_events[i].modifiers & state) ==
           wheel_events[i].modifiers)
         {
           GimpControllerEvent         controller_event;

@@ -31,14 +31,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Necessary in order to have SetProcessDPIAware() defined.
- * This value of _WIN32_WINNT corresponds to Windows 7, which is our
- * minimum supported platform.
- */
-#ifdef _WIN32_WINNT
-#undef _WIN32_WINNT
-#endif
-#define _WIN32_WINNT 0x0601
 #include <windows.h>
 
 #include <libgimp/gimp.h>
@@ -81,7 +73,7 @@ static ICONINFO        iconInfo;
 static MAGIMAGEHEADER  returnedSrcheader;
 static int             rectScreensCount = 0;
 
-static gint32         *image_id;
+static GimpImage     **image;
 static gboolean        capturePointer = FALSE;
 
 static void sendBMPToGimp                      (HBITMAP         hBMP,
@@ -160,37 +152,40 @@ screenshot_win32_get_capabilities (void)
 {
   return (SCREENSHOT_CAN_SHOOT_DECORATIONS |
           SCREENSHOT_CAN_SHOOT_WINDOW      |
-          SCREENSHOT_CAN_SHOOT_POINTER);
+          SCREENSHOT_CAN_SHOOT_POINTER     |
+          SCREENSHOT_CAN_DELAY_WINDOW_SHOT);
 }
 
 GimpPDBStatusType
-screenshot_win32_shoot (ScreenshotValues  *shootvals,
-                        GdkScreen         *screen,
-                        gint32            *image_ID,
-                        GError           **error)
+screenshot_win32_shoot (ShootType    shoot_type,
+                        guint        screenshot_delay,
+                        gboolean     show_cursor,
+                        GdkMonitor  *monitor,
+                        GimpImage  **_image,
+                        GError     **error)
 {
   GimpPDBStatusType status = GIMP_PDB_EXECUTION_ERROR;
 
-  /* leave "shootvals->monitor" alone until somebody patches the code
+  /* leave "monitor" alone until somebody patches the code
    * to be able to get a monitor's color profile
    */
 
-  image_id = image_ID;
+  image = _image;
 
-  winsnapvals.delay = shootvals->screenshot_delay;
-  capturePointer = shootvals->show_cursor;
+  winsnapvals.delay = screenshot_delay;
+  capturePointer = show_cursor;
 
-  if (shootvals->shoot_type == SHOOT_ROOT)
+  if (shoot_type == SHOOT_ROOT)
     {
       doCapture (0);
 
       status = GIMP_PDB_SUCCESS;
     }
-  else if (shootvals->shoot_type == SHOOT_WINDOW)
+  else if (shoot_type == SHOOT_WINDOW)
     {
       status = 0 == doWindowCapture () ? GIMP_PDB_CANCEL : GIMP_PDB_SUCCESS;
     }
-  else if (shootvals->shoot_type == SHOOT_REGION)
+  else if (shoot_type == SHOOT_REGION)
     {
       /* FIXME */
     }
@@ -203,11 +198,11 @@ screenshot_win32_shoot (ScreenshotValues  *shootvals,
        * considering above comment. Just make so that it at least
        * compiles!
        */
-      profile = gimp_screen_get_color_profile (screen, shootvals->monitor);
+      profile = gimp_monitor_get_color_profile (monitor);
 
       if (profile)
         {
-          gimp_image_set_color_profile (*image_ID, profile);
+          gimp_image_set_color_profile (*image, profile);
           g_object_unref (profile);
         }
     }
@@ -287,8 +282,8 @@ sendBMPToGimp (HBITMAP hBMP,
 {
   int            width, height;
   int            imageType, layerType;
-  gint32         new_image_id;
-  gint32         layer_id;
+  GimpImage     *new_image;
+  GimpLayer     *layer;
   GeglBuffer    *buffer;
   GeglRectangle *rectangle;
 
@@ -311,13 +306,13 @@ sendBMPToGimp (HBITMAP hBMP,
   layerType = GIMP_RGB_IMAGE;
 
   /* Create the GIMP image and layers */
-  new_image_id = gimp_image_new (width, height, imageType);
-  layer_id = gimp_layer_new (new_image_id, _("Background"),
-                             ROUND4 (width), height,
-                             layerType,
-                             100,
-                             gimp_image_get_default_new_layer_mode (new_image_id));
-  gimp_image_insert_layer (new_image_id, layer_id, -1, 0);
+  new_image = gimp_image_new (width, height, imageType);
+  layer = gimp_layer_new (new_image, _("Background"),
+                          ROUND4 (width), height,
+                          layerType,
+                          100,
+                          gimp_image_get_default_new_layer_mode (new_image));
+  gimp_image_insert_layer (new_image, layer, NULL, 0);
 
   /* make rectangle */
   rectangle = g_new (GeglRectangle, 1);
@@ -327,7 +322,7 @@ sendBMPToGimp (HBITMAP hBMP,
   rectangle->height = height;
 
   /* get the buffer */
-  buffer = gimp_drawable_get_buffer (layer_id);
+  buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
 
   /* fill the buffer */
   gegl_buffer_set (buffer, rectangle, 0, NULL, (guchar *) capBytes,
@@ -339,11 +334,11 @@ sendBMPToGimp (HBITMAP hBMP,
   /* Now resize the layer down to the correct size if necessary. */
   if (width != ROUND4 (width))
     {
-      gimp_layer_resize (layer_id, width, height, 0, 0);
-      gimp_image_resize (new_image_id, width, height, 0, 0);
+      gimp_layer_resize (layer, width, height, 0, 0);
+      gimp_image_resize (new_image, width, height, 0, 0);
     }
 
-  *image_id = new_image_id;
+  *image = new_image;
 
   return;
 }
@@ -391,7 +386,7 @@ formatWindowsError (char *buffer,
     (LPTSTR) &lpMsgBuf, 0, NULL );
 
   /* Copy to the buffer */
-  strncpy(buffer, lpMsgBuf, buf_size - 1);
+  g_strlcpy (buffer, lpMsgBuf, buf_size);
 
   LocalFree(lpMsgBuf);
 }
@@ -790,7 +785,7 @@ doCaptureMagnificationAPI (HWND selectedHwnd,
 
   /* Create the host window that will store the mag child window */
   hwndHost = CreateWindowEx (0x08000000 | 0x080000 | 0x80 | 0x20, APP_NAME, NULL, 0x80000000,
-                             0, 0, 0, 0, NULL, NULL, GetModuleHandle (NULL), NULL);
+                             0, 0, 0, 0, NULL, NULL, GetModuleHandleW (NULL), NULL);
 
   if (!hwndHost)
     {
@@ -808,7 +803,7 @@ doCaptureMagnificationAPI (HWND selectedHwnd,
   hwndMag = CreateWindow (WC_MAGNIFIER, TEXT ("MagnifierWindow"),
                           magStyles,
                           0, 0, round4Rect.right - round4Rect.left, round4Rect.bottom - round4Rect.top,
-                          hwndHost, NULL, GetModuleHandle (NULL), NULL);
+                          hwndHost, NULL, GetModuleHandleW (NULL), NULL);
 
   /* Set the callback function that will be called by the api to get the pixels */
   if (!MagSetImageScalingCallback (hwndMag, (MagImageScalingCallback)doCaptureMagnificationAPI_callback))
@@ -1207,7 +1202,7 @@ BOOL
 InitInstance (HINSTANCE hInstance,
               int       nCmdShow)
 {
-  HINSTANCE User32Library = LoadLibrary ("user32.dll");
+  HINSTANCE User32Library = LoadLibraryW (L"user32.dll");
 
   if (User32Library)
     {

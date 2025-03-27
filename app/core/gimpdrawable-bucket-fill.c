@@ -18,14 +18,16 @@
 #include "config.h"
 
 #include <cairo.h>
-#define GEGL_ITERATOR2_API
 #include <gegl.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpcolor/gimpcolor.h"
+#include "libgimpconfig/gimpconfig.h"
 
 #include "core-types.h"
+
+#include "config/gimpdialogconfig.h"
 
 #include "gegl/gimp-gegl-apply-operation.h"
 #include "gegl/gimp-gegl-mask.h"
@@ -39,7 +41,9 @@
 #include "gimpdrawable.h"
 #include "gimpdrawable-bucket-fill.h"
 #include "gimpfilloptions.h"
+#include "gimpstrokeoptions.h"
 #include "gimpimage.h"
+#include "gimplineart.h"
 #include "gimppickable.h"
 #include "gimppickable-contiguous-region.h"
 
@@ -316,13 +320,16 @@ gimp_drawable_get_bucket_fill_buffer (GimpDrawable         *drawable,
  * @line_art: the #GimpLineArt computed as fill source.
  * @options: the #GimpFillOptions.
  * @sample_merged:
+ * @fill_color_as_line_art: do we add pixels in @drawable filled with
+ *                          fill color to the line art?
+ * @fill_color_threshold: threshold value to determine fill color.
  * @seed_x: X coordinate to start the fill.
  * @seed_y: Y coordinate to start the fill.
  * @mask_buffer: mask of the fill in-progress when in an interactive
  *               filling process. Set to NULL if you need a one-time
  *               fill.
  * @mask_x: returned x bound of @mask_buffer.
- * @mask_y: returned x bound of @mask_buffer.
+ * @mask_y: returned y bound of @mask_buffer.
  * @mask_width: returned width bound of @mask_buffer.
  * @mask_height: returned height bound of @mask_buffer.
  *
@@ -330,27 +337,42 @@ gimp_drawable_get_bucket_fill_buffer (GimpDrawable         *drawable,
  * based on @line_art and @options, without actually applying it.
  * If @mask_buffer is not NULL, the intermediate fill mask will also be
  * returned. This fill mask can later be reused in successive calls to
- * gimp_drawable_get_bucket_fill_buffer() for interactive filling.
+ * gimp_drawable_get_line_art_fill_buffer() for interactive filling.
+ *
+ * The @fill_color_as_line_art option is a special feature where we
+ * consider pixels in @drawable already in the fill color as part of the
+ * line art. This is a post-process, i.e. that this is not taken into
+ * account while @line_art is computed, making this a fast addition
+ * processing allowing to close some area manually.
  *
  * Returns: a fill buffer which can be directly applied to @drawable, or
  *          used in a drawable filter as preview.
  */
 GeglBuffer *
-gimp_drawable_get_line_art_fill_buffer (GimpDrawable     *drawable,
-                                        GimpLineArt      *line_art,
-                                        GimpFillOptions  *options,
-                                        gboolean          sample_merged,
-                                        gdouble           seed_x,
-                                        gdouble           seed_y,
-                                        GeglBuffer      **mask_buffer,
-                                        gdouble          *mask_x,
-                                        gdouble          *mask_y,
-                                        gint             *mask_width,
-                                        gint             *mask_height)
+gimp_drawable_get_line_art_fill_buffer (GimpDrawable      *drawable,
+                                        GimpLineArt       *line_art,
+                                        GimpFillOptions   *options,
+                                        gboolean           sample_merged,
+                                        gboolean           fill_color_as_line_art,
+                                        gdouble            fill_color_threshold,
+                                        gboolean           line_art_stroke,
+                                        GimpStrokeOptions *stroke_options,
+                                        gdouble            seed_x,
+                                        gdouble            seed_y,
+                                        GeglBuffer       **mask_buffer,
+                                        gdouble           *mask_x,
+                                        gdouble           *mask_y,
+                                        gint              *mask_width,
+                                        gint              *mask_height)
 {
   GimpImage  *image;
   GeglBuffer *buffer;
   GeglBuffer *new_mask;
+  GeglBuffer *rendered_mask;
+  GeglBuffer *fill_buffer   = NULL;
+  GeglColor  *fill_color    = NULL;
+  gint        fill_offset_x = 0;
+  gint        fill_offset_y = 0;
   gint        x, y, width, height;
   gint        mask_offset_x = 0;
   gint        mask_offset_y = 0;
@@ -385,7 +407,35 @@ gimp_drawable_get_line_art_fill_buffer (GimpDrawable     *drawable,
   /*  Do a seed bucket fill...To do this, calculate a new
    *  contiguous region.
    */
+  if (fill_color_as_line_art)
+    {
+      GimpPickable *pickable = gimp_line_art_get_input (line_art);
+
+      /* This cannot be a pattern fill. */
+      g_return_val_if_fail (gimp_fill_options_get_style (options) != GIMP_FILL_STYLE_PATTERN,
+                            NULL);
+      /* Meaningful only in above/below layer cases. */
+      g_return_val_if_fail (GIMP_IS_DRAWABLE (pickable), NULL);
+
+      if (gimp_fill_options_get_style (options) == GIMP_FILL_STYLE_FG_COLOR)
+        fill_color = gimp_context_get_foreground (GIMP_CONTEXT (options));
+      else if (gimp_fill_options_get_style (options) == GIMP_FILL_STYLE_BG_COLOR)
+        fill_color = gimp_context_get_background (GIMP_CONTEXT (options));
+
+      g_return_val_if_fail (fill_color != NULL, NULL);
+
+      fill_buffer   = gimp_drawable_get_buffer (drawable);
+      fill_offset_x = gimp_item_get_offset_x (GIMP_ITEM (drawable)) -
+                      gimp_item_get_offset_x (GIMP_ITEM (pickable));
+      fill_offset_y = gimp_item_get_offset_y (GIMP_ITEM (drawable)) -
+                      gimp_item_get_offset_y (GIMP_ITEM (pickable));
+    }
   new_mask = gimp_pickable_contiguous_region_by_line_art (NULL, line_art,
+                                                          fill_buffer,
+                                                          fill_color,
+                                                          fill_color_threshold,
+                                                          fill_offset_x,
+                                                          fill_offset_y,
                                                           (gint) seed_x,
                                                           (gint) seed_y);
   if (mask_buffer && *mask_buffer)
@@ -397,7 +447,68 @@ gimp_drawable_get_line_art_fill_buffer (GimpDrawable     *drawable,
   if (mask_buffer)
     *mask_buffer = new_mask;
 
-  gimp_gegl_mask_bounds (new_mask, &x, &y, &width, &height);
+  rendered_mask = gimp_gegl_buffer_dup (new_mask);
+  if (gimp_fill_options_get_feather (options, &feather_radius))
+    {
+      /* Feathering for the line art algorithm is not applied during
+       * mask creation because we just want to apply it on the borders
+       * of the mask at the end (since the mask can evolve, we don't
+       * want to actually touch the mask, but only the intermediate
+       * rendered results).
+       */
+      gimp_gegl_apply_feather (rendered_mask, NULL, NULL, rendered_mask, NULL,
+                               feather_radius, feather_radius, TRUE);
+    }
+
+  if (line_art_stroke)
+    {
+      /* Similarly to feathering, stroke only happens on the rendered
+       * result, not on the returned mask.
+       */
+      GimpChannel       *channel;
+      GimpChannel       *stroked;
+      GList             *drawables;
+      GimpContext       *context = gimp_get_user_context (image->gimp);
+      GError            *error   = NULL;
+      GeglColor         *white   = gegl_color_new ("white");
+
+      context = gimp_config_duplicate (GIMP_CONFIG (context));
+      /* As we are stroking a mask, we need to set color to white. */
+      gimp_context_set_foreground (GIMP_CONTEXT (context), white);
+      g_object_unref (white);
+
+      channel = gimp_channel_new_from_buffer (image, new_mask, NULL, NULL);
+      stroked = gimp_channel_new_from_buffer (image, rendered_mask, NULL, NULL);
+      gimp_image_add_hidden_item (image, GIMP_ITEM (channel));
+      gimp_image_add_hidden_item (image, GIMP_ITEM (stroked));
+      drawables = g_list_prepend (NULL, stroked);
+
+      if (! gimp_item_stroke (GIMP_ITEM (channel), drawables,
+                              context,
+                              stroke_options,
+                              NULL, FALSE, NULL, &error))
+        {
+          g_warning ("%s: stroking failed with: %s\n",
+                     G_STRFUNC, error ? error->message : "no error message");
+          g_clear_error (&error);
+        }
+
+      g_list_free (drawables);
+
+      gimp_pickable_flush (GIMP_PICKABLE (stroked));
+      g_object_unref (rendered_mask);
+      rendered_mask = gimp_drawable_get_buffer (GIMP_DRAWABLE (stroked));
+      g_object_ref (rendered_mask);
+
+      gimp_image_remove_hidden_item (image, GIMP_ITEM (channel));
+      g_object_unref (channel);
+      gimp_image_remove_hidden_item (image, GIMP_ITEM (stroked));
+      g_object_unref (stroked);
+
+      g_object_unref (context);
+    }
+
+  gimp_gegl_mask_bounds (rendered_mask, &x, &y, &width, &height);
   width  -= x;
   height -= y;
 
@@ -467,19 +578,8 @@ gimp_drawable_get_line_art_fill_buffer (GimpDrawable     *drawable,
                                                             width, height),
                                             -x, -y);
 
-  gimp_gegl_apply_opacity (buffer, NULL, NULL, buffer, new_mask,
+  gimp_gegl_apply_opacity (buffer, NULL, NULL, buffer, rendered_mask,
                            -mask_offset_x, -mask_offset_y, 1.0);
-
-  if (gimp_fill_options_get_feather (options, &feather_radius))
-    {
-      /* Feathering for the line art algorithm is not applied during
-       * mask creation because we just want to apply it on the borders
-       * of the mask at the end (since the mask can evolve, we don't
-       * want to actually touch it, but only the intermediate results).
-       */
-      gimp_gegl_apply_feather (buffer, NULL, NULL, buffer, NULL,
-                               feather_radius, feather_radius, TRUE);
-    }
 
   if (mask_x)
     *mask_x = x;
@@ -492,6 +592,8 @@ gimp_drawable_get_line_art_fill_buffer (GimpDrawable     *drawable,
 
   if (! mask_buffer)
     g_object_unref (new_mask);
+
+  g_object_unref (rendered_mask);
 
   gimp_unset_busy (image->gimp);
 

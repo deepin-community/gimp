@@ -25,10 +25,10 @@ gboolean               screenshot_x11_available        (void);
 
 ScreenshotCapabilities screenshot_x11_get_capabilities (void);
 
-GimpPDBStatusType      screenshot_x11_shoot            (ScreenshotValues  *shootvals,
-                                                        GdkScreen         *screen,
-                                                        gint32            *image_ID,
-                                                        GError           **error);
+GimpPDBStatusType      screenshot_x11_shoot            (GimpProcedureConfig  *config,
+                                                        GdkMonitor           *monitor,
+                                                        GimpImage           **image,
+                                                        GError              **error);
 
 #endif /* GDK_WINDOWING_X11 */
 

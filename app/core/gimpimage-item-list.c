@@ -24,13 +24,17 @@
 
 #include "core-types.h"
 
+#include "gimpchannel.h"
 #include "gimpcontext.h"
 #include "gimpimage.h"
 #include "gimpimage-item-list.h"
 #include "gimpimage-undo.h"
 #include "gimpitem.h"
+#include "gimplayer.h"
 #include "gimpobjectqueue.h"
 #include "gimpprogress.h"
+
+#include "vectors/gimppath.h"
 
 #include "gimp-intl.h"
 
@@ -142,7 +146,7 @@ gimp_image_item_list_flip (GimpImage           *image,
                            GimpContext         *context,
                            GimpOrientationType  flip_type,
                            gdouble              axis,
-                           gboolean             clip_result)
+                           GimpTransformResize  expected_clip_result)
 {
   g_return_if_fail (GIMP_IS_IMAGE (image));
   g_return_if_fail (GIMP_IS_CONTEXT (context));
@@ -166,7 +170,8 @@ gimp_image_item_list_flip (GimpImage           *image,
 
           gimp_item_flip (item, context,
                           flip_type, axis,
-                          gimp_item_get_clip (item, clip_result));
+                          gimp_item_get_clip (item, expected_clip_result) !=
+                          GIMP_TRANSFORM_RESIZE_ADJUST);
         }
 
       if (list->next)
@@ -294,7 +299,7 @@ gimp_image_item_list_transform (GimpImage              *image,
  * This function returns a #GList of #GimpItem<!-- -->s for which the
  * @type and @set criterions match.
  *
- * Return value: The list of items.
+ * Returns: The list of items.
  **/
 GList *
 gimp_image_item_list_get_list (GimpImage        *image,
@@ -337,9 +342,9 @@ gimp_image_item_list_get_list (GimpImage        *image,
       g_list_free (all_items);
     }
 
-  if (type & GIMP_ITEM_TYPE_VECTORS)
+  if (type & GIMP_ITEM_TYPE_PATHS)
     {
-      all_items = gimp_image_get_vectors_list (image);
+      all_items = gimp_image_get_path_list (image);
 
       for (list = all_items; list; list = g_list_next (list))
         {
@@ -377,6 +382,18 @@ gimp_image_item_list_remove_children (GList          *list,
   return list;
 }
 
+/**
+ * gimp_image_item_list_filter:
+ * @image:
+ * @items: the original list of #GimpItem-s.
+ *
+ * Filter @list by modifying it directly (so the original list should
+ * not be used anymore, only its result), removing all children items
+ * with ancestors also in @list.
+ *
+ * Returns: the modified @list where all items which have an ancestor in
+ *          @list have been removed.
+ */
 GList *
 gimp_image_item_list_filter (GList *list)
 {

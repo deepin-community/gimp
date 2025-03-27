@@ -50,6 +50,7 @@
 
 typedef struct
 {
+  gint          ref_count;
   gchar        *name;
   GMappedFile  *mapped;
   gchar        *text;
@@ -57,60 +58,41 @@ typedef struct
 } GimpScannerData;
 
 
+G_DEFINE_BOXED_TYPE (GimpScanner, gimp_scanner,
+                     gimp_scanner_ref, gimp_scanner_unref)
+
+
+
 /*  local function prototypes  */
 
-static GScanner * gimp_scanner_new     (const gchar  *name,
-                                        GMappedFile  *mapped,
-                                        gchar        *text,
-                                        GError      **error);
-static void       gimp_scanner_message (GScanner     *scanner,
-                                        gchar        *message,
-                                        gboolean      is_error);
+static GimpScanner * gimp_scanner_new                    (const gchar  *name,
+                                                          GMappedFile  *mapped,
+                                                          gchar        *text,
+                                                          GError      **error);
+static void          gimp_scanner_message                (GimpScanner  *scanner,
+                                                          gchar        *message,
+                                                          gboolean      is_error);
+static GTokenType    gimp_scanner_parse_deprecated_color (GimpScanner  *scanner,
+                                                          GeglColor   **color);
 
 
 /*  public functions  */
 
 /**
  * gimp_scanner_new_file:
- * @filename:
- * @error:
- *
- * Return value:
- *
- * Since: 2.4
- **/
-GScanner *
-gimp_scanner_new_file (const gchar  *filename,
-                       GError      **error)
-{
-  GScanner *scanner;
-  GFile    *file;
-
-  g_return_val_if_fail (filename != NULL, NULL);
-  g_return_val_if_fail (error == NULL || *error == NULL, NULL);
-
-  file = g_file_new_for_path (filename);
-  scanner = gimp_scanner_new_gfile (file, error);
-  g_object_unref (file);
-
-  return scanner;
-}
-
-/**
- * gimp_scanner_new_gfile:
  * @file: a #GFile
  * @error: return location for #GError, or %NULL
  *
- * Return value: The new #GScanner.
+ * Returns: (transfer full): The new #GimpScanner.
  *
  * Since: 2.10
  **/
-GScanner *
-gimp_scanner_new_gfile (GFile   *file,
-                        GError **error)
+GimpScanner *
+gimp_scanner_new_file (GFile   *file,
+                       GError **error)
 {
-  GScanner *scanner;
-  gchar    *path;
+  GimpScanner *scanner;
+  gchar       *path;
 
   g_return_val_if_fail (G_IS_FILE (file), NULL);
   g_return_val_if_fail (error == NULL || *error == NULL, NULL);
@@ -179,15 +161,15 @@ gimp_scanner_new_gfile (GFile   *file,
  * @input: a #GInputStream
  * @error: return location for #GError, or %NULL
  *
- * Return value: The new #GScanner.
+ * Returns: (transfer full): The new #GimpScanner.
  *
  * Since: 2.10
  **/
-GScanner *
+GimpScanner *
 gimp_scanner_new_stream (GInputStream  *input,
                          GError       **error)
 {
-  GScanner    *scanner;
+  GimpScanner *scanner;
   GFile       *file;
   const gchar *path;
   GString     *string;
@@ -248,20 +230,20 @@ gimp_scanner_new_stream (GInputStream  *input,
 
 /**
  * gimp_scanner_new_string:
- * @text:
- * @text_len:
- * @error:
+ * @text: (array length=text_len):
+ * @text_len: The length of @text, or -1 if NULL-terminated
+ * @error: return location for #GError, or %NULL
  *
- * Return value:
+ * Returns: (transfer full): The new #GimpScanner.
  *
  * Since: 2.4
  **/
-GScanner *
+GimpScanner *
 gimp_scanner_new_string (const gchar  *text,
                          gint          text_len,
                          GError      **error)
 {
-  GScanner *scanner;
+  GimpScanner *scanner;
 
   g_return_val_if_fail (text != NULL || text_len <= 0, NULL);
   g_return_val_if_fail (error == NULL || *error == NULL, NULL);
@@ -276,23 +258,24 @@ gimp_scanner_new_string (const gchar  *text,
   return scanner;
 }
 
-static GScanner *
+static GimpScanner *
 gimp_scanner_new (const gchar  *name,
                   GMappedFile  *mapped,
                   gchar        *text,
                   GError      **error)
 {
-  GScanner        *scanner;
+  GimpScanner     *scanner;
   GimpScannerData *data;
 
   scanner = g_scanner_new (NULL);
 
   data = g_slice_new0 (GimpScannerData);
 
-  data->name   = g_strdup (name);
-  data->mapped = mapped;
-  data->text   = text;
-  data->error  = error;
+  data->ref_count = 1;
+  data->name      = g_strdup (name);
+  data->mapped    = mapped;
+  data->text      = text;
+  data->error     = error;
 
   scanner->user_data   = data;
   scanner->msg_handler = gimp_scanner_message;
@@ -308,14 +291,41 @@ gimp_scanner_new (const gchar  *name,
 }
 
 /**
- * gimp_scanner_destroy:
- * @scanner: A #GScanner created by gimp_scanner_new_file() or
+ * gimp_scanner_ref:
+ * @scanner: #GimpScanner to ref
+ *
+ * Adds a reference to a #GimpScanner.
+ *
+ * Returns: the same @scanner.
+ *
+ * Since: 3.0
+ */
+GimpScanner *
+gimp_scanner_ref (GimpScanner *scanner)
+{
+  GimpScannerData *data;
+
+  g_return_val_if_fail (scanner != NULL, NULL);
+
+  data = scanner->user_data;
+
+  data->ref_count++;
+
+  return scanner;
+}
+
+/**
+ * gimp_scanner_unref:
+ * @scanner: A #GimpScanner created by gimp_scanner_new_file() or
  *           gimp_scanner_new_string()
  *
- * Since: 2.4
+ * Unref a #GimpScanner. If the reference count drops to zero, the
+ * scanner is freed.
+ *
+ * Since: 3.0
  **/
 void
-gimp_scanner_destroy (GScanner *scanner)
+gimp_scanner_unref (GimpScanner *scanner)
 {
   GimpScannerData *data;
 
@@ -323,31 +333,36 @@ gimp_scanner_destroy (GScanner *scanner)
 
   data = scanner->user_data;
 
-  if (data->mapped)
-    g_mapped_file_unref (data->mapped);
+  data->ref_count--;
 
-  if (data->text)
-    g_free (data->text);
+  if (data->ref_count < 1)
+    {
+      if (data->mapped)
+        g_mapped_file_unref (data->mapped);
 
-  g_free (data->name);
-  g_slice_free (GimpScannerData, data);
+      if (data->text)
+        g_free (data->text);
 
-  g_scanner_destroy (scanner);
+      g_free (data->name);
+      g_slice_free (GimpScannerData, data);
+
+      g_scanner_destroy (scanner);
+    }
 }
 
 /**
  * gimp_scanner_parse_token:
- * @scanner: A #GScanner created by gimp_scanner_new_file() or
+ * @scanner: A #GimpScanner created by gimp_scanner_new_file() or
  *           gimp_scanner_new_string()
  * @token: the #GTokenType expected as next token.
  *
- * Return value: %TRUE if the next token is @token, %FALSE otherwise.
+ * Returns: %TRUE if the next token is @token, %FALSE otherwise.
  *
  * Since: 2.4
  **/
 gboolean
-gimp_scanner_parse_token (GScanner   *scanner,
-                          GTokenType  token)
+gimp_scanner_parse_token (GimpScanner *scanner,
+                          GTokenType   token)
 {
   if (g_scanner_peek_next_token (scanner) != token)
     return FALSE;
@@ -359,17 +374,17 @@ gimp_scanner_parse_token (GScanner   *scanner,
 
 /**
  * gimp_scanner_parse_identifier:
- * @scanner: A #GScanner created by gimp_scanner_new_file() or
+ * @scanner: A #GimpScanner created by gimp_scanner_new_file() or
  *           gimp_scanner_new_string()
- * @identifier: the expected identifier.
+ * @identifier: (out): the expected identifier.
  *
- * Return value: %TRUE if the next token is an identifier and if its
+ * Returns: %TRUE if the next token is an identifier and if its
  * value matches @identifier.
  *
  * Since: 2.4
  **/
 gboolean
-gimp_scanner_parse_identifier (GScanner    *scanner,
+gimp_scanner_parse_identifier (GimpScanner *scanner,
                                const gchar *identifier)
 {
   if (g_scanner_peek_next_token (scanner) != G_TOKEN_IDENTIFIER)
@@ -385,17 +400,17 @@ gimp_scanner_parse_identifier (GScanner    *scanner,
 
 /**
  * gimp_scanner_parse_string:
- * @scanner: A #GScanner created by gimp_scanner_new_file() or
+ * @scanner: A #GimpScanner created by gimp_scanner_new_file() or
  *           gimp_scanner_new_string()
- * @dest: Return location for the parsed string
+ * @dest: (out): Return location for the parsed string
  *
- * Return value: %TRUE on success
+ * Returns: %TRUE on success
  *
  * Since: 2.4
  **/
 gboolean
-gimp_scanner_parse_string (GScanner  *scanner,
-                           gchar    **dest)
+gimp_scanner_parse_string (GimpScanner  *scanner,
+                           gchar       **dest)
 {
   if (g_scanner_peek_next_token (scanner) != G_TOKEN_STRING)
     return FALSE;
@@ -422,17 +437,17 @@ gimp_scanner_parse_string (GScanner  *scanner,
 
 /**
  * gimp_scanner_parse_string_no_validate:
- * @scanner: A #GScanner created by gimp_scanner_new_file() or
+ * @scanner: A #GimpScanner created by gimp_scanner_new_file() or
  *           gimp_scanner_new_string()
- * @dest: Return location for the parsed string
+ * @dest: (out): Return location for the parsed string
  *
- * Return value: %TRUE on success
+ * Returns: %TRUE on success
  *
  * Since: 2.4
  **/
 gboolean
-gimp_scanner_parse_string_no_validate (GScanner  *scanner,
-                                       gchar    **dest)
+gimp_scanner_parse_string_no_validate (GimpScanner  *scanner,
+                                       gchar       **dest)
 {
   if (g_scanner_peek_next_token (scanner) != G_TOKEN_STRING)
     return FALSE;
@@ -449,19 +464,19 @@ gimp_scanner_parse_string_no_validate (GScanner  *scanner,
 
 /**
  * gimp_scanner_parse_data:
- * @scanner: A #GScanner created by gimp_scanner_new_file() or
+ * @scanner: A #GimpScanner created by gimp_scanner_new_file() or
  *           gimp_scanner_new_string()
  * @length: Length of the data to parse
- * @dest: Return location for the parsed data
+ * @dest: (out) (array length=length): Return location for the parsed data
  *
- * Return value: %TRUE on success
+ * Returns: %TRUE on success
  *
  * Since: 2.4
  **/
 gboolean
-gimp_scanner_parse_data (GScanner  *scanner,
-                         gint       length,
-                         guint8   **dest)
+gimp_scanner_parse_data (GimpScanner  *scanner,
+                         gint          length,
+                         guint8      **dest)
 {
   if (g_scanner_peek_next_token (scanner) != G_TOKEN_STRING)
     return FALSE;
@@ -469,7 +484,7 @@ gimp_scanner_parse_data (GScanner  *scanner,
   g_scanner_get_next_token (scanner);
 
   if (scanner->value.v_string)
-    *dest = g_memdup (scanner->value.v_string, length);
+    *dest = g_memdup2 (scanner->value.v_string, length);
   else
     *dest = NULL;
 
@@ -478,17 +493,17 @@ gimp_scanner_parse_data (GScanner  *scanner,
 
 /**
  * gimp_scanner_parse_int:
- * @scanner: A #GScanner created by gimp_scanner_new_file() or
+ * @scanner: A #GimpScanner created by gimp_scanner_new_file() or
  *           gimp_scanner_new_string()
- * @dest: Return location for the parsed integer
+ * @dest: (out): Return location for the parsed integer
  *
- * Return value: %TRUE on success
+ * Returns: %TRUE on success
  *
  * Since: 2.4
  **/
 gboolean
-gimp_scanner_parse_int (GScanner *scanner,
-                        gint     *dest)
+gimp_scanner_parse_int (GimpScanner *scanner,
+                        gint        *dest)
 {
   gboolean negate = FALSE;
 
@@ -513,17 +528,17 @@ gimp_scanner_parse_int (GScanner *scanner,
 
 /**
  * gimp_scanner_parse_int64:
- * @scanner: A #GScanner created by gimp_scanner_new_file() or
+ * @scanner: A #GimpScanner created by gimp_scanner_new_file() or
  *           gimp_scanner_new_string()
- * @dest: Return location for the parsed integer
+ * @dest: (out): Return location for the parsed integer
  *
- * Return value: %TRUE on success
+ * Returns: %TRUE on success
  *
  * Since: 2.8
  **/
 gboolean
-gimp_scanner_parse_int64 (GScanner *scanner,
-                          gint64   *dest)
+gimp_scanner_parse_int64 (GimpScanner *scanner,
+                          gint64      *dest)
 {
   gboolean negate = FALSE;
 
@@ -547,18 +562,18 @@ gimp_scanner_parse_int64 (GScanner *scanner,
 }
 
 /**
- * gimp_scanner_parse_float:
- * @scanner: A #GScanner created by gimp_scanner_new_file() or
+ * gimp_scanner_parse_double:
+ * @scanner: A #GimpScanner created by gimp_scanner_new_file() or
  *           gimp_scanner_new_string()
- * @dest: Return location for the parsed float
+ * @dest: (out): Return location for the parsed double
  *
- * Return value: %TRUE on success
+ * Returns: %TRUE on success
  *
  * Since: 2.4
  **/
 gboolean
-gimp_scanner_parse_float (GScanner *scanner,
-                          gdouble  *dest)
+gimp_scanner_parse_double (GimpScanner *scanner,
+                           gdouble     *dest)
 {
   gboolean negate = FALSE;
 
@@ -581,10 +596,15 @@ gimp_scanner_parse_float (GScanner *scanner,
     }
   else if (g_scanner_peek_next_token (scanner) == G_TOKEN_INT)
     {
+      /* v_int is unsigned so we need to cast to
+       *
+       * gint64 first for negative values.
+       */
+
       g_scanner_get_next_token (scanner);
 
       if (negate)
-        *dest = -scanner->value.v_int;
+        *dest = - (gint64) scanner->value.v_int;
       else
         *dest = scanner->value.v_int;
 
@@ -596,17 +616,17 @@ gimp_scanner_parse_float (GScanner *scanner,
 
 /**
  * gimp_scanner_parse_boolean:
- * @scanner: A #GScanner created by gimp_scanner_new_file() or
+ * @scanner: A #GimpScanner created by gimp_scanner_new_file() or
  *           gimp_scanner_new_string()
- * @dest: Return location for the parsed boolean
+ * @dest: (out): Return location for the parsed boolean
  *
- * Return value: %TRUE on success
+ * Returns: %TRUE on success
  *
  * Since: 2.4
  **/
 gboolean
-gimp_scanner_parse_boolean (GScanner *scanner,
-                            gboolean *dest)
+gimp_scanner_parse_boolean (GimpScanner *scanner,
+                            gboolean    *dest)
 {
   if (g_scanner_peek_next_token (scanner) != G_TOKEN_IDENTIFIER)
     return FALSE;
@@ -642,33 +662,37 @@ enum
   COLOR_RGB  = 1,
   COLOR_RGBA,
   COLOR_HSV,
-  COLOR_HSVA
+  COLOR_HSVA,
+  COLOR
 };
 
 /**
  * gimp_scanner_parse_color:
- * @scanner: A #GScanner created by gimp_scanner_new_file() or
+ * @scanner: A #GimpScanner created by gimp_scanner_new_file() or
  *           gimp_scanner_new_string()
- * @dest: Pointer to a color to store the result
+ * @color: (out callee-allocates): Pointer to a color to store the result
  *
- * Return value: %TRUE on success
+ * Returns: %TRUE on success
  *
  * Since: 2.4
  **/
 gboolean
-gimp_scanner_parse_color (GScanner *scanner,
-                          GimpRGB  *dest)
+gimp_scanner_parse_color (GimpScanner  *scanner,
+                          GeglColor   **color)
 {
   guint      scope_id;
   guint      old_scope_id;
   GTokenType token;
-  GimpRGB    color = { 0.0, 0.0, 0.0, 1.0 };
+  gboolean   success = TRUE;
 
   scope_id = g_quark_from_static_string ("gimp_scanner_parse_color");
   old_scope_id = g_scanner_set_scope (scanner, scope_id);
 
-  if (! g_scanner_scope_lookup_symbol (scanner, scope_id, "color-rgb"))
+  if (! g_scanner_scope_lookup_symbol (scanner, scope_id, "color"))
     {
+      g_scanner_scope_add_symbol (scanner, scope_id,
+                                  "color", GINT_TO_POINTER (COLOR));
+      /* Deprecated. Kept for backward compatibility. */
       g_scanner_scope_add_symbol (scanner, scope_id,
                                   "color-rgb", GINT_TO_POINTER (COLOR_RGB));
       g_scanner_scope_add_symbol (scanner, scope_id,
@@ -679,104 +703,206 @@ gimp_scanner_parse_color (GScanner *scanner,
                                   "color-hsva", GINT_TO_POINTER (COLOR_HSVA));
     }
 
-  token = G_TOKEN_LEFT_PAREN;
+  token = g_scanner_peek_next_token (scanner);
 
-  while (g_scanner_peek_next_token (scanner) == token)
+  if (token == G_TOKEN_IDENTIFIER)
     {
-      token = g_scanner_get_next_token (scanner);
+      g_scanner_get_next_token (scanner);
 
-      switch (token)
+      if (g_ascii_strcasecmp (scanner->value.v_identifier, "null") != 0)
+        /* Do not fail the whole color parsing. Just output to stderr and assume
+         * a NULL color property.
+         */
+        g_printerr ("%s: expected NULL identifier for serialized color, got '%s'. "
+                    "Assuming NULL instead.\n",
+                    G_STRFUNC, scanner->value.v_identifier);
+
+      *color = NULL;
+
+      token = g_scanner_peek_next_token (scanner);
+      if (token == G_TOKEN_RIGHT_PAREN)
+        token = G_TOKEN_NONE;
+      else
+        token = G_TOKEN_RIGHT_PAREN;
+    }
+  else if (token == G_TOKEN_LEFT_PAREN)
+    {
+      g_scanner_get_next_token (scanner);
+      token = g_scanner_peek_next_token (scanner);
+
+      if (token == G_TOKEN_SYMBOL)
         {
-        case G_TOKEN_LEFT_PAREN:
+          if (GPOINTER_TO_INT (scanner->next_value.v_symbol) != COLOR)
+            {
+              /* Support historical GimpRGB format which may be stored in various config
+               * files, but even some data (such as GTP tool presets which contains
+               * tool-options which are GimpContext).
+               */
+              if (gimp_scanner_parse_deprecated_color (scanner, color))
+                token = G_TOKEN_RIGHT_PAREN;
+              else
+                success = FALSE;
+            }
+          else
+            {
+              const Babl *format;
+              gchar      *encoding;
+              guint8     *data;
+              gint        data_length;
+              gint        profile_data_length;
+
+              g_scanner_get_next_token (scanner);
+
+              if (! gimp_scanner_parse_string (scanner, &encoding))
+                {
+                  token = G_TOKEN_STRING;
+                  goto color_parsed;
+                }
+
+              if (! babl_format_exists (encoding))
+                {
+                  g_scanner_error (scanner,
+                                   "%s: format \"%s\" for serialized color is not a valid babl format.",
+                                   G_STRFUNC, encoding);
+                  g_free (encoding);
+                  success = FALSE;
+                  goto color_parsed;
+                }
+
+              format = babl_format (encoding);
+              g_free (encoding);
+
+              if (! gimp_scanner_parse_int (scanner, &data_length))
+                {
+                  token = G_TOKEN_INT;
+                  goto color_parsed;
+                }
+
+              if (data_length != babl_format_get_bytes_per_pixel (format))
+                {
+                  g_scanner_error (scanner,
+                                   "%s: format \"%s\" expects %d bpp but color was serialized with %d bpp.",
+                                   G_STRFUNC, babl_get_name (format),
+                                   babl_format_get_bytes_per_pixel (format),
+                                   data_length);
+                  success = FALSE;
+                  goto color_parsed;
+                }
+
+              if (! gimp_scanner_parse_data (scanner, data_length, &data))
+                {
+                  token = G_TOKEN_STRING;
+                  goto color_parsed;
+                }
+
+              if (! gimp_scanner_parse_int (scanner, &profile_data_length))
+                {
+                  g_free (data);
+                  token = G_TOKEN_INT;
+                  goto color_parsed;
+                }
+
+              if (profile_data_length > 0)
+                {
+                  const Babl       *space = NULL;
+                  GimpColorProfile *profile;
+                  guint8           *profile_data;
+                  GError           *error = NULL;
+
+                  if (! gimp_scanner_parse_data (scanner, profile_data_length, &profile_data))
+                    {
+                      g_free (data);
+                      token = G_TOKEN_STRING;
+                      goto color_parsed;
+                    }
+
+                  profile = gimp_color_profile_new_from_icc_profile (profile_data, profile_data_length, &error);
+
+                  if (profile)
+                    {
+                      space = gimp_color_profile_get_space (profile,
+                                                            GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
+                                                            &error);
+
+                      if (! space)
+                        {
+                          g_scanner_error (scanner,
+                                           "%s: failed to create Babl space for serialized color from profile: %s\n",
+                                           G_STRFUNC, error->message);
+                          g_clear_error (&error);
+                        }
+                      g_object_unref (profile);
+                    }
+                  else
+                    {
+                      g_scanner_error (scanner,
+                                       "%s: invalid profile data for serialized color: %s",
+                                       G_STRFUNC, error->message);
+                      g_error_free (error);
+                    }
+                  format = babl_format_with_space (babl_format_get_encoding (format), space);
+
+                  g_free (profile_data);
+                }
+
+              *color = gegl_color_new (NULL);
+              gegl_color_set_pixel (*color, format, data);
+
+              token = G_TOKEN_RIGHT_PAREN;
+              g_free (data);
+            }
+        }
+      else
+        {
           token = G_TOKEN_SYMBOL;
-          break;
+        }
 
-        case G_TOKEN_SYMBOL:
-          {
-            gdouble  col[4]     = { 0.0, 0.0, 0.0, 1.0 };
-            gint     n_channels = 4;
-            gboolean is_hsv     = FALSE;
-            gint     i;
-
-            switch (GPOINTER_TO_INT (scanner->value.v_symbol))
-              {
-              case COLOR_RGB:
-                n_channels = 3;
-                /* fallthrough */
-              case COLOR_RGBA:
-                break;
-
-              case COLOR_HSV:
-                n_channels = 3;
-                /* fallthrough */
-              case COLOR_HSVA:
-                is_hsv = TRUE;
-                break;
-              }
-
-            token = G_TOKEN_FLOAT;
-
-            for (i = 0; i < n_channels; i++)
-              {
-                if (! gimp_scanner_parse_float (scanner, &col[i]))
-                  goto finish;
-              }
-
-            if (is_hsv)
-              {
-                GimpHSV hsv;
-
-                gimp_hsva_set (&hsv, col[0], col[1], col[2], col[3]);
-                gimp_hsv_to_rgb (&hsv, &color);
-              }
-            else
-              {
-                gimp_rgba_set (&color, col[0], col[1], col[2], col[3]);
-              }
-
-            token = G_TOKEN_RIGHT_PAREN;
-          }
-          break;
-
-        case G_TOKEN_RIGHT_PAREN:
-          token = G_TOKEN_NONE; /* indicates success */
-          goto finish;
-
-        default: /* do nothing */
-          break;
+      if (success && token == G_TOKEN_RIGHT_PAREN)
+        {
+          token = g_scanner_peek_next_token (scanner);
+          if (token == G_TOKEN_RIGHT_PAREN)
+            {
+              g_scanner_get_next_token (scanner);
+              token = G_TOKEN_NONE;
+            }
+          else
+            {
+               g_clear_object (color);
+               token = G_TOKEN_RIGHT_PAREN;
+            }
         }
     }
+  else
+    {
+      token = G_TOKEN_LEFT_PAREN;
+    }
 
- finish:
+color_parsed:
 
-  if (token != G_TOKEN_NONE)
+  if (success && token != G_TOKEN_NONE)
     {
       g_scanner_get_next_token (scanner);
       g_scanner_unexp_token (scanner, token, NULL, NULL, NULL,
                              _("fatal parse error"), TRUE);
     }
-  else
-    {
-      *dest = color;
-    }
 
   g_scanner_set_scope (scanner, old_scope_id);
 
-  return (token == G_TOKEN_NONE);
+  return (success && token == G_TOKEN_NONE);
 }
 
 /**
  * gimp_scanner_parse_matrix2:
- * @scanner: A #GScanner created by gimp_scanner_new_file() or
+ * @scanner: A #GimpScanner created by gimp_scanner_new_file() or
  *           gimp_scanner_new_string()
- * @dest: Pointer to a matrix to store the result
+ * @dest: (out caller-allocates): Pointer to a matrix to store the result
  *
- * Return value: %TRUE on success
+ * Returns: %TRUE on success
  *
  * Since: 2.4
  **/
 gboolean
-gimp_scanner_parse_matrix2 (GScanner    *scanner,
+gimp_scanner_parse_matrix2 (GimpScanner *scanner,
                             GimpMatrix2 *dest)
 {
   guint        scope_id;
@@ -807,13 +933,13 @@ gimp_scanner_parse_matrix2 (GScanner    *scanner,
           {
             token = G_TOKEN_FLOAT;
 
-            if (! gimp_scanner_parse_float (scanner, &matrix.coeff[0][0]))
+            if (! gimp_scanner_parse_double (scanner, &matrix.coeff[0][0]))
               goto finish;
-            if (! gimp_scanner_parse_float (scanner, &matrix.coeff[0][1]))
+            if (! gimp_scanner_parse_double (scanner, &matrix.coeff[0][1]))
               goto finish;
-            if (! gimp_scanner_parse_float (scanner, &matrix.coeff[1][0]))
+            if (! gimp_scanner_parse_double (scanner, &matrix.coeff[1][0]))
               goto finish;
-            if (! gimp_scanner_parse_float (scanner, &matrix.coeff[1][1]))
+            if (! gimp_scanner_parse_double (scanner, &matrix.coeff[1][1]))
               goto finish;
 
             token = G_TOKEN_RIGHT_PAREN;
@@ -851,9 +977,9 @@ gimp_scanner_parse_matrix2 (GScanner    *scanner,
 /*  private functions  */
 
 static void
-gimp_scanner_message (GScanner *scanner,
-                      gchar    *message,
-                      gboolean  is_error)
+gimp_scanner_message (GimpScanner *scanner,
+                      gchar       *message,
+                      gboolean     is_error)
 {
   GimpScannerData *data = scanner->user_data;
 
@@ -868,4 +994,92 @@ gimp_scanner_message (GScanner *scanner,
     /*  should never happen, thus not marked for translation  */
     g_set_error (data->error, GIMP_CONFIG_ERROR, GIMP_CONFIG_ERROR_PARSE,
                  "Error parsing internal buffer: %s", message);
+}
+
+static GTokenType
+gimp_scanner_parse_deprecated_color (GimpScanner  *scanner,
+                                     GeglColor   **color)
+{
+  guint      scope_id;
+  guint      old_scope_id;
+  GTokenType token;
+
+  scope_id = g_quark_from_static_string ("gimp_scanner_parse_deprecated_color");
+  old_scope_id = g_scanner_set_scope (scanner, scope_id);
+
+  if (! g_scanner_scope_lookup_symbol (scanner, scope_id, "color-rgb"))
+    {
+      g_scanner_scope_add_symbol (scanner, scope_id,
+                                  "color-rgb", GINT_TO_POINTER (COLOR_RGB));
+      g_scanner_scope_add_symbol (scanner, scope_id,
+                                  "color-rgba", GINT_TO_POINTER (COLOR_RGBA));
+      g_scanner_scope_add_symbol (scanner, scope_id,
+                                  "color-hsv", GINT_TO_POINTER (COLOR_HSV));
+      g_scanner_scope_add_symbol (scanner, scope_id,
+                                  "color-hsva", GINT_TO_POINTER (COLOR_HSVA));
+    }
+
+  token = G_TOKEN_SYMBOL;
+
+  while (g_scanner_peek_next_token (scanner) == token)
+    {
+      token = g_scanner_get_next_token (scanner);
+
+      switch (token)
+        {
+        case G_TOKEN_SYMBOL:
+          {
+            gdouble  col[4]     = { 0.0, 0.0, 0.0, 1.0 };
+            gfloat   col_f[4]   = { 0.0f, 0.0f, 0.0f, 1.0f };
+            gint     n_channels = 4;
+            gboolean is_hsv     = FALSE;
+            gint     i;
+
+            switch (GPOINTER_TO_INT (scanner->value.v_symbol))
+              {
+              case COLOR_RGB:
+                n_channels = 3;
+                /* fallthrough */
+              case COLOR_RGBA:
+                break;
+
+              case COLOR_HSV:
+                n_channels = 3;
+                /* fallthrough */
+              case COLOR_HSVA:
+                is_hsv = TRUE;
+                break;
+              }
+
+            token = G_TOKEN_FLOAT;
+
+            for (i = 0; i < n_channels; i++)
+              {
+                if (! gimp_scanner_parse_double (scanner, &col[i]))
+                  goto finish;
+
+                col_f[i] = (gfloat) col[i];
+              }
+
+            *color = gegl_color_new (NULL);
+            if (is_hsv)
+              gegl_color_set_pixel (*color, babl_format ("HSVA float"), col_f);
+            else
+              gegl_color_set_pixel (*color, babl_format ("R'G'B'A double"), col);
+
+            /* Indicates success. */
+            token = G_TOKEN_NONE;
+          }
+          break;
+
+        default: /* do nothing */
+          break;
+        }
+    }
+
+finish:
+
+  g_scanner_set_scope (scanner, old_scope_id);
+
+  return token;
 }

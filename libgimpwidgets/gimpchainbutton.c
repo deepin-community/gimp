@@ -23,6 +23,8 @@
 
 #include <gtk/gtk.h>
 
+#include "libgimpbase/gimpbase.h"
+
 #include "gimpwidgetstypes.h"
 
 #include "gimpchainbutton.h"
@@ -65,6 +67,21 @@ enum
   LAST_SIGNAL
 };
 
+
+struct _GimpChainButton
+{
+  GtkGrid            parent_instance;
+
+  GimpChainPosition  position;
+  gboolean           active;
+
+  GtkWidget         *button;
+  GtkWidget         *line1;
+  GtkWidget         *line2;
+  GtkWidget         *image;
+};
+
+
 static void      gimp_chain_button_constructed      (GObject         *object);
 static void      gimp_chain_button_set_property     (GObject         *object,
                                                      guint            property_id,
@@ -75,6 +92,10 @@ static void      gimp_chain_button_get_property     (GObject         *object,
                                                      GValue          *value,
                                                      GParamSpec      *pspec);
 
+static void      gimp_chain_button_compute_expand   (GtkWidget       *widget,
+                                                     gboolean        *hexpand_p,
+                                                     gboolean        *vexpand_p);
+
 static void      gimp_chain_button_clicked_callback (GtkWidget       *widget,
                                                      GimpChainButton *button);
 static void      gimp_chain_button_update_image     (GimpChainButton *button);
@@ -83,7 +104,7 @@ static GtkWidget * gimp_chain_line_new            (GimpChainPosition  position,
                                                    gint               which);
 
 
-G_DEFINE_TYPE (GimpChainButton, gimp_chain_button, GTK_TYPE_TABLE)
+G_DEFINE_TYPE (GimpChainButton, gimp_chain_button, GTK_TYPE_GRID)
 
 #define parent_class gimp_chain_button_parent_class
 
@@ -101,22 +122,22 @@ static const gchar * const gimp_chain_icon_names[] =
 static void
 gimp_chain_button_class_init (GimpChainButtonClass *klass)
 {
-  GObjectClass *object_class = G_OBJECT_CLASS (klass);
+  GObjectClass   *object_class = G_OBJECT_CLASS (klass);
+  GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
-  object_class->constructed  = gimp_chain_button_constructed;
-  object_class->set_property = gimp_chain_button_set_property;
-  object_class->get_property = gimp_chain_button_get_property;
+  object_class->constructed    = gimp_chain_button_constructed;
+  object_class->set_property   = gimp_chain_button_set_property;
+  object_class->get_property   = gimp_chain_button_get_property;
+
+  widget_class->compute_expand = gimp_chain_button_compute_expand;
 
   gimp_chain_button_signals[TOGGLED] =
     g_signal_new ("toggled",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
-                  G_STRUCT_OFFSET (GimpChainButtonClass, toggled),
-                  NULL, NULL,
-                  g_cclosure_marshal_VOID__VOID,
+                  0,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
-
-  klass->toggled = NULL;
 
   /**
    * GimpChainButton:position:
@@ -197,23 +218,21 @@ gimp_chain_button_constructed (GObject *object)
 
   if (button->position & GIMP_CHAIN_LEFT) /* are we a vertical chainbutton? */
     {
-      gtk_table_resize (GTK_TABLE (button), 3, 1);
-      gtk_table_attach (GTK_TABLE (button), button->button, 0, 1, 1, 2,
-                        GTK_SHRINK, GTK_SHRINK, 0, 0);
-      gtk_table_attach_defaults (GTK_TABLE (button),
-                                 button->line1, 0, 1, 0, 1);
-      gtk_table_attach_defaults (GTK_TABLE (button),
-                                 button->line2, 0, 1, 2, 3);
+      gtk_widget_set_vexpand (button->line1, TRUE);
+      gtk_widget_set_vexpand (button->line2, TRUE);
+
+      gtk_grid_attach (GTK_GRID (button), button->line1,  0, 0, 1, 1);
+      gtk_grid_attach (GTK_GRID (button), button->button, 0, 1, 1, 1);
+      gtk_grid_attach (GTK_GRID (button), button->line2,  0, 2, 1, 1);
     }
   else
     {
-      gtk_table_resize (GTK_TABLE (button), 1, 3);
-      gtk_table_attach (GTK_TABLE (button), button->button, 1, 2, 0, 1,
-                        GTK_SHRINK, GTK_SHRINK, 0, 0);
-      gtk_table_attach_defaults (GTK_TABLE (button),
-                                 button->line1, 0, 1, 0, 1);
-      gtk_table_attach_defaults (GTK_TABLE (button),
-                                 button->line2, 2, 3, 0, 1);
+      gtk_widget_set_hexpand (button->line1, TRUE);
+      gtk_widget_set_hexpand (button->line2, TRUE);
+
+      gtk_grid_attach (GTK_GRID (button), button->line1,  0, 0, 1, 1);
+      gtk_grid_attach (GTK_GRID (button), button->button, 1, 0, 1, 1);
+      gtk_grid_attach (GTK_GRID (button), button->line2,  2, 0, 1, 1);
     }
 
   gtk_widget_show (button->button);
@@ -277,6 +296,16 @@ gimp_chain_button_get_property (GObject    *object,
     }
 }
 
+static void
+gimp_chain_button_compute_expand (GtkWidget *widget,
+                                  gboolean  *hexpand_p,
+                                  gboolean  *vexpand_p)
+{
+  /* don't inherit [hv]expand from the chain lines.  see issue #3876. */
+  *hexpand_p = FALSE;
+  *vexpand_p = FALSE;
+}
+
 /**
  * gimp_chain_button_new:
  * @position: The position you are going to use for the button
@@ -285,11 +314,11 @@ gimp_chain_button_get_property (GObject    *object,
  * Creates a new #GimpChainButton widget.
  *
  * This returns a button showing either a broken or a linked chain and
- * small clamps attached to both sides that visually group the two widgets
- * you want to connect. This widget looks best when attached
- * to a table taking up two columns (or rows respectively) next
- * to the widgets that it is supposed to connect. It may work
- * for more than two widgets, but the look is optimized for two.
+ * small clamps attached to both sides that visually group the two
+ * widgets you want to connect. This widget looks best when attached
+ * to a grid taking up two columns (or rows respectively) next to the
+ * widgets that it is supposed to connect. It may work for more than
+ * two widgets, but the look is optimized for two.
  *
  * Returns: Pointer to the new #GimpChainButton, which is inactive
  *          by default. Use gimp_chain_button_set_active() to
@@ -361,6 +390,8 @@ gimp_chain_button_set_active (GimpChainButton  *button,
 {
   g_return_if_fail (GIMP_IS_CHAIN_BUTTON (button));
 
+  button = gimp_chain_button_get_instance_private (button);
+
   if (button->active != active)
     {
       button->active = active ? TRUE : FALSE;
@@ -386,8 +417,31 @@ gimp_chain_button_get_active (GimpChainButton *button)
 {
   g_return_val_if_fail (GIMP_IS_CHAIN_BUTTON (button), FALSE);
 
+  button = gimp_chain_button_get_instance_private (button);
+
   return button->active;
 }
+
+/**
+ * gimp_chain_button_get_button
+ * @button: A #GimpChainButton.
+ *
+ * Returns: (transfer none) (type GtkButton): The #GimpChainButton's button.
+ *
+ * Since: 3.0
+ */
+GtkWidget *
+gimp_chain_button_get_button (GimpChainButton *button)
+{
+  g_return_val_if_fail (GIMP_IS_CHAIN_BUTTON (button), FALSE);
+
+  button = gimp_chain_button_get_instance_private (button);
+
+  return button->button;
+}
+
+
+/*  private functions  */
 
 static void
 gimp_chain_button_clicked_callback (GtkWidget       *widget,
@@ -416,9 +470,9 @@ gimp_chain_button_update_image (GimpChainButton *button)
  * don't need any input events.
  */
 
-static GType     gimp_chain_line_get_type     (void) G_GNUC_CONST;
-static gboolean  gimp_chain_line_expose_event (GtkWidget       *widget,
-                                               GdkEventExpose  *event);
+static GType     gimp_chain_line_get_type (void) G_GNUC_CONST;
+static gboolean  gimp_chain_line_draw     (GtkWidget *widget,
+                                           cairo_t   *cr);
 
 struct _GimpChainLine
 {
@@ -437,7 +491,7 @@ gimp_chain_line_class_init (GimpChainLineClass *klass)
 {
   GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
 
-  widget_class->expose_event = gimp_chain_line_expose_event;
+  widget_class->draw = gimp_chain_line_draw;
 }
 
 static void
@@ -459,22 +513,17 @@ gimp_chain_line_new (GimpChainPosition  position,
 }
 
 static gboolean
-gimp_chain_line_expose_event (GtkWidget      *widget,
-                              GdkEventExpose *event)
+gimp_chain_line_draw (GtkWidget *widget,
+                      cairo_t   *cr)
 {
-  GtkStyle          *style = gtk_widget_get_style (widget);
-  GimpChainLine     *line  = ((GimpChainLine *) widget);
+  GtkStyleContext   *context = gtk_widget_get_style_context (widget);
+  GimpChainLine     *line    = ((GimpChainLine *) widget);
   GtkAllocation      allocation;
   GdkPoint           points[3];
   GimpChainPosition  position;
-  cairo_t           *cr;
+  GdkRGBA            color;
 
   gtk_widget_get_allocation (widget, &allocation);
-
-  cr = gdk_cairo_create (gtk_widget_get_window (widget));
-  gdk_cairo_region (cr, event->region);
-  cairo_translate (cr, allocation.x, allocation.y);
-  cairo_clip (cr);
 
 #define SHORT_LINE 4
   points[0].x = allocation.width  / 2;
@@ -544,11 +593,10 @@ gimp_chain_line_expose_event (GtkWidget      *widget,
 
   cairo_set_line_width (cr, 2.0);
   cairo_set_line_cap (cr, CAIRO_LINE_CAP_BUTT);
-  gdk_cairo_set_source_color (cr, &style->fg[GTK_STATE_NORMAL]);
+  gtk_style_context_get_color (context, gtk_widget_get_state_flags (widget), &color);
+  gdk_cairo_set_source_rgba (cr, &color);
 
   cairo_stroke (cr);
-
-  cairo_destroy (cr);
 
   return TRUE;
 }

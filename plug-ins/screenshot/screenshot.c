@@ -28,8 +28,6 @@
 
 #include "screenshot.h"
 #include "screenshot-freedesktop.h"
-#include "screenshot-icon.h"
-#include "screenshot-kwin.h"
 #include "screenshot-osx.h"
 #include "screenshot-x11.h"
 #include "screenshot-win32.h"
@@ -43,153 +41,245 @@
 #define PLUG_IN_BINARY "screenshot"
 #define PLUG_IN_ROLE   "gimp-screenshot"
 
-#ifdef __GNUC__
-#ifdef GDK_NATIVE_WINDOW_POINTER
-#if GLIB_SIZEOF_VOID_P != 4
-#warning window_id does not fit in PDB_INT32
-#endif
-#endif
-#endif
+typedef struct _Screenshot      Screenshot;
+typedef struct _ScreenshotClass ScreenshotClass;
 
-
-static void                query               (void);
-static void                run                 (const gchar      *name,
-                                                gint              nparams,
-                                                const GimpParam  *param,
-                                                gint             *nreturn_vals,
-                                                GimpParam       **return_vals);
-
-static GimpPDBStatusType   shoot               (GdkScreen        *screen,
-                                                gint32           *image_ID,
-                                                GError          **error);
-
-static gboolean            shoot_dialog        (GdkScreen       **screen);
-static gboolean            shoot_quit_timeout  (gpointer          data);
-static gboolean            shoot_delay_timeout (gpointer          data);
-
-
-/* Global Variables */
-
-static ScreenshotBackend       backend            = SCREENSHOT_BACKEND_NONE;
-static ScreenshotCapabilities  capabilities       = 0;
-static GtkWidget              *select_delay_table = NULL;
-static GtkWidget              *shot_delay_table   = NULL;
-
-static ScreenshotValues shootvals =
+struct _Screenshot
 {
-  SHOOT_WINDOW, /* root window            */
-  TRUE,         /* include WM decorations */
-  0,            /* window ID              */
-  0,            /* monitor                */
-  0,            /* select delay           */
-  0,            /* screenshot delay       */
-  0,            /* coords of region dragged out by pointer */
-  0,
-  0,
-  0,
-  FALSE,        /* show cursor */
-  SCREENSHOT_PROFILE_POLICY_MONITOR
+  GimpPlugIn      parent_instance;
 };
 
-const GimpPlugInInfo PLUG_IN_INFO =
+struct _ScreenshotClass
 {
-  NULL,  /* init_proc  */
-  NULL,  /* quit_proc  */
-  query, /* query_proc */
-  run    /* run_proc   */
+  GimpPlugInClass parent_class;
 };
 
+#define SCREENSHOT_TYPE  (screenshot_get_type ())
+#define SCREENSHOT(obj) (G_TYPE_CHECK_INSTANCE_CAST ((obj), SCREENSHOT_TYPE, Screenshot))
 
-/* Functions */
+GType                   screenshot_get_type         (void) G_GNUC_CONST;
 
-MAIN ()
+static GList          * screenshot_query_procedures (GimpPlugIn           *plug_in);
+static GimpProcedure  * screenshot_create_procedure (GimpPlugIn           *plug_in,
+                                                     const gchar          *name);
+
+static GimpValueArray * screenshot_run              (GimpProcedure        *procedure,
+                                                     GimpProcedureConfig  *config,
+                                                     gpointer              run_data);
+
+static GimpPDBStatusType   shoot               (GdkMonitor           *monitor,
+                                                GimpImage           **image,
+                                                GimpProcedureConfig  *config,
+                                                GError              **error);
+
+static gboolean            shoot_dialog        (GimpProcedure        *procedure,
+                                                GimpProcedureConfig  *config,
+                                                GdkMonitor          **monitor);
+static gboolean            shoot_quit_timeout  (gpointer              data);
+static gboolean            shoot_delay_timeout (gpointer              data);
+
+
+G_DEFINE_TYPE (Screenshot, screenshot, GIMP_TYPE_PLUG_IN)
+
+GIMP_MAIN (SCREENSHOT_TYPE)
+DEFINE_STD_SET_I18N
+
+
+static ScreenshotBackend       backend      = SCREENSHOT_BACKEND_NONE;
+static ScreenshotCapabilities  capabilities = 0;
 
 static void
-query (void)
+screenshot_class_init (ScreenshotClass *klass)
 {
-  static const GimpParamDef args[] =
-  {
-    { GIMP_PDB_INT32, "run-mode",   "The run mode { RUN-INTERACTIVE (0), RUN-NONINTERACTIVE (1) }"     },
-    { GIMP_PDB_INT32, "shoot-type", "The Shoot type { SHOOT-WINDOW (0), SHOOT-ROOT (1), SHOOT-REGION (2) }" },
-    { GIMP_PDB_INT32, "window-id",  "Window id for SHOOT-WINDOW"       },
-    { GIMP_PDB_INT32, "x1",         "Region left x coord for SHOOT-REGION"   },
-    { GIMP_PDB_INT32, "y1",         "Region top y coord for SHOOT-REGION"    },
-    { GIMP_PDB_INT32, "x2",         "Region right x coord for SHOOT-REGION"  },
-    { GIMP_PDB_INT32, "y2",         "Region bottom y coord for SHOOT-REGION" }
-  };
+  GimpPlugInClass *plug_in_class = GIMP_PLUG_IN_CLASS (klass);
 
-  static const GimpParamDef return_vals[] =
-  {
-    { GIMP_PDB_IMAGE, "image", "Output image" }
-  };
-
-  gimp_install_procedure (PLUG_IN_PROC,
-                          N_("Create an image from an area of the screen"),
-                          "The plug-in takes screenshots of an "
-                          "interactively selected window or of the desktop, "
-                          "either the whole desktop or an interactively "
-                          "selected region. When called non-interactively, it "
-                          "may grab the root window or use the window-id "
-                          "passed as a parameter.  The last four parameters "
-                          "are optional and can be used to specify the corners "
-                          "of the region to be grabbed."
-                          "On Mac OS X or on gnome-shell, "
-                          "when called non-interactively, the plug-in"
-                          "only can take screenshots of the entire root window."
-                          "Grabbing a window or a region is not supported"
-                          "non-interactively. To grab a region or a particular"
-                          "window, you need to use the interactive mode."
-                          ,
-                          "Sven Neumann <sven@gimp.org>, "
-                          "Henrik Brix Andersen <brix@gimp.org>,"
-                          "Simone Karin Lehmann",
-                          "1998 - 2008",
-                          "v1.1 (2008/04)",
-                          N_("_Screenshot..."),
-                          NULL,
-                          GIMP_PLUGIN,
-                          G_N_ELEMENTS (args),
-                          G_N_ELEMENTS (return_vals),
-                          args, return_vals);
-
-  gimp_plugin_menu_register (PLUG_IN_PROC, "<Image>/File/Create/Acquire");
-  gimp_plugin_icon_register (PLUG_IN_PROC, GIMP_ICON_TYPE_INLINE_PIXBUF,
-                             screenshot_icon);
+  plug_in_class->query_procedures = screenshot_query_procedures;
+  plug_in_class->create_procedure = screenshot_create_procedure;
+  plug_in_class->set_i18n         = STD_SET_I18N;
 }
 
 static void
-run (const gchar      *name,
-     gint             nparams,
-     const GimpParam  *param,
-     gint             *nreturn_vals,
-     GimpParam       **return_vals)
+screenshot_init (Screenshot *screenshot)
 {
-  static GimpParam   values[2];
+}
+
+static GList *
+screenshot_query_procedures (GimpPlugIn *plug_in)
+{
+  return g_list_append (NULL, g_strdup (PLUG_IN_PROC));
+}
+
+static GimpProcedure *
+screenshot_create_procedure (GimpPlugIn  *plug_in,
+                             const gchar *name)
+{
+  GimpProcedure *procedure = NULL;
+
+  if (! strcmp (name, PLUG_IN_PROC))
+    {
+      procedure = gimp_procedure_new (plug_in, name,
+                                      GIMP_PDB_PROC_TYPE_PLUGIN,
+                                      screenshot_run, NULL, NULL);
+
+      gimp_procedure_set_menu_label (procedure, _("_Screenshot..."));
+      gimp_procedure_add_menu_path (procedure, "<Image>/File/Create");
+
+      gimp_procedure_set_documentation
+        (procedure,
+         _("Create an image from an area of the screen"),
+           "The plug-in takes screenshots of an "
+           "interactively selected window or of the desktop, "
+           "either the whole desktop or an interactively "
+           "selected region. When called non-interactively, it "
+           "may grab the root window or use the window-id "
+           "passed as a parameter.  The last four parameters "
+           "are optional and can be used to specify the corners "
+           "of the region to be grabbed."
+           "On Mac OS X, "
+           "when called non-interactively, the plug-in"
+           "only can take screenshots of the entire root window."
+           "Grabbing a window or a region is not supported"
+           "non-interactively. To grab a region or a particular"
+           "window, you need to use the interactive mode.",
+         name);
+
+      gimp_procedure_set_attribution (procedure,
+                                      "Sven Neumann <sven@gimp.org>, "
+                                      "Henrik Brix Andersen <brix@gimp.org>,"
+                                      "Simone Karin Lehmann",
+                                      "1998 - 2008",
+                                      "v1.1 (2008/04)");
+
+      gimp_procedure_set_icon_pixbuf (procedure,
+                                      gdk_pixbuf_new_from_resource ("/org/gimp/screenshot-icons/screenshot-icon.png", NULL));
+
+      gimp_procedure_add_enum_argument (procedure, "run-mode",
+                                        "Run mode",
+                                        "The run mode",
+                                        GIMP_TYPE_RUN_MODE,
+                                        GIMP_RUN_NONINTERACTIVE,
+                                        G_PARAM_READWRITE);
+
+      /* TODO: Windows does not currently implement selecting by region to grab,
+       * so we'll hide this option for now */
+      gimp_procedure_add_choice_argument (procedure, "shoot-type",
+                                          _("Shoot _area"),
+                                          _("The shoot type"),
+                                          gimp_choice_new_with_values ("window",  SHOOT_WINDOW, _("Take a screenshot of a single window"),   NULL,
+                                                                       "screen",  SHOOT_ROOT,   _("Take a screenshot of the entire screen"), NULL,
+#ifndef G_OS_WIN32
+                                                                       "region",  SHOOT_REGION, _("Select a region to grab"),                NULL,
+#endif
+                                                                       NULL),
+                                          "window",
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "x1",
+                                       "X1",
+                                       "Region left x coord for SHOOT-WINDOW",
+                                       G_MININT, G_MAXINT, 0,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "y1",
+                                       "Y1",
+                                       "Region top y coord for SHOOT-WINDOW",
+                                       G_MININT, G_MAXINT, 0,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "x2",
+                                       "X2",
+                                       "Region right x coord for SHOOT-WINDOW",
+                                       G_MININT, G_MAXINT, 0,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_int_argument (procedure, "y2",
+                                       "Y2",
+                                       "Region bottom y coord for SHOOT-WINDOW",
+                                       G_MININT, G_MAXINT, 0,
+                                       G_PARAM_READWRITE);
+
+      gimp_procedure_add_boolean_argument (procedure, "include-pointer",
+                                           _("Include _mouse pointer"),
+                                           _("Your pointing device's cursor will be part of the image"),
+                                           FALSE,
+                                           G_PARAM_READWRITE);
+
+      /* Since no backends allow window screenshot non-interactively so far, no
+       * need to expose this argument to the API.
+       */
+      gimp_procedure_add_boolean_aux_argument (procedure, "include-decoration",
+                                               _("Include window _decoration"),
+                                               _("Title bar, window borders and shadow will be part of the image"),
+#ifdef PLATFORM_OSX
+                                 /* on OS X, this just means shoot the shadow, default to nope */
+                                 FALSE,
+#else
+                                 TRUE,
+#endif
+                                 G_PARAM_READWRITE);
+      gimp_procedure_add_int_aux_argument     (procedure, "selection-delay",
+                                               _("Selection d_elay"),
+                                               _("Delay before selection of the window or the region"),
+                                               0, 20, 0,
+                                               G_PARAM_READWRITE);
+      gimp_procedure_add_int_aux_argument     (procedure, "screenshot-delay",
+                                               _("Screenshot dela_y"),
+                                               _("Delay before snapping the screenshot"),
+                                               0, 20, 0,
+                                               G_PARAM_READWRITE);
+      gimp_procedure_add_choice_argument (procedure, "color-profile",
+                                          _("Color _Profile"),
+                                          "",
+                                          gimp_choice_new_with_values ("monitor", SCREENSHOT_PROFILE_POLICY_MONITOR, _("Tag image with monitor profile"), NULL,
+                                                                       "srgb",    SCREENSHOT_PROFILE_POLICY_SRGB,    _("Convert image with sRGB"),        NULL,
+                                                                       NULL),
+                                          "monitor",
+                                          G_PARAM_READWRITE);
+
+      gimp_procedure_add_image_return_value (procedure, "image",
+                                             "Image",
+                                             "Output image",
+                                             FALSE,
+                                             G_PARAM_READWRITE);
+    }
+
+  return procedure;
+}
+
+static GimpValueArray *
+screenshot_run (GimpProcedure        *procedure,
+                GimpProcedureConfig  *config,
+                gpointer              run_data)
+{
+  GimpValueArray    *return_vals;
   GimpPDBStatusType  status = GIMP_PDB_SUCCESS;
   GimpRunMode        run_mode;
-  GdkScreen         *screen = NULL;
-  gint32             image_ID;
-  GError            *error  = NULL;
+  GdkMonitor        *monitor = NULL;
+  GimpImage         *image   = NULL;
+  GError            *error   = NULL;
 
-  INIT_I18N ();
+  ShootType               shoot_type;
+  ScreenshotProfilePolicy profile_policy;
+
   gegl_init (NULL, NULL);
 
-  run_mode = param[0].data.d_int32;
+  g_object_get (config, "run-mode", &run_mode, NULL);
+  shoot_type = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                    "shoot-type");
 
-  *nreturn_vals = 1;
-  *return_vals  = values;
-
-  values[0].type          = GIMP_PDB_STATUS;
-  values[0].data.d_status = status;
+  if (! gdk_init_check (NULL, NULL))
+    {
+      g_set_error_literal (&error, GIMP_PLUG_IN_ERROR, 0, _("GDK initialization failed."));
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_EXECUTION_ERROR,
+                                               error);
+    }
 
 #ifdef PLATFORM_OSX
   if (! backend && screenshot_osx_available ())
     {
       backend      = SCREENSHOT_BACKEND_OSX;
       capabilities = screenshot_osx_get_capabilities ();
-
-      /* on OS X, this just means shoot the shadow, default to nope */
-      shootvals.decorate = FALSE;
     }
 #endif
 
@@ -214,88 +304,71 @@ run (const gchar      *name,
       capabilities = screenshot_freedesktop_get_capabilities ();
     }
 
-  if (! backend && screenshot_kwin_available ())
+  if (backend == SCREENSHOT_BACKEND_NONE)
     {
-      backend      = SCREENSHOT_BACKEND_KWIN;
-      capabilities = screenshot_kwin_get_capabilities ();
+      g_set_error_literal (&error, GIMP_PLUG_IN_ERROR, 0,
+                           _("No screenshot backends available."));
+      return gimp_procedure_new_return_values (procedure,
+                                               GIMP_PDB_EXECUTION_ERROR,
+                                               error);
     }
-
   /* how are we running today? */
   switch (run_mode)
     {
     case GIMP_RUN_INTERACTIVE:
-      /* Possibly retrieve data from a previous run */
-      gimp_get_data (PLUG_IN_PROC, &shootvals);
-      shootvals.window_id = 0;
+      gimp_ui_init (PLUG_IN_BINARY);
 
-      if ((shootvals.shoot_type == SHOOT_WINDOW &&
+      /* In interactive mode, coords are always reset. */
+      g_object_set (config,
+                    "x1", 0, "y1", 0,
+                    "x2", 0, "y2", 0,
+                    NULL);
+
+      if ((shoot_type == SHOOT_WINDOW &&
            ! (capabilities & SCREENSHOT_CAN_SHOOT_WINDOW)) ||
-          (shootvals.shoot_type == SHOOT_REGION &&
+          (shoot_type == SHOOT_REGION &&
            ! (capabilities & SCREENSHOT_CAN_SHOOT_REGION)))
         {
           /* Shoot root is the only type of shoot which is definitely
            * shared by all screenshot backends (basically just snap the
            * whole display setup).
            */
-          shootvals.shoot_type = SHOOT_ROOT;
+          g_object_set (config, "shoot-type", "screen", NULL);
         }
 
-      /* Get information from the dialog */
-      if (! shoot_dialog (&screen))
-        status = GIMP_PDB_CANCEL;
-      break;
-
-    case GIMP_RUN_NONINTERACTIVE:
-      if (nparams == 3 || nparams == 7)
+      /* Get information from the dialog. Freedesktop portal comes with
+       * its own dialog.
+       */
+      if (backend != SCREENSHOT_BACKEND_FREEDESKTOP)
         {
-          shootvals.shoot_type   = param[1].data.d_int32;
-          shootvals.window_id    = param[2].data.d_int32;
-          shootvals.select_delay = 0;
-
-          if (shootvals.shoot_type < SHOOT_WINDOW ||
-              shootvals.shoot_type > SHOOT_REGION)
-            {
-              status = GIMP_PDB_CALLING_ERROR;
-            }
-          else if (shootvals.shoot_type == SHOOT_REGION)
-            {
-              if (nparams == 7)
-                {
-                  shootvals.x1 = param[3].data.d_int32;
-                  shootvals.y1 = param[4].data.d_int32;
-                  shootvals.x2 = param[5].data.d_int32;
-                  shootvals.y2 = param[6].data.d_int32;
-                }
-              else
-                {
-                  status = GIMP_PDB_CALLING_ERROR;
-                }
-            }
+          if (! shoot_dialog (procedure, config, &monitor))
+            status = GIMP_PDB_CANCEL;
         }
       else
         {
+          /* This is ugly but in reality we have no idea on which monitor
+           * a screenshot was taken from with portals. It's like a
+           * better-than-nothing trick for easy single-display cases.
+           */
+          monitor = gdk_display_get_monitor (gdk_display_get_default (), 0);
+        }
+      break;
+
+    case GIMP_RUN_NONINTERACTIVE:
+      if (backend == SCREENSHOT_BACKEND_FREEDESKTOP)
+        {
+          /* With portals, even the basic full screenshot is interactive. */
           status = GIMP_PDB_CALLING_ERROR;
         }
-
-      if (status == GIMP_PDB_SUCCESS)
+      else if (! (capabilities & SCREENSHOT_CAN_PICK_NONINTERACTIVELY))
         {
-          if (! gdk_init_check (NULL, NULL))
+          if (shoot_type == SHOOT_WINDOW ||
+              shoot_type == SHOOT_REGION)
             status = GIMP_PDB_CALLING_ERROR;
-
-          if (! (capabilities & SCREENSHOT_CAN_PICK_NONINTERACTIVELY))
-            {
-              if (shootvals.shoot_type == SHOOT_WINDOW ||
-                  shootvals.shoot_type == SHOOT_REGION)
-                {
-                  status = GIMP_PDB_CALLING_ERROR;
-                }
-            }
         }
-        break;
+      break;
 
     case GIMP_RUN_WITH_LAST_VALS:
-      /* Possibly retrieve data from a previous run */
-      gimp_get_data (PLUG_IN_PROC, &shootvals);
       break;
 
     default:
@@ -303,21 +376,25 @@ run (const gchar      *name,
     }
 
   if (status == GIMP_PDB_SUCCESS)
-    {
-      status = shoot (screen, &image_ID, &error);
-    }
+    status = shoot (monitor, &image, config, &error);
 
   if (status == GIMP_PDB_SUCCESS)
     {
       gchar *comment = gimp_get_default_comment ();
 
-      gimp_image_undo_disable (image_ID);
+      gimp_image_undo_disable (image);
 
-      if (shootvals.profile_policy == SCREENSHOT_PROFILE_POLICY_SRGB)
+      profile_policy = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                            "color-profile");
+
+      if (run_mode == GIMP_RUN_NONINTERACTIVE)
+        profile_policy = SCREENSHOT_PROFILE_POLICY_MONITOR;
+
+      if (profile_policy == SCREENSHOT_PROFILE_POLICY_SRGB)
         {
           GimpColorProfile *srgb_profile = gimp_color_profile_new_rgb_srgb ();
 
-          gimp_image_convert_color_profile (image_ID,
+          gimp_image_convert_color_profile (image,
                                             srgb_profile,
                                             GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
                                             TRUE);
@@ -332,71 +409,89 @@ run (const gchar      *name,
                                         GIMP_PARASITE_PERSISTENT,
                                         strlen (comment) + 1, comment);
 
-          gimp_image_attach_parasite (image_ID, parasite);
+          gimp_image_attach_parasite (image, parasite);
           gimp_parasite_free (parasite);
 
           g_free (comment);
         }
 
-      gimp_image_undo_enable (image_ID);
+      gimp_image_undo_enable (image);
 
       if (run_mode == GIMP_RUN_INTERACTIVE)
         {
-          /* Store variable states for next run */
-          gimp_set_data (PLUG_IN_PROC, &shootvals, sizeof (ScreenshotValues));
+          guint select_delay;
 
-          gimp_display_new (image_ID);
+          gimp_display_new (image);
 
+          g_object_get (config,
+                        "selection-delay", &select_delay,
+                        NULL);
           /* Give some sort of feedback that the shot is done */
-          if (shootvals.select_delay > 0)
+          if (select_delay > 0)
             {
-              gdk_display_beep (gdk_screen_get_display (screen));
-              gdk_flush (); /* flush so the beep makes it to the server */
+              gdk_display_beep (gdk_monitor_get_display (monitor));
+              /* flush so the beep makes it to the server */
+              gdk_display_flush (gdk_monitor_get_display (monitor));
             }
         }
-
-      *nreturn_vals = 2;
-
-      values[1].type         = GIMP_PDB_IMAGE;
-      values[1].data.d_image = image_ID;
     }
 
-  if (status != GIMP_PDB_SUCCESS && error)
-    {
-      *nreturn_vals = 2;
-      values[1].type          = GIMP_PDB_STRING;
-      values[1].data.d_string = error->message;
-    }
+  return_vals = gimp_procedure_new_return_values (procedure, status, error);
 
-  values[0].data.d_status = status;
+  if (status == GIMP_PDB_SUCCESS)
+    GIMP_VALUES_SET_IMAGE (return_vals, 1, image);
+
+  return return_vals;
 }
 
 
 /* The main Screenshot function */
 
 static GimpPDBStatusType
-shoot (GdkScreen  *screen,
-       gint32     *image_ID,
-       GError    **error)
+shoot (GdkMonitor           *monitor,
+       GimpImage           **image,
+       GimpProcedureConfig  *config,
+       GError              **error)
 {
+#if defined(PLATFORM_OSX) || defined(G_OS_WIN32)
+  ShootType shoot_type;
+#endif
+  gboolean  decorate;
+  guint     select_delay;
+  guint     screenshot_delay;
+  gboolean  show_cursor;
+
+  g_object_get (config,
+                "screenshot-delay",   &screenshot_delay,
+                "selection-delay",    &select_delay,
+                "include-decoration", &decorate,
+                "include-pointer",    &show_cursor,
+                NULL);
+#if defined(PLATFORM_OSX) || defined(G_OS_WIN32)
+  shoot_type = gimp_procedure_config_get_choice_id (GIMP_PROCEDURE_CONFIG (config),
+                                                    "shoot-type");
+#endif
+
 #ifdef PLATFORM_OSX
   if (backend == SCREENSHOT_BACKEND_OSX)
-    return screenshot_osx_shoot (&shootvals, screen, image_ID, error);
+    return screenshot_osx_shoot (shoot_type,
+                                 select_delay, screenshot_delay,
+                                 decorate, show_cursor,
+                                 image, error);
 #endif
 
 #ifdef G_OS_WIN32
   if (backend == SCREENSHOT_BACKEND_WIN32)
-    return screenshot_win32_shoot (&shootvals, screen, image_ID, error);
+    return screenshot_win32_shoot (shoot_type, screenshot_delay, show_cursor,
+                                   monitor, image, error);
 #endif
 
   if (backend == SCREENSHOT_BACKEND_FREEDESKTOP)
-    return screenshot_freedesktop_shoot (&shootvals, screen, image_ID, error);
-  else if (backend == SCREENSHOT_BACKEND_KWIN)
-    return screenshot_kwin_shoot (&shootvals, screen, image_ID, error);
+    return screenshot_freedesktop_shoot (monitor, image, error);
 
 #ifdef GDK_WINDOWING_X11
   if (backend == SCREENSHOT_BACKEND_X11)
-    return screenshot_x11_shoot (&shootvals, screen, image_ID, error);
+    return screenshot_x11_shoot (config, monitor, image, error);
 #endif
 
   return GIMP_PDB_CALLING_ERROR; /* silence compiler */
@@ -405,426 +500,123 @@ shoot (GdkScreen  *screen,
 
 /*  Screenshot dialog  */
 
-static void
-shoot_dialog_add_hint (GtkNotebook *notebook,
-                       ShootType    type,
-                       const gchar *hint)
-{
-  GtkWidget *label;
-
-  label = g_object_new (GTK_TYPE_LABEL,
-                        "label",   hint,
-                        "wrap",    TRUE,
-                        "justify", GTK_JUSTIFY_LEFT,
-                        "xalign",  0.0,
-                        "yalign",  0.0,
-                        NULL);
-  gimp_label_set_attributes (GTK_LABEL (label),
-                             PANGO_ATTR_STYLE, PANGO_STYLE_ITALIC,
-                             -1);
-
-  gtk_notebook_insert_page (notebook, label, NULL, type);
-  gtk_widget_show (label);
-}
-
-static void
-shoot_radio_button_toggled (GtkWidget *widget,
-                            GtkWidget *notebook)
-{
-  gimp_radio_button_update (widget, &shootvals.shoot_type);
-
-  if (select_delay_table)
-    {
-      if (shootvals.shoot_type == SHOOT_ROOT ||
-          (shootvals.shoot_type == SHOOT_WINDOW &&
-           ! (capabilities & SCREENSHOT_CAN_PICK_WINDOW)))
-        {
-          gtk_widget_hide (select_delay_table);
-        }
-      else
-        {
-          gtk_widget_show (select_delay_table);
-        }
-    }
-  if (shot_delay_table)
-    {
-      if (shootvals.shoot_type == SHOOT_WINDOW        &&
-          (capabilities & SCREENSHOT_CAN_PICK_WINDOW) &&
-          ! (capabilities & SCREENSHOT_CAN_DELAY_WINDOW_SHOT))
-        {
-          gtk_widget_hide (shot_delay_table);
-        }
-      else
-        {
-          gtk_widget_show (shot_delay_table);
-        }
-    }
-  gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook), shootvals.shoot_type);
-}
-
 static gboolean
-shoot_dialog (GdkScreen **screen)
+shoot_dialog (GimpProcedure        *procedure,
+              GimpProcedureConfig  *config,
+              GdkMonitor          **monitor)
 {
-  GtkWidget     *dialog;
-  GtkWidget     *main_vbox;
-  GtkWidget     *notebook1;
-  GtkWidget     *notebook2;
-  GtkWidget     *frame;
-  GtkWidget     *vbox;
-  GtkWidget     *hbox;
-  GtkWidget     *label;
-  GtkWidget     *button;
-  GtkWidget     *toggle;
-  GtkWidget     *spinner;
-  GtkWidget     *table;
-  GSList        *radio_group = NULL;
-  GtkAdjustment *adj;
-  gboolean       run;
-  GtkWidget     *cursor_toggle = NULL;
+  GtkWidget      *dialog;
+  GimpValueArray *values;
+  GValue          value = G_VALUE_INIT;
+  gboolean        run;
 
-  gimp_ui_init (PLUG_IN_BINARY, FALSE);
+  dialog = gimp_procedure_dialog_new (procedure,
+                                      GIMP_PROCEDURE_CONFIG (config),
+                                      _("Screenshot"));
+  gimp_procedure_dialog_set_ok_label (GIMP_PROCEDURE_DIALOG (dialog), _("S_nap"));
 
-  dialog = gimp_dialog_new (_("Screenshot"), PLUG_IN_ROLE,
-                            NULL, 0,
-                            gimp_standard_help_func, PLUG_IN_PROC,
-
-                            _("_Cancel"), GTK_RESPONSE_CANCEL,
-                            _("S_nap"),   GTK_RESPONSE_OK,
-
-                            NULL);
-
-  gtk_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                           GTK_RESPONSE_OK,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
-
-  main_vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 12);
-  gtk_container_set_border_width (GTK_CONTAINER (main_vbox), 12);
-  gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
-                      main_vbox, FALSE, FALSE, 0);
-  gtk_widget_show (main_vbox);
-
-
-  /*  Create delay hints notebooks early  */
-  notebook1 = g_object_new (GTK_TYPE_NOTEBOOK,
-                            "show-border", FALSE,
-                            "show-tabs",   FALSE,
-                            NULL);
-  notebook2 = g_object_new (GTK_TYPE_NOTEBOOK,
-                            "show-border", FALSE,
-                            "show-tabs",   FALSE,
-                            NULL);
-
-  /*  Area  */
-  frame = gimp_frame_new (_("Area"));
-  gtk_box_pack_start (GTK_BOX (main_vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
-
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 6);
-  gtk_container_add (GTK_CONTAINER (frame), vbox);
-  gtk_widget_show (vbox);
-
-  /*  Single window  */
-  if (capabilities & SCREENSHOT_CAN_SHOOT_WINDOW)
+  if (capabilities & SCREENSHOT_CAN_SHOOT_POINTER ||
+      capabilities & SCREENSHOT_CAN_SHOOT_DECORATIONS)
     {
-      button = gtk_radio_button_new_with_mnemonic (radio_group,
-                                                   _("Take a screenshot of "
-                                                     "a single _window"));
-      radio_group = gtk_radio_button_get_group (GTK_RADIO_BUTTON (button));
-      gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
+      if (! (capabilities & SCREENSHOT_CAN_SHOOT_POINTER))
+        gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "contents-box",
+                                        "include-decoration",
+                                        NULL);
+      else if (! (capabilities & SCREENSHOT_CAN_SHOOT_DECORATIONS))
+        gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "contents-box",
+                                        "include-pointer",
+                                        NULL);
+      else
+        gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "contents-box",
+                                        "include-decoration",
+                                        "include-pointer",
+                                        NULL);
 
-      g_object_set_data (G_OBJECT (button), "gimp-item-data",
-                         GINT_TO_POINTER (SHOOT_WINDOW));
+      gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                       "contents-frame-title",
+                                       _("Contents"), FALSE, FALSE);
+      gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "contents-frame", "contents-frame-title",
+                                        FALSE, "contents-box");
 
-      g_signal_connect (button, "toggled",
-                        G_CALLBACK (shoot_radio_button_toggled),
-                        notebook1);
-      g_signal_connect (button, "toggled",
-                        G_CALLBACK (shoot_radio_button_toggled),
-                        notebook2);
-
-      /*  Window decorations  */
       if (capabilities & SCREENSHOT_CAN_SHOOT_DECORATIONS)
         {
-          hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-          gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
-          gtk_widget_show (hbox);
-
-          toggle = gtk_check_button_new_with_mnemonic (_("Include window _decoration"));
-          gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle),
-                                        shootvals.decorate);
-          gtk_box_pack_start (GTK_BOX (hbox), toggle, TRUE, TRUE, 24);
-          gtk_widget_show (toggle);
-
-          g_signal_connect (toggle, "toggled",
-                            G_CALLBACK (gimp_toggle_button_update),
-                            &shootvals.decorate);
-
-          g_object_bind_property (button, "active",
-                                  toggle, "sensitive",
-                                  G_BINDING_SYNC_CREATE);
+          values = gimp_value_array_new (1);
+          g_value_init (&value, G_TYPE_STRING);
+          g_value_set_string (&value, "window");
+          gimp_value_array_append (values, &value);
+          g_value_unset (&value);
+          gimp_procedure_dialog_set_sensitive_if_in (GIMP_PROCEDURE_DIALOG (dialog),
+                                                     "include-decoration",
+                                                     NULL, "shoot-type",
+                                                     values, TRUE);
         }
-      /*  Mouse pointer  */
       if (capabilities & SCREENSHOT_CAN_SHOOT_POINTER)
         {
-          hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-          gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
-          gtk_widget_show (hbox);
-
-          cursor_toggle = gtk_check_button_new_with_mnemonic (_("Include _mouse pointer"));
-          gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (cursor_toggle),
-                                        shootvals.show_cursor);
-          gtk_box_pack_start (GTK_BOX (hbox), cursor_toggle, TRUE, TRUE, 24);
-          gtk_widget_show (cursor_toggle);
-
-          g_signal_connect (cursor_toggle, "toggled",
-                            G_CALLBACK (gimp_toggle_button_update),
-                            &shootvals.show_cursor);
-
-          g_object_bind_property (button, "active",
-                                  cursor_toggle, "sensitive",
-                                  G_BINDING_SYNC_CREATE);
+          values = gimp_value_array_new (1);
+          g_value_init (&value, G_TYPE_STRING);
+          g_value_set_string (&value, "region");
+          gimp_value_array_append (values, &value);
+          g_value_unset (&value);
+          gimp_procedure_dialog_set_sensitive_if_in (GIMP_PROCEDURE_DIALOG (dialog),
+                                                     "include-pointer",
+                                                     NULL, "shoot-type",
+                                                     values, FALSE);
         }
-
-
-      gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (button),
-                                    shootvals.shoot_type == SHOOT_WINDOW);
     }
 
-  /*  Whole screen  */
-  button = gtk_radio_button_new_with_mnemonic (radio_group,
-                                               _("Take a screenshot of "
-                                                 "the entire _screen"));
-  radio_group = gtk_radio_button_get_group (GTK_RADIO_BUTTON (button));
-  gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
-
-  g_object_set_data (G_OBJECT (button), "gimp-item-data",
-                     GINT_TO_POINTER (SHOOT_ROOT));
-
-  g_signal_connect (button, "toggled",
-                    G_CALLBACK (shoot_radio_button_toggled),
-                    notebook1);
-  g_signal_connect (button, "toggled",
-                    G_CALLBACK (shoot_radio_button_toggled),
-                    notebook2);
-
-  /*  Mouse pointer  */
-  if (capabilities & SCREENSHOT_CAN_SHOOT_POINTER)
+  if (capabilities & SCREENSHOT_CAN_DELAY_WINDOW_SHOT)
     {
-      hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 12);
-      gtk_box_pack_start (GTK_BOX (vbox), hbox, FALSE, FALSE, 0);
-      gtk_widget_show (hbox);
-
-      toggle = gtk_check_button_new_with_mnemonic (_("Include _mouse pointer"));
-      gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (toggle),
-                                    shootvals.show_cursor);
-      gtk_box_pack_start (GTK_BOX (hbox), toggle, TRUE, TRUE, 24);
-      gtk_widget_show (toggle);
-
-      g_signal_connect (toggle, "toggled",
-                        G_CALLBACK (gimp_toggle_button_update),
-                        &shootvals.show_cursor);
-
-      if (cursor_toggle)
+      if (capabilities & SCREENSHOT_CAN_PICK_WINDOW)
         {
-          g_object_bind_property (cursor_toggle, "active",
-                                  toggle, "active",
-                                  G_BINDING_BIDIRECTIONAL);
+          gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                          "delay-box",
+                                          "selection-delay",
+                                          "screenshot-delay",
+                                          NULL);
+
+          values = gimp_value_array_new (1);
+          g_value_init (&value, G_TYPE_STRING);
+          g_value_set_string (&value, "screen");
+          gimp_value_array_append (values, &value);
+          g_value_unset (&value);
+          gimp_procedure_dialog_set_sensitive_if_in (GIMP_PROCEDURE_DIALOG (dialog),
+                                                     "selection-delay",
+                                                     NULL, "shoot-type",
+                                                     values, FALSE);
         }
-      g_object_bind_property (button, "active",
-                              toggle, "sensitive",
-                              G_BINDING_SYNC_CREATE);
+      else
+        {
+          gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
+                                          "delay-box", "screenshot-delay", NULL);
+        }
+
+      gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
+                                       "delay-frame-title",
+                                       _("Delay"), FALSE, FALSE);
+      gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "delay-frame", "delay-frame-title",
+                                        FALSE, "delay-box");
     }
 
-  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (button),
-                                shootvals.shoot_type == SHOOT_ROOT);
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog), "shoot-type", NULL);
 
-  /*  Dragged region  */
-  if (capabilities & SCREENSHOT_CAN_SHOOT_REGION)
-    {
-      button = gtk_radio_button_new_with_mnemonic (radio_group,
-                                                   _("Select a _region to grab"));
-      radio_group = gtk_radio_button_get_group (GTK_RADIO_BUTTON (button));
-      gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (button),
-                                    shootvals.shoot_type == SHOOT_REGION);
-      gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-      gtk_widget_show (button);
+  if ((capabilities & SCREENSHOT_CAN_SHOOT_POINTER) ||
+      (capabilities & SCREENSHOT_CAN_SHOOT_DECORATIONS))
+    gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog), "contents-frame", NULL);
 
-      g_object_set_data (G_OBJECT (button), "gimp-item-data",
-                         GINT_TO_POINTER (SHOOT_REGION));
+  if (capabilities & SCREENSHOT_CAN_DELAY_WINDOW_SHOT)
+    gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog), "delay-frame", NULL);
 
-      g_signal_connect (button, "toggled",
-                        G_CALLBACK (shoot_radio_button_toggled),
-                        notebook1);
-      g_signal_connect (button, "toggled",
-                        G_CALLBACK (shoot_radio_button_toggled),
-                        notebook2);
-    }
+  gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog), "color-profile", NULL);
+  run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (dialog));
 
-  frame = gimp_frame_new (_("Delay"));
-  gtk_box_pack_start (GTK_BOX (main_vbox), frame, TRUE, TRUE, 0);
-  gtk_widget_show (frame);
-
-  vbox = gtk_box_new (GTK_ORIENTATION_VERTICAL, 2);
-  gtk_container_add (GTK_CONTAINER (frame), vbox);
-  gtk_widget_show (vbox);
-
-  /* Selection delay  */
-  table = gtk_table_new (2, 3, FALSE);
-  select_delay_table = table;
-  gtk_box_pack_start (GTK_BOX (vbox), table, FALSE, FALSE, 0);
-  /* Check if this delay must be hidden from start. */
-  if (shootvals.shoot_type == SHOOT_REGION ||
-      (shootvals.shoot_type == SHOOT_WINDOW &&
-       capabilities & SCREENSHOT_CAN_PICK_WINDOW))
-    {
-      gtk_widget_show (select_delay_table);
-    }
-
-  label = gtk_label_new (_("Selection delay: "));
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 0, 1,
-                    GTK_SHRINK, GTK_SHRINK, 0, 0);
-  gtk_widget_show (label);
-
-  adj = (GtkAdjustment *)
-    gtk_adjustment_new (shootvals.select_delay,
-                        0.0, 100.0, 1.0, 5.0, 0.0);
-  spinner = gimp_spin_button_new (adj, 0, 0);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinner), TRUE);
-  gtk_table_attach (GTK_TABLE (table), spinner, 1, 2, 0, 1,
-                    GTK_SHRINK, GTK_SHRINK, 0, 0);
-  gtk_widget_show (spinner);
-
-  g_signal_connect (adj, "value-changed",
-                    G_CALLBACK (gimp_int_adjustment_update),
-                    &shootvals.select_delay);
-
-  /*  translators: this is the unit label of a spinbutton  */
-  label = gtk_label_new (_("seconds"));
-  gtk_table_attach (GTK_TABLE (table), label, 2, 3, 0, 1,
-                    GTK_EXPAND | GTK_FILL, GTK_SHRINK, 1.0, 0);
-  gtk_misc_set_alignment (GTK_MISC (label), 0.1, 0.5);
-  gtk_widget_show (label);
-
-  /*  Selection delay hints  */
-  gtk_table_attach (GTK_TABLE (table), notebook1, 0, 3, 1, 2,
-                    GTK_EXPAND | GTK_FILL, GTK_SHRINK, 0, 0);
-  gtk_widget_show (notebook1);
-
-  /* No selection delay for full-screen. */
-  shoot_dialog_add_hint (GTK_NOTEBOOK (notebook1), SHOOT_ROOT, "");
-  shoot_dialog_add_hint (GTK_NOTEBOOK (notebook1), SHOOT_REGION,
-                         _("After the delay, drag your mouse to select "
-                           "the region for the screenshot."));
-#ifdef G_OS_WIN32
-  shoot_dialog_add_hint (GTK_NOTEBOOK (notebook1), SHOOT_WINDOW,
-                         _("Click in a window to snap it after delay."));
-#else
-  if (capabilities & SCREENSHOT_CAN_PICK_WINDOW)
-    {
-      shoot_dialog_add_hint (GTK_NOTEBOOK (notebook1), SHOOT_WINDOW,
-                             _("At the end of the delay, click in a window "
-                               "to snap it."));
-    }
-  else
-    {
-      shoot_dialog_add_hint (GTK_NOTEBOOK (notebook1), SHOOT_WINDOW, "");
-    }
-#endif
-  gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook1), shootvals.shoot_type);
-
-  /* Screenshot delay  */
-  table = gtk_table_new (2, 3, FALSE);
-  shot_delay_table = table;
-  gtk_box_pack_start (GTK_BOX (vbox), table, FALSE, FALSE, 0);
-  if (shootvals.shoot_type != SHOOT_WINDOW          ||
-      ! (capabilities & SCREENSHOT_CAN_PICK_WINDOW) ||
-      (capabilities & SCREENSHOT_CAN_DELAY_WINDOW_SHOT))
-    {
-      gtk_widget_show (table);
-    }
-
-  label = gtk_label_new_with_mnemonic (_("Screenshot dela_y: "));
-  gtk_table_attach (GTK_TABLE (table), label, 0, 1, 0, 1,
-                    GTK_SHRINK, GTK_SHRINK, 0, 0);
-  gtk_widget_show (label);
-
-  adj = (GtkAdjustment *)
-    gtk_adjustment_new (shootvals.screenshot_delay,
-                        0.0, 100.0, 1.0, 5.0, 0.0);
-  spinner = gimp_spin_button_new (adj, 0, 0);
-  gtk_spin_button_set_numeric (GTK_SPIN_BUTTON (spinner), TRUE);
-  gtk_table_attach (GTK_TABLE (table), spinner, 1, 2, 0, 1,
-                    GTK_SHRINK, GTK_SHRINK, 0, 0);
-  gtk_label_set_mnemonic_widget (GTK_LABEL (label), GTK_WIDGET (spinner));
-  gtk_widget_show (spinner);
-
-  g_signal_connect (adj, "value-changed",
-                    G_CALLBACK (gimp_int_adjustment_update),
-                    &shootvals.screenshot_delay);
-
-  /*  translators: this is the unit label of a spinbutton  */
-  label = gtk_label_new (_("seconds"));
-  gtk_table_attach (GTK_TABLE (table), label, 2, 3, 0, 1,
-                    GTK_EXPAND | GTK_FILL, GTK_SHRINK, 1.0, 0);
-  gtk_misc_set_alignment (GTK_MISC (label), 0.1, 0.5);
-  gtk_widget_show (label);
-
-  /*  Screenshot delay hints  */
-  gtk_table_attach (GTK_TABLE (table), notebook2, 0, 3, 1, 2,
-                    GTK_EXPAND | GTK_FILL, GTK_SHRINK, 0, 0);
-  gtk_widget_show (notebook2);
-
-  shoot_dialog_add_hint (GTK_NOTEBOOK (notebook2), SHOOT_ROOT,
-                         _("After the delay, the screenshot is taken."));
-  shoot_dialog_add_hint (GTK_NOTEBOOK (notebook2), SHOOT_REGION,
-                         _("Once the region is selected, it will be "
-                           "captured after this delay."));
-  if (capabilities & SCREENSHOT_CAN_PICK_WINDOW)
-    {
-      shoot_dialog_add_hint (GTK_NOTEBOOK (notebook2), SHOOT_WINDOW,
-                             _("Once the window is selected, it will be "
-                               "captured after this delay."));
-    }
-  else
-    {
-      shoot_dialog_add_hint (GTK_NOTEBOOK (notebook2), SHOOT_WINDOW,
-                             _("After the delay, the active window "
-                               "will be captured."));
-    }
-  gtk_notebook_set_current_page (GTK_NOTEBOOK (notebook2), shootvals.shoot_type);
-
-  /*  Color profile  */
-  frame = gimp_int_radio_group_new (TRUE,
-                                    _("Color Profile"),
-                                    G_CALLBACK (gimp_radio_button_update),
-                                    &shootvals.profile_policy,
-                                    shootvals.profile_policy,
-
-                                    _("Tag image with _monitor profile"),
-                                    SCREENSHOT_PROFILE_POLICY_MONITOR,
-                                    NULL,
-
-                                    _("Convert image to sR_GB"),
-                                    SCREENSHOT_PROFILE_POLICY_SRGB,
-                                    NULL,
-
-                                    NULL);
-  gtk_box_pack_start (GTK_BOX (main_vbox), frame, FALSE, FALSE, 0);
-  gtk_widget_show (frame);
-
-
-  gtk_widget_show (dialog);
-
-  run = (gimp_dialog_run (GIMP_DIALOG (dialog)) == GTK_RESPONSE_OK);
-
+  /* Get the screen on which we are running */
   if (run)
-    {
-      /* get the screen on which we are running */
-      *screen = gtk_widget_get_screen (dialog);
-    }
+    *monitor = gimp_widget_get_monitor (dialog);
 
   gtk_widget_destroy (dialog);
 
@@ -866,7 +658,7 @@ shoot_delay_timeout (gpointer data)
 /*  public functions  */
 
 void
-screenshot_delay (gint seconds)
+screenshot_wait_delay (gint seconds)
 {
   g_timeout_add (1000, shoot_delay_timeout, &seconds);
   gtk_main ();

@@ -31,12 +31,11 @@
 
 #include "display-types.h"
 
-#include "core/gimpmarshal.h"
-
 #include "gimpscalecombobox.h"
 
-
-#define MAX_ITEMS  10
+/*  Use U+2009 THIN SPACE to separate the percent sign from the number */
+#define PERCENT_SPACE "\342\200\211"
+#define MAX_ITEMS     10
 
 enum
 {
@@ -55,9 +54,6 @@ enum
 
 static void      gimp_scale_combo_box_constructed     (GObject           *object);
 static void      gimp_scale_combo_box_finalize        (GObject           *object);
-
-static void      gimp_scale_combo_box_style_set       (GtkWidget         *widget,
-                                                       GtkStyle          *prev_style);
 
 static void      gimp_scale_combo_box_changed         (GimpScaleComboBox *combo_box);
 static void      gimp_scale_combo_box_entry_activate  (GtkWidget         *entry,
@@ -83,32 +79,18 @@ static guint scale_combo_box_signals[LAST_SIGNAL] = { 0 };
 static void
 gimp_scale_combo_box_class_init (GimpScaleComboBoxClass *klass)
 {
-  GObjectClass   *object_class = G_OBJECT_CLASS (klass);
-  GtkWidgetClass *widget_class = GTK_WIDGET_CLASS (klass);
+  GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
   scale_combo_box_signals[ENTRY_ACTIVATED] =
     g_signal_new ("entry-activated",
                   G_TYPE_FROM_CLASS (klass),
                   G_SIGNAL_RUN_FIRST,
                   G_STRUCT_OFFSET (GimpScaleComboBoxClass, entry_activated),
-                  NULL, NULL,
-                  gimp_marshal_VOID__VOID,
+                  NULL, NULL, NULL,
                   G_TYPE_NONE, 0);
 
   object_class->constructed = gimp_scale_combo_box_constructed;
   object_class->finalize    = gimp_scale_combo_box_finalize;
-
-  widget_class->style_set   = gimp_scale_combo_box_style_set;
-
-  klass->entry_activated    = NULL;
-
-  gtk_widget_class_install_style_property (widget_class,
-                                           g_param_spec_double ("label-scale",
-                                                                NULL, NULL,
-                                                                0.0,
-                                                                G_MAXDOUBLE,
-                                                                1.0,
-                                                                GIMP_PARAM_READABLE));
 }
 
 static void
@@ -144,6 +126,8 @@ gimp_scale_combo_box_constructed (GObject *object)
                                        COLUMN_LABEL);
 
   entry = gtk_bin_get_child (GTK_BIN (combo_box));
+
+  gtk_widget_add_events (GTK_WIDGET (entry), GDK_SCROLL_MASK);
 
   g_object_set (entry,
                 "xalign",             1.0,
@@ -207,38 +191,6 @@ gimp_scale_combo_box_finalize (GObject *object)
     }
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
-}
-
-static void
-gimp_scale_combo_box_style_set (GtkWidget *widget,
-                                GtkStyle  *prev_style)
-{
-  GtkWidget            *entry;
-  GtkRcStyle           *rc_style;
-  PangoContext         *context;
-  PangoFontDescription *font_desc;
-  gint                  font_size;
-  gdouble               label_scale;
-
-  GTK_WIDGET_CLASS (parent_class)->style_set (widget, prev_style);
-
-  gtk_widget_style_get (widget, "label-scale", &label_scale, NULL);
-
-  entry = gtk_bin_get_child (GTK_BIN (widget));
-
-  rc_style = gtk_widget_get_modifier_style (GTK_WIDGET (entry));
-
-  if (rc_style->font_desc)
-    pango_font_description_free (rc_style->font_desc);
-
-  context = gtk_widget_get_pango_context (widget);
-  font_desc = pango_context_get_font_description (context);
-  rc_style->font_desc = pango_font_description_copy (font_desc);
-
-  font_size = pango_font_description_get_size (rc_style->font_desc);
-  pango_font_description_set_size (rc_style->font_desc, label_scale * font_size);
-
-  gtk_widget_modify_style (GTK_WIDGET (entry), rc_style);
 }
 
 static void
@@ -375,20 +327,6 @@ gimp_scale_combo_box_scale_iter_set (GtkListStore *store,
 {
   gchar label[32];
 
-#ifdef G_OS_WIN32
-
-  /*  use a normal space until pango's windows backend uses harfbuzz,
-   *  see bug #735505
-   */
-#define PERCENT_SPACE " "
-
-#else
-
-  /*  use U+2009 THIN SPACE to separate the percent sign from the number */
-#define PERCENT_SPACE "\342\200\211"
-
-#endif
-
   if (scale > 1.0)
     g_snprintf (label, sizeof (label),
                 "%d" PERCENT_SPACE "%%", (gint) ROUND (100.0 * scale));
@@ -467,7 +405,7 @@ gimp_scale_combo_box_mru_remove_last (GimpScaleComboBox *combo_box)
 /**
  * gimp_scale_combo_box_new:
  *
- * Return value: a new #GimpScaleComboBox.
+ * Returns: a new #GimpScaleComboBox.
  **/
 GtkWidget *
 gimp_scale_combo_box_new (void)
@@ -488,6 +426,8 @@ gimp_scale_combo_box_set_scale (GimpScaleComboBox *combo_box,
   gboolean      iter_valid;
   gboolean      persistent;
   gint          n_digits;
+  gchar        *label        = NULL;
+  gint          label_length = 5;
 
   g_return_if_fail (GIMP_IS_SCALE_COMBO_BOX (combo_box));
   g_return_if_fail (scale > 0.0);
@@ -535,6 +475,7 @@ gimp_scale_combo_box_set_scale (GimpScaleComboBox *combo_box,
 
   gtk_tree_model_get (model, &iter,
                       COLUMN_PERSISTENT, &persistent,
+                      COLUMN_LABEL,      &label,
                       -1);
   if (! persistent)
     {
@@ -544,12 +485,16 @@ gimp_scale_combo_box_set_scale (GimpScaleComboBox *combo_box,
         gimp_scale_combo_box_mru_remove_last (combo_box);
     }
 
+  if (label)
+    label_length = (g_utf8_strlen (label, -1) > 5) ?
+                    g_utf8_strlen (label, -1) : 5;
+
   /* Update entry size appropriately. */
   entry = gtk_bin_get_child (GTK_BIN (combo_box));
   n_digits = (gint) floor (log10 (scale) + 1);
 
   g_object_set (entry,
-                "width-chars", MAX (5, n_digits + 4),
+                "width-chars", MAX (label_length, n_digits + 4),
                 NULL);
 }
 

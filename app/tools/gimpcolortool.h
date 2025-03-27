@@ -63,7 +63,7 @@ struct _GimpColorToolClass
                          GimpDisplay        *display,
                          const Babl        **sample_format,
                          gpointer            pixel,
-                         GimpRGB            *color);
+                         GeglColor         **color);
 
   /*  signals  */
   void     (* picked)   (GimpColorTool      *tool,
@@ -72,7 +72,7 @@ struct _GimpColorToolClass
                          GimpColorPickState  pick_state,
                          const Babl         *sample_format,
                          gpointer            pixel,
-                         const GimpRGB      *color);
+                         GeglColor          *color);
 };
 
 

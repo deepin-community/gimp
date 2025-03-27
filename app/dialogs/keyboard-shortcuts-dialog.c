@@ -28,16 +28,12 @@
 
 #include "widgets/gimpactioneditor.h"
 #include "widgets/gimphelp-ids.h"
-#include "widgets/gimpuimanager.h"
 
 #include "menus/menus.h"
 
 #include "keyboard-shortcuts-dialog.h"
 
 #include "gimp-intl.h"
-
-
-#define RESPONSE_SAVE 1
 
 
 /*  local function prototypes  */
@@ -66,8 +62,7 @@ keyboard_shortcuts_dialog_new (Gimp *gimp)
                             gimp_standard_help_func,
                             GIMP_HELP_KEYBOARD_SHORTCUTS,
 
-                            _("_Save"),  RESPONSE_SAVE,
-                            _("_Close"), GTK_RESPONSE_CLOSE,
+                            _("_OK"), GTK_RESPONSE_OK,
 
                             NULL);
 
@@ -81,8 +76,7 @@ keyboard_shortcuts_dialog_new (Gimp *gimp)
                       vbox, TRUE, TRUE, 0);
   gtk_widget_show (vbox);
 
-  editor = gimp_action_editor_new (gimp_ui_managers_from_name ("<Image>")->data,
-                                   NULL, TRUE);
+  editor = gimp_action_editor_new (gimp, NULL, TRUE);
   gtk_box_pack_start (GTK_BOX (vbox), editor, TRUE, TRUE, 0);
   gtk_widget_show (editor);
 
@@ -96,7 +90,6 @@ keyboard_shortcuts_dialog_new (Gimp *gimp)
   button = gimp_prop_check_button_new (G_OBJECT (gimp->config), "save-accels",
                                        _("S_ave keyboard shortcuts on exit"));
   gtk_box_pack_start (GTK_BOX (vbox), button, FALSE, FALSE, 0);
-  gtk_widget_show (button);
 
   return dialog;
 }
@@ -111,10 +104,6 @@ keyboard_shortcuts_dialog_response (GtkWidget *dialog,
 {
   switch (response)
     {
-    case RESPONSE_SAVE:
-      menus_save (gimp, TRUE);
-      break;
-
     default:
       gtk_widget_destroy (dialog);
       break;

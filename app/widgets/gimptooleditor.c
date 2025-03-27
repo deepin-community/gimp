@@ -76,9 +76,9 @@ static void            gimp_tool_editor_view_iface_init           (GimpContainer
 
 static void            gimp_tool_editor_constructed               (GObject                    *object);
 
-static gboolean        gimp_tool_editor_select_item               (GimpContainerView          *view,
-                                                                   GimpViewable               *viewable,
-                                                                   gpointer                    insert_data);
+static gboolean        gimp_tool_editor_select_items              (GimpContainerView          *view,
+                                                                   GList                      *items,
+                                                                   GList                      *paths);
 static void            gimp_tool_editor_set_container             (GimpContainerView          *container_view,
                                                                    GimpContainer              *container);
 static void            gimp_tool_editor_set_context               (GimpContainerView          *container_view,
@@ -86,14 +86,14 @@ static void            gimp_tool_editor_set_context               (GimpContainer
 
 static gboolean        gimp_tool_editor_drop_possible             (GimpContainerTreeView      *tree_view,
                                                                    GimpDndType                 src_type,
-                                                                   GimpViewable               *src_viewable,
+                                                                   GList                      *src_viewables,
                                                                    GimpViewable               *dest_viewable,
                                                                    GtkTreePath                *drop_path,
                                                                    GtkTreeViewDropPosition     drop_pos,
                                                                    GtkTreeViewDropPosition    *return_drop_pos,
                                                                    GdkDragAction              *return_drag_action);
-static void            gimp_tool_editor_drop_viewable             (GimpContainerTreeView      *tree_view,
-                                                                   GimpViewable               *src_viewable,
+static void            gimp_tool_editor_drop_viewables            (GimpContainerTreeView      *tree_view,
+                                                                   GList                      *src_viewables,
                                                                    GimpViewable               *dest_viewable,
                                                                    GtkTreeViewDropPosition     drop_pos);
 
@@ -155,10 +155,10 @@ gimp_tool_editor_class_init (GimpToolEditorClass *klass)
   GObjectClass               *object_class    = G_OBJECT_CLASS (klass);
   GimpContainerTreeViewClass *tree_view_class = GIMP_CONTAINER_TREE_VIEW_CLASS (klass);
 
-  object_class->constructed      = gimp_tool_editor_constructed;
+  object_class->constructed       = gimp_tool_editor_constructed;
 
-  tree_view_class->drop_possible = gimp_tool_editor_drop_possible;
-  tree_view_class->drop_viewable = gimp_tool_editor_drop_viewable;
+  tree_view_class->drop_possible  = gimp_tool_editor_drop_possible;
+  tree_view_class->drop_viewables = gimp_tool_editor_drop_viewables;
 }
 
 static void
@@ -169,7 +169,7 @@ gimp_tool_editor_view_iface_init (GimpContainerViewInterface *iface)
   if (! parent_view_iface)
     parent_view_iface = g_type_default_interface_peek (GIMP_TYPE_CONTAINER_VIEW);
 
-  iface->select_item   = gimp_tool_editor_select_item;
+  iface->select_items  = gimp_tool_editor_select_items;
   iface->set_container = gimp_tool_editor_set_container;
   iface->set_context   = gimp_tool_editor_set_context;
 }
@@ -207,24 +207,24 @@ gimp_tool_editor_constructed (GObject *object)
   {
     GtkTreeViewColumn *column;
     GtkCellRenderer   *eye_cell;
-    GtkStyle          *tree_style;
-    GtkIconSize        icon_size;
+    GtkStyleContext   *tree_style;
+    GtkBorder          border;
+    gint               icon_size;
 
-    tree_style = gtk_widget_get_style (GTK_WIDGET (tool_editor));
+    tree_style = gtk_widget_get_style_context (GTK_WIDGET (tool_editor));
 
-    icon_size = gimp_get_icon_size (GTK_WIDGET (tool_editor),
-                                    GIMP_ICON_VISIBLE,
-                                    GTK_ICON_SIZE_BUTTON,
-                                    view_size -
-                                    2 * tree_style->xthickness,
-                                    view_size -
-                                    2 * tree_style->ythickness);
+    gtk_style_context_get_border (tree_style, 0, &border);
 
     column = gtk_tree_view_column_new ();
     gtk_tree_view_insert_column (tree_view->view, column, 0);
 
     eye_cell = gimp_cell_renderer_toggle_new (GIMP_ICON_VISIBLE);
-    g_object_set (eye_cell, "stock-size", icon_size, NULL);
+
+    g_object_get (eye_cell, "icon-size", &icon_size, NULL);
+    icon_size = MIN (icon_size, MAX (view_size - (border.left + border.right),
+                                     view_size - (border.top + border.bottom)));
+    g_object_set (eye_cell, "icon-size", icon_size, NULL);
+
     gtk_tree_view_column_pack_start (column, eye_cell, FALSE);
     gtk_tree_view_column_set_cell_data_func  (column, eye_cell,
                                               gimp_tool_editor_eye_data_func,
@@ -279,15 +279,15 @@ gimp_tool_editor_constructed (GObject *object)
 }
 
 static gboolean
-gimp_tool_editor_select_item (GimpContainerView *container_view,
-                              GimpViewable      *viewable,
-                              gpointer           insert_data)
+gimp_tool_editor_select_items (GimpContainerView   *container_view,
+                               GList               *viewables,
+                               GList               *paths)
 {
   GimpToolEditor *tool_editor = GIMP_TOOL_EDITOR (container_view);
   gboolean        result;
 
-  result = parent_view_iface->select_item (container_view,
-                                           viewable, insert_data);
+  result = parent_view_iface->select_items (container_view,
+                                            viewables, paths);
 
   gimp_tool_editor_update_sensitivity (tool_editor);
 
@@ -319,7 +319,7 @@ gimp_tool_editor_set_context (GimpContainerView *container_view,
 static gboolean
 gimp_tool_editor_drop_possible (GimpContainerTreeView   *tree_view,
                                 GimpDndType              src_type,
-                                GimpViewable            *src_viewable,
+                                GList                   *src_viewables,
                                 GimpViewable            *dest_viewable,
                                 GtkTreePath             *drop_path,
                                 GtkTreeViewDropPosition  drop_pos,
@@ -328,7 +328,7 @@ gimp_tool_editor_drop_possible (GimpContainerTreeView   *tree_view,
 {
   if (GIMP_CONTAINER_TREE_VIEW_CLASS (parent_class)->drop_possible (
         tree_view,
-        src_type, src_viewable, dest_viewable, drop_path, drop_pos,
+        src_type, src_viewables, dest_viewable, drop_path, drop_pos,
         return_drop_pos, return_drag_action))
     {
       if (gimp_viewable_get_parent (dest_viewable)       ||
@@ -336,7 +336,15 @@ gimp_tool_editor_drop_possible (GimpContainerTreeView   *tree_view,
            (drop_pos == GTK_TREE_VIEW_DROP_INTO_OR_AFTER ||
             drop_pos == GTK_TREE_VIEW_DROP_INTO_OR_BEFORE)))
         {
-          return ! gimp_viewable_get_children (src_viewable);
+          GList *iter;
+
+          for (iter = src_viewables; iter; iter = iter->next)
+            {
+              GimpViewable *src_viewable = iter->data;
+
+              if (gimp_viewable_get_children (src_viewable))
+                return FALSE;
+            }
         }
 
       return TRUE;
@@ -346,19 +354,20 @@ gimp_tool_editor_drop_possible (GimpContainerTreeView   *tree_view,
 }
 
 static void
-gimp_tool_editor_drop_viewable (GimpContainerTreeView   *tree_view,
-                                GimpViewable            *src_viewable,
-                                GimpViewable            *dest_viewable,
-                                GtkTreeViewDropPosition  drop_pos)
+gimp_tool_editor_drop_viewables (GimpContainerTreeView   *tree_view,
+                                 GList                   *src_viewables,
+                                 GimpViewable            *dest_viewable,
+                                 GtkTreeViewDropPosition  drop_pos)
 {
   GimpContainerView *container_view = GIMP_CONTAINER_VIEW (tree_view);
 
-  GIMP_CONTAINER_TREE_VIEW_CLASS (parent_class)->drop_viewable (tree_view,
-                                                                src_viewable,
-                                                                dest_viewable,
-                                                                drop_pos);
+  GIMP_CONTAINER_TREE_VIEW_CLASS (parent_class)->drop_viewables (tree_view,
+                                                                 src_viewables,
+                                                                 dest_viewable,
+                                                                 drop_pos);
 
-  gimp_container_view_select_item (container_view, src_viewable);
+  if (src_viewables)
+    gimp_container_view_select_items (container_view, src_viewables);
 }
 
 static void
@@ -741,7 +750,7 @@ gimp_tool_editor_update_container (GimpToolEditor *tool_editor)
       /* save initial tool order */
       string = g_string_new (NULL);
 
-      writer = gimp_config_writer_new_string (string);
+      writer = gimp_config_writer_new_from_string (string);
 
       gimp_tools_serialize (context->gimp, container, writer);
 
@@ -840,5 +849,5 @@ gimp_tool_editor_revert_changes (GimpToolEditor *tool_editor)
                           tool_editor->priv->container,
                           scanner);
 
-  gimp_scanner_destroy (scanner);
+  gimp_scanner_unref (scanner);
 }

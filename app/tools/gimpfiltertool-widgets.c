@@ -29,6 +29,7 @@
 #include "tools-types.h"
 
 #include "core/gimpcontainer.h"
+#include "core/gimpdrawablefilter.h"
 #include "core/gimpitem.h"
 
 #include "display/gimpdisplay.h"
@@ -387,8 +388,7 @@ gimp_filter_tool_controller_free (Controller *controller)
     {
       g_signal_handlers_disconnect_by_data (controller->widget, controller);
 
-      g_object_remove_weak_pointer (G_OBJECT (controller->widget),
-                                    (gpointer) &controller->widget);
+      g_clear_weak_pointer (&controller->widget);
     }
 
   g_slice_free (Controller, controller);
@@ -409,7 +409,7 @@ gimp_filter_tool_set_line (Controller    *controller,
     return;
 
   tool     = GIMP_TOOL (controller->filter_tool);
-  drawable = tool->drawable;
+  drawable = tool->drawables->data;
 
   if (drawable)
     {
@@ -486,7 +486,7 @@ gimp_filter_tool_set_slider_line (Controller                 *controller,
     return;
 
   tool     = GIMP_TOOL (controller->filter_tool);
-  drawable = tool->drawable;
+  drawable = tool->drawables->data;
 
   if (drawable)
     {
@@ -560,19 +560,25 @@ gimp_filter_tool_set_transform_grid (Controller        *controller,
                                      GeglRectangle     *area,
                                      const GimpMatrix3 *transform)
 {
-  GimpTool     *tool;
-  GimpDrawable *drawable;
-  gdouble       x1 = area->x;
-  gdouble       y1 = area->y;
-  gdouble       x2 = area->x + area->width;
-  gdouble       y2 = area->y + area->height;
-  GimpMatrix3   matrix;
+  GimpTool       *tool;
+  GimpFilterTool *filter_tool;
+  GimpDrawable   *drawable;
+  gdouble         x1 = area->x;
+  gdouble         y1 = area->y;
+  gdouble         x2 = area->x + area->width;
+  gdouble         y2 = area->y + area->height;
+  GimpMatrix3     matrix;
 
   if (! controller->widget)
     return;
 
-  tool     = GIMP_TOOL (controller->filter_tool);
-  drawable = tool->drawable;
+  tool        = GIMP_TOOL (controller->filter_tool);
+  filter_tool = controller->filter_tool;
+
+  if (filter_tool->existing_filter)
+    drawable = gimp_drawable_filter_get_drawable (filter_tool->existing_filter);
+  else
+    drawable = tool->drawables->data;
 
   if (drawable)
     {
@@ -662,7 +668,7 @@ gimp_filter_tool_set_transform_grids (Controller        *controller,
 
   tool     = GIMP_TOOL (controller->filter_tool);
   shell    = gimp_display_get_shell (tool->display);
-  drawable = tool->drawable;
+  drawable = tool->drawables->data;
 
   g_signal_handlers_block_by_func (controller->widget,
                                    gimp_filter_tool_transform_grids_changed,
@@ -885,7 +891,7 @@ gimp_filter_tool_set_focus (Controller    *controller,
     return;
 
   tool     = GIMP_TOOL (controller->filter_tool);
-  drawable = tool->drawable;
+  drawable = tool->drawables->data;
 
   if (drawable)
     {
