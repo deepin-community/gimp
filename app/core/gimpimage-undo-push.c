@@ -359,6 +359,22 @@ gimp_image_undo_push_filter_reorder (GimpImage          *image,
                                NULL);
 }
 
+GimpUndo *
+gimp_image_undo_push_filter_modified (GimpImage          *image,
+                                      const gchar        *undo_desc,
+                                      GimpDrawable       *drawable,
+                                      GimpDrawableFilter *filter)
+{
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
+  g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), NULL);
+
+  return gimp_image_undo_push (image, GIMP_TYPE_DRAWABLE_FILTER_UNDO,
+                               GIMP_UNDO_FILTER_MODIFIED, undo_desc,
+                               GIMP_DIRTY_ITEM_META,
+                               "filter", filter,
+                               NULL);
+}
+
 
 /****************/
 /*  Mask Undos  */

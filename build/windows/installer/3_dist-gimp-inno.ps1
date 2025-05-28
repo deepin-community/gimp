@@ -23,11 +23,19 @@ if (-not $GITLAB_CI)
       {
         Set-Location ..\..\..
       }
+
+    $PARENT_DIR = '..\'
   }
 
 
-# This script needs a bit of MSYS2 to work
-Invoke-Expression ((Get-Content build\windows\1_build-deps-msys2.ps1 | Select-String 'MSYS_ROOT\)' -Context 0,13) -replace '> ','')
+# This script needs a bit of Python to work
+#FIXME: Restore the condition when TWAIN 32-bit support is dropped
+#if (-not (Get-Command "python" -ErrorAction SilentlyContinue) -or "$(Get-Command "python" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)" -like '*WindowsApps*')
+#  {
+    Invoke-Expression ((Get-Content build\windows\1_build-deps-msys2.ps1 | Select-String 'MSYS_ROOT\)' -Context 0,12) -replace '> ','')
+    $env:PATH = "$MSYS_ROOT/usr/bin;" + $env:PATH
+    Invoke-Expression ((Get-Content .gitlab-ci.yml | Select-String 'win_environ\[' -Context 0,7) -replace '> ','' -replace '- ','')
+#  }
 
 
 # 1. GET INNO
@@ -36,7 +44,8 @@ Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0)
 ## Download Inno
 ## (We need to ensure that TLS 1.2 is enabled because of some runners)
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-Invoke-WebRequest https://jrsoftware.org/download.php/is.exe -OutFile ..\is.exe
+#Post-6.4.2 Inno have awfully broken task dialogs: https://groups.google.com/g/innosetup/c/g0V_QE3Zf5Y/m/Daki-eb8EQAJ
+Invoke-WebRequest https://files.jrsoftware.org/is/6/innosetup-6.4.2.exe -OutFile ..\is.exe
 $inno_version_downloaded = (Get-Item ..\is.exe).VersionInfo.ProductVersion -replace ' ',''
 
 ## Install or Update Inno
@@ -144,14 +153,15 @@ function download_langs ([array]$langsArray)
       if ($langfile -ne '' -and -not (Test-Path "$langfilePath" -Type Leaf))
         {
           Write-Output "(INFO): temporarily installing $($langfilePath -replace '\\\\','\')"
-          $langfileUnix = $langfile.Replace('\\', '/')
-          Invoke-WebRequest https://raw.githubusercontent.com/jrsoftware/issrc/main/Files/$langfileUnix -OutFile "$langfilePath"
+          Copy-Item "${PARENT_DIR}issrc\Files\$langfile" "$langfilePath" -Force
         }
     }
 }
+git clone --depth 1 https://github.com/jrsoftware/issrc.git "${PARENT_DIR}issrc"
 download_langs $langsArray_Official
 New-Item "$INNO_PATH\Languages\Unofficial" -ItemType Directory -Force | Out-Null
 download_langs $langsArray_unofficial
+Remove-Item "${PARENT_DIR}issrc" -Recurse -Force
 ### Patch 'AppVer*' against Inno pervasive behavior: https://groups.google.com/g/innosetup/c/w0sebw5YAeg
 function fix_msg ([array]$langsArray, [string]$AppVer)
 {
@@ -163,25 +173,8 @@ function fix_msg ([array]$langsArray, [string]$AppVer)
         {
           Copy-Item "$langfilePath" "$Env:Tmp\$(Split-Path $langfile -Leaf).bak" -Force
 
-          #Prefer MSYS2 since PowerShell (even 7.1+) doesn't handle well files with mixed encodings
-          $langfilePathUnix = "$langfilePath" -replace '\\','/' -replace '//','/'
-          bash build/windows/installer/lang/fix_msg.sh "$langfilePathUnix" $AppVer
-
-          #Write-Output "(INFO): temporarily patching $langfilePath with $AppVer"
-          #$Encoding = 'utf8NoBOM'
-          #$bytes = $(Get-Content $langfilePath -AsByteStream)[0..1]
-          #if ("$bytes" -eq "239 187")
-          #  {
-          #    $Encoding = 'utf8BOM'
-          #  }
-          #$msg = Get-Content $langfilePath -Encoding $Encoding
-          #$linenumber = $msg | Select-String 'SetupWindowTitle' | Select-Object -ExpandProperty LineNumber
-          #$msg | ForEach-Object { If ($_.ReadCount -eq $linenumber) {$_ -Replace "%1", "%1 $AppVer"} Else {$_} } |
-          #       Set-Content "$langfilePath" -Encoding $Encoding
-          #$msg = Get-Content $langfilePath -Encoding $Encoding
-          #$linenumber = $msg | Select-String 'UninstallAppFullTitle' | Select-Object -ExpandProperty LineNumber
-          #$msg | ForEach-Object { If ($_.ReadCount -eq $linenumber) {$_ -Replace "%1", "%1 $AppVer"} Else {$_} } |
-          #       Set-Content "$langfilePath" -Encoding $Encoding
+          #Prefer Python since PowerShell/.NET doesn't handle well files with different encodings
+          python build\windows\installer\lang\fix_msg.py "$langfilePath" $AppVer
         }
 
       else #($AppVer -eq 'revert')
@@ -202,29 +195,11 @@ Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):i
 Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):installer_files[collapsed=true]$([char]13)$([char]27)[0KGenerating 32-bit TWAIN dependencies list"
 $twain_list_file = 'build\windows\installer\base_twain32on64.list'
 Copy-Item $twain_list_file "$twain_list_file.bak"
-$twain_list = (python3 build/windows/2_bundle-gimp-uni_dep.py --debug debug-only $(Resolve-Path $GIMP32/lib/gimp/*/plug-ins/twain/twain.exe) $MSYS_ROOT/mingw32/ $GIMP32/ 32 |
+$twain_list = (python build\windows\2_bundle-gimp-uni_dep.py --debug debug-only $(Resolve-Path $GIMP32/lib/gimp/*/plug-ins/twain/twain.exe) $MSYS_ROOT/mingw32/ $GIMP32/ 32 |
               Select-String 'Installed' -CaseSensitive -Context 0,1000) -replace "  `t- ",'bin\'
 (Get-Content $twain_list_file) | Foreach-Object {$_ -replace "@DEPS_GENLIST@","$twain_list"} | Set-Content $twain_list_file
 (Get-Content $twain_list_file) | Select-string 'Installed' -notmatch | Set-Content $twain_list_file
 Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):installer_files$([char]13)$([char]27)[0K"
-
-## Do arch-specific things
-foreach ($bundle in $supported_archs)
-  {
-    Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):${bundle}_files[collapsed=true]$([char]13)$([char]27)[0KPreparing GIMP files in $bundle bundle"
-
-    ## Split .debug symbols
-    if ("$bundle" -eq "$GIMP32")
-      {
-        #We do not split 32-bit DWARF symbols here (they were in gimp-win-x86 job)
-        Write-Output "(INFO): skipping (already done) $GIMP32 .debug extracting"
-      }
-    else
-      {
-        bash build/windows/installer/3_dist-gimp-inno_sym.sh $bundle
-      }
-    Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):${bundle}_files$([char]13)$([char]27)[0K"
-  }
 
 
 # 5. COMPILE .EXE INSTALLER

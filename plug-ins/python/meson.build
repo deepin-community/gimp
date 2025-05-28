@@ -32,7 +32,7 @@ foreach plugin : plugins
     # from the build directory without installing it.
     # To be run even if we don't install Python plug-ins so that we can
     # still run them for in-build scripts.
-    run_command(python, meson.project_source_root() / '.gitlab/cp-plug-in-subfolder.py',
+    run_command(python, meson.project_source_root() / 'build/meson/cp-plug-in-subfolder.py',
                 meson.current_source_dir() / src, meson.current_build_dir() / name, check: true)
   endforeach
 endforeach
@@ -40,7 +40,7 @@ endforeach
 # Fallback fix to the problem of non-configured interpreters (needed by MSIX)
 if platform_windows and not meson.is_cross_build() and python.found()
   python_config = configuration_data()
-  if not stable
+  if gimp_unstable or not release
     #python.exe is prefered in unstable versions because of error output
     python_config.set('PYTHON_EXE', 'python.exe')
   else

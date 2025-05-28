@@ -1223,6 +1223,8 @@ gimp_filter_tool_commit (GimpFilterTool *filter_tool,
   /* Copy over filter info back to existing filter */
   if (filter_tool->existing_filter)
     {
+      GimpImage               *image;
+      GimpDrawable            *drawable;
       GeglNode                *node;
       GeglNode                *existing_node;
       gdouble                  opacity;
@@ -1249,6 +1251,13 @@ gimp_filter_tool_commit (GimpFilterTool *filter_tool,
       gegl_node_get (node, "operation", &operation_name, NULL);
       gegl_node_get (existing_node, "operation", &name, NULL);
 
+      drawable =
+        gimp_drawable_filter_get_drawable (filter_tool->existing_filter);
+      image = gimp_item_get_image (GIMP_ITEM (drawable));
+
+      gimp_image_undo_push_filter_modified (image, _("Edited filter"),
+                                            drawable,
+                                            filter_tool->existing_filter);
       /* If the filter was changed, we need to update the original filter's
        * operation */
       if (g_strcmp0 (operation_name, name) != 0)
@@ -1329,12 +1338,16 @@ gimp_filter_tool_commit (GimpFilterTool *filter_tool,
 
       if (non_destructive && ! filter_tool->existing_filter)
         {
-          GimpDrawable *drawable =
-            gimp_drawable_filter_get_drawable (filter_tool->filter);
+          GimpDrawable *drawable;
+          const gchar  *filter_name;
+
+          drawable = gimp_drawable_filter_get_drawable (filter_tool->filter);
+
+          filter_name = gimp_object_get_name (filter_tool->filter);
 
           gimp_image_undo_push_filter_add (gimp_display_get_image (tool->display),
-                                           _("Add filter"),
-                                           drawable, filter_tool->filter);
+                                           filter_name, drawable,
+                                           filter_tool->filter);
         }
 
       drawable = gimp_drawable_filter_get_drawable (filter_tool->filter);

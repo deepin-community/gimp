@@ -73,8 +73,8 @@ foreach size : desktop_sizes
                            ],
                            build_by_default: true,
                            install: false)
-  meson.add_install_script('sh', '-c',
-                           'mkdir -p "$MESON_INSTALL_DESTDIR_PREFIX/@1@/" && cp -f "@0@" "$MESON_INSTALL_DESTDIR_PREFIX/@1@/gimp.png"'.format(app_icon.full_path(), installdir))
+  meson.add_install_script(python, '-c',
+                           'from pathlib import Path; from shutil import copy2; import sys, os; target_dir = Path(os.environ.get("MESON_INSTALL_DESTDIR_PREFIX")) / sys.argv[2]; target_dir.mkdir(parents=True, exist_ok=True); copy2(sys.argv[1], target_dir / "gimp.png")', app_icon.full_path(), installdir)
 endforeach
 
 install_data('gimp-logo.svg',
@@ -97,8 +97,8 @@ if build_ico_files
   # explicitly by maintainers as part of the procedure when updating the logo.
 
   gen_ico_conf = configuration_data()
-  gen_ico_conf.set('PARENT_TOP_SRCDIR', meson.global_source_root())
-  gen_ico_conf.set('SRCDIR', meson.current_source_dir())
+  gen_ico_conf.set('PARENT_TOP_SRCDIR', meson.global_source_root().replace('\\', '/'))
+  gen_ico_conf.set('SRCDIR', meson.current_source_dir().replace('\\', '/'))
 
   gen_gimp_ico_py = configure_file(input : 'gen-gimp-ico.py.in',
                                    output : 'gen-gimp-ico.py',

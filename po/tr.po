@@ -10,17 +10,17 @@
 # Ubuntu Türkiye Çeviri Takımı, 2010.
 # Simge Sezgin <simgesezgin88@gmail.com>, 2015.
 # Sabri Ünal <yakushabb@gmail.com>, 2018-2020, 2022-2025.
-# Emin Tufan Çetin <etcetin@gmail.com>, 2019-2025.
 # Muhammet Kara <muhammetk@gmail.com>, 2011-2025.
+# Emin Tufan Çetin <etcetin@gmail.com>, 2019-2025.
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: GIMP UI translations master\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gimp/issues\n"
-"POT-Creation-Date: 2025-03-23 17:50+0000\n"
-"PO-Revision-Date: 2025-03-24 00:28+0300\n"
-"Last-Translator: Muhammet Kara <muhammetk@gmail.com>\n"
-"Language-Team: Turkish <gnome-turk@gnome.org>\n"
+"POT-Creation-Date: 2025-04-12 14:29+0000\n"
+"PO-Revision-Date: 2025-04-06 08:00+0300\n"
+"Last-Translator: Emin Tufan Çetin <etcetin@gmail.com>\n"
+"Language-Team: Turkish <takim@gnome.org.tr>\n"
 "Language: tr\n"
 "MIME-Version: 1.0\n"
 "Content-Type: text/plain; charset=UTF-8\n"
@@ -82,22 +82,28 @@ msgid ""
 "Scene 4 cut 15 of \"ZeMarmot\" being edited in GIMP. Illustration by Aryeom "
 "(CC by-sa 4.0 International)"
 msgstr ""
+"\"ZeMarmot\"un 4. sahnesinin 15. kesiti GIMP’te düzenleniyor. Çizer: Aryeom "
+"(CC by-sa 4.0 International)"
 
 #: desktop/org.gimp.GIMP.appdata.xml.in.in:52
 msgid ""
 "Gull on beach photograph being edited in GIMP. Photo by Iana (CC by-sa 4.0 "
 "International)"
 msgstr ""
+"Kumsaldaki martı fotoğrafı GIMP’te düzenleniyor. Fotoğrafçı: Iana (CC by-sa "
+"4.0 International)"
 
 #: desktop/org.gimp.GIMP.appdata.xml.in.in:56
 msgid ""
 "Portrait of Sofiia being edited in GIMP. Photo by Sofia (CC by-sa 4.0 "
 "International)"
 msgstr ""
+"Sofiia’nın portresi GIMP’te düzenleniyor. Fotoğrafçı: Sofia (CC by-sa 4.0 "
+"International)"
 
 #: desktop/org.gimp.GIMP.appdata.xml.in.in:60
 msgid "Scanned engraving being edited in GIMP. Artwork by Liam (CC0)"
-msgstr ""
+msgstr "Taranmış oyma GIMP’te düzenleniyor. Sanatçı: Liam (CC0)"
 
 #: desktop/gimp.desktop.in.in:6
 msgid "Image Editor"
@@ -292,11 +298,11 @@ msgstr "Deneysel özellikler ile bir tercihler sayfası göster"
 msgid "Show an image submenu with debug actions"
 msgstr "Hata ayıklama işlemleriyle bir görüntü alt menüsü göster"
 
-#: app/main.c:716
+#: app/main.c:725
 msgid "[FILE|URI...]"
 msgstr "[DOSYA|ADRES...]"
 
-#: app/main.c:744
+#: app/main.c:753
 msgid ""
 "GIMP could not initialize the graphical user interface.\n"
 "Make sure a proper setup for your display environment exists."
@@ -304,20 +310,20 @@ msgstr ""
 "GIMP, grafiksel kullanıcı arayüzünü başlatamadı.\n"
 "Görüntüleme ortamınız için uygun bir kurulumun var olduğundan emin olun."
 
-#: app/main.c:765
+#: app/main.c:774
 msgid "Another GIMP instance is already running."
 msgstr "Başka bir GIMP zaten çalışıyor."
 
-#: app/main.c:854
+#: app/main.c:863
 msgid "GIMP output. Type any character to close this window."
 msgstr "GIMP çıktısı. Bu pencereyi kapatmak için herhangi bir karakter girin."
 
-#: app/main.c:855
+#: app/main.c:864
 #, c-format
 msgid "(Type any character to close this window)\n"
 msgstr "(Bu pencereyi kapatmak için herhangi bir karakter girin)\n"
 
-#: app/main.c:872
+#: app/main.c:881
 msgid "GIMP output. You can minimize this window, but don't close it."
 msgstr "GIMP çıktısı. Bu pencereyi küçültebilirsiniz, fakat kapatmayın."
 
@@ -2536,7 +2542,7 @@ msgstr "İşaretçi için bir açıklama girin"
 #: app/dialogs/file-open-dialog.c:288
 #: app/dialogs/file-open-location-dialog.c:217
 #: app/dialogs/file-open-location-dialog.c:233
-#: app/dialogs/welcome-dialog.c:1247 app/display/gimpdisplayshell-dnd.c:680
+#: app/dialogs/welcome-dialog.c:1246 app/display/gimpdisplayshell-dnd.c:680
 #: app/widgets/gimplayertreeview.c:820 app/widgets/gimptoolbox.c:828
 #: app/widgets/gimptoolbox-dnd.c:178
 #, c-format
@@ -6022,7 +6028,7 @@ msgstr "Çevirme"
 msgid "Rotating"
 msgstr "Döndürme"
 
-#: app/actions/image-commands.c:880 app/actions/layers-commands.c:1343
+#: app/actions/image-commands.c:880 app/actions/layers-commands.c:1344
 msgid "Cannot crop because the current selection is empty."
 msgstr "Kırpma yapılamaz çünkü geçerli seçim boş."
 
@@ -6071,7 +6077,7 @@ msgid "Scale Image"
 msgstr "Görüntüyü Ölçekle"
 
 #. Scaling
-#: app/actions/image-commands.c:1520 app/actions/layers-commands.c:2573
+#: app/actions/image-commands.c:1520 app/actions/layers-commands.c:2574
 #: app/dialogs/preferences-dialog.c:1747 app/pdb/image-transform-cmds.c:124
 #: app/pdb/item-transform-cmds.c:595 app/pdb/layer-cmds.c:453
 #: app/tools/gimpscaletool.c:122
@@ -6941,7 +6947,7 @@ msgctxt "layers-action"
 msgid "To _New Layer"
 msgstr "_Yeni Katmana"
 
-#: app/actions/layers-commands.c:286 app/actions/layers-commands.c:2415
+#: app/actions/layers-commands.c:286 app/actions/layers-commands.c:2416
 msgid "Layer Attributes"
 msgstr "Katman Öznitelikleri"
 
@@ -6961,7 +6967,7 @@ msgid "Create a New Layer"
 msgid_plural "Create %d New Layers"
 msgstr[0] "Yeni %d Katman Oluştur"
 
-#: app/actions/layers-commands.c:444 app/actions/layers-commands.c:2300
+#: app/actions/layers-commands.c:444 app/actions/layers-commands.c:2301
 msgid "New layer"
 msgid_plural "New layers"
 msgstr[0] "Yeni katman"
@@ -6999,45 +7005,45 @@ msgstr[0] "Katmanları En Alta İndir"
 msgid "Duplicate layers"
 msgstr "Katmanları çoğalt"
 
-#: app/actions/layers-commands.c:998
+#: app/actions/layers-commands.c:999
 #, c-format
 msgctxt "undo-type"
 msgid "Merge %d Layer Groups"
 msgstr "%d Katman Kümesini Birleştir"
 
-#: app/actions/layers-commands.c:1058
+#: app/actions/layers-commands.c:1059
 #, c-format
 msgctxt "undo-type"
 msgid "Remove %d Layers"
 msgstr "%d Katmanı Kaldır"
 
-#: app/actions/layers-commands.c:1085 app/text/gimptextlayer.c:584
+#: app/actions/layers-commands.c:1086 app/text/gimptextlayer.c:584
 msgid "Discard Text Information"
 msgstr "Metin Bilgisini Gözden Çıkar"
 
-#: app/actions/layers-commands.c:1104
+#: app/actions/layers-commands.c:1105
 msgid "Add Paths"
 msgstr "Yollar Ekle"
 
-#: app/actions/layers-commands.c:1228
+#: app/actions/layers-commands.c:1229
 msgid "Set Layer Boundary Size"
 msgstr "Katman Sınırı Boyutunu Ayarla"
 
-#: app/actions/layers-commands.c:1258
+#: app/actions/layers-commands.c:1259
 msgid "Layers to Image Size"
 msgstr "Katmanlardan Görüntü Boyutuna"
 
-#: app/actions/layers-commands.c:1309
+#: app/actions/layers-commands.c:1310
 msgid "Scale Layer"
 msgstr "Katmanı Ölçekle"
 
-#: app/actions/layers-commands.c:1348
+#: app/actions/layers-commands.c:1349
 #, c-format
 msgid "Crop Layer to Selection"
 msgid_plural "Crop %d Layers to Selection"
 msgstr[0] "%d Katmanı Seçime Kırp"
 
-#: app/actions/layers-commands.c:1413
+#: app/actions/layers-commands.c:1414
 msgid ""
 "Cannot crop because none of the selected layers have content or they are "
 "already cropped to their content."
@@ -7045,107 +7051,107 @@ msgstr ""
 "Seçilen katmanların hiçbirinin içeriği olmadığı veya zaten kendi "
 "içeriklerine kırpılmış oldukları için kırpma yapılamaz."
 
-#: app/actions/layers-commands.c:1419
+#: app/actions/layers-commands.c:1420
 #, c-format
 msgid "Crop Layer to Content"
 msgid_plural "Crop %d Layers to Content"
 msgstr[0] "%d Katmanı İçeriğe Kırp"
 
-#: app/actions/layers-commands.c:1556 app/actions/layers-commands.c:2508
+#: app/actions/layers-commands.c:1557 app/actions/layers-commands.c:2509
 msgid "Add Layer Masks"
 msgstr "Katman Maskeleri Ekle"
 
-#: app/actions/layers-commands.c:1608
+#: app/actions/layers-commands.c:1609
 msgid "Apply Layer Masks"
 msgstr "Katman Maskelerini Uygula"
 
-#: app/actions/layers-commands.c:1612
+#: app/actions/layers-commands.c:1613
 msgid "Delete Layer Masks"
 msgstr "Katman Maskelerini Sil"
 
-#: app/actions/layers-commands.c:1699
+#: app/actions/layers-commands.c:1700
 msgid "Show Layer Masks"
 msgstr "Katman Maskelerini Göster"
 
-#: app/actions/layers-commands.c:1746
+#: app/actions/layers-commands.c:1747
 msgid "Disable Layer Masks"
 msgstr "Katman Maskelerini Etkisizleştir"
 
-#: app/actions/layers-commands.c:1785
+#: app/actions/layers-commands.c:1786
 msgctxt "undo-type"
 msgid "Masks to Selection"
 msgstr "Maskelerden Seçime"
 
-#: app/actions/layers-commands.c:1789
+#: app/actions/layers-commands.c:1790
 msgctxt "undo-type"
 msgid "Add Masks to Selection"
 msgstr "Maskeleri Seçime Ekle"
 
-#: app/actions/layers-commands.c:1793
+#: app/actions/layers-commands.c:1794
 msgctxt "undo-type"
 msgid "Subtract Masks from Selection"
 msgstr "Maskeleri Seçimden Çıkart"
 
-#: app/actions/layers-commands.c:1797
+#: app/actions/layers-commands.c:1798
 msgctxt "undo-type"
 msgid "Intersect Masks with Selection"
 msgstr "Maskeleri Seçimle Kesiştir"
 
-#: app/actions/layers-commands.c:1818
+#: app/actions/layers-commands.c:1819
 msgid "Add Alpha Channel"
 msgstr "Alfa Kanalı Ekle"
 
-#: app/actions/layers-commands.c:1839
+#: app/actions/layers-commands.c:1840
 msgid "Remove Alpha Channel"
 msgstr "Alfa Kanalını Kaldır"
 
-#: app/actions/layers-commands.c:1867 app/core/gimpchannel-select.c:433
+#: app/actions/layers-commands.c:1868 app/core/gimpchannel-select.c:433
 #: app/core/gimplayer.c:435
 msgctxt "undo-type"
 msgid "Alpha to Selection"
 msgstr "Alfadan Seçime"
 
-#: app/actions/layers-commands.c:1871 app/core/gimpchannel-select.c:427
+#: app/actions/layers-commands.c:1872 app/core/gimpchannel-select.c:427
 msgctxt "undo-type"
 msgid "Add Alpha to Selection"
 msgstr "Seçime Alfa Ekle"
 
-#: app/actions/layers-commands.c:1875 app/core/gimpchannel-select.c:430
+#: app/actions/layers-commands.c:1876 app/core/gimpchannel-select.c:430
 msgctxt "undo-type"
 msgid "Subtract Alpha from Selection"
 msgstr "Alfayı Seçimden Çıkart"
 
-#: app/actions/layers-commands.c:1879 app/core/gimpchannel-select.c:436
+#: app/actions/layers-commands.c:1880 app/core/gimpchannel-select.c:436
 msgctxt "undo-type"
 msgid "Intersect Alpha with Selection"
 msgstr "Alfayla Seçimi Kesiştir"
 
-#: app/actions/layers-commands.c:1890
+#: app/actions/layers-commands.c:1891
 msgid "Empty Selection"
 msgstr "Boş Seçim"
 
-#: app/actions/layers-commands.c:1920 app/actions/layers-commands.c:1964
+#: app/actions/layers-commands.c:1921 app/actions/layers-commands.c:1965
 #: app/widgets/gimplayertreeview.c:1115
 msgid "Set layers opacity"
 msgstr "Katmanların matlığını ayarla"
 
-#: app/actions/layers-commands.c:2034
+#: app/actions/layers-commands.c:2035
 msgid "Set layers' blend space"
 msgstr "Katmanların harmanlanma alanını ayarla"
 
-#: app/actions/layers-commands.c:2087
+#: app/actions/layers-commands.c:2088
 msgid "Set layers' composite space"
 msgstr "Katmanların birleşik alanını ayarla"
 
-#: app/actions/layers-commands.c:2140
+#: app/actions/layers-commands.c:2141
 msgid "Set layers' composite mode"
 msgstr "Katmanların birleşik kipini ayarla"
 
-#: app/actions/layers-commands.c:2224
+#: app/actions/layers-commands.c:2225
 msgid "Lock alpha channels"
 msgstr "Alfa kanallarını kilitle"
 
-#: app/actions/layers-commands.c:2224
+#: app/actions/layers-commands.c:2225
 msgid "Unlock alpha channels"
 msgstr "Alfa kanallarının kilidini aç"
 
@@ -8375,7 +8381,7 @@ msgstr "Metin Dosyasını Aç (UTF-8)"
 
 #: app/actions/text-editor-commands.c:66 app/actions/text-tool-commands.c:125
 #: app/dialogs/file-open-location-dialog.c:81
-#: app/dialogs/path-import-dialog.c:94 app/dialogs/welcome-dialog.c:718
+#: app/dialogs/path-import-dialog.c:94 app/dialogs/welcome-dialog.c:717
 #: app/widgets/gimpiconpicker.c:490 app/widgets/gimpopendialog.c:87
 #: app/widgets/gimpsettingsbox.c:718
 msgid "_Open"
@@ -12715,7 +12721,7 @@ msgstr "\"%s\" silinemedi: %s"
 
 #. initialize the list of gimp dynamics
 #: app/core/gimp-data-factories.c:363 app/core/gimpcontext.c:706
-#: app/dialogs/preferences-dialog.c:3515 app/tools/gimppaintoptions-gui.c:327
+#: app/dialogs/preferences-dialog.c:3515 app/tools/gimppaintoptions-gui.c:329
 msgid "Dynamics"
 msgstr "Hareketler"
 
@@ -13138,19 +13144,19 @@ msgstr "Fırça Şekli"
 msgid "Brush Radius"
 msgstr "Fırça Yarıçapı"
 
-#: app/core/gimpbrushgenerated.c:150
+#: app/core/gimpbrushgenerated.c:152
 msgid "Brush Spikes"
 msgstr "Fırça Çivileri"
 
-#: app/core/gimpbrushgenerated.c:157 app/paint/gimppaintoptions.c:242
+#: app/core/gimpbrushgenerated.c:159 app/paint/gimppaintoptions.c:242
 msgid "Brush Hardness"
 msgstr "Fırça Sertliği"
 
-#: app/core/gimpbrushgenerated.c:165 app/paint/gimppaintoptions.c:221
+#: app/core/gimpbrushgenerated.c:167 app/paint/gimppaintoptions.c:221
 msgid "Brush Aspect Ratio"
 msgstr "Fırça En Boy Oranı"
 
-#: app/core/gimpbrushgenerated.c:172 app/paint/gimppaintoptions.c:228
+#: app/core/gimpbrushgenerated.c:174 app/paint/gimppaintoptions.c:228
 msgid "Brush Angle"
 msgstr "Fırça Açısı"
 
@@ -13392,7 +13398,7 @@ msgstr "Örüntü"
 
 #: app/core/gimpcontext.c:727 app/core/gimpcontext.c:728
 #: app/pdb/drawable-edit-cmds.c:255 app/tools/gimpgradientoptions.c:269
-#: app/tools/gimpgradienttool.c:166 app/tools/gimppaintoptions-gui.c:383
+#: app/tools/gimpgradienttool.c:166 app/tools/gimppaintoptions-gui.c:385
 msgid "Gradient"
 msgstr "Renk Geçişi"
 
@@ -13402,7 +13408,7 @@ msgid "Palette"
 msgstr "Palet"
 
 #: app/core/gimpcontext.c:741 app/core/gimpcontext.c:742
-#: app/tools/gimptextoptions.c:796
+#: app/tools/gimptextoptions.c:799
 msgid "Font"
 msgstr "Yazı tipi"
 
@@ -13432,7 +13438,7 @@ msgstr "kopyala"
 msgid "%s copy"
 msgstr "%s kopyası"
 
-#: app/core/gimpdatafactory.c:638 app/tools/gimptextoptions.c:777
+#: app/core/gimpdatafactory.c:638 app/tools/gimptextoptions.c:780
 #: app/widgets/gimpfontfactoryview.c:97
 msgid "Loading fonts (this may take a while...)"
 msgstr "Yazı tipleri yükleniyor (bu biraz zaman alabilir...)"
@@ -13629,7 +13635,7 @@ msgstr "Doldurma kenarlarını tüylemeyi etkinleştir"
 #: app/core/gimpfilloptions.c:142 app/paint/gimpmybrushoptions.c:87
 #: app/tools/gimpbucketfilloptions.c:203 app/tools/gimpcoloroptions.c:86
 #: app/tools/gimprectangleselectoptions.c:101
-#: app/tools/gimpselectionoptions.c:103 app/widgets/gimpbrusheditor.c:154
+#: app/tools/gimpselectionoptions.c:103 app/widgets/gimpbrusheditor.c:157
 msgid "Radius"
 msgstr "Yarıçap"
 
@@ -15322,10 +15328,10 @@ msgstr "GIMP’i size sunanlar"
 #: app/dialogs/about-dialog.c:805
 #, c-format
 msgid ""
-"This is an unstable development release\n"
+"This is a development build\n"
 "commit %s"
 msgstr ""
-"Bu, kararsız bir geliştirme sürümüdür\n"
+"Bu geliştirme inşasıdır\n"
 "%s işlemesi"
 
 #: app/dialogs/action-search-dialog.c:68
@@ -15847,7 +15853,7 @@ msgstr "Yalnızca etkin _kümeler içinde birleştir"
 msgid "_Discard invisible layers"
 msgstr "Görünmez katmanları _gözden çıkar"
 
-#: app/dialogs/image-new-dialog.c:100 app/dialogs/welcome-dialog.c:703
+#: app/dialogs/image-new-dialog.c:100 app/dialogs/welcome-dialog.c:702
 msgid "Create a New Image"
 msgstr "Yeni Görüntü Oluştur"
 
@@ -16928,7 +16934,7 @@ msgstr "_Tüm Klavye Kısayollarını Kaldır"
 
 #. Themes
 #: app/dialogs/preferences-dialog.c:1959 app/dialogs/preferences-dialog.c:1960
-#: app/dialogs/welcome-dialog.c:547
+#: app/dialogs/welcome-dialog.c:546
 msgid "Theme"
 msgstr "Tema"
 
@@ -16940,44 +16946,44 @@ msgstr "Tema Seç"
 msgid "Color scheme variant (if available)"
 msgstr "Renk şeması çeşidi (varsa)"
 
-#: app/dialogs/preferences-dialog.c:2051 app/dialogs/welcome-dialog.c:599
+#: app/dialogs/preferences-dialog.c:2051 app/dialogs/welcome-dialog.c:598
 msgid "_Override icon sizes set by the theme"
 msgstr "Temaca ayarlanan simge boyutlarının _üzerine yaz"
 
-#: app/dialogs/preferences-dialog.c:2064 app/dialogs/welcome-dialog.c:608
+#: app/dialogs/preferences-dialog.c:2064 app/dialogs/welcome-dialog.c:607
 msgid "Small"
 msgstr "Küçük"
 
-#: app/dialogs/preferences-dialog.c:2066 app/dialogs/welcome-dialog.c:610
+#: app/dialogs/preferences-dialog.c:2066 app/dialogs/welcome-dialog.c:609
 msgid "Medium"
 msgstr "Orta"
 
-#: app/dialogs/preferences-dialog.c:2068 app/dialogs/welcome-dialog.c:612
+#: app/dialogs/preferences-dialog.c:2068 app/dialogs/welcome-dialog.c:611
 msgid "Large"
 msgstr "Büyük"
 
-#: app/dialogs/preferences-dialog.c:2070 app/dialogs/welcome-dialog.c:614
+#: app/dialogs/preferences-dialog.c:2070 app/dialogs/welcome-dialog.c:613
 msgid "Huge"
 msgstr "Kocaman"
 
 #. Font sizes.
-#: app/dialogs/preferences-dialog.c:2083 app/dialogs/welcome-dialog.c:630
+#: app/dialogs/preferences-dialog.c:2083 app/dialogs/welcome-dialog.c:629
 msgid "Font Scaling"
 msgstr "Yazı Tipi Ölçekleme"
 
-#: app/dialogs/preferences-dialog.c:2085 app/dialogs/welcome-dialog.c:632
+#: app/dialogs/preferences-dialog.c:2085 app/dialogs/welcome-dialog.c:631
 msgid "Font scaling will not work with themes using absolute sizes."
 msgstr "Yazı tipi ölçekleme mutlak boyutları kullanan temalarla çalışmaz."
 
-#: app/dialogs/preferences-dialog.c:2091 app/dialogs/welcome-dialog.c:638
+#: app/dialogs/preferences-dialog.c:2091 app/dialogs/welcome-dialog.c:637
 msgid "50%"
 msgstr "%50"
 
-#: app/dialogs/preferences-dialog.c:2093 app/dialogs/welcome-dialog.c:640
+#: app/dialogs/preferences-dialog.c:2093 app/dialogs/welcome-dialog.c:639
 msgid "100%"
 msgstr "%100"
 
-#: app/dialogs/preferences-dialog.c:2095 app/dialogs/welcome-dialog.c:642
+#: app/dialogs/preferences-dialog.c:2095 app/dialogs/welcome-dialog.c:641
 msgid "200%"
 msgstr "%200"
 
@@ -16993,7 +16999,7 @@ msgstr "Simge Teması"
 msgid "Select an Icon Theme"
 msgstr "Simge Teması Seç"
 
-#: app/dialogs/preferences-dialog.c:2247 app/dialogs/welcome-dialog.c:592
+#: app/dialogs/preferences-dialog.c:2247 app/dialogs/welcome-dialog.c:591
 msgid "Use symbolic icons if available"
 msgstr "Oluyorsa, sembolik simgeleri kullan"
 
@@ -17024,7 +17030,7 @@ msgstr "Etkin _fırçayı, örüntüyü ve renk geçişini göster"
 msgid "Show active _image"
 msgstr "Etkin _görüntüyü göster"
 
-#: app/dialogs/preferences-dialog.c:2291 app/dialogs/welcome-dialog.c:678
+#: app/dialogs/preferences-dialog.c:2291 app/dialogs/welcome-dialog.c:677
 msgid "Use tool _groups"
 msgstr "Araç _kümelerini kullan"
 
@@ -18201,7 +18207,7 @@ msgid "_Next Tip"
 msgstr "_Sonraki İpucu"
 
 #. a link to the related section in the user manual
-#: app/dialogs/tips-dialog.c:196 app/dialogs/welcome-dialog.c:1093
+#: app/dialogs/tips-dialog.c:196 app/dialogs/welcome-dialog.c:1092
 msgid "Learn more"
 msgstr "Daha çok bilgi edin"
 
@@ -18311,7 +18317,7 @@ msgid "You installed GIMP %s!"
 msgstr "GIMP %s kurdunuz!"
 
 #. Welcome message: left
-#: app/dialogs/welcome-dialog.c:441
+#: app/dialogs/welcome-dialog.c:440
 msgid ""
 "GIMP is Free Software for image authoring and manipulation.\n"
 "Want to know more?"
@@ -18319,22 +18325,22 @@ msgstr ""
 "GIMP, görüntü üretme ve işleme için Özgür Yazılımdır.\n"
 "Daha çoğunu öğrenmek ister misiniz?"
 
-#: app/dialogs/welcome-dialog.c:470
+#: app/dialogs/welcome-dialog.c:469
 msgid "GIMP website"
 msgstr "GIMP web sitesi"
 
-#: app/dialogs/welcome-dialog.c:474
+#: app/dialogs/welcome-dialog.c:473
 msgid "Tutorials"
 msgstr "Dersler"
 
-#: app/dialogs/welcome-dialog.c:479
+#: app/dialogs/welcome-dialog.c:478
 msgid "Documentation"
 msgstr "Belgelendirme"
 
 #. XXX: should we add API docs for plug-in developers once it's
 #. * properly set up?
 #. Welcome message: right
-#: app/dialogs/welcome-dialog.c:487
+#: app/dialogs/welcome-dialog.c:486
 msgid ""
 "GIMP is Community Software under the GNU general public license v3.\n"
 "Want to contribute?"
@@ -18342,76 +18348,76 @@ msgstr ""
 "GIMP, GNU genel kamu lisansı v3 lisansıyla dağıtılan Topluluk Yazılımıdır.\n"
 "Katkıda bulunmak ister misiniz?"
 
-#: app/dialogs/welcome-dialog.c:512
+#: app/dialogs/welcome-dialog.c:511
 msgid "Contributing"
 msgstr "Katkı vermek"
 
-#: app/dialogs/welcome-dialog.c:517
+#: app/dialogs/welcome-dialog.c:516
 msgid "Donating"
 msgstr "Bağış Yap"
 
-#: app/dialogs/welcome-dialog.c:557
+#: app/dialogs/welcome-dialog.c:556
 msgid "Color scheme"
 msgstr "Renk şeması"
 
-#: app/dialogs/welcome-dialog.c:583
+#: app/dialogs/welcome-dialog.c:582
 msgid "Icon theme"
 msgstr "Simge teması"
 
-#: app/dialogs/welcome-dialog.c:596
+#: app/dialogs/welcome-dialog.c:595
 msgid "Icon Scaling"
 msgstr "Simge Ölçekleme"
 
-#: app/dialogs/welcome-dialog.c:655
+#: app/dialogs/welcome-dialog.c:654
 msgid "GUI Language (requires restart)"
 msgstr "Arayüz Dili (yeniden başlatma gerektirir)"
 
-#: app/dialogs/welcome-dialog.c:660
+#: app/dialogs/welcome-dialog.c:659
 msgid "Additional Customizations"
 msgstr "Ek Özelleştirmeler"
 
-#: app/dialogs/welcome-dialog.c:664
+#: app/dialogs/welcome-dialog.c:663
 msgid "Merge menu and title bar (requires restart)"
 msgstr "Menü ve başlık çubuğunu birleştir (yeniden başlatma gerektirir)"
 
-#: app/dialogs/welcome-dialog.c:672
+#: app/dialogs/welcome-dialog.c:671
 msgid "Enable check for updates (requires internet)"
 msgstr "Güncellemeleri denetleyi etkinleştir (internet gerekir)"
 
-#: app/dialogs/welcome-dialog.c:706
+#: app/dialogs/welcome-dialog.c:705
 msgid "C_reate"
 msgstr "Oluştu_r"
 
-#: app/dialogs/welcome-dialog.c:715
+#: app/dialogs/welcome-dialog.c:714
 msgid "Open an Existing Image"
 msgstr "Var Olan Görüntüyü Aç"
 
 #. Recent Files
-#: app/dialogs/welcome-dialog.c:727
+#: app/dialogs/welcome-dialog.c:726
 msgid "Recent Images"
 msgstr "Son Görüntüler"
 
-#: app/dialogs/welcome-dialog.c:819
+#: app/dialogs/welcome-dialog.c:818
 msgid "O_pen Selected Images"
 msgstr "Seçilen Görüntüleri _Aç"
 
-#: app/dialogs/welcome-dialog.c:828
+#: app/dialogs/welcome-dialog.c:827
 msgid ""
 "Show on Start (You can show the Welcome dialog again from the \"Help\" menu)"
 msgstr ""
 "Başlagıçta Göster (\"Yardım\" menüsünden Hoş Geldiniz iletişim kutusunu "
 "yeniden gösterebilirsiniz)"
 
-#: app/dialogs/welcome-dialog.c:856
+#: app/dialogs/welcome-dialog.c:855
 #, c-format
 msgid "Ways to contribute"
 msgstr "Katkı verme yolları"
 
-#: app/dialogs/welcome-dialog.c:865 app/dialogs/welcome-dialog.c:876
+#: app/dialogs/welcome-dialog.c:864 app/dialogs/welcome-dialog.c:875
 msgid "Report Bugs"
 msgstr "Hata Bildir"
 
-#: app/dialogs/welcome-dialog.c:867
+#: app/dialogs/welcome-dialog.c:866
 #, c-format
 msgid ""
 "As any application, GIMP is not bug-free, so reporting bugs that you "
@@ -18420,11 +18426,11 @@ msgstr ""
 "Her uygulama gibi GIMP de hatasız değildir, ve karşılaştığınız hataları "
 "bildirmeniz geliştirme için çok önemlidir."
 
-#: app/dialogs/welcome-dialog.c:880 app/dialogs/welcome-dialog.c:890
+#: app/dialogs/welcome-dialog.c:879 app/dialogs/welcome-dialog.c:889
 msgid "Write Code"
 msgstr "Kod Yazın"
 
-#: app/dialogs/welcome-dialog.c:882
+#: app/dialogs/welcome-dialog.c:881
 #, c-format
 msgid ""
 "Our Developer Website is where you want to start learning about being a code "
@@ -18433,39 +18439,39 @@ msgstr ""
 "Koda katkıda bulunmak isterseniz Geliştirici Web Sitemizden öğrenmeye "
 "başlayabilirsiniz."
 
-#: app/dialogs/welcome-dialog.c:894 app/dialogs/welcome-dialog.c:904
+#: app/dialogs/welcome-dialog.c:893 app/dialogs/welcome-dialog.c:903
 msgid "Translate"
 msgstr "Çevir"
 
-#: app/dialogs/welcome-dialog.c:896
+#: app/dialogs/welcome-dialog.c:895
 #, c-format
 msgid "Contact the respective translation team for your language"
 msgstr "Dilinizle ilgili çeviri ekibiyle iletişime geçin"
 
-#: app/dialogs/welcome-dialog.c:908
+#: app/dialogs/welcome-dialog.c:907
 msgid "Donate"
 msgstr "Bağış Yap"
 
-#: app/dialogs/welcome-dialog.c:910
+#: app/dialogs/welcome-dialog.c:909
 #, c-format
 msgid "Donating money is important: it makes GIMP sustainable."
 msgstr "Bağışlarınız önemlidir: GIMP’i sürdürülebilir kılar."
 
-#: app/dialogs/welcome-dialog.c:918
+#: app/dialogs/welcome-dialog.c:917
 msgid "Donate via Liberapay"
 msgstr "Liberapay ile bağış yap"
 
-#: app/dialogs/welcome-dialog.c:921
+#: app/dialogs/welcome-dialog.c:920
 msgid "Other donation options"
 msgstr "Diğer bağış seçenekleri"
 
 #. Translators: the %s string will be the version, e.g. "3.0".
-#: app/dialogs/welcome-dialog.c:955
+#: app/dialogs/welcome-dialog.c:954
 #, c-format
 msgid "GIMP %s Release Notes"
 msgstr "GIMP %s Sürüm Notları"
 
-#: app/dialogs/welcome-dialog.c:1066
+#: app/dialogs/welcome-dialog.c:1065
 #, c-format
 msgid "Click on release items with a %s bullet point to get a tour."
 msgstr "Tur almak için %s madde imli yayın ögelerine tıklayın."
@@ -20418,13 +20424,13 @@ msgid "The color"
 msgstr "Renk"
 
 #: app/operations/gimpoperationsettings.c:76 app/tools/gimpfiltertool.c:1416
-#: app/tools/gimpflipoptions.c:156 app/tools/gimptransformoptions.c:109
-#: app/tools/gimptransformoptions.c:262
+#: app/tools/gimpflipoptions.c:156 app/tools/gimptransformoptions.c:113
+#: app/tools/gimptransformoptions.c:307
 msgid "Clipping"
 msgstr "Kırpma"
 
 #: app/operations/gimpoperationsettings.c:77
-#: app/tools/gimptransformoptions.c:110
+#: app/tools/gimptransformoptions.c:114
 msgid "How to clip"
 msgstr "Nasıl kırpılır"
 
@@ -20609,7 +20615,7 @@ msgstr "Mürekkep Damlası Boyutu"
 #. angle frame
 #: app/paint/gimpinkoptions.c:81 app/paint/gimpinkoptions.c:120
 #: app/paint/gimppaintoptions.c:227 app/tools/gimptransform3dtool.c:321
-#: app/tools/gimptransform3dtool.c:422 app/widgets/gimpbrusheditor.c:194
+#: app/tools/gimptransform3dtool.c:422 app/widgets/gimpbrusheditor.c:197
 msgid "Angle"
 msgstr "Açı"
 
@@ -20624,7 +20630,7 @@ msgstr "Eğim"
 msgid "Shape"
 msgstr "Şekil"
 
-#: app/paint/gimpinkoptions.c:114 app/widgets/gimpbrusheditor.c:184
+#: app/paint/gimpinkoptions.c:114 app/widgets/gimpbrusheditor.c:187
 msgid "Aspect ratio"
 msgstr "En boy oranı"
 
@@ -20649,7 +20655,7 @@ msgid "Base Opacity"
 msgstr "Temel Matlık"
 
 #: app/paint/gimpmybrushoptions.c:101 app/paint/gimppaintoptions.c:241
-#: app/tools/gimpwarpoptions.c:99 app/widgets/gimpbrusheditor.c:174
+#: app/tools/gimpwarpoptions.c:99 app/widgets/gimpbrusheditor.c:177
 msgid "Hardness"
 msgstr "Sertlik"
 
@@ -20682,7 +20688,7 @@ msgid "Aspect Ratio"
 msgstr "En Boy Oranı"
 
 #: app/paint/gimppaintoptions.c:234 app/tools/gimpwarpoptions.c:113
-#: app/widgets/gimpbrusheditor.c:204 app/widgets/gimpbrushfactoryview.c:102
+#: app/widgets/gimpbrusheditor.c:207 app/widgets/gimpbrushfactoryview.c:102
 #: app/widgets/gimpgrideditor.c:175
 msgid "Spacing"
 msgstr "Boşluk"
@@ -20824,7 +20830,7 @@ msgid "Reverse direction of fading"
 msgstr "Solmanın yönünü tersine çevir"
 
 #: app/paint/gimppaintoptions.c:380 app/paint/gimppaintoptions.c:400
-#: app/tools/gimpgradientoptions.c:307 app/tools/gimppaintoptions-gui.c:363
+#: app/tools/gimpgradientoptions.c:307 app/tools/gimppaintoptions-gui.c:365
 msgid "Repeat"
 msgstr "Yinele"
 
@@ -20833,7 +20839,7 @@ msgid "How fade is repeated as you paint"
 msgstr "Boyandıkça solma nasıl yinelensin"
 
 #: app/paint/gimppaintoptions.c:393 app/tools/gimpgradientoptions.c:282
-#: app/tools/gimppaintoptions-gui.c:396
+#: app/tools/gimppaintoptions-gui.c:398
 msgid "Blend Color Space"
 msgstr "Harmanlama Renk Uzayı"
 
@@ -21312,8 +21318,8 @@ msgstr "Örnek saydamlık"
 msgid "Diagonal neighbors"
 msgstr "Köşegen komşular"
 
-#: app/pdb/gimppdbcontext.c:165 app/tools/gimptransformoptions.c:101
-#: app/tools/gimptransformoptions.c:253 app/tools/gimpwarpoptions.c:120
+#: app/pdb/gimppdbcontext.c:165 app/tools/gimptransformoptions.c:105
+#: app/tools/gimptransformoptions.c:298 app/tools/gimpwarpoptions.c:120
 #: app/tools/gimpwarpoptions.c:333
 msgid "Interpolation"
 msgstr "Aradeğerleme"
@@ -21553,22 +21559,22 @@ msgstr "'%s' kaynağı yeniden adlandırılamaz"
 #. TODO: write a more explicit error message after
 #. * string freeze.
 #.
-#: app/pdb/text-layer-cmds.c:85 app/pdb/text-layer-cmds.c:111
+#: app/pdb/text-layer-cmds.c:85 app/pdb/text-layer-cmds.c:112
 #, c-format
 msgid "Failed to create text layer"
 msgstr "Metin katmanı oluşturulamadı"
 
-#: app/pdb/text-layer-cmds.c:176 app/pdb/text-layer-cmds.c:314
-#: app/pdb/text-layer-cmds.c:379 app/pdb/text-layer-cmds.c:438
-#: app/pdb/text-layer-cmds.c:496 app/pdb/text-layer-cmds.c:554
-#: app/pdb/text-layer-cmds.c:612 app/pdb/text-layer-cmds.c:670
-#: app/pdb/text-layer-cmds.c:728 app/pdb/text-layer-cmds.c:784
-#: app/pdb/text-layer-cmds.c:842 app/pdb/text-layer-cmds.c:900
-#: app/pdb/text-layer-cmds.c:958 app/pdb/text-layer-cmds.c:993
+#: app/pdb/text-layer-cmds.c:177 app/pdb/text-layer-cmds.c:315
+#: app/pdb/text-layer-cmds.c:380 app/pdb/text-layer-cmds.c:439
+#: app/pdb/text-layer-cmds.c:497 app/pdb/text-layer-cmds.c:555
+#: app/pdb/text-layer-cmds.c:613 app/pdb/text-layer-cmds.c:671
+#: app/pdb/text-layer-cmds.c:729 app/pdb/text-layer-cmds.c:785
+#: app/pdb/text-layer-cmds.c:843 app/pdb/text-layer-cmds.c:901
+#: app/pdb/text-layer-cmds.c:959 app/pdb/text-layer-cmds.c:994
 msgid "Set text layer attribute"
 msgstr "Metin katmanı özniteliğini ayarla"
 
-#: app/pdb/text-layer-cmds.c:245
+#: app/pdb/text-layer-cmds.c:246
 msgid "Set text layer markup"
 msgstr "Metin katmanı işaretlemesini ayarla"
 
@@ -23067,11 +23073,13 @@ msgstr "_Tür:"
 msgid "Curve _type:"
 msgstr "Eğri _türü:"
 
-#: app/tools/gimpcurvestool.c:755 app/tools/gimplevelstool.c:745
+#: app/tools/gimpcurvestool.c:756 app/tools/gimpcurvestool.c:759
+#: app/tools/gimplevelstool.c:745
+#, c-format
 msgid "Could not read header: "
 msgstr "Başlık okunamadı: "
 
-#: app/tools/gimpcurvestool.c:832
+#: app/tools/gimpcurvestool.c:836
 msgid "Use _old curves file format"
 msgstr "_Eski eğrilerin dosya biçimini kullan"
 
@@ -23548,7 +23556,7 @@ msgstr "Etkin renk geçişini düzenle"
 msgid "Modify the active gradient in-place"
 msgstr "Etkin renk geçişini konumunda düzenle"
 
-#: app/tools/gimpgradientoptions.c:275 app/tools/gimppaintoptions-gui.c:389
+#: app/tools/gimpgradientoptions.c:275 app/tools/gimppaintoptions-gui.c:391
 msgid "Edit this gradient"
 msgstr "Bu renk geçişini düzenle"
 
@@ -23609,7 +23617,7 @@ msgid "Y:"
 msgstr "Y:"
 
 #. the color label
-#: app/tools/gimpgradienttool-editor.c:1345 app/tools/gimptextoptions.c:852
+#: app/tools/gimpgradienttool-editor.c:1345 app/tools/gimptextoptions.c:855
 msgid "Color:"
 msgstr "Renk:"
 
@@ -23793,7 +23801,7 @@ msgid "Sensitivity"
 msgstr "Duyarlık"
 
 #: app/tools/gimpinkoptions-gui.c:147 app/tools/gimpmybrushoptions-gui.c:98
-#: app/tools/gimppaintoptions-gui.c:530
+#: app/tools/gimppaintoptions-gui.c:532
 msgid "Fill Layer Mask With"
 msgstr "Katman Maskesini Şununla Doldur"
 
@@ -23944,7 +23952,7 @@ msgstr ""
 "Yeni yakınlaştırma düzeylerine uyum sağlaması için görüntü penceresini "
 "yeniden boyutlandır"
 
-#: app/tools/gimpmagnifyoptions.c:92 app/tools/gimptransformoptions.c:93
+#: app/tools/gimpmagnifyoptions.c:92 app/tools/gimptransformoptions.c:97
 #: app/widgets/gimpdynamicseditor.c:163
 #: app/widgets/gimpdynamicsoutputeditor.c:72
 msgid "Direction"
@@ -24046,32 +24054,32 @@ msgstr "Uzaklıkları ve Açıları Ölç"
 msgid "Distance:"
 msgstr "Uzaklık:"
 
-#: app/tools/gimpmoveoptions.c:137
+#: app/tools/gimpmoveoptions.c:173
 msgid "Move selection"
 msgstr "Seçimi taşı"
 
-#: app/tools/gimpmoveoptions.c:147 app/tools/gimpmoveoptions.c:210
+#: app/tools/gimpmoveoptions.c:183 app/tools/gimpmoveoptions.c:258
 #, c-format
 msgid "Tool Toggle  (%s)"
 msgstr "Araç Geçişi (%s)"
 
-#: app/tools/gimpmoveoptions.c:155
+#: app/tools/gimpmoveoptions.c:191
 msgid "Pick a layer or guide"
 msgstr "Bir katman ya da kılavuz seç"
 
-#: app/tools/gimpmoveoptions.c:156
+#: app/tools/gimpmoveoptions.c:192
 msgid "Move the selected layers"
 msgstr "Seçilmiş katmanları taşı"
 
-#: app/tools/gimpmoveoptions.c:160
+#: app/tools/gimpmoveoptions.c:196
 msgid "Pick a path"
 msgstr "Bir yol seç"
 
-#: app/tools/gimpmoveoptions.c:161
+#: app/tools/gimpmoveoptions.c:197
 msgid "Move the active path"
 msgstr "Etkin yolu taşı"
 
-#: app/tools/gimpmoveoptions.c:198
+#: app/tools/gimpmoveoptions.c:236
 msgid "Move:"
 msgstr "Taşı:"
 
@@ -24253,23 +24261,23 @@ msgstr "Fırça boşluğunu öntanımlı değerine sıfırla"
 msgid "Reset hardness to brush's native hardness"
 msgstr "Fırça sertliğini öntanımlı değerine sıfırla"
 
-#: app/tools/gimppaintoptions-gui.c:206
+#: app/tools/gimppaintoptions-gui.c:208
 msgid "Reset force to default"
 msgstr "Öntanımlı hale gelmesi için sıfırlamayı zorla"
 
-#: app/tools/gimppaintoptions-gui.c:331
+#: app/tools/gimppaintoptions-gui.c:333
 msgid "Edit this dynamics"
 msgstr "Bu hareketi düzenle"
 
-#: app/tools/gimppaintoptions-gui.c:334
+#: app/tools/gimppaintoptions-gui.c:336
 msgid "Fade Options"
 msgstr "Solma Seçenekleri"
 
-#: app/tools/gimppaintoptions-gui.c:374
+#: app/tools/gimppaintoptions-gui.c:376
 msgid "Color Options"
 msgstr "Renk Seçenekleri"
 
-#: app/tools/gimppaintoptions-gui.c:613
+#: app/tools/gimppaintoptions-gui.c:615
 msgid "Link to brush default"
 msgstr "Fırçayı öntanımlı olarak bağla"
 
@@ -24466,7 +24474,7 @@ msgstr "Geçerli"
 msgid "Fixed"
 msgstr "Sabit"
 
-#: app/tools/gimprectangleoptions.c:1006 app/tools/gimptextoptions.c:810
+#: app/tools/gimprectangleoptions.c:1006 app/tools/gimptextoptions.c:813
 msgid "Size:"
 msgstr "Boyut:"
 
@@ -24842,31 +24850,31 @@ msgstr "Çerçeve genişliği birimi"
 msgid "Outline miter limit"
 msgstr "Çerçeve gönye sınırı"
 
-#: app/tools/gimptextoptions.c:841
+#: app/tools/gimptextoptions.c:844
 msgid "Hinting:"
 msgstr "İpucu:"
 
-#: app/tools/gimptextoptions.c:845
+#: app/tools/gimptextoptions.c:848
 msgid "Text Color"
 msgstr "Metin Rengi"
 
-#: app/tools/gimptextoptions.c:858
+#: app/tools/gimptextoptions.c:861
 msgid "Style:"
 msgstr "Biçem:"
 
-#: app/tools/gimptextoptions.c:862
+#: app/tools/gimptextoptions.c:865
 msgid "Outline Options"
 msgstr "Çerçeve Seçenekleri"
 
-#: app/tools/gimptextoptions.c:883
+#: app/tools/gimptextoptions.c:886
 msgid "Justify:"
 msgstr "Hizala:"
 
-#: app/tools/gimptextoptions.c:913
+#: app/tools/gimptextoptions.c:916
 msgid "Box:"
 msgstr "Kutu:"
 
-#: app/tools/gimptextoptions.c:953
+#: app/tools/gimptextoptions.c:956
 msgid "Language:"
 msgstr "Dil:"
 
@@ -25235,15 +25243,15 @@ msgstr "Z"
 msgid "Rotation axis order"
 msgstr "Döndürme eksen düzeni"
 
-#: app/tools/gimptransformoptions.c:94
+#: app/tools/gimptransformoptions.c:98
 msgid "Direction of transformation"
 msgstr "Dönüşümün yönü"
 
-#: app/tools/gimptransformoptions.c:102 app/tools/gimpwarpoptions.c:121
+#: app/tools/gimptransformoptions.c:106 app/tools/gimpwarpoptions.c:121
 msgid "Interpolation method"
 msgstr "Aradeğerleme yöntemi"
 
-#: app/tools/gimptransformoptions.c:233
+#: app/tools/gimptransformoptions.c:268
 msgid "Transform:"
 msgstr "Dönüşüm:"
 
@@ -25875,11 +25883,11 @@ msgstr "Kısayol değiştirilemedi."
 msgid "Shape:"
 msgstr "Şekil:"
 
-#: app/widgets/gimpbrusheditor.c:164
+#: app/widgets/gimpbrusheditor.c:167
 msgid "Spikes"
 msgstr "Çiviler"
 
-#: app/widgets/gimpbrusheditor.c:209 app/widgets/gimpbrushfactoryview.c:106
+#: app/widgets/gimpbrusheditor.c:212 app/widgets/gimpbrushfactoryview.c:106
 msgid "Percentage of width of brush"
 msgstr "Fırça genişliğinin yüzdesi"
 
@@ -27101,26 +27109,26 @@ msgstr "Şerit %d"
 msgid "Select Pad Event Action"
 msgstr "Pad Olayı Eylemini Seç"
 
-#: app/widgets/gimpdevicestatus.c:161
+#: app/widgets/gimpdevicestatus.c:164
 msgid "Save device status"
 msgstr "Aygıt durumunu kaydet"
 
-#: app/widgets/gimpdevicestatus.c:629
+#: app/widgets/gimpdevicestatus.c:632
 #, c-format
 msgid "Foreground: %d, %d, %d (in color space of \"%s\")"
 msgstr "Ön plan: %d, %d, %d (\"%s\" renk uzayında)"
 
-#: app/widgets/gimpdevicestatus.c:633
+#: app/widgets/gimpdevicestatus.c:636
 #, c-format
 msgid "Foreground: %d, %d, %d (in sRGB)"
 msgstr "Ön plan: %d, %d, %d (sRGB içinde)"
 
-#: app/widgets/gimpdevicestatus.c:640
+#: app/widgets/gimpdevicestatus.c:643
 #, c-format
 msgid "Background: %d, %d, %d (in color space of \"%s\")"
 msgstr "Arka plan: %d, %d, %d (\"%s\" renk uzayında)"
 
-#: app/widgets/gimpdevicestatus.c:644
+#: app/widgets/gimpdevicestatus.c:647
 #, c-format
 msgid "Background: %d, %d, %d (in sRGB)"
 msgstr "Arka plan: %d, %d, %d (sRGB içinde)"

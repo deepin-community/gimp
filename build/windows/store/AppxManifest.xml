@@ -43,7 +43,7 @@
         <uap3:Extension Category="windows.fileTypeAssociation">
           <uap3:FileTypeAssociation Name="xcf">
             <uap:DisplayName>eXperimental Computing Facility file</uap:DisplayName>
-            <uap:Logo>Assets\fileicon.png</uap:Logo>
+            <uap:Logo>Assets\fileicon-xcf.png</uap:Logo>
             <uap:SupportedFileTypes>
               <uap:FileType>.xcf</uap:FileType>
             </uap:SupportedFileTypes>
@@ -54,6 +54,14 @@
             <uap:Logo>Assets\fileicon.png</uap:Logo>
             <uap:SupportedFileTypes>
               @FILE_TYPES@
+            </uap:SupportedFileTypes>
+          </uap:FileTypeAssociation>
+        </uap:Extension>
+        <!--make association for .ico files but do not set uap:Logo since their content is the uap:Logo-->
+        <uap:Extension Category="windows.fileTypeAssociation">
+          <uap:FileTypeAssociation Name="ico">
+            <uap:SupportedFileTypes>
+              <uap:FileType>.ico</uap:FileType>
             </uap:SupportedFileTypes>
           </uap:FileTypeAssociation>
         </uap:Extension>

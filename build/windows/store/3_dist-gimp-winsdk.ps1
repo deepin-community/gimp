@@ -40,7 +40,7 @@ else
 # Windows SDK
 $win_sdk_version = Get-ItemProperty Registry::'HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Microsoft SDKs\Windows\v10.0' | Select-Object -ExpandProperty ProductVersion
 $win_sdk_path = Get-ItemProperty Registry::'HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Microsoft SDKs\Windows\v10.0' | Select-Object -ExpandProperty InstallationFolder
-$env:Path = "${win_sdk_path}bin\${win_sdk_version}.0\$cpu_arch;${win_sdk_path}App Certification Kit;" + $env:Path
+$env:PATH = "${win_sdk_path}bin\${win_sdk_version}.0\$cpu_arch;${win_sdk_path}App Certification Kit;" + $env:PATH
 # msstore-cli (ONLY FOR RELEASES)
 if ("$CI_COMMIT_TAG" -eq (git describe --all | Foreach-Object {$_ -replace 'tags/',''}))
   {
@@ -57,7 +57,7 @@ if ("$CI_COMMIT_TAG" -eq (git describe --all | Foreach-Object {$_ -replace 'tags
         Write-Output "(INFO): downloading .NET v$dotnet_tag"
         Invoke-WebRequest https://aka.ms/dotnet/$dotnet_major/dotnet-runtime-win-$cpu_arch.zip -OutFile ${PARENT_DIR}dotnet-runtime.zip
         Expand-Archive ${PARENT_DIR}dotnet-runtime.zip ${PARENT_DIR}dotnet-runtime -Force
-        $env:Path = "$(Resolve-Path $PWD\${PARENT_DIR}dotnet-runtime);" + $env:Path
+        $env:PATH = "$(Resolve-Path $PWD\${PARENT_DIR}dotnet-runtime);" + $env:PATH
         $env:DOTNET_ROOT = "$(Resolve-Path $PWD\${PARENT_DIR}dotnet-runtime)"
       }
 
@@ -66,7 +66,7 @@ if ("$CI_COMMIT_TAG" -eq (git describe --all | Foreach-Object {$_ -replace 'tags
         Write-Output "(INFO): downloading MSStoreCLI $msstore_tag"
         Invoke-WebRequest https://github.com/microsoft/msstore-cli/releases/download/$msstore_tag/MSStoreCLI-win-$cpu_arch.zip -OutFile ${PARENT_DIR}MSStoreCLI.zip
         Expand-Archive ${PARENT_DIR}MSStoreCLI.zip ${PARENT_DIR}MSStoreCLI -Force
-        $env:Path = "$(Resolve-Path $PWD\${PARENT_DIR}MSStoreCLI);" + $env:Path
+        $env:PATH = "$(Resolve-Path $PWD\${PARENT_DIR}MSStoreCLI);" + $env:PATH
       }
     $msstore_text = " | Installed MSStoreCLI: $(msstore --version)"
   }
@@ -92,7 +92,7 @@ ForEach ($line in $(Select-String 'define' $config_path -AllMatches))
   }
 
 ## Get Identity Name (the dir shown in Explorer)
-if (-not $GIMP_RELEASE -and $GIMP_UNSTABLE -or $GIMP_IS_RC_GIT)
+if (-not $GIMP_RELEASE -or $GIMP_IS_RC_GIT)
   {
     $IDENTITY_NAME="GIMP.GIMPInsider"
   }
@@ -211,11 +211,11 @@ foreach ($bundle in $supported_archs)
         (Get-Content $msix_arch\AppxManifest.xml) | Foreach-Object {$_ -replace "@IDENTITY_NAME@","$IDENTITY_NAME"} |
         Set-Content $msix_arch\AppxManifest.xml
         ### Set Display Name (the name shown in MS Store)
-        if (-not $GIMP_RELEASE -and $GIMP_UNSTABLE -or $GIMP_IS_RC_GIT)
+        if (-not $GIMP_RELEASE -or $GIMP_IS_RC_GIT)
           {
             $display_name='GIMP (Insider)'
           }
-        elseif ($GIMP_RELEASE -and $GIMP_UNSTABLE -or $GIMP_RC_VERSION)
+        elseif (($GIMP_RELEASE -and $GIMP_UNSTABLE) -or $GIMP_RC_VERSION)
           {
             $display_name='GIMP (Preview)'
           }
@@ -287,22 +287,18 @@ foreach ($bundle in $supported_archs)
         ## Remove uneeded files (to match the Inno Windows Installer artifact)
         Get-ChildItem "$vfs" -Recurse -Include (".gitignore", "gimp.cmd") | Remove-Item -Recurse
 
-        ## Remove uncompliant files (to avoid WACK/'signtool' issues)
-        Get-ChildItem "$vfs" -Recurse -Include ("*.debug", "*.tar") | Remove-Item -Recurse
-
 
         # 5.A. MAKE .MSIX AND CORRESPONDING .APPXSYM
 
         ## Make .appxsym for each msix_arch (ONLY FOR RELEASES)
         $APPXSYM = "${IDENTITY_NAME}_${CUSTOM_GIMP_VERSION}_$msix_arch.appxsym"
-        #if ($GIMP_RELEASE -and -not $GIMP_IS_RC_GIT)
-        #  {
-        #    Write-Output "(INFO): putting .pdb symbols into $APPXSYM"
-        #    Get-ChildItem $msix_arch -Filter *.pdb -Recurse |
-        #    Compress-Archive -DestinationPath "${IDENTITY_NAME}_${CUSTOM_GIMP_VERSION}_$msix_arch.zip"
-        #    Get-ChildItem *.zip | Rename-Item -NewName $APPXSYM
-        #    Get-ChildItem $msix_arch -Include *.pdb -Recurse -Force | Remove-Item -Recurse -Force
-        #  }
+        if ($CI_COMMIT_TAG -match 'GIMP_[0-9]*_[0-9]*_[0-9]*' -or $GIMP_CI_MS_STORE -like 'MSIXUPLOAD*')
+          {
+            Write-Output "(INFO): making $APPXSYM"
+            Get-ChildItem $msix_arch -Filter *.pdb -Recurse | Compress-Archive -DestinationPath "$APPXSYM.zip"
+            Get-ChildItem *.zip | Rename-Item -NewName $APPXSYM
+            Get-ChildItem $msix_arch -Include *.pdb -Recurse -Force | Remove-Item -Recurse -Force
+          }
 
         ## Make .msix from each msix_arch
         $MSIX_ARTIFACT = $APPXSYM -replace '.appxsym','.msix'
@@ -338,10 +334,10 @@ if (((Test-Path $a64_bundle) -and (Test-Path $x64_bundle)) -and (Get-ChildItem *
     if ($GIMP_RELEASE -and -not $GIMP_IS_RC_GIT)
       {
         Write-Output "(INFO): creating $MSIXUPLOAD for submission"
-        Get-ChildItem *.msixbundle | ForEach-Object { Compress-Archive -Path "$($_.Basename).msixbundle" -DestinationPath "$($_.Basename).zip" }
+        Compress-Archive -Path "*.appxsym","*.msixbundle" -DestinationPath "$MSIXUPLOAD.zip"
         Get-ChildItem ${IDENTITY_NAME}*.zip | Rename-Item -NewName $MSIXUPLOAD
-        #Get-ChildItem *.appxsym | Remove-Item -Recurse -Force
-        Get-ChildItem *.msixbundle | Remove-Item -Recurse -Force
+        Remove-Item *.appxsym -Force
+        Remove-Item *.msixbundle -Force
       }
     Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):msix_making$([char]13)$([char]27)[0K"
   }

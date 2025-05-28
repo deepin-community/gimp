@@ -76,6 +76,9 @@ typedef struct
   gboolean        visible;
 } GimpAboutDialog;
 
+static void        about_dialog_response      (GtkDialog       *dialog,
+                                               gint             response_id,
+                                               gpointer         user_data);
 #ifdef G_OS_WIN32
 static void        about_dialog_realize       (GtkWidget       *widget,
                                                GimpAboutDialog *dialog);
@@ -95,10 +98,10 @@ static gboolean    about_dialog_anim_draw     (GtkWidget       *widget,
 static void        about_dialog_reshuffle     (GimpAboutDialog *dialog);
 static gboolean    about_dialog_timer         (gpointer         data);
 
-#ifdef GIMP_UNSTABLE
+#ifndef GIMP_RELEASE
 static void        about_dialog_add_unstable_message
                                               (GtkWidget       *vbox);
-#endif /* GIMP_UNSTABLE */
+#endif /* ! GIMP_RELEASE */
 
 static void        about_dialog_last_release_changed
                                               (GimpCoreConfig   *config,
@@ -180,7 +183,7 @@ about_dialog_create (Gimp           *gimp,
       g_set_weak_pointer (&dialog.dialog, widget);
 
       g_signal_connect (widget, "response",
-                        G_CALLBACK (gtk_widget_destroy),
+                        G_CALLBACK (about_dialog_response),
                         NULL);
 #ifdef G_OS_WIN32
       g_signal_connect (widget, "realize",
@@ -202,9 +205,9 @@ about_dialog_create (Gimp           *gimp,
         {
           if (dialog.use_animation)
             about_dialog_add_animation (children->data, &dialog);
-#ifdef GIMP_UNSTABLE
+#ifndef GIMP_RELEASE
           about_dialog_add_unstable_message (children->data);
-#endif /* GIMP_UNSTABLE */
+#endif /* ! GIMP_RELEASE */
 #ifdef CHECK_UPDATE
           if (gimp_version_check_update ())
             about_dialog_add_update (&dialog, config);
@@ -230,6 +233,17 @@ about_dialog_create (Gimp           *gimp,
                                "gimp-about-dialog");
 
   return dialog.dialog;
+}
+
+static void
+about_dialog_response (GtkDialog *dialog,
+                       gint       response_id,
+                       gpointer   user_data)
+{
+  if (response_id == GTK_RESPONSE_HELP)
+    gimp_standard_help_func (GIMP_HELP_ABOUT_DIALOG, NULL);
+  else
+    gtk_widget_destroy (GTK_WIDGET (dialog));
 }
 
 #ifdef G_OS_WIN32
@@ -794,7 +808,7 @@ about_dialog_timer (gpointer data)
   return G_SOURCE_CONTINUE;
 }
 
-#ifdef GIMP_UNSTABLE
+#ifndef GIMP_RELEASE
 
 static void
 about_dialog_add_unstable_message (GtkWidget *vbox)
@@ -802,7 +816,7 @@ about_dialog_add_unstable_message (GtkWidget *vbox)
   GtkWidget *label;
   gchar     *text;
 
-  text = g_strdup_printf (_("This is an unstable development release\n"
+  text = g_strdup_printf (_("This is a development build\n"
                             "commit %s"), GIMP_GIT_VERSION_ABBREV);
   label = gtk_label_new (text);
   g_free (text);
@@ -817,7 +831,7 @@ about_dialog_add_unstable_message (GtkWidget *vbox)
   gtk_widget_show (label);
 }
 
-#endif /* GIMP_UNSTABLE */
+#endif /* ! GIMP_RELEASE */
 
 static void
 about_dialog_last_release_changed (GimpCoreConfig   *config,

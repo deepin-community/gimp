@@ -271,6 +271,9 @@ layers_edit_attributes_cmd_callback (GimpAction *action,
 
   layer = layers->data;
 
+  if (gimp_layer_is_floating_sel (layer))
+    return;
+
 #define EDIT_DIALOG_KEY "gimp-layer-edit-attributes-dialog"
 
   dialog = dialogs_get_dialog (G_OBJECT (layer), EDIT_DIALOG_KEY);
@@ -832,6 +835,7 @@ layers_duplicate_cmd_callback (GimpAction *action,
                             gimp_layer_get_parent (iter->data),
                             gimp_item_get_index (iter->data),
                             TRUE);
+      gimp_drawable_enable_resize_undo (GIMP_DRAWABLE (new_layer));
       new_layers = g_list_prepend (new_layers, new_layer);
 
       /* Import any attached layer effects */

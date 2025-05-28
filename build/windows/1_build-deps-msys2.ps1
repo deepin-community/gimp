@@ -36,14 +36,13 @@ if (-not $MSYSTEM_PREFIX)
   {
     $MSYSTEM_PREFIX = if ((Get-WmiObject Win32_ComputerSystem).SystemType -like 'ARM64*') { 'clangarm64' } else { 'clang64' }
   }
-$env:Path = "$MSYS_ROOT/$MSYSTEM_PREFIX/bin;$MSYS_ROOT/usr/bin;" + $env:Path
 
 Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):deps_install[collapsed=true]$([char]13)$([char]27)[0KInstalling dependencies provided by MSYS2"
 if ("$PSCommandPath" -like "*1_build-deps-msys2.ps1*" -or "$CI_JOB_NAME" -like "*deps*")
   {
-    pacman --noconfirm -Suy
+    & $MSYS_ROOT\usr\bin\pacman --noconfirm -Suy
   }
-pacman --noconfirm -S --needed (Get-Content build/windows/all-deps-uni.txt).Replace('${MINGW_PACKAGE_PREFIX}',$(if ($MINGW_PACKAGE_PREFIX) { "$MINGW_PACKAGE_PREFIX" } elseif ($MSYSTEM_PREFIX -eq 'clangarm64') { 'mingw-w64-clang-aarch64' } else { 'mingw-w64-clang-x86_64' })).Replace(' \','')
+& $MSYS_ROOT\usr\bin\pacman --noconfirm -S --needed $(if ($MSYSTEM_PREFIX -ne 'mingw32') { "$(if ($MSYSTEM_PREFIX -eq 'clangarm64') { 'mingw-w64-clang-aarch64' } else { 'mingw-w64-clang-x86_64' })-perl" }) (Get-Content build/windows/all-deps-uni.txt).Replace('${MINGW_PACKAGE_PREFIX}',$(if ($MINGW_PACKAGE_PREFIX) { "$MINGW_PACKAGE_PREFIX" } elseif ($MSYSTEM_PREFIX -eq 'clangarm64') { 'mingw-w64-clang-aarch64' } else { 'mingw-w64-clang-x86_64' })).Replace(' \','')
 Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):deps_install$([char]13)$([char]27)[0K"
 
 
@@ -60,7 +59,7 @@ Invoke-Expression ((Get-Content $GIMP_DIR\.gitlab-ci.yml | Select-String 'win_en
 
 
 # Build babl and GEGL
-function self_build ([string]$dep, [string]$option1, [string]$option2)
+function self_build ([string]$dep, [string]$unstable_branch, [string]$stable_patch, [string]$option1, [string]$option2)
   {
     Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):${dep}_build[collapsed=true]$([char]13)$([char]27)[0KBuilding $dep"
 
@@ -68,7 +67,6 @@ function self_build ([string]$dep, [string]$option1, [string]$option2)
     if (-not (Test-Path $dep))
       {
         $repo="https://gitlab.gnome.org/GNOME/$dep.git"
-
         # For tagged jobs (i.e. release or test jobs for upcoming releases), use the
         # last tag. Otherwise use the default branch's HEAD.
         if ($CI_COMMIT_TAG)
@@ -78,8 +76,19 @@ function self_build ([string]$dep, [string]$option1, [string]$option2)
             $git_options="--branch=$tag"
             Write-Output "Using tagged release of ${dep}: $tag"
           }
-
+        elseif ($unstable_branch)
+          {
+            $git_options="--branch=$unstable_branch"
+          }
         git clone $git_options --depth $GIT_DEPTH $repo
+
+        # This allows to add some minor patch on a dependency without having a proper new release.
+        if ($CI_COMMIT_TAG -and $stable_patch)
+          {
+            Set-Location $dep
+            git apply $GIMP_DIR\$stable_patch
+            Set-Location ..
+          }
       }
     Set-Location $dep
     git pull
@@ -87,7 +96,7 @@ function self_build ([string]$dep, [string]$option1, [string]$option2)
     ## Configure and/or build
     if (-not (Test-Path _build-$MSYSTEM_PREFIX\build.ninja -Type Leaf))
       {
-        meson setup _build-$MSYSTEM_PREFIX -Dprefix="$GIMP_PREFIX" $option1 $option2
+        meson setup _build-$MSYSTEM_PREFIX -Dprefix="$GIMP_PREFIX" $PKGCONF_RELOCATABLE_OPTION $option1 $option2
       }
     Set-Location _build-$MSYSTEM_PREFIX
     ninja
@@ -102,6 +111,6 @@ function self_build ([string]$dep, [string]$option1, [string]$option2)
   }
 
 self_build babl
-self_build gegl
+self_build gegl master build/windows/patches/0001-meson-only-generate-CodeView-.pdb-symbols-on-Windows.patch
 
 Set-Location $GIMP_DIR

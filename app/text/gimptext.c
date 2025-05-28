@@ -587,6 +587,9 @@ gimp_text_set_property (GObject      *object,
 
         if (font != text->font && font != NULL)
           g_set_object (&text->font, font);
+        /* this is defensive to avoid some crashes */
+        else if (font == NULL) 
+          g_set_object (&text->font, GIMP_FONT (gimp_font_get_standard ()));
       }
       break;
     case PROP_FONT_SIZE:
@@ -844,6 +847,12 @@ gimp_text_serialize_property (GimpConfig       *config,
                     font = GIMP_FONT (gimp_container_search (container,
                                                              (GimpContainerSearchFunc) gimp_font_match_by_lookup_name,
                                                              (gpointer) altered_font_name));
+                  /* in case pango returns a non existant font name */
+                  if (font == NULL) 
+                    {
+                      font = GIMP_FONT (gimp_font_get_standard ());
+                      font_name = "gimpfont";
+                    }
 
                   gimp_config_writer_open   (writer, "markupfont");
                   /*lookupname format is "gimpfont%d" we keep only the "font%d",

@@ -19,15 +19,8 @@
 #ifndef TYPES_H
 #define TYPES_H
 
-/* Booleans.  */
-typedef enum { false = 0, true = 1 } boolean;
-
-/* The X11 library defines `FALSE' and `TRUE', and so we only want to
-   define them if necessary.  */
-#ifndef FALSE
-#define FALSE false
-#define TRUE true
-#endif /* FALSE */
+/* Cope with C23 */
+typedef int boolean;
 
 /* The usual null-terminated string.  */
 typedef char *string;

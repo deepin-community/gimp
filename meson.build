@@ -1,6 +1,6 @@
 project('gimp',
   'c', 'cpp',
-  version: '3.0.2',
+  version: '3.0.4',
   meson_version: '>=0.61.0',
   default_options: [
     'cpp_std=gnu++14',
@@ -65,7 +65,7 @@ gimp_api_name = 'gimp-' + gimp_api_version
 
 
 # Libtool versioning
-gimp_interface_age = 2
+gimp_interface_age = 4
 
 gimp_binary_age = 100 * gimp_app_version_minor + gimp_app_version_micro
 lt_current      = 100 * gimp_app_version_minor + gimp_app_version_micro - gimp_interface_age
@@ -78,6 +78,9 @@ so_version = '@0@.@1@.@2@'.format(lt_current - lt_age, lt_age, lt_revision)
 
 
 gimp_command  = 'gimp-' + gimp_app_version
+
+# A specific desktop name to fix window icon under Wayland
+gimp_desktop_name = 'gimp'
 
 gettext_package= 'gimp@0@@1@'.format(api_version_major, api_version_minor)
 conf.set_quoted('GETTEXT_PACKAGE', gettext_package)
@@ -102,6 +105,13 @@ if gimp_rc_version != false
 endif
 # GIMP_IS_GIT can only be set during development of a RC.
 conf.set('GIMP_IS_RC_GIT', gimp_rc_git ? 1 : false)
+
+# Mutex version
+if gimp_unstable != false
+  conf.set_quoted('GIMP_MUTEX_VERSION', gimp_app_version)
+else
+  conf.set_quoted('GIMP_MUTEX_VERSION', gimp_app_version_major.to_string())
+endif
 
 versionconfig = configuration_data()
 versionconfig.set('GIMP_FULL_NAME',     full_name)
@@ -326,12 +336,12 @@ if platform_windows and cc.get_id() == 'clang'
   compiler_args += '-fansi-escape-codes'
 endif
 
-# Generate .pdb (CodeView) debug symbols (makes possible to debug with DIA SDK)
-#pdb_support = cc.has_argument('-gcodeview') and cc.has_link_argument('-Wl,--pdb=')
-#if platform_windows and pdb_support
-#  compiler_args += '-gcodeview'
-#  linker_args += '-Wl,--pdb='
-#endif
+# Generate native .pdb (CodeView) debug symbols (for DIA or DbgHelp debuggers and LLDB)
+pdb_support = cc.has_argument('-gcodeview') and cc.has_link_argument('-Wl,--pdb=')
+if platform_windows and pdb_support and cc.get_id() == 'clang'
+  compiler_args += '-gcodeview'
+  linker_args += '-Wl,--pdb='
+endif
 
 
 conf.set('HAVE__NL_MEASUREMENT_MEASUREMENT',
@@ -389,7 +399,7 @@ winsock           = platform_windows ? cc.find_library('ws2_32') : no_dep
 mscms             = platform_windows ? cc.find_library('mscms') : no_dep
 atk_minver        = '2.4.0'
 atk               = dependency('atk',                version: '>='+atk_minver)
-babl_minver       = '0.1.112'
+babl_minver       = '0.1.114'
 babl              = dependency('babl-0.1',           version: '>='+babl_minver, required: false)
 if not babl.found()
   # babl changed its pkg-config name from 'babl' to 'babl-0.1' in version
@@ -411,7 +421,7 @@ freetype2_minver  = '2.1.7'
 freetype2         = dependency('freetype2',          version: '>='+freetype2_minver)
 gdk_pixbuf_minver = '2.30.8'
 gdk_pixbuf        = dependency('gdk-pixbuf-2.0',     version: '>='+gdk_pixbuf_minver)
-gegl_minver       = '0.4.58'
+gegl_minver       = '0.4.62'
 gegl              = dependency('gegl-0.4',           version: '>='+gegl_minver)
 exiv2_minver      = '0.27.4'
 exiv2             = dependency('exiv2',              version: '>='+exiv2_minver)
@@ -1419,7 +1429,7 @@ module_dependencies = find_program('tools'/'module-dependencies.py')
 meson_install_subdir= find_program('tools'/'meson_install_subdir.py')
 
 gimp_mkenums = find_program('tools' / 'gimp-mkenums')
-mkenums_wrap = find_program(meson.current_source_dir() / 'tools' / 'meson-mkenums.sh')
+mkenums_wrap = find_program(meson.current_source_dir() / 'tools' / 'meson-mkenums.py')
 
 libgimp_mkenums_dtails = \
     '    { 0, NULL, NULL }\n'                                                      + \
@@ -1641,6 +1651,7 @@ conf.set_quoted('GIMP_PACKAGE',   meson.project_name())
 conf.set_quoted('PACKAGE_NAME',   meson.project_name())
 conf.set_quoted('PACKAGE_STRING', package_string)
 conf.set_quoted('GIMP_COMMAND',   gimp_command)
+conf.set_quoted('GIMP_DESKTOP_NAME', gimp_desktop_name)
 
 # Versions
 conf.set_quoted('GIMP_APP_VERSION_STRING',gimp_app_version)
@@ -1816,7 +1827,7 @@ if is_git_repository
   endif
 
   if git.found()
-    git_submodule_check = run_command(meson.project_source_root() / 'build/meson/check-gimp-data.sh',
+    git_submodule_check = run_command(meson.project_source_root() / 'build/meson/check-gimp-data.py',
                                       check: false)
     if git_submodule_check.returncode() != 0
       submodule_warning = 'gimp-data submodule seems outdated. Possibly run from the source repository: git submodule update'
@@ -1860,7 +1871,7 @@ custom_target('AUTHORS',
   ],
   build_by_default: false,
 )
-date = run_command('date', '-u', '+%Y-%m-%dT%H:%M:%SZ', check: true)
+date = run_command(python, '-c', 'import datetime; print(datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ"))', check: true)
 custom_target('authors.md',
   input : [ 'authors4gimp-web.xsl', 'authors.xml', ],
   output: 'authors.md',
@@ -1898,7 +1909,7 @@ custom_target('Changelog',
   build_by_default: false,
 )
 
-meson.add_dist_script('meson_dist_script.sh',
+meson.add_dist_script('meson_dist_script.py',
                       generate_version_h ?  gitversion_h.full_path() : gitversion_h,
                       meson.project_source_root(), meson.project_build_root())
 
@@ -2046,7 +2057,7 @@ else
   gimp_exe_depends = []
 endif
 
-gimp_exe = find_program('tools'/'in-build-gimp.sh')
+gimp_exe = find_program('tools'/'in-build-gimp.py')
 
 ################################################################################
 # Subdirs: part 2
@@ -2133,14 +2144,14 @@ pkgconfig.generate(libgimpui,
 # Install native debug data (.pdb) on Windows
 # Ideally meson should take care of it automatically.
 # See: https://github.com/mesonbuild/meson/issues/12977
-#if platform_windows and pdb_support
-#  install_win_debug_script = find_program('./meson_install_win_debug.sh')
-#  meson.add_install_script(install_win_debug_script)
-#endif
+if platform_windows and pdb_support and cc.get_id() == 'clang'
+  install_win_debug_script = find_program('build/windows/2_bundle-gimp-uni_sym.py')
+  meson.add_install_script(install_win_debug_script)
+endif
 
 # On Windows, install deps in a bundle before distributing
 if get_option('windows-installer') or get_option('ms-store')
-  install_win_bundling_script = find_program('build/windows/2_bundle-gimp-uni_base.sh')
+  install_win_bundling_script = find_program('build/windows/2_bundle-gimp-uni_base.py')
   meson.add_install_script(install_win_bundling_script)
 endif
 
@@ -2175,16 +2186,16 @@ final_message = [
 '''  gimp-console:        @0@'''.format(enable_console_bin),
 '',
 '''Optional Features:''',
-'''  Check updates at startup:  @0@'''.format(check_update),
-'''  Language selection:        @0@'''.format(isocodes.found()),
-'''  Vector icons:              @0@'''.format(have_vector_icons),
-'''  Dr. Mingw (Win32):         @0@'''.format(drmingw.found()),
-'''  Relocatable Bundle:        @0@'''.format(relocatable_bundle),
-'''  Default ICC directory:     @0@'''.format(icc_directory),
-'''  32-bit DLL folder (Win32): @0@'''.format(get_option('win32-32bits-dll-folder')),
-'''  Dashboard backtraces:      @0@'''.format(dashboard_backtrace),
-'''  Binary symlinks:           @0@'''.format(enable_default_bin),
-'''  OpenMP:                    @0@'''.format(have_openmp),
+'''  Check updates at startup:      @0@'''.format(check_update),
+'''  Language selection:            @0@'''.format(isocodes.found()),
+'''  Vector icons:                  @0@'''.format(have_vector_icons),
+'''  Dr. Mingw (Win32):             @0@'''.format(drmingw.found()),
+'''  Relocatable Bundle:            @0@'''.format(relocatable_bundle),
+'''  Default ICC directory (Linux): @0@'''.format(icc_directory),
+'''  32-bit DLL folder (Win32):     @0@'''.format(get_option('win32-32bits-dll-folder')),
+'''  Dashboard backtraces:          @0@'''.format(dashboard_backtrace),
+'''  Binary symlinks:               @0@'''.format(enable_default_bin),
+'''  OpenMP:                        @0@'''.format(have_openmp),
 '',
 '''Optional Plug-Ins:''',
 '''  Ascii Art:           @0@'''.format(libaa.found()),

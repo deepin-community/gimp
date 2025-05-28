@@ -55,7 +55,7 @@ typedef struct
 struct _GimpGradientChooser
 {
   GimpResourceChooser      parent_instance;
-  GimpGradientPreviewData *local_grad_data;
+  GimpGradientPreviewData  local_grad_data;
   GtkWidget               *preview;
 };
 
@@ -76,7 +76,7 @@ static gboolean gimp_gradient_select_model_change_handler  (GimpGradientChooser 
                                                             GimpResource        *resource,
                                                             gboolean   is_closing);
 
-static void     local_grad_data_new                         (GimpGradientChooser *self);
+static void     local_grad_data_free                        (GimpGradientChooser *self);
 static gboolean local_grad_data_exists                      (GimpGradientChooser *self);
 static gboolean local_grad_data_refresh                     (GimpGradientChooser *self,
                                                              GimpGradient        *gradient);
@@ -114,6 +114,10 @@ gimp_gradient_chooser_init (GimpGradientChooser *self)
   button = gtk_button_new ();
   gtk_container_add (GTK_CONTAINER (self), button);
 
+  self->local_grad_data.data             = NULL;
+  self->local_grad_data.n_samples        = 0;
+  self->local_grad_data.allocation_width = 0;
+
   self->preview = gtk_drawing_area_new ();
   gtk_widget_set_size_request (self->preview, CELL_WIDTH, CELL_HEIGHT);
   gtk_container_add (GTK_CONTAINER (button), self->preview);
@@ -132,6 +136,8 @@ gimp_gradient_chooser_init (GimpGradientChooser *self)
                                          self->preview, &drag_target);
 
   _gimp_resource_chooser_set_clickable (GIMP_RESOURCE_CHOOSER (self), button);
+
+  gimp_gradient_chooser_draw_interior (GIMP_RESOURCE_CHOOSER (self));
 }
 
 /* Called when dialog is closed and owning ResourceSelect button is disposed. */
@@ -140,8 +146,7 @@ gimp_gradient_chooser_finalize (GObject *object)
 {
   GimpGradientChooser *self = GIMP_GRADIENT_CHOOSER (object);
 
-  g_free (self->local_grad_data->data);
-  g_free (self->local_grad_data);
+  local_grad_data_free (self);
 
   /* chain up. */
   G_OBJECT_CLASS (gimp_gradient_chooser_parent_class)->finalize (object);
@@ -192,10 +197,6 @@ gimp_gradient_chooser_new (const gchar  *title,
                          "label",    label,
                          "resource", gradient,
                          NULL);
-
-  local_grad_data_new (GIMP_GRADIENT_CHOOSER (self));
-
-  gimp_gradient_chooser_draw_interior (GIMP_RESOURCE_CHOOSER (self));
 
   return self;
 }
@@ -347,9 +348,9 @@ gimp_gradient_select_preview_draw_handler (GtkWidget           *widget,
 
   /* Width in pixels of src, since BPP is 4. */
   gimp_gradient_select_preview_draw (cr,
-                                     self->local_grad_data->n_samples,
-                                     self->local_grad_data->allocation_width,
-                                     self->local_grad_data->data);
+                                     self->local_grad_data.n_samples,
+                                     self->local_grad_data.allocation_width,
+                                     self->local_grad_data.data);
 
   return FALSE;
 }
@@ -387,13 +388,14 @@ gimp_gradient_select_model_change_handler (GimpGradientChooser *self,
 static gboolean
 local_grad_data_exists (GimpGradientChooser *self)
 {
-  return self->local_grad_data->data != 0;
+  return self->local_grad_data.data != NULL;
 }
 
 static void
-local_grad_data_new (GimpGradientChooser *self)
+local_grad_data_free (GimpGradientChooser *self)
 {
-  self->local_grad_data = g_slice_new0 (GimpGradientPreviewData);
+  g_clear_pointer (&self->local_grad_data.data, g_free);
+  self->local_grad_data.n_samples = 0;
 }
 
 /* Called at initial draw to get local data for the model gradient.
@@ -408,10 +410,10 @@ local_grad_data_refresh (GimpGradientChooser *self, GimpGradient *gradient)
   gsize    n_samples;
 
   /* Must not be called before widget is allocated. */
-  g_assert (self->local_grad_data->allocation_width != 0);
+  g_assert (self->local_grad_data.allocation_width != 0);
 
   if (!get_gradient_data (gradient,
-                          self->local_grad_data->allocation_width,
+                          self->local_grad_data.allocation_width,
                           &n_samples,
                           &src))
     {
@@ -420,9 +422,9 @@ local_grad_data_refresh (GimpGradientChooser *self, GimpGradient *gradient)
     }
   else
     {
-      g_free (self->local_grad_data->data);
-      self->local_grad_data->data = src;
-      self->local_grad_data->n_samples = n_samples;
+      local_grad_data_free (self);
+      self->local_grad_data.data = src;
+      self->local_grad_data.n_samples = n_samples;
       return TRUE;
     }
 }
@@ -430,5 +432,5 @@ local_grad_data_refresh (GimpGradientChooser *self, GimpGradient *gradient)
 static void
 local_grad_data_set_allocation_width (GimpGradientChooser *self, gint width)
 {
-  self->local_grad_data->allocation_width = width;
+  self->local_grad_data.allocation_width = width;
 }

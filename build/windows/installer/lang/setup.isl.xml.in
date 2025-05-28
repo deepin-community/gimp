@@ -18,6 +18,11 @@
   </section>
 
   <section name="CustomMessages">
+    <!-- Shown when the user tries to downgrade without unninstalling GIMP -->
+    <config name="DowngradeError">
+      <value>You are trying to directly downgrade from GIMP %1 to %2.%n%nPlease remove GIMP yourself before installing this version.</value>
+    </config>
+
     <!-- Shown before the wizard starts on development versions of GIMP -->
     <config name="DevelopmentWarningTitle">
       <value>Development version</value>
@@ -47,8 +52,17 @@
       <value>E&amp;xit</value>
     </config>
 
+    <config name="Repair">
+      <value>&amp;Repair</value>
+    </config>    
     <config name="Install">
       <value>&amp;Install</value>
+    </config>
+    <config name="Reinstall">
+      <value>&amp;Reinstall</value>
+    </config>
+    <config name="Update">
+      <value>&amp;Update</value>
     </config>
     <config name="Customize">
       <value>&amp;Customize</value>
@@ -94,6 +108,14 @@
     <!-- Components -->
     <config name="ComponentsDebugDescription">
       <value>Include information to help with debugging GIMP</value>
+    </config>
+    <!-- Components -->
+    <config name="ComponentsDev">
+      <value>Resource development files</value>
+    </config>
+    <!-- Components -->
+    <config name="ComponentsDevDescription">
+      <value>Include some files to help with building GEGL filters and GIMP plug-ins in MSYS2</value>
     </config>
     <!-- Components -->
     <config name="ComponentsTranslations">
@@ -223,7 +245,7 @@
 
     <!-- Shown after uninstall -->
     <config name="UninstallConfig">
-      <value>Do you want to permanently delete your personal GIMP files (e.g. settings, tool presets, custom brushes)?</value>
+      <value>Do you want to delete your personal GIMP files (e.g. settings, tool presets, custom brushes)?%n%nA copy will be made on Desktop.</value>
     </config>
 
     <config name="InternalError">

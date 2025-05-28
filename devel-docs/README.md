@@ -11,135 +11,15 @@ contribute to all parts of GIMP, the whole documentation is of interest.
 
 [TOC]
 
-## Plug-in development
-### Concepts
-#### Basics
+## Plug-in and Filters development
 
-Plug-ins in GIMP are executables which GIMP can call upon certain
-conditions. Since they are separate executables, it means that they are
-run as their own process, making the plug-in infrastructure very robust.
-No plug-in should ever crash GIMP, even with the worst bugs. If such
-thing happens, you can consider this a core bug.
-
-On the other hand, a plug-in can mess your opened files, so a badly
-developed plug-in could still leave your opened images in an undesirable
-state. If this happens, you'd be advised to close and reopen the file
-(provided you saved recently).
-
-Another downside of plug-ins is that GIMP currently doesn't have any
-sandboxing ability. Since we explained that plug-ins are run by GIMP as
-independent processes, it also means they have the same rights as your
-GIMP process. Therefore be careful that you trust the source of your
-plug-ins. You should never run shady plug-ins from untrusted sources.
-
-GIMP comes itself with a lot of plug-ins. Actually nearly all file
-format support is implemented as a plug-in (XCF support being the
-exception: the only format implemented as core code). This makes it a
-very good base to study plug-in development.
-
-#### Procedural DataBase (PDB)
-
-Obviously since plug-ins are separate processes, they need a way to
-communicate with GIMP. This is the Procedural Database role, also known
-as **PDB**.
-
-The PDB is our protocol allowing plug-ins to request or send information
-from or to the main GIMP process.
-
-Not only this, but every plug-in has the ability to register one or
-several procedures itself, which means that any plug-in can call
-features brought by other plug-ins through the PDB.
-
-#### libgimp and libgimpui
-
-The GIMP project provides plug-in developers with the `libgimp` library.
-This is the main library which any plug-in needs. All the core PDB
-procedures have a wrapper in `libgimp` so you actually nearly never need
-to call PDB procedures explicitly (exception being when you call
-procedures registered by other plug-ins; these won't have a wrapper).
-
-The `libgimpui` library is an optional one which provides various
-graphical interface utility functions, based on the GIMP toolkit
-(`GTK`). Of course, it means that linking to this library is not
-mandatory (unlike `libgimp`). Some cases where you would not do this
-are: because you don't need any graphical interface (e.g. a plug-in
-doing something directly without dialog, or even a plug-in meant to be
-run on non-GUI servers); because you want to use pure GTK directly
-without going through `libgimpui` facility; because you want to make
-your GUI with another toolkit…
-
-The whole C reference documentation for both these libraries can be
-generated in the main GIMP build with the `-Dgi-docgen=enabled` meson
-option (you need to have the `gi-docgen` tools installed).
-
-See the [API documentation](https://developer.gimp.org/api/3.0/)
-
-### Programming Languages
-
-While C is our main language, and the one `libgimp` and `libgimpui` are
-provided in, these 2 libraries are also introspected thanks to the
-[GObject-Introspection](https://gi.readthedocs.io/en/latest/) (**GI**)
-project. It means you can in fact create plug-ins with absolutely any
-[language with a GI binding](https://wiki.gnome.org/Projects/GObjectIntrospection/Users)
-though of course it may not always be as easy as the theory goes.
-
-The GIMP project explicitly tests the following languages and even
-provides a test plug-in as a case study:
-
-* [C](https://gitlab.gnome.org/GNOME/gimp/-/blob/master/extensions/goat-exercises/goat-exercise-c.c) (not a binding)
-* [Python 3](https://gitlab.gnome.org/GNOME/gimp/-/blob/master/extensions/goat-exercises/goat-exercise-py3.py)
-  (binding)
-* [Lua](https://gitlab.gnome.org/GNOME/gimp/-/blob/master/extensions/goat-exercises/goat-exercise-lua.lua)
-  (binding)
-* [Vala](https://gitlab.gnome.org/GNOME/gimp/-/blob/master/extensions/goat-exercises/goat-exercise-vala.vala)
-  (binding)
-* [Javascript](https://gitlab.gnome.org/GNOME/gimp/-/blob/master/extensions/goat-exercises/goat-exercise-gjs.js)
-  (binding, not supported on Windows for the time being)
-
-One of the big advantage of these automatic bindings is that they are
-full-featured since they don't require manual tweaking. Therefore any
-function in the C library should have an equivalent in any of the
-bindings.
-
-**TODO**: binding reference documentation.
-
-**Note**: several GObject-Introspection's Scheme bindings exist though
-we haven't tested them. Nevertheless, GIMP also provides historically
-the "script-fu" interface, based on an integrated Scheme implementation.
-It is different from the other bindings (even from any GI Scheme
-binding) and doesn't use `libgimp`. Please see the [Script-fu
-development](#script-fu-development) section.
-
-### Tutorials
-
-**TODO**: at least in C and in one of the officially supported binding
-(ideally even in all of them).
+All needed information for Plug-in and Filters development is documented on the
+[Resource Development](https://developer.gimp.org/resource/)
+section of GIMP Developer website, with exception of the following:
 
 ### Porting from GIMP 2 plug-ins
 
 Take a look at our [porting guide](GIMP3-plug-in-porting-guide/README.md).
-
-### Debugging
-
-GIMP provides an infrastructure to help debugging plug-ins.
-
-You are invited to read the [dedicated documentation](https://developer.gimp.org/resource/debug-plug-ins/).
-
-## Script-fu development
-
-`Script-fu` is its own thing as it is a way to run Scheme script with
-GIMP. It is itself implemented as an always-running plug-in with its own
-Scheme mini-interpreter and therefore `Script-fu` scripts do not use
-`libgimp` or `libgimpui`. They interface with the PDB through the
-`Script-fu` plug-in.
-
-### TODO: Tutorials
-
-### Porting from GIMP 2 scripts
-
-Take a look at our [ScriptFu porting guide](GIMP3-plug-in-porting-guide/script-fu-author-guide.md)
-
-## TODO: GEGL operation development
 
 ## Custom data
 
@@ -274,104 +154,13 @@ Variant" button ON or OFF.
 Icon sets (a.k.a. "icon themes") have been separated from themes since
 GIMP 2.10 so you can have any icon theme with any theme.
 
-We currently only support 2 such icon themes — Symbolic and Color — and
-we keep around the Legacy icons.
-
-We don't want too many alternative designs as official icon themes
-(people are welcome to publish their favorite designs as third-party
-icons) though we would welcome special-purpose icon themes (e.g. high
-contrast).
-
-We also welcome design updates as a whole (anyone willing to work on
-this should discuss with us and propose something) and obviously fixes
-on existing icons or adding missing icons while keeping consistent
-styling.
-
-See the dedicated [icons documentation](icons.md) for more technical
-information.
+To know about icons, go to [gimp-data/icons](https://gitlab.gnome.org/GNOME/gimp-data/-/blob/main/icons/README.md?ref_type=heads).
 
 ### TODO: Tool presets
 
 
 ## TODO: GIMP extensions (*.gex*)
 
-## Continuous Integration
-
-For most of its continuous integration (macOS excepted), GIMP project
-uses Gitlab CI. We recommend looking the file
-[.gitlab-ci.yml](/.gitlab-ci.yml) which is the startup script.
-
-The main URL for our CI system is
-[build.gimp.org](https://build.gimp.org) which redirects to Gitlab
-pipelines page.
-
-Note that it is important to keep working CI jobs for a healthy code
-source. Therefore when you push some code which breaks the CI (you
-should receive a notification email when you do so), you are expected to
-look at the failed jobs' logs, try and understand the issue(s) and fix
-them (or ask for help). Don't just shrug this because it works locally
-(the point of the CI is to build in more conditions than developers
-usually do locally).
-
-Of course, sometimes CI failures are out of our control, for instance
-when downloaded dependencies have issues, or because of runner issues.
-You should still check that these were reported and that
-packagers/maintainers of these parts are aware and working on a fix.
-
-### Automatic pipelines
-
-At each commit pushed to the repository, several pipelines are currently
-running, such as:
-
-- Debian testing builds
-- Windows builds (cross compiled).
-
-Additionally, we test build with alternative tools or options (e.g. with
-`GCC` instead of `Clang` compiler) or jobs which may take much longer,
-such as package creation as scheduled pipelines (once every few days).
-
-The above listing is not necessarily exhaustive nor is it meant to be.
-Only the [.gitlab-ci.yml](/.gitlab-ci.yml) script is meant to be
-authoritative. The top comment in this file should stay as exhaustive
-as possible.
-
-### Manual pipelines
-
-It is possible to trigger pipelines manually, for instance with specific
-jobs, if you have the "*Developer*" Gitlab role:
-
-1. go to the [Pipelines](https://gitlab.gnome.org/GNOME/gimp/-/pipelines)
-   page.
-2. Hit the "*Run pipeline*" button.
-3. Choose the branch or tag you wish to build.
-4. Add relevant variables. A list of variables named `GIMP_CI_*` are
-   available (just set them to any value) and will trigger specific job
-   lists. These variables are listed in the top comment of
-   [.gitlab-ci.yml](/.gitlab-ci.yml).
-
-### Merge request pipelines
-
-Special pipelines happen for merge request code. For instance, these
-also include a (non-perfect) code style check.
-
-Additionally you can trigger flatpak standalone packages, Windows
-installer or Microsoft Store/.msixbundle to be generated
-with the MR code as explained in [gitlab-mr.md](gitlab-mr.md).
-
-### Release pipeline
-
-Special pipelines happen when pushing git `tags`. These should be tested
-before a release to avoid unexpected release-time issues, as explained
-in [our release procedure](https://developer.gimp.org/core/maintainer/release/).
-
-### Exception: macOS
-
-As an exception, macOS is currently built with the `Circle-CI` service.
-The whole CI scripts and documentation can be found in the dedicated
-[gimp-macos-build](https://gitlab.gnome.org/Infrastructure/gimp-macos-build)
-repository.
-
-Eventually we want to move this pipeline to Gitlab as well.
 
 ## Core development
 
@@ -396,6 +185,10 @@ You might also like to read these instructions on the process of
 
 ### TODO: Core Contributors
 
+As a core dev, you can trigger .appimage, .flatpak standalone packages,
+.exe Windows installer or Microsoft Store/.msixbundle to be generated
+with the MR code as explained in [gitlab-mr.md](gitlab-mr.md).
+
 ### Directory structure of GIMP source tree
 
 GIMP source tree can be divided into the main application, libraries, plug-ins,
@@ -407,14 +200,13 @@ top-level directories:
 | app/            | Source code of the main GIMP application             |
 | app-tools/      | Source code of distributed tools                     |
 | build/          | Scripts for creating binary packages                 |
-| cursors/        | Bitmaps used to construct cursors                    |
-| data/           | Data files: brushes, gradients, patterns, images…    |
+| data/           | Data files: dynamics, gradients, palettes…           |
 | desktop/        | Desktop integration files                            |
 | devel-docs/     | Developers documentation                             |
 | docs/           | Users documentation                                  |
 | etc/            | Configuration files installed with GIMP              |
 | extensions/     | Source code of extensions                            |
-| icons/          | Official icon themes                                 |
+| gimp-data/      | Raster or image data files                           |
 | libgimp/        | Library for plug-ins (core does not link against)    |
 | libgimpbase/    | Basic functions shared by core and plug-ins          |
 | libgimpcolor/   | Color-related functions shared by core and plug-ins  |

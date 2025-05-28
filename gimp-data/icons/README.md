@@ -2,26 +2,24 @@
 
 ## Released Themes
 
-GIMP 3.0 comes with 3 icon themes:
+GIMP comes with 2 icon themes:
 
-1. **Symbolic**: the default icon theme which is vector and which will
-   be automatically recolored to your theme colors.
+1. **Default**: the main icon theme, designed with vector graphics.
+   
+   By default, we use the **Symbolic** variant, which will be
+   automatically recolored to your theme colors. It is our
+   main target since they are considered better suited for
+   graphics work (less visual distraction). Color icons are kept as
+   fall-back since some users prefer them.
 
    We follow [GNOME
    guidelines](https://developer.gnome.org/hig/guidelines/ui-icons.html)
    when possible.
 
-2. **Color**: the color icon theme, also designed with vector graphics,
-   yet it won't be recolored.
-
-3. **Legacy**: icon theme which contains the old GIMP 2.8's raster
+2. **Legacy**: icon theme which contains the old GIMP 2.8's raster
    icons (mostly untouched ever since GIMP 2.10). It is not maintained
    anymore and we are not expecting new icons for Legacy. Yet since we
    keep them in the source tree for now, we would accept updates.
-
-The Symbolic icon theme is our main target since they are considered
-better suited for graphics work (less visual distraction). Color icons
-are kept as fall-back since some users prefer them.
 
 Vector icons are now preferred because they are much less maintenance.
 For instance, we do not need to double, triple (or more) every icon for
@@ -37,9 +35,9 @@ the icons as the software evolve.
 
 - Add new icons in the single SVG file inside their respective
   directories, i.e.
-  [symbolic-scalable.svg](/icons/Symbolic/symbolic-scalable.svg) for
+  [symbolic-scalable.svg](/icons/Default/symbolic-scalable.svg) for
   symbolic icons and
-  [color-scalable.svg](icons/Color/color-scalable.svg) for color icons.
+  [color-scalable.svg](icons/Default/color-scalable.svg) for color icons.
 
   A single file allows easier reuse of material, and easy overview of
   all existing icons which simplifies consistent styling…
@@ -63,14 +61,13 @@ using crazy build dependencies (like Inkscape). So this is done by hand
 for the time being.
 
 Please make sure that you provide both the Symbolic as well as the Color
-icons. You are welcome to add a raster version for Legacy, but this is
+variants. You are welcome to add a raster version for Legacy, but this is
 not mandatory anymore.
 
 - Add the icons in relevant listing files in `icons/icon-lists/` then run
-  `touch icons/Color/meson.build icons/Symbolic/meson.build` to force-trigger
-  their re-processing (hence re-configuration) at next build. Otherwise even
-  with image list changed, meson might not see it as it uses the list from the
-  last configuration.
+  `touch icons/Default/meson.build` to force-trigger their re-processing
+  (hence re-configuration) at next build. Otherwise even with image list
+  changed, meson might not see it as it uses the list from the last configuration.
 
 ### Pixel perfection
 
@@ -100,12 +97,12 @@ easy-maintenance choice. We are not against pixel-perfection, even of
 vector icons, but once again if a contributor wants to embark in such a
 journey, we'd expect them to stay for continuous maintenance.
 
-### Colors in Symbolic icon theme
+### Colors in Symbolic variant
 
 By default, colors in the Symbolic icon theme don't matter as they will
 be changed by the foreground and background colors of the theme. Yet it
 is still a good idea to use the same colors for all icons in
-`icons/Symbolic/symbolic-scalable.svg` to keep visual consistency when
+`icons/Default/symbolic-scalable.svg` to keep visual consistency when
 reviewing icons.
 
 Furthermore, there is a trick to apply hard-coded colors (i.e. which
@@ -117,11 +114,11 @@ this flag, so you will likely have to edit the file manually in a text
 or XML editor.
 
 For instance
-"[gimp-default-colors](icons/Symbolic/scalable/gimp-default-colors-symbolic.svg)"
-![gimp-default-colors](icons/Symbolic/scalable/gimp-default-colors-symbolic.svg)
+"[gimp-default-colors](icons/Default/scalable/gimp-default-colors-symbolic.svg)"
+![gimp-default-colors](icons/Default/scalable/gimp-default-colors-symbolic.svg)
 and
-"[gimp-toilet-paper](icons/Symbolic/scalable/gimp-toilet-paper-symbolic.svg)"
-![gimp-toilet-paper](icons/Symbolic/scalable/gimp-toilet-paper-symbolic.svg)
+"[gimp-toilet-paper](icons/Default/scalable/gimp-toilet-paper-symbolic.svg)"
+![gimp-toilet-paper](icons/Default/scalable/gimp-toilet-paper-symbolic.svg)
 icons contain such tricks.
 For the first one, the default colors was black and white in this
 specific order (it made no sense to invert them or worse to transform
@@ -130,13 +127,13 @@ second, it was considered inappropriate by some contributors to generate
 black toilet papers.
 
 Other such examples are
-[gimp-color-picker-black](icons/Symbolic/scalable/gimp-color-picker-black-symbolic.svg),
-![gimp-color-picker-black](icons/Symbolic/scalable/gimp-color-picker-black-symbolic.svg)
-[gimp-color-picker-gray](icons/Symbolic/scalable/gimp-color-picker-gray-symbolic.svg)
-![gimp-color-picker-gray](icons/Symbolic/scalable/gimp-color-picker-gray-symbolic.svg)
+[gimp-color-picker-black](icons/Default/scalable/gimp-color-picker-black-symbolic.svg),
+![gimp-color-picker-black](icons/Default/scalable/gimp-color-picker-black-symbolic.svg)
+[gimp-color-picker-gray](icons/Default/scalable/gimp-color-picker-gray-symbolic.svg)
+![gimp-color-picker-gray](icons/Default/scalable/gimp-color-picker-gray-symbolic.svg)
 and
-[gimp-color-picker-white](icons/Symbolic/scalable/gimp-color-picker-white-symbolic.svg).
-![gimp-color-picker-white](icons/Symbolic/scalable/gimp-color-picker-white-symbolic.svg).
+[gimp-color-picker-white](icons/Default/scalable/gimp-color-picker-white-symbolic.svg).
+![gimp-color-picker-white](icons/Default/scalable/gimp-color-picker-white-symbolic.svg).
 Since they are designing specific colors, it doesn't make sense to let
 any recoloring happen.
 
@@ -150,19 +147,6 @@ Some known sizes:
 […]
 
 ## Testing icons
-### Showing menu icons and buttons
-
-Menu items and buttons are not supposed to have icons any longer (except
-for buttons with no label at all). Yet our actions have icons and some
-desktop environments would enable them in menus and buttons regardless.
-To test how it looks on systems which do so, set the environment
-variable `GIMP_ICONS_LIKE_A_BOSS`.
-
-For instance, start GIMP like this:
-
-    GIMP_ICONS_LIKE_A_BOSS=1 gimp-2.99
-
-### Playing with low/high density
 
 To test high (or low) density icons, without having to change the
 scaling factor of your whole desktop, just change the `GDK_SCALE`
