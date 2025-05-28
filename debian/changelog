@@ -1,8 +1,32 @@
-gimp (3.0.2-1deepin1) unstable; urgency=medium
+gimp (3.0.4-1) experimental; urgency=medium
 
-  * skip test to fix build
+  * New upstream bugfix release
+    https://www.gimp.org/news/2025/05/18/gimp-3-0-4-released/
+  * Bump minimum babl and gegl
+  * Remove remaining patch: applied in new release
 
- -- lhdjply <lhdjply@126.com>  Mon, 31 Mar 2025 10:55:48 +0800
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Tue, 27 May 2025 09:29:39 -0400
+
+gimp (3.0.2-3.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * plug-ins: ZDI-CAN-26752 mitigation (Closes: #1105005)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Sat, 17 May 2025 14:05:55 +0200
+
+gimp (3.0.2-3) unstable; urgency=medium
+
+  * Team upload
+  * Replace build-dep on obsolete appstream-util with appstream
+
+ -- Matthias Klumpp <mak@debian.org>  Sat, 03 May 2025 15:00:50 +0200
+
+gimp (3.0.2-2) unstable; urgency=medium
+
+  * Add Depends: python3-gi (Closes: #1096155)
+  * Fix typo in gir1.2-gimp-3.0 package description (Closes: #1101747)
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Sun, 20 Apr 2025 11:09:48 -0400
 
 gimp (3.0.2-1) unstable; urgency=medium
 

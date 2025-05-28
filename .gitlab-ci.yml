@@ -1,11 +1,32 @@
-# Our pipelines are auto cancelable when explicity set in 'rules'.
-# GitLab is quite sensitive about rules 'if' order so be careful.
+spec:
+  inputs:
+    distribution_pipeline:
+      description: 'Pipelines that creates installable GIMP'
+      options:
+        - GIMP_CI_APPIMAGE #trigger the appimage making.
+        - GIMP_CI_FLATPAK #trigger the flatpak build and publishing (base but slow)
+        - GIMP_CI_WIN_INSTALLER #trigger all native MSYS2 builds then creates Inno Windows installer (base but slow)
+        - GIMP_CI_MS_STORE #trigger arm64 and x64 native MSYS2 builds then creates a .msixbundle (base but slow)
+        - none
+      default: 'none'
+    test_pipeline:
+      description: 'Pipelines used only for testing'
+      options:
+        - GIMP_CI_MESON_GCC #trigger the Debian GCC build (rare usefulness)
+        - GIMP_CI_RASTER_ICONS #trigger the Debian Clang build without vector icons (rare usefulness)
+        - GIMP_CI_CPPCHECK #trigger cppcheck (static code analysis)
+        - none
+      default: 'none'
+---
+
 workflow:
   auto_cancel:
     on_new_commit: interruptible
 
 
-# There are five "TYPES" of pipelines on our CI:
+##################################################
+# There are five "TYPES" of pipelines on our CI: #
+##################################################
 
 ## 1. On MERGE REQUESTS, the following are triggered:
 ## - Abbreviated Linux Clang build (base & fast)
@@ -16,8 +37,9 @@ workflow:
   interruptible: true
   variables: {}
 
-## 2. LABELED MERGE REQUESTS (search for 'CI_MERGE_REQUEST_LABELS').
-  #'interruptible: true' needs to be hardcoded on job
+## 2. LABELED MERGE REQUESTS (search for $CI_MERGE_REQUEST_LABELS =~ /.*Package).
+  #'interruptible: true' needs to be hardcoded on job rules
+  # GitLab is quite sensitive about rules 'if' order so be careful
 
 ## 3. On COMMITS except tags.
 ## - Linux Clang build (base & fast)
@@ -41,22 +63,9 @@ workflow:
 
 .default:
   ## 5. On CUSTOM builds though web GUI, API or schedules.
-  ## Scheduled CI ($CI_PIPELINE_SOURCE == "schedule") will run regularly:
-  ## - GIMP_CI_MESON_GCC: trigger the Debian GCC build (rare usefulness).
-  ## - GIMP_CI_RASTER_ICONS: trigger the Debian Clang build without vector icons (rare usefulness).
-  ## - GIMP_CI_CPPCHECK: trigger cppcheck (static code analysis).
-  ## - GIMP_CI_APPIMAGE: trigger the appimage making (experimental).
-  ## - GIMP_CI_FLATPAK: trigger the flatpak build and publishing (base but slow).
-  ## - GIMP_CI_WIN_INSTALLER: trigger all native MSYS2 builds then creates Inno Windows installer (base but slow).
-  ## - GIMP_CI_MS_STORE: trigger arm64 and x64 native MSYS2 builds then creates a .msixbundle (base but slow).
-  ## In addition to the variables above, to force step-specific pipelines
-  ## without waiting for commits and/or schedules, these you should set on GUI:
-  ## - GIMP_CI_MESON_CLANG: trigger the Debian Clang build.
-  ## - GIMP_CI_CROSSROAD_WIN64: trigger the crossroad build for Win 64-bit.
-  ## - GIMP_CI_MSYS2_WIN_AARCH64: trigger the native MSYS2 build for Win Aarch64.
-  ## - GIMP_CI_MSYS2_WIN64: trigger the native MSYS2 build for Win 64-bit.
-  ## - GIMP_CI_MSYS2_WIN32: trigger the native MSYS2 build for Win 32-bit.
-  ## - GIMP_CI_SOURCES: trigger the Debian Clang build and the source tarball job.
+  ## Scheduled CI ($CI_PIPELINE_SOURCE == "schedule") will run regularly all
+  ## the 'distribution_pipeline' and 'test_pipeline' above. To run them without
+  ## waiting for schedules: https://gitlab.gnome.org/GNOME/gimp/-/pipelines/new
   interruptible: false
 
 
@@ -92,9 +101,9 @@ stages:
 .debian:
   extends: .default
   rules:
-    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*5. AppImage package.*/'
+    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*Package:AppImage.*/'
       interruptible: true
-    - if: '$GIMP_CI_APPIMAGE != null'
+    - if: '$GIMP_CI_APPIMAGE != null || "$[[ inputs.distribution_pipeline ]]" =~ /.*GIMP_CI_APPIMAGE.*/'
     - <<: *CI_RELEASE
   parallel:
     matrix:
@@ -133,6 +142,7 @@ deps-debian:
   variables:
     GIT_STRATEGY: none
     UMFPACK: libumfpack5
+    PKGCONF_RELOCATABLE_OPTION: '-Dpkgconfig.relocatable=true'
   script:
     - export container=docker
     - mkdir -p /kaniko/.docker
@@ -210,33 +220,34 @@ deps-debian:
             python3-gi
             python3-gi-cairo" >> Dockerfile
     - echo "RUN echo -e \"\e[0Ksection_end:0000000002:deps_install\r\e[0K\"" >> Dockerfile
-    # Build some deps
-    - if [[ ! "$CI_JOB_NAME" =~ 'cross' ]]; then
-        echo "FROM $CI_REGISTRY_IMAGE:build-debian-${DEB_VERSION}-${RUNNER}" > Dockerfile2;
-        echo "RUN echo -e \"\e[0Ksection_start:`date +%s`:environ[collapsed=true]\r\e[0KPreparing build environment\"" >> Dockerfile2;
-        export LIB_DIR="lib";
-        export LIB_SUBDIR=$([ "$(uname -m)" = 'aarch64' ] && echo "aarch64-linux-gnu/" || echo "x86_64-linux-gnu/");
-        echo "ENV PKG_CONFIG_PATH=\"${GIMP_PREFIX}/${LIB_DIR}/${LIB_SUBDIR}pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}\"" >> Dockerfile2;
-        echo "ENV XDG_DATA_DIRS=\"${GIMP_PREFIX}/share:/usr/share${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}\"" >> Dockerfile2;
-        echo "ENV CC=\"$CC\"" >> Dockerfile2;
-        echo "ENV CXX=\"$CXX\"" >> Dockerfile2;
-        echo "ENV CC_LD=\"$CC_LD\"" >> Dockerfile2;
-        echo "ENV CXX_LD=\"$CXX_LD\"" >> Dockerfile2;
-        echo "ENV CLICOLOR_FORCE=\"1\"" >> Dockerfile2;
-        echo "RUN echo -e \"\e[0Ksection_end:`date +%s`:environ\r\e[0K\"" >> Dockerfile2;
-        echo "RUN echo -e \"\e[0Ksection_start:`date +%s`:babl_build[collapsed=true]\r\e[0KBuilding babl\"" >> Dockerfile2;
-        echo "RUN git clone --branch \"\$([ \"$CI_COMMIT_TAG\" ] && echo \"\$(git ls-remote --tags --exit-code --refs https://gitlab.gnome.org/GNOME/babl.git | grep -oi \"BABL_[0-9]*_[0-9]*_[0-9]*\" | sort --version-sort | tail -1)\" || echo \"master\")\" --depth=${GIT_DEPTH} https://gitlab.gnome.org/GNOME/babl.git" $CI_PROJECT_DIR/babl >> Dockerfile2;
-        echo "RUN meson setup $CI_PROJECT_DIR/babl/_build-${RUNNER} $CI_PROJECT_DIR/babl -Dprefix=\"${GIMP_PREFIX}\"" >> Dockerfile2;
-        echo "RUN ninja -C $CI_PROJECT_DIR/babl/_build-${RUNNER}" >> Dockerfile2;
-        echo "RUN ninja -C $CI_PROJECT_DIR/babl/_build-${RUNNER} install" >> Dockerfile2;
-        echo "RUN echo -e \"\e[0Ksection_end:`date +%s`:babl_build\r\e[0K\"" >> Dockerfile2;
-        echo "RUN echo -e \"\e[0Ksection_start:`date +%s`:gegl_build[collapsed=true]\r\e[0KBuilding gegl\"" >> Dockerfile2;
-        echo "RUN git clone --branch \"\$([ \"$CI_COMMIT_TAG\" ] && echo \"\$(git ls-remote --tags --exit-code --refs https://gitlab.gnome.org/GNOME/gegl.git | grep -oi \"GEGL_[0-9]*_[0-9]*_[0-9]*\" | sort --version-sort | tail -1)\" || echo \"master\")\" --depth=${GIT_DEPTH} https://gitlab.gnome.org/GNOME/gegl.git" $CI_PROJECT_DIR/gegl >> Dockerfile2;
-        echo "RUN meson setup $CI_PROJECT_DIR/gegl/_build-${RUNNER} $CI_PROJECT_DIR/gegl -Dprefix=\"${GIMP_PREFIX}\" $WORKSHOP_OPTION" >> Dockerfile2;
-        echo "RUN ninja -C $CI_PROJECT_DIR/gegl/_build-${RUNNER}" >> Dockerfile2;
-        echo "RUN ninja -C $CI_PROJECT_DIR/gegl/_build-${RUNNER} install" >> Dockerfile2;
-        echo "RUN echo -e \"\e[0Ksection_end:`date +%s`:gegl_build\r\e[0K\"" >> Dockerfile2;
-      fi
+    # Prepare environ
+    - echo "FROM $CI_REGISTRY_IMAGE:build-debian-${DEB_VERSION}-${RUNNER}" > Dockerfile2;
+    - echo "RUN echo -e \"\e[0Ksection_start:`date +%s`:environ[collapsed=true]\r\e[0KPreparing build environment\"" >> Dockerfile2;
+    - export LIB_DIR="lib";
+    - export LIB_SUBDIR=$([ "$(uname -m)" = 'aarch64' ] && echo "aarch64-linux-gnu/" || echo "x86_64-linux-gnu/");
+    - echo "ENV PKG_CONFIG_PATH=\"${GIMP_PREFIX}/${LIB_DIR}/${LIB_SUBDIR}pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}\"" >> Dockerfile2;
+    - echo "ENV XDG_DATA_DIRS=\"${GIMP_PREFIX}/share:/usr/share${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}\"" >> Dockerfile2;
+    - echo "ENV CC=\"$CC\"" >> Dockerfile2;
+    - echo "ENV CXX=\"$CXX\"" >> Dockerfile2;
+    - echo "ENV CC_LD=\"$CC_LD\"" >> Dockerfile2;
+    - echo "ENV CXX_LD=\"$CXX_LD\"" >> Dockerfile2;
+    - echo "ENV CLICOLOR_FORCE=\"1\"" >> Dockerfile2;
+    - echo "RUN echo -e \"\e[0Ksection_end:`date +%s`:environ\r\e[0K\"" >> Dockerfile2;
+    # Build some dependencies
+    ## Build babl
+    - echo "RUN echo -e \"\e[0Ksection_start:`date +%s`:babl_build[collapsed=true]\r\e[0KBuilding babl\"" >> Dockerfile2;
+    - echo "RUN git clone --branch \"\$([ \"$CI_COMMIT_TAG\" ] && echo \"\$(git ls-remote --tags --exit-code --refs https://gitlab.gnome.org/GNOME/babl.git | grep -oi \"BABL_[0-9]*_[0-9]*_[0-9]*\" | sort --version-sort | tail -1)\" || echo \"master\")\" --depth=${GIT_DEPTH} https://gitlab.gnome.org/GNOME/babl.git" $CI_PROJECT_DIR/babl >> Dockerfile2;
+    - echo "RUN meson setup $CI_PROJECT_DIR/babl/_build-${RUNNER} $CI_PROJECT_DIR/babl -Dprefix=\"${GIMP_PREFIX}\" $PKGCONF_RELOCATABLE_OPTION" >> Dockerfile2;
+    - echo "RUN ninja -C $CI_PROJECT_DIR/babl/_build-${RUNNER}" >> Dockerfile2;
+    - echo "RUN ninja -C $CI_PROJECT_DIR/babl/_build-${RUNNER} install" >> Dockerfile2;
+    - echo "RUN echo -e \"\e[0Ksection_end:`date +%s`:babl_build\r\e[0K\"" >> Dockerfile2;
+    ## Build GEGL
+    - echo "RUN echo -e \"\e[0Ksection_start:`date +%s`:gegl_build[collapsed=true]\r\e[0KBuilding gegl\"" >> Dockerfile2;
+    - echo "RUN git clone --branch \"\$([ \"$CI_COMMIT_TAG\" ] && echo \"\$(git ls-remote --tags --exit-code --refs https://gitlab.gnome.org/GNOME/gegl.git | grep -oi \"GEGL_[0-9]*_[0-9]*_[0-9]*\" | sort --version-sort | tail -1)\" || echo \"master\")\" --depth=${GIT_DEPTH} https://gitlab.gnome.org/GNOME/gegl.git" $CI_PROJECT_DIR/gegl >> Dockerfile2;
+    - echo "RUN meson setup $CI_PROJECT_DIR/gegl/_build-${RUNNER} $CI_PROJECT_DIR/gegl -Dprefix=\"${GIMP_PREFIX}\" $PKGCONF_RELOCATABLE_OPTION $WORKSHOP_OPTION" >> Dockerfile2;
+    - echo "RUN ninja -C $CI_PROJECT_DIR/gegl/_build-${RUNNER}" >> Dockerfile2;
+    - echo "RUN ninja -C $CI_PROJECT_DIR/gegl/_build-${RUNNER} install" >> Dockerfile2;
+    - echo "RUN echo -e \"\e[0Ksection_end:`date +%s`:gegl_build\r\e[0K\"" >> Dockerfile2;
     - /kaniko/executor --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $CI_REGISTRY_IMAGE:build-debian-${DEB_VERSION}-${RUNNER} --cache=true --cache-ttl=120h --image-fs-extract-retry 1 --verbosity=warn
     - if [ -f 'Dockerfile2' ]; then /kaniko/executor --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile2 --destination build-debian-${DEB_VERSION}-${RUNNER}-temp --cache=false --no-push --verbosity=warn; fi
   artifacts:
@@ -259,6 +270,7 @@ gimp-debian:
     # Build GIMP
     - echo -e "\e[0Ksection_start:`date +%s`:gimp_build[collapsed=true]\r\e[0KBuilding GIMP"
     - meson setup _build-${RUNNER} -Dprefix="${GIMP_PREFIX}"
+                                   -Dpkgconfig.relocatable=true
                                    -Drelocatable-bundle=yes
                                    -Dcheck-update=yes
                                    -Dbuild-id=org.gimp.GIMP_official.AppImage.$(uname -m)
@@ -288,18 +300,17 @@ gimp-debian:
     - <<: *CI_COMMIT
     - if: '$GIMP_CI_MESON_CLANG != null'
       variables: {}
-    - if: '$GIMP_CI_MESON_GCC != null'
+    - if: '$GIMP_CI_MESON_GCC != null || "$[[ inputs.test_pipeline ]]" =~ /.*GIMP_CI_MESON_GCC.*/'
       variables:
         CC: "cc"
         CXX: "c++"
         CC_LD: bfd
         CXX_LD: bfd
         VARIANT: "-gcc"
-    - if: '$GIMP_CI_RASTER_ICONS != null'
+    - if: '$GIMP_CI_RASTER_ICONS != null || "$[[ inputs.test_pipeline ]]" =~ /.*GIMP_CI_RASTER_ICONS.*/'
       variables:
         MESON_OPTIONS: "-Dvector-icons=false"
         VARIANT: "-raster"
-    - if: '$GIMP_CI_CROSSROAD_WIN64 != null'
     - if: '$GIMP_CI_SOURCES != null'
     - <<: *CI_RELEASE
   parallel:
@@ -367,9 +378,9 @@ gimp-debian-x64:
 .flatpak-x64:
   extends: .default
   rules:
-    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*5. Flatpak package.*/'
+    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*Package:Flatpak.*/'
       interruptible: true
-    - if: '$GIMP_CI_FLATPAK != null'
+    - if: '$GIMP_CI_FLATPAK != null || "$[[ inputs.distribution_pipeline ]]" =~ /.*GIMP_CI_FLATPAK.*/'
   tags:
     - flatpak
   image: 'quay.io/gnome_infrastructure/gnome-runtime-images:gnome-master'
@@ -410,76 +421,20 @@ gimp-flatpak-x64:
     expire_in: 2 days
 
 
-## WINDOWS 64-bit CI (cross-build crossroad) ##
-.win-cross:
-  extends: .debian-x64
-  rules:
-    - <<: *CI_MERGE
-      when: never
-    - <<: *CI_COMMIT
-      when: never
-    - if: '$GIMP_CI_CROSSROAD_WIN64 != null'
-  variables:
-    MSYSTEM_PREFIX: clang64
-    #To match Debian Testing compiler with MSYS2 compiler resources
-    DEB_VERSION: testing
-    #To avoid noisy 'apt' warnings
-    DEBIAN_FRONTEND: noninteractive
-    TERM: dumb
-
-deps-win-x64-cross:
-  extends: .win-cross
-  stage: !reference [deps-debian, stage]
-  image: !reference [deps-debian, image]
-  variables:
-    UMFPACK: libumfpack6
-  #https://gitlab.gnome.org/Infrastructure/Infrastructure/-/issues/1461
-  #cache:
-    #key: ${CI_JOB_NAME_SLUG}
-    #paths:
-      #- quasi-msys2/
-  before_script: []
-  script:
-    - bash build/windows/1_build-deps-quasimsys2.sh
-  artifacts:
-    paths:
-      - quasi-msys2/
-      - _install-$MSYSTEM_PREFIX-cross/
-      - babl/_build-$MSYSTEM_PREFIX-cross/meson-logs/meson-log.txt
-      - gegl/_build-$MSYSTEM_PREFIX-cross/meson-logs/meson-log.txt
-    expire_in: 2 hours
-
-gimp-win-x64-cross:
-  extends: .win-cross
-  needs: ["deps-win-x64-cross", "gimp-debian-x64"]
-  stage: gimp
-  variables:
-    GIT_SUBMODULE_STRATEGY: recursive
-  script:
-    - bash build/windows/2_build-gimp-quasimsys2.sh
-  artifacts:
-    expose_as: 'Windows zip'
-    paths:
-      - gimp-clang64/
-      - _build-clang64-cross/meson-logs/meson-log.txt
-      - _build-clang64-cross/done-dll.list
-    expire_in: 2 days
-
-
 ## WINDOWS pipelines (native MSYS2) ##
 .win:
   extends: .default
   rules:
-    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*5. Windows Installer.*/ && $CI_MERGE_REQUEST_LABELS =~ /.*5. Microsoft Store.*/'
+    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*Package:Windows Installer.*/ && $CI_MERGE_REQUEST_LABELS =~ /.*Package:Microsoft Store.*/'
       interruptible: true
       variables:
         INSTALLER_OPTION: '-Dwindows-installer=true'
         STORE_OPTION: '-Dms-store=true'
-    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*5. Windows Installer.*/'
+    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*Package:Windows Installer.*/'
       interruptible: true
       variables:
         INSTALLER_OPTION: '-Dwindows-installer=true'
-    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*5. Microsoft Store.*/ && $CI_JOB_NAME =~ /.*64.*/ && $CI_JOB_NAME !~ /.*installer.*/'
+    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*Package:Microsoft Store.*/ && $CI_JOB_NAME =~ /.*64.*/ && $CI_JOB_NAME !~ /.*installer.*/'
       interruptible: true
       variables:
         STORE_OPTION: '-Dms-store=true'
@@ -487,10 +442,10 @@ gimp-win-x64-cross:
       variables:
         INSTALLER_OPTION: '-Dwindows-installer=true'
         STORE_OPTION: '-Dms-store=true'
-    - if: '$GIMP_CI_WIN_INSTALLER != null'
+    - if: '$GIMP_CI_WIN_INSTALLER != null || "$[[ inputs.distribution_pipeline ]]" =~ /.*GIMP_CI_WIN_INSTALLER.*/'
       variables:
         INSTALLER_OPTION: '-Dwindows-installer=true'
-    - if: '$GIMP_CI_MS_STORE != null && $CI_JOB_NAME =~ /.*64.*/ && $CI_JOB_NAME !~ /.*installer.*/'
+    - if: '$GIMP_CI_MS_STORE != null || "$[[ inputs.distribution_pipeline ]]" =~ /.*GIMP_CI_MS_STORE.*/ && $CI_JOB_NAME =~ /.*64.*/ && $CI_JOB_NAME !~ /.*installer.*/'
       variables:
         STORE_OPTION: '-Dms-store=true'
     - <<: *CI_RELEASE
@@ -506,14 +461,15 @@ gimp-win-x64-cross:
   tags:
     - $RUNNER
   variables:
+    MSYS_ROOT: 'C:/msys64'
     CC: cc
     CXX: c++
+    #meson.build forces non-relocatable .pc. See: https://github.com/mesonbuild/meson/issues/14346
+    PKGCONF_RELOCATABLE_OPTION: '-Dpkgconfig.relocatable=true'
   before_script:
-    - $MSYS_ROOT = 'C:/msys64'
-    - $env:Path = "$MSYS_ROOT/$MSYSTEM_PREFIX/bin;$MSYS_ROOT/usr/bin;" + $env:Path
     # FIXME:'gimpenv' have buggy code about Windows paths. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/12284
     - $GIMP_PREFIX = "$PWD\_install-$MSYSTEM_PREFIX".Replace('\', '/')
-  timeout: 60m
+  timeout: 40m
 
 .win_environ: &WIN_ENVIRON
 - Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):win_environ[collapsed=true]$([char]13)$([char]27)[0KPreparing build environment"
@@ -521,7 +477,7 @@ gimp-win-x64-cross:
 - $env:PKG_CONFIG_PATH = "$GIMP_PREFIX/lib/pkgconfig;$MSYS_ROOT/$MSYSTEM_PREFIX/lib/pkgconfig;$MSYS_ROOT/$MSYSTEM_PREFIX/share/pkgconfig"
 - $env:XDG_DATA_DIRS = "$GIMP_PREFIX/share;$MSYS_ROOT/$MSYSTEM_PREFIX/share"
 ## Runtime vars
-- $env:Path = "$GIMP_PREFIX/bin;" + $env:Path
+- $env:PATH = "$GIMP_PREFIX/bin;$MSYS_ROOT/$MSYSTEM_PREFIX/bin;" + $env:PATH
 - $env:GI_TYPELIB_PATH = "$GIMP_PREFIX/lib/girepository-1.0;$MSYS_ROOT/$MSYSTEM_PREFIX/lib/girepository-1.0"
 - Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):win_environ$([char]13)$([char]27)[0K"
 
@@ -586,9 +542,8 @@ gimp-win-x86:
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
   script:
+    - $env:PATH = "C:/msys64/usr/bin;" + $env:PATH
     - !reference [gimp-win, script]
-    # We split 32-bit DWARF symbols here because LLVM-objcopy do NOT support them
-    - bash build/windows/installer/3_dist-gimp-inno_sym.sh gimp-$MSYSTEM_PREFIX
   artifacts: !reference [gimp-win, artifacts]
 
 
@@ -638,6 +593,17 @@ file-plug-in-tests:
       junit: "_log/import-tests.xml"
     expire_in: 2 days
 
+meson-health:
+  extends: .default
+  rules:
+    - <<: *CI_MERGE
+    - <<: *CI_COMMIT
+  stage: analysis
+  script:
+    - apt-get update
+    - apt-get install -y git
+    - bash .gitlab/run_meson_health_diff.sh
+
 clang-format:
   extends: .default
   rules:
@@ -659,13 +625,13 @@ clang-format:
 cppcheck:
   extends: .default
   rules:
-    - if: '$GIMP_CI_CPPCHECK != null'
+    - if: '$GIMP_CI_CPPCHECK != null || "$[[ inputs.test_pipeline ]]" =~ /.*GIMP_CI_CPPCHECK.*/'
   stage: analysis
   script:
     - apt-get update
     - apt-get install -y cppcheck
     - cppcheck -q -j8 --enable=all --force --output-file=cppcheck.xml --xml --xml-version=2
-        -i _build -i _build-cross -i babl -i gegl -i _install -i .local -i .cache -i gimp-x64 .
+        -i _build -i babl -i gegl -i _install -i .local -i .cache -i gimp-x64 .
     - mkdir report
     - cppcheck-htmlreport --source-dir=. --title=gimp --file=cppcheck.xml --report-dir=report
   artifacts:
@@ -769,15 +735,18 @@ dist-appimage-weekly:
       - build/linux/appimage/_Output/
     expire_in: 8 days
 
-include: 'https://raw.githubusercontent.com/GNOME/citemplates/master/flatpak/flatpak_ci_initiative.yml'
+include:
+  project: 'GNOME/citemplates'
+  file: 'flatpak/flatpak_ci_initiative.yml'
+
 dist-flatpak-weekly:
   extends:
     - .default
     - .publish_nightly
   rules:
-    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*5. Flatpak package.*/'
+    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*Package:Flatpak.*/'
       interruptible: true
-    - if: '$GIMP_CI_FLATPAK != null'
+    - if: '$GIMP_CI_FLATPAK != null || "$[[ inputs.distribution_pipeline ]]" =~ /.*GIMP_CI_FLATPAK.*/'
   needs: ["gimp-flatpak-x64"]
   stage: distribution
   script:
@@ -810,9 +779,9 @@ dist-installer-weekly:
 dist-store-weekly:
   extends: .default
   rules:
-    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*5. Microsoft Store.*/'
+    - if: '$CI_MERGE_REQUEST_LABELS =~ /.*Package:Microsoft Store.*/'
       interruptible: true
-    - if: '$GIMP_CI_MS_STORE != null'
+    - if: '$GIMP_CI_MS_STORE != null || "$[[ inputs.distribution_pipeline ]]" =~ /.*GIMP_CI_MS_STORE.*/'
     - <<: *CI_RELEASE
   needs: ["gimp-win"]
   stage: distribution

@@ -4,11 +4,11 @@ Section: graphics
 Maintainer: Debian GNOME Maintainers <pkg-gnome-maintainers@lists.alioth.debian.org>
 Uploaders: Jordi Mallach <jordi@debian.org>, Jeremy Bícha <jbicha@ubuntu.com>
 Build-Depends: debhelper-compat (= 13),
-               appstream-util,
-               desktop-file-utils <!nocheck>,
-               dpkg-dev (>= 1.22.5),
                dh-sequence-gir,
-               gegl (>= 1:0.4.58),
+               dpkg-dev (>= 1.22.5),
+               appstream,
+               desktop-file-utils <!nocheck>,
+               gegl (>= 1:0.4.62),
                gettext,
 #               gjs [amd64 arm64 armhf i386 mips64el ppc64el riscv64 s390x loong64 ppc64 sparc64],
                glib-networking,
@@ -17,7 +17,8 @@ Build-Depends: debhelper-compat (= 13),
                libappstream-glib-dev (>= 0.7.7),
                libasound2-dev (>= 1.0.0) [linux-any],
                libatk1.0-dev (>= 2.4.0),
-               libbabl-dev (>= 1:0.1.112),
+               libbabl-dev (>= 1:0.1.114),
+               libbrotli-dev,
                libbz2-dev,
                libcairo2-dev (>= 1.14.0),
                libcfitsio-dev,
@@ -27,7 +28,7 @@ Build-Depends: debhelper-compat (= 13),
                libfreetype-dev (>= 2.2),
                libgdk-pixbuf-2.0-dev (>= 2.30.8),
                libgdk-pixbuf2.0-doc,
-               libgegl-dev (>= 1:0.4.58),
+               libgegl-dev (>= 1:0.4.62),
                libgexiv2-dev (>= 0.14.0),
                libgirepository1.0-dev (>= 1.32.0),
 #               libgjs-dev [amd64 arm64 armhf i386 mips64el ppc64el riscv64 s390x loong64 ppc64 sparc64],
@@ -39,10 +40,12 @@ Build-Depends: debhelper-compat (= 13),
                libgudev-1.0-dev (>= 167) [linux-any],
                libharfbuzz-dev (>= 2.8.2),
                libheif-dev (>= 1.15.1),
+               libhwy-dev,
                libice-dev,
                libjpeg-dev,
                libjson-glib-dev (>= 1.2.6),
                libjxl-dev (>= 0.7.0),
+               liblcms-dev,
                liblcms2-dev (>= 2.9),
 #               libluajit-5.1-dev [amd64 arm64 armel armhf i386 mips64el riscv64 s390x loong64 powerpc],
                liblzma-dev (>= 5.0.0),
@@ -65,8 +68,6 @@ Build-Depends: debhelper-compat (= 13),
                libxmu-dev,
                libxpm-dev,
                libxt-dev,
-               libhwy-dev, libbrotli-dev, liblcms-dev,
-               zlib1g-dev,
                meson (>= 0.56),
                mypaint-brushes,
                patchutils,
@@ -75,10 +76,10 @@ Build-Depends: debhelper-compat (= 13),
                shared-mime-info,
                valac (>= 0.40.0),
                xauth <!nocheck>,
+               xsltproc,
                xvfb <!nocheck>,
-               xsltproc
-Build-Depends-Indep: gi-docgen <!nodoc>,
-                     yelp-tools
+               zlib1g-dev
+Build-Depends-Indep: gi-docgen <!nodoc>, yelp-tools
 Rules-Requires-Root: no
 Standards-Version: 4.7.0
 X-Ubuntu-Use-Langpack: yes
@@ -88,27 +89,27 @@ Homepage: https://www.gimp.org/
 
 Package: gimp
 Architecture: any
-Depends: libgimp-3.0-0 (>= ${source:Upstream-Version}),
-         libgimp-3.0-0 (<= ${source:Upstream-Version}-z),
-         librsvg2-common,
+Depends: gimp-data (<= ${source:Upstream-Version}-z),
          gimp-data (>= ${source:Upstream-Version}),
-         gimp-data (<= ${source:Upstream-Version}-z),
          gir1.2-gimp-3.0 (= ${binary:Version}),
          graphviz,
+         libgimp-3.0-0 (<= ${source:Upstream-Version}-z),
+         libgimp-3.0-0 (>= ${source:Upstream-Version}),
+         librsvg2-common,
+         python3-gi,
          xdg-utils,
-         ${shlibs:Depends},
-         ${misc:Depends}
+         ${misc:Depends},
+         ${shlibs:Depends}
 Recommends: ghostscript
-Suggests: gimp-help-en | gimp-help,
-          gimp-data-extras,
+Suggests: gimp-data-extras,
+          gimp-help-en | gimp-help,
 #          gjs [amd64 arm64 armhf i386 mips64el ppc64el riscv64 s390x loong64 ppc64 sparc64],
           gvfs-backends,
 #          luajit [amd64 arm64 armel armhf i386 mips64el riscv64 s390x loong64 powerpc],
           python3
-Conflicts: gimp-dds,
+Conflicts: gimp-dds
 Breaks: gimp-plugin-registry (<< 7.20140602+nmu1~)
-Replaces: gimp-dds,
-          gimp-plugin-registry (<< 7.20140602+nmu1~)
+Replaces: gimp-dds, gimp-plugin-registry (<< 7.20140602+nmu1~)
 Description: GNU Image Manipulation Program
  GIMP is an advanced picture editor. You can use it to edit, enhance, and
  retouch photos and scans, create drawings, and make your own images.
@@ -139,10 +140,9 @@ Package: libgimp-3.0-0
 Architecture: any
 Multi-Arch: same
 Section: libs
-Depends: ${shlibs:Depends},
-         ${misc:Depends}
-Recommends: gimp-data (>= ${source:Upstream-Version}),
-            gimp-data (<= ${source:Upstream-Version}-z)
+Depends: ${misc:Depends}, ${shlibs:Depends}
+Recommends: gimp-data (<= ${source:Upstream-Version}-z),
+            gimp-data (>= ${source:Upstream-Version})
 Description: Libraries for the GNU Image Manipulation Program
  This package includes the libgimp libraries, which are
  necessary to run GIMP and third-party GIMP plugins.
@@ -152,14 +152,14 @@ Architecture: any
 Multi-Arch: same
 Section: libdevel
 Depends: gir1.2-gimp-3.0 (= ${binary:Version}),
-         ${shlibs:Depends},
-         ${misc:Depends},
-         libgegl-dev (>= 1:0.4.58),
+         libgegl-dev (>= 1:0.4.62),
          libgexiv2-dev (>= 0.14.0),
          libgimp-3.0-0 (= ${binary:Version}),
          libgimp-3.0-bin (= ${binary:Version}),
          libgtk-3-dev (>= 3.22.29),
-         pkgconf
+         pkgconf,
+         ${misc:Depends},
+         ${shlibs:Depends}
 Provides: ${gir:Provides}
 Suggests: libgimp-3.0-doc
 Description: Headers and other files for compiling plugins for GIMP
@@ -173,8 +173,7 @@ Package: libgimp-3.0-bin
 Architecture: any
 Multi-Arch: foreign
 Section: libdevel
-Depends: ${shlibs:Depends},
-         ${misc:Depends}
+Depends: ${misc:Depends}, ${shlibs:Depends}
 Suggests: libgimp-3.0-doc
 Description: Development binaries for the GIMP library
  This package contains binaries that are necessary to develop gimp
@@ -186,8 +185,7 @@ Package: libgimp-3.0-doc
 Architecture: all
 Section: doc
 Build-Profiles: <!nodoc>
-Depends: ${misc:Depends},
-         lynx | www-browser
+Depends: lynx | www-browser, ${misc:Depends}
 Description: Developers' Documentation for the GIMP library
  This package contains the HTML documentation for the GIMP library in
  /usr/share/gtk-doc/html/ .
@@ -196,11 +194,9 @@ Package: gir1.2-gimp-3.0
 Section: introspection
 Architecture: any
 Multi-Arch: same
-Depends: ${gir:Depends},
-         ${misc:Depends},
-         ${shlibs:Depends}
+Depends: ${gir:Depends}, ${misc:Depends}, ${shlibs:Depends}
 Provides: gir1.2-gimpui-3.0 (= ${binary:Version})
-Description: Instrospection data for the GIMP library
+Description: Introspection data for the GIMP library
  This package includes the libgimp libraries, which are necessary to run
  GIMP and third-party GIMP plugins.
  .

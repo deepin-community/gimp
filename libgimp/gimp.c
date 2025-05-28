@@ -226,9 +226,16 @@ gimp_main (GType  plug_in_type,
   /* Use Dr. Mingw (dumps backtrace on crash) if it is available. */
   {
     time_t   t;
+    gchar   *codeview_path;
     gchar   *filename;
     gchar   *dir;
     wchar_t *plug_in_backtrace_path_utf16;
+
+    /* FIXME: https://github.com/jrfonseca/drmingw/issues/91 */
+    codeview_path = g_build_filename (gimp_installation_directory (),
+                                      "bin", NULL);
+    g_setenv ("_NT_SYMBOL_PATH", codeview_path, TRUE);
+    g_free (codeview_path);
 
     /* This has to be the non-roaming directory (i.e., the local
      * directory) as backtraces correspond to the binaries on this
@@ -270,8 +277,8 @@ gimp_main (GType  plug_in_type,
     typedef BOOL (WINAPI *t_SetProcessDEPPolicy) (DWORD dwFlags);
     t_SetProcessDEPPolicy p_SetProcessDEPPolicy;
 
-    p_SetProcessDEPPolicy = GetProcAddress (GetModuleHandleW (L"kernel32.dll"),
-                                            "SetProcessDEPPolicy");
+    p_SetProcessDEPPolicy = (t_SetProcessDEPPolicy) GetProcAddress (GetModuleHandleW (L"kernel32.dll"),
+                                                                    "SetProcessDEPPolicy");
     if (p_SetProcessDEPPolicy)
       (*p_SetProcessDEPPolicy) (PROCESS_DEP_ENABLE|PROCESS_DEP_DISABLE_ATL_THUNK_EMULATION);
   }

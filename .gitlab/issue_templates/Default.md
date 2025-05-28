@@ -14,7 +14,7 @@ interactions. Thanks!
 
 ### Environment/Versions
 
-- GIMP version:
+- GIMP version number:
 - Package: <!--[flatpak? Installer from gimp.org? If another installer, tell us where from] (write it after the > symbol)-->
 - Operating System: <!--[Windows? macOS? Linux? All? Add OS versions too] (write it after the > symbol) -->
 - (if Linux) Display system: <!--[X11? Wayland? Which compositor and version?] (write it after the > symbol) -->
@@ -26,7 +26,7 @@ either in the last stable version of GIMP or on updated development code
 ### Description of the bug
 
 <!--Please describe your issue with details.
-Add screenshot or other files if needed.(write it after the > symbol)-->
+Add full (not cropped) screenshots or other files if needed.(write it after the > symbol)-->
 
 ### Reproduction
 

@@ -35,10 +35,18 @@ typedef struct _GimpDrawableFilterUndoClass GimpDrawableFilterUndoClass;
 
 struct _GimpDrawableFilterUndo
 {
-  GimpUndo            parent_instance;
+  GimpUndo               parent_instance;
 
-  GimpDrawableFilter *filter;
-  guint32             row_index;
+  GimpDrawableFilter    *filter;
+  guint32                row_index;
+
+  GeglNode              *node;
+  gdouble                opacity;
+  GimpLayerMode          paint_mode;
+  GimpLayerColorSpace    blend_space;
+  GimpLayerColorSpace    composite_space;
+  GimpLayerCompositeMode composite_mode;
+  GimpFilterRegion       region;
 };
 
 struct _GimpDrawableFilterUndoClass
