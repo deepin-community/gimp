@@ -1,8 +1,65 @@
-gimp (3.0.4-1deepin1) unstable; urgency=medium
+gimp (3.0.4-6.2) unstable; urgency=medium
 
-  * skip test to fix build.
+  * Non-maintainer upload.
+  * plug-ins: fix ZDI-CAN-27823 (CVE-2025-10934) (Closes: #1119661)
 
- -- lhdjply <lhdjply@126.com>  Wed, 28 May 2025 09:50:05 +0800
+ -- Salvatore Bonaccorso <carnil@debian.org>  Thu, 30 Oct 2025 21:13:18 +0100
+
+gimp (3.0.4-6.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * plug-ins: Fix ZDI-CAN-27684 (CVE-2025-10920) (Closes: #1116458)
+  * plug-ins: fix dicom plug-in ZDI-CAN-27863 (CVE-2025-10922)
+    (Closes: #1116459)
+  * plug-ins: fix ZDI-CAN-27878 (CVE-2025-10923) (Closes: #1116460)
+  * plug-ins: Fix ZDI-CAN-27836 (CVE-2025-10924) (Closes: #1116461)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Mon, 29 Sep 2025 20:57:32 +0200
+
+gimp (3.0.4-6) unstable; urgency=medium
+
+  * Team upload
+  * d/control: Replace transitional libgirepository1.0-dev B-D.
+    This package uses the actual library, so replace it with the
+    combination of gobject-introspection and libgirepository-1.0-dev.
+  * d/control: Add missing gir1.2-*-dev B-D as reported by dh_girepository
+  * d/control: Add ${gir:Depends} to -dev package
+  * d/control: Use ${gir:Provides} instead of hard-coding it
+  * d/copyright: Don't quote the FSF's former postal address here
+  * d/libgimp-3.0-doc.links: Fix devhelp integration
+  * d/libgimp-3.0-doc.doc-base.*: Register API documentation with doc-base
+
+ -- Simon McVittie <smcv@debian.org>  Mon, 08 Sep 2025 14:31:58 +0100
+
+gimp (3.0.4-5) unstable; urgency=medium
+
+  * Remove obsolete Rules-Requires-Root: no field
+  * Remove unnecessary X-Ubuntu-Langpack: yes field
+  * Opt into Salsa CI but disable the reproducibility test
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Sun, 07 Sep 2025 20:52:38 -0400
+
+gimp (3.0.4-4) unstable; urgency=medium
+
+  * Cherry-pick patch to switch from appstream-glib to appstream
+  * Update Build-Depends: libappstream-glib-dev → libappstream-dev
+  * Bump Standards Version to 4.7.2
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Sat, 23 Aug 2025 20:11:21 -0400
+
+gimp (3.0.4-3) unstable; urgency=high
+
+  * plug-ins: ZDI-CAN-26752 mitigation for 32-bit (Closes: #1107758)
+    - CVE-2025-2760
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Wed, 02 Jul 2025 10:46:57 -0400
+
+gimp (3.0.4-2) unstable; urgency=medium
+
+  * Set NO_AT_BRIDGE=1 for dh_auto_test
+  * Release to unstable
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Sun, 01 Jun 2025 12:57:17 -0400
 
 gimp (3.0.4-1) experimental; urgency=medium
 
