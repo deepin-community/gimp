@@ -1,1 +1,7 @@
-0001-skip-test-to-fix-build.patch
+plug-ins-dds-fix-12790-for-32-bit.patch
+app-Port-from-appstream-glib-to-appstream.patch
+plug-ins-Fix-ZDI-CAN-27684.patch
+plug-ins-fix-dicom-plug-in-ZDI-CAN-27863.patch
+plug-ins-fix-ZDI-CAN-27878.patch
+plug-ins-Fix-ZDI-CAN-27836.patch
+plug-ins-fix-ZDI-CAN-27823.patch

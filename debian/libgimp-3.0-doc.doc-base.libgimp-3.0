@@ -1,0 +1,9 @@
+Document: libgimp-3.0
+Title: Gimp-3.0 Reference Manual
+Author: GIMP contributors
+Abstract: GIMP library
+Section: Programming/C
+
+Format: HTML
+Index: /usr/share/doc/libgimp-3.0-doc/reference/gimp-3.0/libgimp-3.0/index.html
+Files: /usr/share/doc/libgimp-3.0-doc/reference/gimp-3.0/libgimp-3.0/*.html

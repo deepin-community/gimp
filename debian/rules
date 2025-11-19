@@ -58,4 +58,4 @@ override_dh_makeshlibs:
 
 # Give tests more time on slow architectures like riscv64
 override_dh_auto_test:
-	xvfb-run -s -noreset -a dh_auto_test --  --verbose --timeout-multiplier 5
+	NO_AT_BRIDGE=1 xvfb-run -s -noreset -a dh_auto_test --  --verbose --timeout-multiplier 5

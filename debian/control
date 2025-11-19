@@ -10,11 +10,21 @@ Build-Depends: debhelper-compat (= 13),
                desktop-file-utils <!nocheck>,
                gegl (>= 1:0.4.62),
                gettext,
+               gir1.2-babl-0.1-dev,
+               gir1.2-cairo-1.0-dev,
+               gir1.2-gdkpixbuf-2.0-dev,
+               gir1.2-gegl-0.4-dev,
+               gir1.2-gio-2.0-dev,
+               gir1.2-gobject-2.0-dev,
+               gir1.2-gtk-3.0-dev,
+               gir1.2-pango-1.0-dev,
 #               gjs [amd64 arm64 armhf i386 mips64el ppc64el riscv64 s390x loong64 ppc64 sparc64],
                glib-networking,
+               gobject-introspection (>= 1.80),
                iso-codes,
                libaa1-dev,
-               libappstream-glib-dev (>= 0.7.7),
+               libappstream-dev,
+               libarchive-dev,
                libasound2-dev (>= 1.0.0) [linux-any],
                libatk1.0-dev (>= 2.4.0),
                libbabl-dev (>= 1:0.1.114),
@@ -30,7 +40,7 @@ Build-Depends: debhelper-compat (= 13),
                libgdk-pixbuf2.0-doc,
                libgegl-dev (>= 1:0.4.62),
                libgexiv2-dev (>= 0.14.0),
-               libgirepository1.0-dev (>= 1.32.0),
+               libgirepository-1.0-dev (>= 1.32.0),
 #               libgjs-dev [amd64 arm64 armhf i386 mips64el ppc64el riscv64 s390x loong64 ppc64 sparc64],
                libglib2.0-dev (>= 2.70.0),
                libglib2.0-doc,
@@ -80,9 +90,7 @@ Build-Depends: debhelper-compat (= 13),
                xvfb <!nocheck>,
                zlib1g-dev
 Build-Depends-Indep: gi-docgen <!nodoc>, yelp-tools
-Rules-Requires-Root: no
-Standards-Version: 4.7.0
-X-Ubuntu-Use-Langpack: yes
+Standards-Version: 4.7.2
 Vcs-Git: https://salsa.debian.org/gnome-team/gimp.git
 Vcs-Browser: https://salsa.debian.org/gnome-team/gimp
 Homepage: https://www.gimp.org/
@@ -158,6 +166,7 @@ Depends: gir1.2-gimp-3.0 (= ${binary:Version}),
          libgimp-3.0-bin (= ${binary:Version}),
          libgtk-3-dev (>= 3.22.29),
          pkgconf,
+         ${gir:Depends},
          ${misc:Depends},
          ${shlibs:Depends}
 Provides: ${gir:Provides}
@@ -195,7 +204,7 @@ Section: introspection
 Architecture: any
 Multi-Arch: same
 Depends: ${gir:Depends}, ${misc:Depends}, ${shlibs:Depends}
-Provides: gir1.2-gimpui-3.0 (= ${binary:Version})
+Provides: ${gir:Provides}
 Description: Introspection data for the GIMP library
  This package includes the libgimp libraries, which are necessary to run
  GIMP and third-party GIMP plugins.

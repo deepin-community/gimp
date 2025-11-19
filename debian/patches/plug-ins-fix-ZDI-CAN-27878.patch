@@ -1,0 +1,62 @@
+From: Jacob Boerema <jgboerema@gmail.com>
+Date: Wed, 3 Sep 2025 15:25:55 -0400
+Subject: plug-ins: fix ZDI-CAN-27878
+Origin: https://gitlab.gnome.org/GNOME/gimp/-/commit/fb31ddf32298bb2f0f09b3ccc53464b8693a050e
+Bug-Debian: https://bugs.debian.org/1116460
+Bug: https://gitlab.gnome.org/GNOME/gimp/-/issues/14812
+Bug-Debian-Security: https://security-tracker.debian.org/tracker/CVE-2025-10923
+
+GIMP WBMP File Parsing Integer Overflow Remote Code Execution
+Vulnerability
+
+We recently fixed one instance of not upgrading the size, but forgot
+the other. Fix that here by casting to (gsize). While we're at it,
+also add a warning, when reading more data fails unexpectedly.
+
+Closes #14812
+---
+ plug-ins/common/file-wbmp.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/plug-ins/common/file-wbmp.c b/plug-ins/common/file-wbmp.c
+index a19b0f9728f9..f37450118f96 100644
+--- a/plug-ins/common/file-wbmp.c
++++ b/plug-ins/common/file-wbmp.c
+@@ -456,6 +456,7 @@ read_image (FILE    *fd,
+   GeglBuffer  *buffer;
+   guchar      *dest, *temp;
+   gint         i, cur_progress, max_progress;
++  size_t       n_read;
+ 
+   /* Make a new image in GIMP */
+   if ((width < 0) || (width > GIMP_MAX_IMAGE_SIZE))
+@@ -480,14 +481,14 @@ read_image (FILE    *fd,
+ 
+   gimp_image_insert_layer (image, layer, NULL, 0);
+ 
+-  dest = g_malloc0 (width * height);
++  dest = g_malloc0 ((gsize) width * height);
+ 
+   ypos = 0;
+ 
+   cur_progress = 0;
+   max_progress = height;
+ 
+-  while (ReadOK (fd, &v, 1))
++  while ((n_read = ReadOK (fd, &v, 1)) != 0)
+     {
+       for (i = 1; (i <= 8) && (xpos < width); i++, xpos++)
+         {
+@@ -512,6 +513,9 @@ read_image (FILE    *fd,
+         break;
+     }
+ 
++  if (n_read == 0)
++      g_warning (_("Read failure at position %u. Possibly corrupt image."), ypos * width + xpos);
++
+   buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
+ 
+   gegl_buffer_set (buffer, GEGL_RECTANGLE (0, 0, width, height), 0, NULL, dest,
+-- 
+2.51.0
+
