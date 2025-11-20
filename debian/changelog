@@ -1,3 +1,10 @@
+gimp (3.0.4-6.2deepin1) unstable; urgency=medium
+
+  * Revert previous switching from appstream-glib to appstream.
+  * skip test to fix build.
+
+ -- Tianyu Chen <sweetyfish@deepin.org>  Thu, 20 Nov 2025 14:50:14 +0800
+
 gimp (3.0.4-6.2) unstable; urgency=medium
 
   * Non-maintainer upload.

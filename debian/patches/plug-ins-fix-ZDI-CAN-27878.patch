@@ -22,7 +22,7 @@ diff --git a/plug-ins/common/file-wbmp.c b/plug-ins/common/file-wbmp.c
 index a19b0f9728f9..f37450118f96 100644
 --- a/plug-ins/common/file-wbmp.c
 +++ b/plug-ins/common/file-wbmp.c
-@@ -456,6 +456,7 @@ read_image (FILE    *fd,
+@@ -256,6 +256,7 @@ read_image (FILE    *fd,
    GeglBuffer  *buffer;
    guchar      *dest, *temp;
    gint         i, cur_progress, max_progress;
@@ -30,7 +30,7 @@ index a19b0f9728f9..f37450118f96 100644
  
    /* Make a new image in GIMP */
    if ((width < 0) || (width > GIMP_MAX_IMAGE_SIZE))
-@@ -480,14 +481,14 @@ read_image (FILE    *fd,
+@@ -280,14 +281,14 @@ read_image (FILE    *fd,
  
    gimp_image_insert_layer (image, layer, NULL, 0);
  
@@ -47,7 +47,7 @@ index a19b0f9728f9..f37450118f96 100644
      {
        for (i = 1; (i <= 8) && (xpos < width); i++, xpos++)
          {
-@@ -512,6 +513,9 @@ read_image (FILE    *fd,
+@@ -312,6 +313,9 @@ read_image (FILE    *fd,
          break;
      }
  
