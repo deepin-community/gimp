@@ -48,18 +48,24 @@
 #include "gimplayermaskundo.h"
 #include "gimplayerpropundo.h"
 #include "gimplayerundo.h"
+#include "gimplinklayer.h"
+#include "gimplinklayerundo.h"
 #include "gimpmaskundo.h"
+#include "gimprasterizable.h"
+#include "gimprasterizableundo.h"
 #include "gimpsamplepoint.h"
 #include "gimpsamplepointundo.h"
 #include "gimpselection.h"
 
+#include "path/gimppath.h"
+#include "path/gimppathmodundo.h"
+#include "path/gimppathpropundo.h"
+#include "path/gimppathundo.h"
+#include "path/gimpvectorlayer.h"
+#include "path/gimpvectorlayerundo.h"
+
 #include "text/gimptextlayer.h"
 #include "text/gimptextundo.h"
-
-#include "vectors/gimppath.h"
-#include "vectors/gimppathmodundo.h"
-#include "vectors/gimppathpropundo.h"
-#include "vectors/gimppathundo.h"
 
 #include "gimp-intl.h"
 
@@ -311,6 +317,7 @@ gimp_image_undo_push_drawable_format (GimpImage    *image,
 /***************************/
 /*  Drawable Filter Undos  */
 /***************************/
+
 GimpUndo *
 gimp_image_undo_push_filter_add (GimpImage          *image,
                                  const gchar        *undo_desc,
@@ -319,6 +326,8 @@ gimp_image_undo_push_filter_add (GimpImage          *image,
 {
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), NULL);
+  g_return_val_if_fail (gimp_drawable_filter_get_temporary (filter) == FALSE,
+                        NULL);
 
   return gimp_image_undo_push (image, GIMP_TYPE_DRAWABLE_FILTER_UNDO,
                                GIMP_UNDO_FILTER_ADD, undo_desc,
@@ -335,6 +344,8 @@ gimp_image_undo_push_filter_remove (GimpImage          *image,
 {
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), NULL);
+  g_return_val_if_fail (gimp_drawable_filter_get_temporary (filter) == FALSE,
+                        NULL);
 
   return gimp_image_undo_push (image, GIMP_TYPE_DRAWABLE_FILTER_UNDO,
                                GIMP_UNDO_FILTER_REMOVE, undo_desc,
@@ -351,6 +362,8 @@ gimp_image_undo_push_filter_reorder (GimpImage          *image,
 {
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), NULL);
+  g_return_val_if_fail (gimp_drawable_filter_get_temporary (filter) == FALSE,
+                        NULL);
 
   return gimp_image_undo_push (image, GIMP_TYPE_DRAWABLE_FILTER_UNDO,
                                GIMP_UNDO_FILTER_REORDER, undo_desc,
@@ -367,6 +380,8 @@ gimp_image_undo_push_filter_modified (GimpImage          *image,
 {
   g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
   g_return_val_if_fail (GIMP_IS_DRAWABLE_FILTER (filter), NULL);
+  g_return_val_if_fail (gimp_drawable_filter_get_temporary (filter) == FALSE,
+                        NULL);
 
   return gimp_image_undo_push (image, GIMP_TYPE_DRAWABLE_FILTER_UNDO,
                                GIMP_UNDO_FILTER_MODIFIED, undo_desc,
@@ -813,6 +828,27 @@ gimp_image_undo_push_group_layer_convert (GimpImage      *image,
 }
 
 
+/************************/
+/*  Rasterizable Undos  */
+/************************/
+
+GimpUndo *
+gimp_image_undo_push_rasterizable (GimpImage        *image,
+                                   const gchar      *undo_desc,
+                                   GimpRasterizable *rasterizable)
+{
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
+  g_return_val_if_fail (GIMP_IS_RASTERIZABLE (rasterizable), NULL);
+  g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (rasterizable)), NULL);
+
+  return gimp_image_undo_push (image, GIMP_TYPE_RASTERIZABLE_UNDO,
+                               GIMP_UNDO_RASTERIZABLE, undo_desc,
+                               GIMP_DIRTY_ITEM | GIMP_DIRTY_DRAWABLE,
+                               "item", rasterizable,
+                               NULL);
+}
+
+
 /**********************/
 /*  Text Layer Undos  */
 /**********************/
@@ -836,22 +872,6 @@ gimp_image_undo_push_text_layer (GimpImage        *image,
 }
 
 GimpUndo *
-gimp_image_undo_push_text_layer_modified (GimpImage     *image,
-                                          const gchar   *undo_desc,
-                                          GimpTextLayer *layer)
-{
-  g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
-  g_return_val_if_fail (GIMP_IS_TEXT_LAYER (layer), NULL);
-  g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (layer)), NULL);
-
-  return gimp_image_undo_push (image, GIMP_TYPE_TEXT_UNDO,
-                               GIMP_UNDO_TEXT_LAYER_MODIFIED, undo_desc,
-                               GIMP_DIRTY_ITEM_META,
-                               "item", layer,
-                               NULL);
-}
-
-GimpUndo *
 gimp_image_undo_push_text_layer_convert (GimpImage     *image,
                                          const gchar   *undo_desc,
                                          GimpTextLayer *layer)
@@ -864,6 +884,49 @@ gimp_image_undo_push_text_layer_convert (GimpImage     *image,
                                GIMP_UNDO_TEXT_LAYER_CONVERT, undo_desc,
                                GIMP_DIRTY_ITEM,
                                "item", layer,
+                               NULL);
+}
+
+
+/**********************/
+/*  Link Layer Undos  */
+/**********************/
+
+GimpUndo *
+gimp_image_undo_push_link_layer (GimpImage     *image,
+                                 const gchar   *undo_desc,
+                                 GimpLinkLayer *layer)
+{
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
+  g_return_val_if_fail (GIMP_IS_LINK_LAYER (layer), NULL);
+  g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (layer)), NULL);
+
+  return gimp_image_undo_push (image, GIMP_TYPE_LINK_LAYER_UNDO,
+                               GIMP_UNDO_LINK_LAYER, undo_desc,
+                               GIMP_DIRTY_ITEM | GIMP_DIRTY_DRAWABLE,
+                               "item",  layer,
+                               NULL);
+}
+
+/************************/
+/*  Vector Layer Undos  */
+/************************/
+
+GimpUndo *
+gimp_image_undo_push_vector_layer (GimpImage        *image,
+                                   const gchar      *undo_desc,
+                                   GimpVectorLayer  *layer,
+                                   const GParamSpec *pspec)
+{
+  g_return_val_if_fail (GIMP_IS_IMAGE (image), NULL);
+  g_return_val_if_fail (GIMP_IS_VECTOR_LAYER (layer), NULL);
+  g_return_val_if_fail (gimp_item_is_attached (GIMP_ITEM (layer)), NULL);
+
+  return gimp_image_undo_push (image, GIMP_TYPE_VECTOR_LAYER_UNDO,
+                               GIMP_UNDO_VECTOR_LAYER, undo_desc,
+                               GIMP_DIRTY_ITEM | GIMP_DIRTY_DRAWABLE,
+                               "item",  layer,
+                               "param", pspec,
                                NULL);
 }
 
@@ -889,6 +952,7 @@ gimp_image_undo_push_layer_mask_add (GimpImage     *image,
                                GIMP_DIRTY_IMAGE_STRUCTURE,
                                "item",       layer,
                                "layer-mask", mask,
+                               "edit-mask",  FALSE,
                                NULL);
 }
 
@@ -911,6 +975,7 @@ gimp_image_undo_push_layer_mask_remove (GimpImage     *image,
                                GIMP_DIRTY_IMAGE_STRUCTURE,
                                "item",       layer,
                                "layer-mask", mask,
+                               "edit-mask",  gimp_layer_get_edit_mask (layer),
                                NULL);
 }
 

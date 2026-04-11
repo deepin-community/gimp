@@ -18,27 +18,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_GROUP_LAYER_H__
-#define __GIMP_GROUP_LAYER_H__
+#pragma once
+
+#include "gimplayer.h"
 
 
-#include "core/gimplayer.h"
+#define GIMP_TYPE_GROUP_LAYER (gimp_group_layer_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpGroupLayer,
+                          gimp_group_layer,
+                          GIMP, GROUP_LAYER,
+                          GimpLayer)
 
-
-#define GIMP_TYPE_GROUP_LAYER            (gimp_group_layer_get_type ())
-#define GIMP_GROUP_LAYER(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_GROUP_LAYER, GimpGroupLayer))
-#define GIMP_GROUP_LAYER_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_GROUP_LAYER, GimpGroupLayerClass))
-#define GIMP_IS_GROUP_LAYER(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_GROUP_LAYER))
-#define GIMP_IS_GROUP_LAYER_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_GROUP_LAYER))
-#define GIMP_GROUP_LAYER_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_GROUP_LAYER, GimpGroupLayerClass))
-
-
-typedef struct _GimpGroupLayerClass GimpGroupLayerClass;
-
-struct _GimpGroupLayer
-{
-  GimpLayer  parent_instance;
-};
 
 struct _GimpGroupLayerClass
 {
@@ -73,6 +63,3 @@ void             _gimp_group_layer_start_transform    (GimpGroupLayer      *grou
                                                        gboolean             push_undo);
 void             _gimp_group_layer_end_transform      (GimpGroupLayer      *group,
                                                        gboolean             push_undo);
-
-
-#endif /* __GIMP_GROUP_LAYER_H__ */

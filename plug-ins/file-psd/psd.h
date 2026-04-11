@@ -35,6 +35,7 @@
 #define LOAD_MERGED_PROC                "file-psd-load-merged"
 #define LOAD_THUMB_PROC                 "file-psd-load-thumb"
 #define EXPORT_PROC                     "file-psd-export"
+#define EXPORT_PSB_PROC                 "file-psb-export"
 #define LOAD_METADATA_PROC              "file-psd-load-metadata"
 #define PLUG_IN_BINARY                  "file-psd"
 #define PLUG_IN_ROLE                    "gimp-file-psd"
@@ -592,13 +593,12 @@ typedef struct
 {
   guint32    size;
   guint32    ver;
-  guint32    blur;
-  guint32    intensity;
-  gint32     angle;
-  guint32    distance;
+  gfloat     blur;
+  gfloat     intensity;
+  gfloat     angle;
+  gfloat     distance;
   guint16    color[5];
   gchar      blendsig[4];
-  guint32    effect;
   guchar     effecton;
   guchar     anglefx;
   guchar     opacity;
@@ -796,6 +796,7 @@ typedef struct
   guint32              *alpha_id;               /* Alpha channel ids (tattoos) */
   guint16               alpha_id_count;         /* Number of alpha channel id items */
   guint16               quick_mask_id;          /* Channel number containing quick mask */
+  gint32                global_light_angle;     /* Global Lighting Angle for Effect layers */
 
   GimpColorProfile     *cmyk_profile;
   gpointer              cmyk_transform;

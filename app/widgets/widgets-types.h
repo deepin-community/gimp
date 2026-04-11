@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __WIDGETS_TYPES_H__
-#define __WIDGETS_TYPES_H__
-
+#pragma once
 
 #include "libgimpwidgets/gimpwidgetstypes.h"
 
@@ -30,6 +28,7 @@
 
 typedef struct _GimpControllerInfo           GimpControllerInfo;
 typedef struct _GimpControllerKeyboard       GimpControllerKeyboard;
+typedef struct _GimpControllerManager        GimpControllerManager;
 typedef struct _GimpControllerMouse          GimpControllerMouse;
 typedef struct _GimpControllerWheel          GimpControllerWheel;
 typedef struct _GimpDeviceInfo               GimpDeviceInfo;
@@ -89,6 +88,7 @@ typedef struct _GimpContainerBox             GimpContainerBox;
 typedef struct _GimpContainerComboBox        GimpContainerComboBox;
 typedef struct _GimpContainerEntry           GimpContainerEntry;
 typedef struct _GimpContainerIconView        GimpContainerIconView;
+typedef struct _GimpContainerListView        GimpContainerListView;
 typedef struct _GimpContainerTreeStore       GimpContainerTreeStore;
 typedef struct _GimpContainerTreeView        GimpContainerTreeView;
 typedef struct _GimpContainerView            GimpContainerView; /* dummy typedef */
@@ -162,6 +162,8 @@ typedef struct _GimpViewableDialog           GimpViewableDialog;
 typedef struct _GimpBrushSelect              GimpBrushSelect;
 typedef struct _GimpFontSelect               GimpFontSelect;
 typedef struct _GimpGradientSelect           GimpGradientSelect;
+typedef struct _GimpImageSelect              GimpImageSelect;
+typedef struct _GimpItemSelect               GimpItemSelect;
 typedef struct _GimpPaletteSelect            GimpPaletteSelect;
 typedef struct _GimpPatternSelect            GimpPatternSelect;
 typedef struct _GimpPickableSelect           GimpPickableSelect;
@@ -204,10 +206,12 @@ typedef struct _GimpHighlightableButton      GimpHighlightableButton;
 typedef struct _GimpHistogramBox             GimpHistogramBox;
 typedef struct _GimpHistogramView            GimpHistogramView;
 typedef struct _GimpIconPicker               GimpIconPicker;
+typedef struct _GimpImageChooser             GimpImageChooser;
 typedef struct _GimpImageCommentEditor       GimpImageCommentEditor;
 typedef struct _GimpImageParasiteView        GimpImageParasiteView;
 typedef struct _GimpImageProfileView         GimpImageProfileView;
 typedef struct _GimpImagePropView            GimpImagePropView;
+typedef struct _GimpItemChooser              GimpItemChooser;
 typedef struct _GimpLanguageComboBox         GimpLanguageComboBox;
 typedef struct _GimpLanguageEntry            GimpLanguageEntry;
 typedef struct _GimpLanguageStore            GimpLanguageStore;
@@ -261,6 +265,7 @@ typedef struct _GimpViewRenderer             GimpViewRenderer;
 typedef struct _GimpViewRendererBrush        GimpViewRendererBrush;
 typedef struct _GimpViewRendererBuffer       GimpViewRendererBuffer;
 typedef struct _GimpViewRendererDrawable     GimpViewRendererDrawable;
+typedef struct _GimpViewRendererFont         GimpViewRendererFont;
 typedef struct _GimpViewRendererGradient     GimpViewRendererGradient;
 typedef struct _GimpViewRendererImage        GimpViewRendererImage;
 typedef struct _GimpViewRendererImagefile    GimpViewRendererImagefile;
@@ -274,6 +279,11 @@ typedef struct _GimpViewRendererPath         GimpViewRendererPath;
 typedef struct _GimpCellRendererButton       GimpCellRendererButton;
 typedef struct _GimpCellRendererDashes       GimpCellRendererDashes;
 typedef struct _GimpCellRendererViewable     GimpCellRendererViewable;
+
+
+/*  list rows  */
+
+typedef struct _GimpRow                      GimpRow;
 
 
 /*  misc objects  */
@@ -331,6 +341,3 @@ typedef gboolean    (* GimpPanedBoxDroppedFunc)      (GtkWidget         *noteboo
                                                       gpointer           data);
 
 typedef GtkWidget * (* GimpToolOptionsGUIFunc)       (GimpToolOptions   *tool_options);
-
-
-#endif /* __WIDGETS_TYPES_H__ */

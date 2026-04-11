@@ -47,6 +47,10 @@ GimpDock GimpColorScales spinbutton entry {
     padding-bottom: 2px;
 }
 
+GimpColorSelect button.radio  {
+  margin-right: 0px;
+}
+
 GimpColorSelection ColorselCmyk {
     padding: 2px 2px 2px 2px;
 }
@@ -76,6 +80,13 @@ GimpOverlayDialog button,
 GimpToolDialog :not(headerbar) button,
 GimpTextStyleEditor button {
     padding: 0px 2px 0px 2px;
+}
+
+GimpDock :not(toolbutton) > button + button,
+GimpOverlayDialog button + button,
+GimpToolDialog :not(headerbar) button + button,
+GimpTextStyleEditor button + button {
+    margin-right: 4px;
 }
 
 GimpToolDialog headerbar {
@@ -108,22 +119,80 @@ spinbutton entry {
     border-radius: 3px;
 }
 
+/* 9 button toggles on some transformation tools */
+GimpPivotSelector .toggle {
+  margin-right: 0px;
+}
+
 GimpSpinScale entry {
     /* Important: prevent overhigh spin scale */
     min-height: 16px;
-    padding:    0px 8px 0px 5px;
+    padding:    0px;
 }
 
 GimpSpinScale entry progress {
     background-color: @theme_selected_bg_color;
     border-width:     0px;
     border-radius:    3px;
-    margin:           0px -8px 0px -5px;
+    margin:           0px;
 }
 
 GimpSpinScale button {
     /* Makes the +- buttons a bit more compact. */
     padding: 0 1px 0 1px;
+}
+
+
+/* Create appearance of toggle group for enum radio buttons */
+buttonbox button.radio
+{
+  min-height:    24px;
+  min-width:     16px;
+  outline-width: 0px;
+}
+
+buttonbox button.radio image
+{
+  padding: 4px;
+}
+
+buttonbox.horizontal button.radio
+{
+  border-top:    1px solid @borders;
+  border-bottom: 1px solid @borders;
+  border-left:   1px solid @borders;
+}
+
+buttonbox.horizontal button.radio:last-child
+{
+  border-right: 1px solid @borders;
+}
+
+buttonbox.vertical button.radio
+{
+  border-top:   1px solid @borders;
+  border-left:  1px solid @borders;
+  border-right: 1px solid @borders;
+  margin-right: 0px;
+}
+
+buttonbox.vertical button.radio:last-child
+{
+  border-bottom: 1px solid @borders;
+}
+
+buttonbox.horizontal button.radio:not(:first-child)
+{
+  margin-right: -1px;
+}
+
+buttonbox.vertical button.radio:not(:first-child)
+{
+  margin-bottom: -1px;
+}
+
+combobox button {
+  outline-width: 0px;
 }
 
 entry.italic {
@@ -145,4 +214,13 @@ treeview .toggle-icon:not(.visible):hover {
 
 treeview .toggle-icon:not(.visible):selected {
     border-color: lightgray;
+}
+
+.metadata-tag-row box {
+    background-color: transparent;
+    margin: 3px;
+}
+
+.metadata-value-label {
+    margin-left: 12px;
 }

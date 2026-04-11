@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_IMAGE_PREVIEW_H__
-#define __GIMP_IMAGE_PREVIEW_H__
+#pragma once
 
 
 const Babl  * gimp_image_get_preview_format (GimpImage    *image);
@@ -41,11 +40,10 @@ gboolean      gimp_image_get_popup_size     (GimpViewable *viewable,
 GimpTempBuf * gimp_image_get_new_preview    (GimpViewable *viewable,
                                              GimpContext  *context,
                                              gint          width,
-                                             gint          height);
+                                             gint          height,
+                                             GeglColor    *fg_color);
 GdkPixbuf   * gimp_image_get_new_pixbuf     (GimpViewable *viewable,
                                              GimpContext  *context,
                                              gint          width,
-                                             gint          height);
-
-
-#endif /* __GIMP_IMAGE_PREVIEW_H__ */
+                                             gint          height,
+                                             GeglColor    *fg_color);

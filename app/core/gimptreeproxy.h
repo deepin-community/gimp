@@ -18,9 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_TREE_PROXY_H__
-#define __GIMP_TREE_PROXY_H__
-
+#pragma once
 
 #include "gimplist.h"
 
@@ -51,7 +49,7 @@ struct _GimpTreeProxyClass
 
 GType           gimp_tree_proxy_get_type (void) G_GNUC_CONST;
 
-GimpContainer * gimp_tree_proxy_new               (GType          children_type);
+GimpContainer * gimp_tree_proxy_new               (GType          child_type);
 GimpContainer * gimp_tree_proxy_new_for_container (GimpContainer *container);
 
 void            gimp_tree_proxy_set_container     (GimpTreeProxy *tree_proxy,
@@ -61,6 +59,3 @@ GimpContainer * gimp_tree_proxy_get_container     (GimpTreeProxy *tree_proxy);
 void            gimp_tree_proxy_set_flat          (GimpTreeProxy *tree_proxy,
                                                    gboolean       flat);
 gboolean        gimp_tree_proxy_get_flat          (GimpTreeProxy *tree_proxy);
-
-
-#endif  /*  __GIMP_TREE_PROXY_H__  */

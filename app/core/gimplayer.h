@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_LAYER_H__
-#define __GIMP_LAYER_H__
-
+#pragma once
 
 #include "gimpdrawable.h"
 
@@ -124,7 +122,8 @@ struct _GimpLayerClass
                                                GimpTransformDirection  direction,
                                                GimpInterpolationType   interpolation_type,
                                                GimpTransformResize     clip_result,
-                                               GimpProgress           *progress);
+                                               GimpProgress           *progress,
+                                               gboolean                push_undo);
   void          (* convert_type)              (GimpLayer              *layer,
                                                GimpImage              *dest_image,
                                                const Babl             *new_format,
@@ -160,6 +159,7 @@ GimpLayerMask * gimp_layer_create_mask         (GimpLayer            *layer,
                                                 GimpChannel          *channel);
 GimpLayerMask * gimp_layer_add_mask            (GimpLayer            *layer,
                                                 GimpLayerMask        *mask,
+                                                gboolean              edit_mask,
                                                 gboolean              push_undo,
                                                 GError              **error);
 void            gimp_layer_apply_mask          (GimpLayer            *layer,
@@ -249,5 +249,4 @@ gboolean        gimp_layer_is_alpha_locked     (GimpLayer            *layer,
 void          gimp_layer_update_effective_mode (GimpLayer            *layer);
 void       gimp_layer_update_excludes_backdrop (GimpLayer            *layer);
 
-
-#endif /* __GIMP_LAYER_H__ */
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GimpLayer, g_object_unref);

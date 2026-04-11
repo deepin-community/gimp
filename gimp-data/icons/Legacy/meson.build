@@ -261,6 +261,10 @@ legacy_icons_24 = [
   '24/gimp-print-resolution.png',
   '24/gimp-sample-point.png',
   '24/gimp-template.png',
+  '24/gimp-text-dir-ttb-ltr.png',
+  '24/gimp-text-dir-ttb-ltr-upright.png',
+  '24/gimp-text-dir-ttb-rtl.png',
+  '24/gimp-text-dir-ttb-rtl-upright.png',
   '24/gimp-text-layer.png',
   '24/gimp-toilet-paper.png',
   '24/gimp-tool-options.png',
@@ -366,6 +370,8 @@ legacy_icons_256 = [
   '256/gimp-wilber.png',
 ]
 legacy_tools_scalable = [
+  '../Default/scalable/gimp-curve-point-corner.svg',
+  '../Default/scalable/gimp-curve-point-smooth.svg',
   'scalable/gimp-gegl.svg',
   'scalable/gimp-tool-airbrush.svg',
   'scalable/gimp-tool-align.svg',
@@ -444,6 +450,7 @@ legacy_temporary_scalable = [
   '../Default/scalable/gimp-even-horizontal-gap.svg',
   '../Default/scalable/gimp-even-vertical-gap.svg',
   '../Default/scalable/gimp-file-manager.svg',
+  '../Default/scalable/gimp-group-layer.svg',
   '../Default/scalable/gimp-lock-alpha.svg',
   '../Default/scalable/gimp-lock-alpha-symbolic.svg',
   '../Default/scalable/gimp-lock-content.svg',
@@ -491,6 +498,8 @@ legacy_temporary_scalable = [
   '../Default/scalable/gimp-symmetry.svg',
   '../Default/scalable/gtk-ok.svg',
   '../Default/scalable/gtk-no.svg',
+  '../Default/scalable/gtk-yes.svg',
+  '../Default/scalable/gtk-cancel.svg',
   '../Default/scalable/gtk-select-color.svg',
   '../Default/scalable/gtk-select-font.svg',
 ]

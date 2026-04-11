@@ -44,7 +44,7 @@ libappconfig = static_library('appconfig',
   include_directories: [ rootInclude, rootAppInclude, ],
   c_args: '-DG_LOG_DOMAIN="Gimp-Config"',
   dependencies: [
-    cairo, gegl, gdk_pixbuf, gio, gio_specific, libmypaint,
+    cairo, gegl, gdk_pixbuf, gexiv2, gio, gio_specific, libmypaint,
   ],
 )
 
@@ -53,7 +53,7 @@ test('app-config',
     [ 'test-config.c', app_debug_files, ],
 
     dependencies: [
-      appstream_glib,
+      appstream,
       libapp_dep,
     ],
     link_with: [

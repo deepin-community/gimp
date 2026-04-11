@@ -38,7 +38,7 @@
 #include "core/gimppickable.h"
 #include "core/gimppickable-auto-shrink.h"
 
-#include "vectors/gimppath.h"
+#include "path/gimppath.h"
 
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimpwidgets-utils.h"
@@ -155,6 +155,7 @@ gimp_align_tool_class_init (GimpAlignToolClass *klass)
   tool_class->cursor_update  = gimp_align_tool_cursor_update;
   tool_class->can_undo       = gimp_align_tool_can_undo;
   tool_class->undo           = gimp_align_tool_undo;
+  tool_class->is_destructive = FALSE;
 
   draw_tool_class->draw      = gimp_align_tool_draw;
 }
@@ -305,7 +306,7 @@ gimp_align_tool_button_release (GimpTool              *tool,
       /* Check if a layer is fully included in the rubber-band rectangle.
        * Don't verify for too small rectangles.
        */
-      /* FIXME: look for vectors too */
+      /* FIXME: look for paths too */
       if (hypot (coords->x - align_tool->x1,
                  coords->y - align_tool->y1) > EPSILON)
         {

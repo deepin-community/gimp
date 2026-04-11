@@ -22,6 +22,10 @@
 
 #include <stdlib.h>
 #include <ctype.h>
+#ifdef _WIN32
+#include <string.h>
+#define strdup _strdup
+#endif
 
 #include <gegl.h>
 #include <gtk/gtk.h>
@@ -4267,7 +4271,7 @@ metadata_dialog_editor_set_metadata (GExiv2Metadata  *metadata,
                                           COL_LICENSOR_PHONE1,      NULL,
                                           COL_LICENSOR_PHONE_TYPE1, gettext (phone_types[0].display),
                                           COL_LICENSOR_PHONE2,      NULL,
-                                          COL_LICENSOR_PHONE_TYPE1, gettext (phone_types[0].display),
+                                          COL_LICENSOR_PHONE_TYPE2, gettext (phone_types[0].display),
                                           COL_LICENSOR_EMAIL,       NULL,
                                           COL_LICENSOR_WEB,         NULL,
                                           -1);

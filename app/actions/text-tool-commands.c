@@ -36,7 +36,10 @@
 
 #include "display/gimpdisplay.h"
 
+#include "text/gimptextlayer.h"
+
 #include "tools/gimptexttool.h"
+#include "tools/gimptexttool-editor.h"
 
 #include "dialogs/dialogs.h"
 
@@ -82,6 +85,46 @@ text_tool_paste_cmd_callback (GimpAction *action,
   GimpTextTool *text_tool = GIMP_TEXT_TOOL (data);
 
   gimp_text_tool_paste_clipboard (text_tool);
+}
+
+void
+text_tool_paste_unformatted_cmd_callback (GimpAction *action,
+                                          GVariant   *value,
+                                          gpointer    data)
+{
+  GimpTextTool *text_tool = GIMP_TEXT_TOOL (data);
+
+  gimp_text_tool_paste_clipboard_unformatted (text_tool);
+}
+
+void
+text_tool_toggle_bold_cmd_callback (GimpAction *action,
+                                    GVariant   *value,
+                                    gpointer    data)
+{
+  GimpTextTool *text_tool = GIMP_TEXT_TOOL (data);
+
+  gimp_text_tool_toggle_tag (text_tool, text_tool->buffer->bold_tag);
+}
+
+void
+text_tool_toggle_italic_cmd_callback (GimpAction *action,
+                                      GVariant   *value,
+                                      gpointer    data)
+{
+  GimpTextTool *text_tool = GIMP_TEXT_TOOL (data);
+
+  gimp_text_tool_toggle_tag (text_tool, text_tool->buffer->italic_tag);
+}
+
+void
+text_tool_toggle_underline_cmd_callback (GimpAction *action,
+                                         GVariant   *value,
+                                         gpointer    data)
+{
+  GimpTextTool *text_tool = GIMP_TEXT_TOOL (data);
+
+  gimp_text_tool_toggle_tag (text_tool, text_tool->buffer->underline_tag);
 }
 
 void
@@ -170,7 +213,7 @@ text_tool_text_to_path_cmd_callback (GimpAction *action,
 {
   GimpTextTool *text_tool = GIMP_TEXT_TOOL (data);
 
-  gimp_text_tool_create_vectors (text_tool);
+  gimp_text_tool_create_path (text_tool);
 }
 
 void
@@ -181,7 +224,7 @@ text_tool_text_along_path_cmd_callback (GimpAction *action,
   GimpTextTool *text_tool = GIMP_TEXT_TOOL (data);
   GError       *error     = NULL;
 
-  if (! gimp_text_tool_create_vectors_warped (text_tool, &error))
+  if (! gimp_text_tool_create_path_warped (text_tool, &error))
     {
       gimp_message (text_tool->image->gimp, G_OBJECT (text_tool),
                     GIMP_MESSAGE_ERROR,
@@ -205,6 +248,17 @@ text_tool_direction_cmd_callback (GimpAction *action,
                 "base-direction", direction,
                 NULL);
 }
+
+void
+text_tool_restore_on_canvas_editor_position_cmd_callback (GimpAction *action,
+                                                          GVariant   *value,
+                                                          gpointer    data)
+{
+  GimpTextTool *text_tool = GIMP_TEXT_TOOL (data);
+
+  gimp_text_tool_restore_on_canvas_editor_position (text_tool);
+}
+
 
 
 /*  private functions  */

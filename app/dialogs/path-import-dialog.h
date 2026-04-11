@@ -15,26 +15,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __PATH_IMPORT_DIALOG_H__
-#define __PATH_IMPORT_DIALOG_H__
+#pragma once
 
 
 typedef void (* GimpPathImportCallback) (GtkWidget *dialog,
                                          GimpImage *image,
                                          GFile     *file,
                                          GFile     *import_folder,
-                                         gboolean   merge_vectors,
-                                         gboolean   scale_vectors,
+                                         gboolean   merge_paths,
+                                         gboolean   scale_paths,
                                          gpointer   user_data);
 
 
 GtkWidget * path_import_dialog_new (GimpImage                 *image,
                                     GtkWidget                 *parent,
                                     GFile                     *import_folder,
-                                    gboolean                   merge_path,
-                                    gboolean                   scale_path,
+                                    gboolean                   merge_paths,
+                                    gboolean                   scale_paths,
                                     GimpPathImportCallback     callback,
                                     gpointer                   user_data);
-
-
-#endif /* __PATH_IMPORT_DIALOG_H__ */

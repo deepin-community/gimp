@@ -78,7 +78,14 @@ gimp_operation_equalize_class_init (GimpOperationEqualizeClass *klass)
 
   gegl_operation_class_set_keys (operation_class,
                                  "name",        "gimp:equalize",
-                                 "categories",  "color",
+                                 /* Adding to "hidden" category because
+                                  * it cannot be used through the API
+                                  * right now (missing GimpHistogram
+                                  * type in libgimp), and even less as
+                                  * NDE since it won't update the
+                                  * histogram on changes.
+                                  */
+                                 "categories",  "color:hidden",
                                  "description", "GIMP Equalize operation",
                                  NULL);
 
@@ -96,8 +103,21 @@ gimp_operation_equalize_class_init (GimpOperationEqualizeClass *klass)
 static void
 gimp_operation_equalize_init (GimpOperationEqualize *self)
 {
+  GimpOperationPointFilter *pt = GIMP_OPERATION_POINT_FILTER (self);
+
   self->values = NULL;
   self->n_bins = 0;
+
+  /* Let's have equalize work in non-linear space (see #14486), just
+   * like in GIMP 2.10.
+   * I do wonder if really what matters is that we work in a
+   * kinda-perceptual space, then maybe we actually want to work in
+   * GIMP_TRC_PERCEPTUAL.
+   * And are there cases where we want to equalize across actual light?
+   * In this case, maybe we should add a "trc" property to this
+   * operation would allow people to use it however they want.
+   */
+  pt->trc = GIMP_TRC_NON_LINEAR;
 }
 
 static void
@@ -142,10 +162,7 @@ gimp_operation_equalize_set_property (GObject      *object,
   switch (property_id)
     {
     case PROP_HISTOGRAM:
-      if (self->histogram)
-        g_object_unref (self->histogram);
-
-      self->histogram = g_value_dup_object (value);
+      g_set_object (&self->histogram, g_value_get_object (value));
 
       if (self->histogram)
         {
@@ -215,6 +232,10 @@ gimp_operation_equalize_map (GimpOperationEqualize *self,
                              gfloat                 value)
 {
   gint index;
+
+  if (isnan (value))
+    value = 0;
+
   index = component * self->n_bins + \
             (gint) (CLAMP (value * (self->n_bins - 1), 0.0, self->n_bins - 1));
 

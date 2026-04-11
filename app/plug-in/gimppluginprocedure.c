@@ -162,11 +162,13 @@ gimp_plug_in_procedure_finalize (GObject *object)
   g_free (proc->insensitive_reason);
 
   g_free (proc->extensions);
+  g_free (proc->meta_extensions);
   g_free (proc->prefixes);
   g_free (proc->magics);
   g_free (proc->mime_types);
 
   g_slist_free_full (proc->extensions_list, (GDestroyNotify) g_free);
+  g_slist_free_full (proc->meta_extensions_list, (GDestroyNotify) g_free);
   g_slist_free_full (proc->prefixes_list, (GDestroyNotify) g_free);
   g_slist_free_full (proc->magics_list, (GDestroyNotify) g_free);
   g_slist_free_full (proc->mime_types_list, (GDestroyNotify) g_free);
@@ -357,9 +359,8 @@ gimp_plug_in_procedure_get_sensitive (GimpProcedure  *procedure,
   else if (g_list_length (drawables) == 1 &&
            (proc->sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_DRAWABLE) == 0)
     sensitive = FALSE;
-  else if (image && g_list_length (drawables) == 0 &&
-           (proc->sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_NO_DRAWABLES) == 0)
-    sensitive = FALSE;
+  else if (image && g_list_length (drawables) == 0)
+    sensitive = proc->sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_NO_DRAWABLES;
   else if (g_list_length (drawables) > 1 &&
            (proc->sensitivity_mask & GIMP_PROCEDURE_SENSITIVE_DRAWABLES) == 0)
     sensitive = FALSE;
@@ -1138,6 +1139,7 @@ extensions_parse (gchar *extensions)
 void
 gimp_plug_in_procedure_set_file_proc (GimpPlugInProcedure *proc,
                                       const gchar         *extensions,
+                                      const gchar         *meta_extensions,
                                       const gchar         *prefixes,
                                       const gchar         *magics)
 {
@@ -1151,8 +1153,7 @@ gimp_plug_in_procedure_set_file_proc (GimpPlugInProcedure *proc,
 
   if (proc->extensions != extensions)
     {
-      if (proc->extensions)
-        g_free (proc->extensions);
+      g_free (proc->extensions);
 
       proc->extensions = g_strdup (extensions);
     }
@@ -1161,6 +1162,18 @@ gimp_plug_in_procedure_set_file_proc (GimpPlugInProcedure *proc,
     g_slist_free_full (proc->extensions_list, (GDestroyNotify) g_free);
 
   proc->extensions_list = extensions_parse (proc->extensions);
+
+  if (proc->meta_extensions != meta_extensions)
+    {
+      g_free (proc->meta_extensions);
+
+      proc->meta_extensions = g_strdup (meta_extensions);
+    }
+
+  if (proc->meta_extensions_list)
+    g_slist_free_full (proc->meta_extensions_list, (GDestroyNotify) g_free);
+
+  proc->meta_extensions_list = extensions_parse (proc->meta_extensions);
 
   /*  prefixes  */
 
@@ -1204,6 +1217,104 @@ gimp_plug_in_procedure_set_file_proc (GimpPlugInProcedure *proc,
     g_slist_free_full (proc->magics_list, (GDestroyNotify) g_free);
 
   proc->magics_list = extensions_parse (proc->magics);
+}
+
+gchar *
+gimp_plug_in_procedure_get_save_extensions (GimpPlugInProcedure *proc,
+                                            gboolean             one_full)
+{
+  GString *str = g_string_new ("");
+
+  for (GSList *iter = proc->extensions_list; iter; iter = iter->next)
+    if (g_str_has_prefix (iter->data, "xcf"))
+      {
+        g_string_append (str, iter->data);
+
+        if (one_full)
+          break;
+
+        if (iter->next && ! one_full)
+          g_string_append (str, ",");
+      }
+
+  return g_string_free (str, (str->len == 0));
+}
+
+gchar *
+gimp_plug_in_procedure_get_export_extensions (GimpPlugInProcedure *proc,
+                                              gboolean             one_full)
+{
+  GString *str = g_string_new ("");
+
+  for (GSList *iter = proc->extensions_list; iter; iter = iter->next)
+    if (! g_str_has_prefix (iter->data, "xcf"))
+      {
+        g_string_append (str, iter->data);
+
+        if (one_full)
+          break;
+
+        if (iter->next)
+          g_string_append (str, ",");
+      }
+
+  if ((str->len == 0 || ! one_full) && proc->meta_extensions_list)
+    {
+      if (str->len > 0)
+        g_string_append (str, ",");
+
+      for (GSList *iter = proc->meta_extensions_list; iter; iter = iter->next)
+        {
+          /* The one_full case is used to actually set an extension. If
+           * we don't have a good common export format using this meta
+           * format, then let's use PNG.
+           * The other case is for displaying full listing of supported
+           * export extensions. We use a glob '*' for display.
+           */
+          if (one_full)
+            g_string_append_printf (str, "png.%s", (gchar *) iter->data);
+          else
+            g_string_append_printf (str, "*.%s", (gchar *) iter->data);
+
+          if (one_full)
+            break;
+
+          if (iter->next)
+            g_string_append (str, ",");
+        }
+    }
+
+  return g_string_free (str, (str->len == 0));
+}
+
+gchar *
+gimp_plug_in_procedure_get_open_extensions (GimpPlugInProcedure *proc)
+{
+  GString *str = g_string_new ("");
+
+  for (GSList *iter = proc->extensions_list; iter; iter = iter->next)
+    {
+      g_string_append (str, iter->data);
+
+      if (iter->next)
+        g_string_append (str, ",");
+    }
+
+  if (proc->meta_extensions_list)
+    {
+      if (str->len > 0)
+        g_string_append (str, ",");
+
+      for (GSList *iter = proc->meta_extensions_list; iter; iter = iter->next)
+        {
+          g_string_append_printf (str, "*.%s", (gchar *) iter->data);
+
+          if (iter->next)
+            g_string_append (str, ",");
+        }
+    }
+
+  return g_string_free (str, (str->len == 0));
 }
 
 void
@@ -1337,4 +1448,21 @@ gimp_plug_in_procedure_handle_return_values (GimpPlugInProcedure *proc,
         }
       break;
     }
+}
+
+gboolean
+gimp_plug_in_procedure_is_xcf_load (GimpPlugInProcedure *file_proc)
+{
+  const gchar *proc_name;
+
+  g_return_val_if_fail (GIMP_IS_PLUG_IN_PROCEDURE (file_proc), TRUE);
+
+  proc_name = gimp_object_get_name (file_proc);
+
+  /* Even when loading through an intermediate container format plug-in
+   * (e.g. file-compressor), the stored procedure shall be the inner
+   * format.
+   * See commit bb9d8df855b.
+   */
+  return (g_strcmp0 (proc_name, "gimp-xcf-load") == 0);
 }

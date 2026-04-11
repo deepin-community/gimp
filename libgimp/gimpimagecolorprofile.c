@@ -27,13 +27,15 @@
  * gimp_image_get_color_profile:
  * @image: The image.
  *
- * Returns the image's color profile
+ * This procedure returns the image's color profile, or %NULL if the
+ * image uses the built-in color profile.
  *
- * This procedure returns the image's color profile, or NULL if the
- * image has no color profile assigned.
+ * See also [method@Gimp.Image.get_effective_color_profile] if you want
+ * the effective color profile and don't want to have to deal with %NULL
+ * return values.
  *
- * Returns: (transfer full): The image's color profile. The returned
- *          value must be freed with [method@GObject.Object.unref].
+ * Returns: (transfer full) (nullable): The image's color profile. The
+ *          returned value must be freed with [method@GObject.Object.unref].
  *
  * Since: 2.10
  **/
@@ -63,9 +65,10 @@ gimp_image_get_color_profile (GimpImage *image)
  * @image:   The image.
  * @profile: (nullable): A #GimpColorProfile, or %NULL.
  *
- * Sets the image's color profile
- *
  * This procedure sets the image's color profile.
+ *
+ * If %NULL is passed as @profile, then the built-in profile for
+ * @image's color model is set.
  *
  * Returns: %TRUE on success.
  *
@@ -100,13 +103,11 @@ gimp_image_set_color_profile (GimpImage        *image,
  * gimp_image_get_simulation_profile:
  * @image: The image.
  *
- * Returns the image's simulation color profile
- *
- * This procedure returns the image's simulation color profile, or NULL if
+ * This procedure returns the image's simulation color profile, or %NULL if
  * the image has no simulation color profile assigned.
  *
- * Returns: (transfer full): The image's simulation color profile. The
- *          returned value must be freed with g_object_unref().
+ * Returns: (transfer full) (nullable): The image's simulation color profile. The
+ *          returned value must be freed with [method@GObject.Object.unref].
  *
  * Since: 3.0
  **/
@@ -136,9 +137,9 @@ gimp_image_get_simulation_profile (GimpImage *image)
  * @image:   The image.
  * @profile: (nullable): A #GimpColorProfile, or %NULL.
  *
- * Sets the image's simulation color profile
- *
  * This procedure sets the image's simulation color profile.
+ *
+ * If %NULL is passed as @profile, then the simulation profile is unset.
  *
  * Returns: %TRUE on success.
  *
@@ -172,15 +173,10 @@ gimp_image_set_simulation_profile (GimpImage        *image,
  * gimp_image_get_effective_color_profile:
  * @image: The image.
  *
- * Returns the color profile that is used for the image.
- *
  * This procedure returns the color profile that is actually used for
  * this image, which is the profile returned by
  * [method@Gimp.Image.get_color_profile] if the image has a profile
- * assigned, or the default profile from preferences, for the given
- * color space, if no profile is assigned to the image. If there is no
- * default profile configured in preferences either, a generated default
- * profile is returned.
+ * assigned, or a built-in profile for the given color space otherwise.
  *
  * Returns: (transfer full): The color profile. The returned value must
  *          be freed with [method@GObject.Object.unref].
@@ -212,17 +208,16 @@ gimp_image_get_effective_color_profile (GimpImage *image)
 /**
  * gimp_image_convert_color_profile:
  * @image:   The image.
- * @profile: The color profile to convert to.
+ * @profile: (nullable): The color profile to convert to.
  * @intent:  Rendering intent.
  * @bpc:     Black point compensation.
  *
- * Convert the image's layers to a color profile
- *
  * This procedure converts from the image's color profile (or the
- * default profile if none is set) to the given color profile.
+ * built-in profile if none is set) to the given color profile.
  *
- * Only RGB and grayscale color profiles are accepted, according to the
- * image's type.
+ * Make sure you use a valid color profile, according to the image's
+ * type (e.g. RGB or grayscale color profiles respectively for RGB or
+ * grayscale images).
  *
  * Returns: %TRUE on success.
  *

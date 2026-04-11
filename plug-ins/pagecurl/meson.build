@@ -1,8 +1,9 @@
 plugin_name = 'pagecurl'
 
-plugin_sources = [
+plugin_sourcecode = [
   'pagecurl.c',
 ]
+plugin_sources = plugin_sourcecode
 
 pagecurl_icons_images = [
   'curl0.png',
@@ -41,9 +42,8 @@ if platform_windows
   plugin_sources += windows.compile_resources(
     gimp_plugins_rc,
     args: [
-      '--define', 'ORIGINALFILENAME_STR="@0@"'.format(plugin_name+'.exe'),
-      '--define', 'INTERNALNAME_STR="@0@"'    .format(plugin_name),
-      '--define', 'TOP_SRCDIR="@0@"'          .format(meson.project_source_root()),
+      rc_define_flag, rc_define_fmt.format('ORIGINALFILENAME_STR', plugin_name+'.exe'),
+      rc_define_flag, rc_define_fmt.format('INTERNALNAME_STR', plugin_name),
     ],
     include_directories: [
       rootInclude, appInclude,
@@ -60,4 +60,12 @@ plugin_exe = executable(plugin_name,
                         win_subsystem: 'windows',
                         install: true,
                         install_dir: gimpplugindir / 'plug-ins' / plugin_name)
+
+# Ugly trick to add executables to plugin_custom_targets list (see root meson.build)
+plugin_custom_targets += custom_target('dummy-' + plugin_name,
+              input: plugin_exe,
+              output: 'dummy-' + plugin_name + '.dummy',
+              command: [python, '-c',
+                        'open("@OUTPUT@", "w").write("Nice. I was built before calling in-build-gimp.py\\n")'],
+              build_by_default: true)
 plugin_executables += [plugin_exe.full_path()]

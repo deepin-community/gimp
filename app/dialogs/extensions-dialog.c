@@ -73,7 +73,7 @@ extensions_dialog_new (Gimp *gimp)
   GtkWidget   *widget;
   GtkTreeIter  top_iter;
 
-  dialog = gimp_dialog_new (_("Extensions"), "gimp-extensions",
+  dialog = gimp_dialog_new (C_("GIMP extensions", "Extensions"), "gimp-extensions",
                             NULL, 0, NULL,
                             GIMP_HELP_EXTENSIONS_DIALOG,
                             _("_OK"), GTK_RESPONSE_OK,
@@ -90,7 +90,9 @@ extensions_dialog_new (Gimp *gimp)
 
   stack = gtk_stack_new ();
   gtk_stack_set_transition_type (GTK_STACK (stack),
-                                 GTK_STACK_TRANSITION_TYPE_SLIDE_RIGHT);
+                                 gimp_widget_animation_enabled ()        ?
+                                   GTK_STACK_TRANSITION_TYPE_SLIDE_RIGHT :
+                                   GTK_STACK_TRANSITION_TYPE_NONE);
   gtk_box_pack_start (GTK_BOX (gtk_dialog_get_content_area (GTK_DIALOG (dialog))),
                       stack, TRUE, TRUE, 0);
   gtk_widget_show (stack);

@@ -1090,6 +1090,7 @@ read_creator_block (FILE      *f,
   guint16       keyword;
   guint32       length;
   gchar        *string;
+  gchar        *string2;
   gchar        *title = NULL, *artist = NULL, *copyright = NULL, *description = NULL;
   guint32       dword;
   guint32       __attribute__((unused))cdate = 0;
@@ -1120,7 +1121,17 @@ read_creator_block (FILE      *f,
         }
       keyword = GUINT16_FROM_LE (keyword);
       length = GUINT32_FROM_LE (length);
-      switch (keyword)
+
+      if ((goffset) ftell (f) + length > (goffset) data_start + total_len)
+        {
+          /* FIXME: After string freeze is over, we should consider changing
+           * this error message to be a bit more descriptive. */
+          g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                       _("Error reading creator keyword data"));
+          return -1;
+        }
+
+        switch (keyword)
         {
         case PSP_CRTR_FLD_TITLE:
         case PSP_CRTR_FLD_ARTIST:
@@ -1136,6 +1147,19 @@ read_creator_block (FILE      *f,
             }
           /* PSP does not zero terminate strings */
           string[length] = '\0';
+          string2 = string;
+          /* Strings are in ASCII format according to PSP8 specs. */
+          string = g_convert (string2, -1, "utf-8", "iso8859-1", NULL, NULL, NULL);
+          if (string)
+            g_free (string2);
+          else
+            string = string2;
+          if (! g_utf8_validate (string, -1, NULL))
+            {
+              g_printerr ("Invalid creator keyword ignored.\n");
+              break;
+            }
+
           switch (keyword)
             {
             case PSP_CRTR_FLD_TITLE:
@@ -1422,7 +1446,7 @@ blend_mode_name (PSPBlendModes mode)
   };
   static gchar *err_name = NULL;
 
-  if (mode >= 0 && mode <= PSP_BLEND_TRUE_LIGHTNESS)
+  if (mode <= PSP_BLEND_TRUE_LIGHTNESS)
     return blend_mode_names[mode];
   else if (mode == PSP_BLEND_ADJUST)
     return blend_mode_names[PSP_BLEND_TRUE_LIGHTNESS+1];
@@ -1449,7 +1473,7 @@ layer_type_name (PSPLayerTypePSP6 type)
   };
   static gchar *err_name = NULL;
 
-  if (type >= 0 && type <= keGLTArtMedia)
+  if (type <= keGLTArtMedia)
     return layer_type_names[type];
 
   g_free (err_name);
@@ -1599,9 +1623,14 @@ read_channel_data (FILE        *f,
                 {
                   guchar *p, *q;
 
-                  fread (buf, width, 1, f);
+                  if (fread (buf, 1, width, f) != width)
+                    {
+                      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                                   _("Error reading data. Most likely unexpected end of file."));
+                      return -1;
+                    }
                   /* Contrary to what the PSP specification seems to suggest
-                    scanlines are not stored on a 4-byte boundary. */
+                     scanlines are not stored on a 4-byte boundary. */
                   p = buf;
                   q = pixels[y] + offset;
                   for (i = 0; i < width; i++)
@@ -1617,9 +1646,14 @@ read_channel_data (FILE        *f,
                 {
                   guint16 *p, *q;
 
-                  fread (buf, width * ia->bytes_per_sample, 1, f);
+                  if (fread (buf, ia->bytes_per_sample, width, f) != width)
+                    {
+                      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                                   _("Error reading data. Most likely unexpected end of file."));
+                      return -1;
+                    }
                   /* Contrary to what the PSP specification seems to suggest
-                    scanlines are not stored on a 4-byte boundary. */
+                     scanlines are not stored on a 4-byte boundary. */
                   p = (guint16 *) buf;
                   q = (guint16 *) (pixels[y] + offset);
                   for (i = 0; i < width; i++)
@@ -2093,7 +2127,23 @@ read_layer_block (FILE      *f,
 
       if (can_handle_layer)
         {
-          pixel = g_malloc0 (height * width * bytespp);
+          gint line_width = width * bytespp;
+
+          if (ia->depth < 8)
+            {
+              gint min_line_width = (((width * ia->depth + 7) / 8) + (ia->depth - 1)) / 4 * 4;
+
+              /* For small widths, when depth is 1, or 4, the number of bytes
+               * used can be larger than the width * bytespp. Adjust for that. */
+              if (min_line_width > line_width)
+                {
+                  IFDBG(3) g_message ("Adjusting line width from %d to %d\n",
+                                      line_width, min_line_width);
+                  line_width = min_line_width;
+                }
+            }
+
+          pixel = g_malloc0 (height * line_width);
           if (null_layer)
             {
               pixels = NULL;
@@ -2102,7 +2152,7 @@ read_layer_block (FILE      *f,
             {
               pixels = g_new (guchar *, height);
               for (i = 0; i < height; i++)
-                pixels[i] = pixel + width * bytespp * i;
+                pixels[i] = pixel + line_width * i;
             }
 
           buffer = gimp_drawable_get_buffer (GIMP_DRAWABLE (layer));
@@ -2137,7 +2187,7 @@ read_layer_block (FILE      *f,
                   || fread (&channel_type, 2, 1, f) < 1)
                 {
                   g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                              _("Error reading channel information chunk"));
+                               _("Error reading channel information chunk"));
                   return NULL;
                 }
 
@@ -2157,11 +2207,12 @@ read_layer_block (FILE      *f,
                 }
               else
                 {
-                  if (channel_type > PSP_CHANNEL_BLUE)
+                  if ((ia->base_type == GIMP_RGB && channel_type > PSP_CHANNEL_BLUE) ||
+                      (ia->base_type != GIMP_RGB && channel_type >= PSP_CHANNEL_RED))
                     {
                       g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                                  _("Invalid channel type %d in channel information chunk"),
-                                  channel_type);
+                                   _("Invalid channel type %d in channel information chunk"),
+                                   channel_type);
                       return NULL;
                     }
 
@@ -2249,7 +2300,9 @@ read_tube_block (FILE      *f,
   GimpParasite      *pipe_parasite;
   gchar             *parasite_text;
 
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   gimp_pixpipe_params_init (&params);
+  G_GNUC_END_IGNORE_DEPRECATIONS
 
   if (psp_ver_major >= 4)
     {
@@ -2317,7 +2370,9 @@ read_tube_block (FILE      *f,
                            (selection_mode == tsmPressure ? "pressure" :
                             (selection_mode == tsmVelocity ? "velocity" :
                              "default")))));
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   parasite_text = gimp_pixpipe_params_build (&params);
+  G_GNUC_END_IGNORE_DEPRECATIONS
 
   IFDBG(2) g_message ("parasite: %s", parasite_text);
 
@@ -2355,10 +2410,25 @@ read_selection_block (FILE      *f,
                       PSPimage  *ia,
                       GError   **error)
 {
-  gsize   current_location;
-  gsize   file_size;
-  guint32 chunk_size;
-  guint32 rect[4];
+  gsize           current_location;
+  gsize           file_size;
+  guint32         chunk_size;
+  guint32         rect[4];
+  guint32         saved_rect[4];
+  gushort         channel_counts[2];
+  /* Channel information */
+  gint            sub_id;
+  guint32         channel_init_len;
+  guint32         channel_total_len;
+  guint32         compressed_len;
+  guint32         uncompressed_len;
+  guint16         bitmap_type;
+  guint16         channel_type;
+  GimpSelection  *selection;
+  GeglBuffer     *buffer;
+  guchar         *pixels;
+  gint            width;
+  gint            height;
 
   current_location = ftell (f);
   fseek (f, 0, SEEK_END);
@@ -2381,7 +2451,8 @@ read_selection_block (FILE      *f,
       return -1;
     }
 
-  if (fread (&rect, 16, 1, f) < 1)
+  if (fread (&rect, 16, 1, f) < 1 ||
+      fread (&saved_rect, 16, 1, f) < 1)
     {
       g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
                    _("Error reading selection chunk"));
@@ -2389,15 +2460,112 @@ read_selection_block (FILE      *f,
     }
 
   swab_rect (rect);
-  gimp_image_select_rectangle (image, GIMP_CHANNEL_OP_ADD,
-                               rect[0], rect[1],
-                               rect[2] - rect[0],
-                               rect[3] - rect[1]);
+  width  = rect[2] - rect[0];
+  height = rect[3] - rect[1];
 
-  /* The file format specifies multiple selections, but
-   * as of PSP 8 they only allow one. Skipping the remaining
-   * information in the block. */
-  total_len -= sizeof (guint32) + sizeof (rect);
+  total_len  -= sizeof (chunk_size) + sizeof (rect) + sizeof (saved_rect);
+  chunk_size -= sizeof (chunk_size) + sizeof (rect) + sizeof (saved_rect);
+
+  if (try_fseek (f, chunk_size, SEEK_CUR, error) < 0)
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Error reading end of selection chunk"));
+      return -1;
+    }
+
+  /* Per the specifications, selections always have only one channel */
+  if (fread (&chunk_size, 4, 1, f) < 1)
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Error reading selection chunk"));
+      return -1;
+    }
+  chunk_size = GUINT32_FROM_LE (chunk_size);
+
+  if (fread (&channel_counts, 4, 1, f) < 1)
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Error reading selection chunk"));
+      return -1;
+    }
+  total_len  -= sizeof (chunk_size) + sizeof (channel_counts);
+  chunk_size -= sizeof (chunk_size) + sizeof (channel_counts);
+  if (try_fseek (f, chunk_size, SEEK_CUR, error) < 0)
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Error reading end of selection chunk"));
+      return -1;
+    }
+
+  /* Load PSP_CHANNEL_BLOCK subblock data for selection */
+  sub_id = read_block_header (f, &channel_init_len, &channel_total_len, error);
+  if (sub_id != PSP_CHANNEL_BLOCK)
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                  _("Invalid selection sub-block %s, should be CHANNEL"),
+                  block_name (sub_id));
+      return -1;
+    }
+
+  if ((psp_ver_major >= 4 && (fread (&chunk_size, 4, 1, f) < 1 ||
+       ((chunk_size = GUINT32_FROM_LE (chunk_size)) < 16)))    ||
+      fread (&compressed_len, 4, 1, f) < 1                     ||
+      fread (&uncompressed_len, 4, 1, f) < 1                   ||
+      fread (&bitmap_type, 2, 1, f) < 1                        ||
+      fread (&channel_type, 2, 1, f) < 1)
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Error reading channel information chunk"));
+      return -1;
+    }
+  total_len  -= sizeof (chunk_size) + sizeof (compressed_len) +
+                sizeof (uncompressed_len) + sizeof (bitmap_type) +
+                sizeof (channel_type);
+  chunk_size -= sizeof (chunk_size) + sizeof (compressed_len) +
+                sizeof (uncompressed_len) + sizeof (bitmap_type) +
+                sizeof (channel_type);
+  if (try_fseek (f, chunk_size, SEEK_CUR, error) < 0)
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Error reading end of selection chunk"));
+      return -1;
+    }
+
+  pixels = g_try_malloc0 (width * height);
+  if (pixels == NULL)
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Error reading channel information chunk"));
+      return -1;
+    }
+
+  selection = gimp_image_get_selection (image);
+  buffer    = gimp_drawable_get_buffer (GIMP_DRAWABLE (selection));
+
+  /* Per the specification, this will always be a 1 byte grayscale channel */
+  if (ia->compression == PSP_COMP_NONE)
+    {
+      fread (pixels, width * height, 1, f);
+    }
+  else
+    {
+      if (read_channel_data (f, ia, &pixels, 1, 0, buffer, compressed_len,
+                             error) == -1)
+        {
+          g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                       _("Error reading channel information chunk"));
+          g_free (pixels);
+          return -1;
+        }
+    }
+
+  gegl_buffer_set (buffer, GEGL_RECTANGLE (0, 0, width, height), 0,
+                   NULL, pixels, GEGL_AUTO_ROWSTRIDE);
+  g_object_unref (buffer);
+  g_free (pixels);
+
+  gimp_selection_translate (image, rect[0], rect[1]);
+
   if (try_fseek (f, total_len, SEEK_SET, error) < 0)
     {
       g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
@@ -2432,7 +2600,6 @@ read_extended_block (FILE      *f,
 
       if (memcmp (header, "~FL\0", 4) != 0)
         {
-          g_print ("Header: %s\n", header);
           g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
                        _("Invalid extended block chunk header"));
           return -1;
@@ -2466,7 +2633,7 @@ read_extended_block (FILE      *f,
                 fread (&unit, 2, 1, f) < 1)
               {
                 g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                           _("Error reading extended chunk grid data"));
+                             _("Error reading extended chunk grid data"));
                 return -1;
               }
 
@@ -2494,7 +2661,7 @@ read_extended_block (FILE      *f,
                 fread (&orientation, 2, 1, f) < 1)
               {
                 g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                           _("Error reading extended chunk guide data"));
+                             _("Error reading extended chunk guide data"));
                 return -1;
               }
 

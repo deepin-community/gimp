@@ -99,6 +99,7 @@ pdb_wrappers_sources = [
   'gimpitem_pdb.c',
   'gimpitemtransform_pdb.c',
   'gimplayer_pdb.c',
+  'gimplinklayer_pdb.c',
   'gimpmessage_pdb.c',
   'gimppainttools_pdb.c',
   'gimppalette_pdb.c',
@@ -109,11 +110,13 @@ pdb_wrappers_sources = [
   'gimppatterns_pdb.c',
   'gimppatternselect_pdb.c',
   'gimpprogress_pdb.c',
+  'gimprasterizable_pdb.c',
   'gimpresource_pdb.c',
   'gimpselection_pdb.c',
   'gimptextlayer_pdb.c',
   'gimptexttool_pdb.c',
   'gimpunit_pdb.c',
+  'gimpvectorlayer_pdb.c',
 ]
 
 pdb_wrappers_headers = [
@@ -158,6 +161,7 @@ pdb_wrappers_headers = [
   'gimpitem_pdb.h',
   'gimpitemtransform_pdb.h',
   'gimplayer_pdb.h',
+  'gimplinklayer_pdb.h',
   'gimpmessage_pdb.h',
   'gimppainttools_pdb.h',
   'gimppalette_pdb.h',
@@ -168,11 +172,13 @@ pdb_wrappers_headers = [
   'gimppatterns_pdb.h',
   'gimppatternselect_pdb.h',
   'gimpprogress_pdb.h',
+  'gimprasterizable_pdb.h',
   'gimpresource_pdb.h',
   'gimpselection_pdb.h',
   'gimptextlayer_pdb.h',
   'gimptexttool_pdb.h',
   'gimpunit_pdb.h',
+  'gimpvectorlayer_pdb.h',
 ]
 
 libgimp_sources_introspectable = [
@@ -180,6 +186,7 @@ libgimp_sources_introspectable = [
   'gimpbatchprocedure.c',
   'gimpbrush.c',
   'gimpchannel.c',
+  'gimpcurve.c',
   'gimpdisplay.c',
   'gimpdrawable.c',
   'gimpdrawablefilter.c',
@@ -198,6 +205,7 @@ libgimp_sources_introspectable = [
   'gimpitem.c',
   'gimplayer.c',
   'gimplayermask.c',
+  'gimplinklayer.c',
   'gimploadprocedure.c',
   'gimppalette.c',
   'gimpparamspecs.c',
@@ -209,11 +217,13 @@ libgimp_sources_introspectable = [
   'gimpprocedure-params.c',
   'gimpprocedureconfig.c',
   'gimpprogress.c',
+  'gimprasterizable.c',
   'gimpresource.c',
   'gimpexportprocedure.c',
   'gimpselection.c',
   'gimptextlayer.c',
   'gimpthumbnailprocedure.c',
+  'gimpvectorlayer.c',
   'gimpvectorloadprocedure.c',
   gimpenums,
   pdb_wrappers_sources,
@@ -243,6 +253,7 @@ libgimp_headers_introspectable = [
   'gimpbatchprocedure.h',
   'gimpbrush.h',
   'gimpchannel.h',
+  'gimpcurve.h',
   'gimpdisplay.h',
   'gimpdrawable.h',
   'gimpdrawablefilter.h',
@@ -260,6 +271,7 @@ libgimp_headers_introspectable = [
   'gimpitem.h',
   'gimplayer.h',
   'gimplayermask.h',
+  'gimplinklayer.h',
   'gimploadprocedure.h',
   'gimppalette.h',
   'gimpparamspecs.h',
@@ -271,11 +283,13 @@ libgimp_headers_introspectable = [
   'gimpprocedure-params.h',
   'gimpprocedureconfig.h',
   'gimpprogress.h',
+  'gimprasterizable.h',
   'gimpresource.h',
   'gimpexportprocedure.h',
   'gimpselection.h',
   'gimptextlayer.h',
   'gimpthumbnailprocedure.h',
+  'gimpvectorlayer.h',
   'gimpvectorloadprocedure.h',
   pdb_wrappers_headers,
 ]
@@ -291,7 +305,9 @@ libgimpui_sources_introspectable = [
   'gimpdrawablepreview.c',
   'gimpfontchooser.c',
   'gimpgradientchooser.c',
+  'gimpimagechooser.c',
   'gimpimagecombobox.c',
+  'gimpitemchooser.c',
   'gimpitemcombobox.c',
   'gimppalettechooser.c',
   'gimppatternchooser.c',
@@ -327,7 +343,9 @@ libgimpui_headers_introspectable = [
   'gimpdrawablepreview.h',
   'gimpfontchooser.h',
   'gimpgradientchooser.h',
+  'gimpimagechooser.h',
   'gimpimagecombobox.h',
+  'gimpitemchooser.h',
   'gimpitemcombobox.h',
   'gimppalettechooser.h',
   'gimppatternchooser.h',
@@ -351,6 +369,33 @@ libgimpui_introspectable = [
   libgimpui_sources_introspectable,
   libgimpui_headers_introspectable,
 ]
+
+
+if glib.version().version_compare('>=2.86')
+  if not platform_windows
+    gio_specific_gir = 'GioUnix-2.0'
+    gio_specific_vapi = 'gio-unix-2.0'
+  else
+    gio_specific_gir = 'GioWin32-2.0'
+    gio_specific_vapi = 'gio-windows-2.0'
+  endif
+else
+  gio_specific_gir = ''
+  gio_specific_vapi = ''
+endif
+
+libgimp_deps_table = [
+    { 'gir': 'Babl-0.1',          'vapi': 'babl-0.1',        },
+    { 'gir': 'cairo-1.0',         'vapi': 'cairo-1.0',       },
+    { 'gir': 'GdkPixbuf-2.0',     'vapi': 'gdk-pixbuf-2.0',  },
+    { 'gir': 'Gegl-0.4',          'vapi': 'gegl-0.4',        },
+    { 'gir': 'GExiv2-0.10',       'vapi': 'gexiv2',          },
+    { 'gir': 'Gio-2.0',           'vapi': 'gio-2.0',         },
+    { 'gir': gio_specific_gir,    'vapi': gio_specific_vapi, },
+    { 'gir': 'GLib-2.0',          'vapi': 'glib-2.0',        },
+    { 'gir': 'GObject-2.0',       'vapi': 'gobject-2.0',     },
+    { 'gir': 'Pango-1.0',         'vapi': 'gtk+-3.0',        },
+  ]
 
 
 libgimp = library('gimp-'+ gimp_api_version,
@@ -387,6 +432,7 @@ libgimp_dep = declare_dependency(
     cairo,
     gdk_pixbuf,
     gegl,
+    gexiv2,
   ],
   link_with: [
     libgimp,
@@ -404,7 +450,6 @@ libgimpui = library('gimpui-'+ gimp_api_version,
   libgimpui_sources,
   dependencies: [
     libgimp_dep,
-    gexiv2,
     gtk3,
   ],
   sources: [
@@ -481,16 +526,12 @@ elif get_option('b_sanitize') != 'none'
   warnings += gobject_introspection_warning
 else
   have_gobject_introspection = true
-  libgimp_gir_includes = [
-    'Babl-0.1',
-    'cairo-1.0',
-    'GdkPixbuf-2.0',
-    'Gegl-0.4',
-    'Gio-2.0',
-    'GLib-2.0',
-    'GObject-2.0',
-    'Pango-1.0',
-  ]
+  libgimp_gir_includes = []
+  foreach dep : libgimp_deps_table
+    if dep['gir'] != ''
+      libgimp_gir_includes += [dep['gir']]
+    endif
+  endforeach
 
   gir_args = [
     '-DGIMP_COMPILATION',
@@ -525,6 +566,17 @@ else
     install: true,
   )
 
+  if platform_osx
+    patched_libgimp_gir = custom_target('libgimp-macos-typelib.stamp',
+                            output: [ 'libgimp-macos-typelib.stamp' ],
+                            depends: [ libgimp_gir ],
+                            command: [
+                              'make-in-build-typelib.py', libgimp_gir,
+                              meson.current_build_dir(), prefix, g_ir_compiler
+                            ],
+                            build_by_default: true)
+  endif
+
   libgimpui_gir = gnome.generate_gir(
     libgimpui,
     libgimpwidgets,
@@ -543,27 +595,23 @@ else
   )
 
   if platform_osx
-    g_ir_compiler = find_program('g-ir-compiler')
-    gimp_exe_typelib = custom_target('macos-typelib.stamp',
-                                     output: [ 'macos-typelib.stamp' ],
-                                     command: [
-                                       'make-in-build-typelib.sh', libgimp_gir, libgimpui_gir,
-                                       meson.current_build_dir(), prefix, g_ir_compiler
-                                     ],
-                                     build_by_default: true)
+    patched_libgimpui_gir = custom_target('libgimpui-macos-typelib.stamp',
+                                          output: [ 'libgimpui-macos-typelib.stamp' ],
+                                          depends: [ libgimp_gir, libgimpui_gir ],
+                                          command: [
+                                            'make-in-build-typelib.py', libgimpui_gir,
+                                            meson.current_build_dir(), prefix, g_ir_compiler
+                                          ],
+                                          build_by_default: true)
   endif
 
   if have_vala
-    vapi_deps = [
-      'babl-0.1',
-      'cairo-1.0',
-      'gdk-pixbuf-2.0',
-      'gegl-0.4',
-      'gio-2.0',
-      'glib-2.0',
-      'gobject-2.0',
-      'gtk+-3.0',
-    ]
+    vapi_deps = []
+    foreach dep : libgimp_deps_table
+      if dep['vapi'] != ''
+        vapi_deps += [dep['vapi']]
+      endif
+    endforeach
 
     libgimp_vapi = gnome.generate_vapi('gimp-' + gimp_api_version,
       sources: libgimp_gir[0],
@@ -579,14 +627,11 @@ else
   endif
 endif
 
-if not platform_windows and not platform_osx
-  # Verify .def files for Windows.
-  # Ironically we only check this on non-Windows platform, since the
-  # script expects .so libraries, and I'm not sure that the `nm` tool is
-  # available on Windows.
-  # On the other hand, it is how it always has been, since we used to
-  # only run this on dist step (which we historically run on a GNU/Linux
-  # machine). And it worked fine until now.
+if not platform_osx and host_cpu_family != 'x86'
+  nm = find_program('nm', required: false)
+
+  # Verify .def files for Windows linking.
+  # We check this on non-Windows platform (Debian) on CI, and on Windows itself.
   custom_target('check-def-files',
     input: [
       '../libgimpbase/gimpbase.def',
@@ -610,6 +655,7 @@ if not platform_windows and not platform_osx
       libgimpthumb,
       libgimpwidgets
     ],
+    env: nm.found() ? { 'NM': nm.full_path() } : {},
     output: [ 'check-def-files', ],
     command: [
       python, meson.project_source_root() / 'tools' / 'defcheck.py', meson.project_source_root(),

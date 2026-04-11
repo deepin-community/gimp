@@ -42,8 +42,6 @@ import sys
 import gi
 gi.require_version('Gimp', '3.0')
 from gi.repository import Gimp
-gi.require_version('GimpUi', '3.0')
-from gi.repository import GimpUi
 from gi.repository import GObject
 from gi.repository import GLib
 from gi.repository import Gio
@@ -165,6 +163,9 @@ def histogram_export(procedure, img, layers, gio_file,
 
 def run(procedure, run_mode, image, layers, config, data):
     if run_mode == Gimp.RunMode.INTERACTIVE:
+        gi.require_version('GimpUi', '3.0')
+        from gi.repository import GimpUi
+
         GimpUi.init("python-fu-histogram-export")
 
         dialog = GimpUi.ProcedureDialog.new(procedure, config, _("Histogram Export..."))
@@ -213,7 +214,7 @@ class HistogramExport(Gimp.PlugIn):
                 _("Exports the image histogram to a text file (CSV)"),
                 globals()["__doc__"],  # This includes the docstring, on the top of the file
                 name)
-            procedure.set_menu_label(_("_Export histogram..."))
+            procedure.set_menu_label(_("_Export Histogram..."))
             procedure.set_attribution("João S. O. Bueno",
                                       "(c) GPL V3.0 or later",
                                       "2014")
@@ -221,18 +222,18 @@ class HistogramExport(Gimp.PlugIn):
 
             # TODO: GFile props still don't have labels + only load existing files
             # (here we likely want to create a new file).
-            procedure.add_file_argument ("file", _("Histogram File"),
+            procedure.add_file_argument ("file", _("Histogram file"),
                                          _("Histogram export file"), Gimp.FileChooserAction.SAVE,
                                          False, None, GObject.ParamFlags.READWRITE)
-            procedure.add_double_argument ("bucket-size", _("_Bucket Size"), _("Bucket Size"),
+            procedure.add_double_argument ("bucket-size", _("_Bucket size"), _("Bucket size"),
                                            0.001, 1.0, 0.01, GObject.ParamFlags.READWRITE)
-            procedure.add_boolean_argument ("sample-average", _("Sample _Average"), _("Sample Average"),
+            procedure.add_boolean_argument ("sample-average", _("Sample _average"), _("Sample average"),
                                             False, GObject.ParamFlags.READWRITE)
             choice = Gimp.Choice.new()
-            choice.add("pixel-count", 0, _("Pixel Count"), "")
+            choice.add("pixel-count", 0, _("Pixel count"), "")
             choice.add("normalized", 1, _("Normalized"), "")
             choice.add("percent", 2, _("Percent"), "")
-            procedure.add_choice_argument ("output-format", _("Output _format"), _("Output format"),
+            procedure.add_choice_argument ("output-format", _("Output _Format"), _("Output format"),
                                            choice, "percent", GObject.ParamFlags.READWRITE)
 
         return procedure

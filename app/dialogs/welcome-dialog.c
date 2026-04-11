@@ -25,7 +25,6 @@
 #ifdef GDK_WINDOWING_WAYLAND
 #include <gdk/gdkwayland.h>
 #endif
-#include <gdk-pixbuf/gdk-pixbuf.h>
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpconfig/gimpconfig.h"
@@ -43,21 +42,21 @@
 #include "core/gimpcontainer.h"
 #include "core/gimpimagefile.h"
 
-#include "dialogs/file-open-dialog.h"
-
 #include "file/file-open.h"
-
-#include "gui/icon-themes.h"
-#include "gui/themes.h"
-
-#include "menus/menus.h"
 
 #include "widgets/gimpdialogfactory.h"
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimpprefsbox.h"
+#include "widgets/gimprow.h"
 #include "widgets/gimpuimanager.h"
 #include "widgets/gimpwidgets-utils.h"
 
+#include "menus/menus.h"
+
+#include "gui/icon-themes.h"
+#include "gui/themes.h"
+
+#include "file-open-dialog.h"
 #include "preferences-dialog-utils.h"
 #include "welcome-dialog.h"
 #include "welcome-dialog-data.h"
@@ -115,6 +114,22 @@ static void   welcome_open_activated_callback        (GtkListBox     *listbox,
                                                       GtkWidget      *welcome_dialog);
 static void   welcome_open_images_callback           (GtkWidget      *button,
                                                       GtkListBox     *listbox);
+static void   welcome_dialog_new_image_accelerator   (GtkAccelGroup  *accel_group,
+                                                      GObject        *accelerator_widget,
+                                                      guint           keyval,
+                                                      GdkModifierType mods,
+                                                      gpointer        user_data);
+static void   welcome_dialog_open_image_dialog_accelerator
+                                                     (GtkAccelGroup  *accel_group,
+                                                      GObject        *accelerator_widget,
+                                                      guint           keyval,
+                                                      GdkModifierType mods,
+                                                      gpointer        user_data);
+static void   welcome_dialog_open_image_accelerator  (GtkAccelGroup  *accel_group,
+                                                      GObject        *accelerator_widget,
+                                                      guint           keyval,
+                                                      GdkModifierType mods,
+                                                      gpointer        user_data);
 
 static gboolean welcome_scrollable_resize            (gpointer        data);
 
@@ -170,17 +185,22 @@ welcome_dialog_new (Gimp       *gimp,
                     GimpConfig *config,
                     gboolean    show_welcome_page)
 {
-  GtkWidget   *dialog;
-  GList       *windows;
-  GtkWidget   *switcher;
-  GtkWidget   *stack;
-  GtkWidget   *tree_view;
-  GtkTreeIter  top_iter;
+  GtkWidget      *dialog;
+  GList          *windows;
+  GtkWidget      *switcher;
+  GtkWidget      *stack;
+  GtkWidget      *tree_view;
+  GtkTreeIter     top_iter;
 
-  GtkWidget   *prefs_box;
-  GtkWidget   *main_vbox;
+  GtkWidget      *prefs_box;
+  GtkWidget      *main_vbox;
 
-  gchar       *title;
+  gchar          *title;
+
+  GtkAccelGroup  *accel_group;
+  guint           accel_key;
+  GdkModifierType accel_mods;
+  gchar         **accels;
 
   /* Translators: the %s string will be the version, e.g. "3.0". */
   title = g_strdup_printf (_("Welcome to GIMP %s"), GIMP_VERSION);
@@ -298,6 +318,58 @@ welcome_dialog_new (Gimp       *gimp,
 
       welcome_dialog_create_release_page (gimp, dialog, main_vbox);
       gtk_widget_set_visible (main_vbox, TRUE);
+    }
+
+  /*************/
+  /* Shortcuts */
+  /*************/
+  /* XXX: GtkAccelGroup will be deprecated in GTK4
+   * See: https://docs.gtk.org/gtk4/migrating-3to4.html#use-the-new-apis-for-keyboard-shortcuts
+   * This GtkAccelGroup must be converted to a GtkShortcutController
+   */
+  accel_group = gtk_accel_group_new ();
+  gtk_window_add_accel_group (GTK_WINDOW (dialog), accel_group);
+
+  accels = gtk_application_get_accels_for_action (GTK_APPLICATION (gimp->app),
+                                                  "app.image-new");
+  if (accels && accels[0])
+    {
+      gtk_accelerator_parse (accels[0], &accel_key, &accel_mods);
+      gtk_accel_group_connect (accel_group,
+                              accel_key, accel_mods, 0,
+                              g_cclosure_new (G_CALLBACK (welcome_dialog_new_image_accelerator),
+                                              dialog, NULL));
+      g_strfreev (accels);
+    }
+
+  accels = gtk_application_get_accels_for_action (GTK_APPLICATION (gimp->app),
+                                                  "app.file-open");
+  if (accels && accels[0])
+    {
+      gtk_accelerator_parse (accels[0], &accel_key, &accel_mods);
+      gtk_accel_group_connect (accel_group,
+                              accel_key, accel_mods, 0,
+                              g_cclosure_new (G_CALLBACK (welcome_dialog_open_image_dialog_accelerator),
+                                              dialog, NULL));
+      g_strfreev (accels);
+    }
+
+  for (guint i = 0; i < 10; i++)
+    {
+      gchar accel_str[24];
+
+      g_snprintf (accel_str, sizeof (accel_str), "app.file-open-recent-%02u", i + 1);
+      accels = gtk_application_get_accels_for_action (GTK_APPLICATION (gimp->app),
+                                                      accel_str);
+      if (accels && accels[0])
+        {
+          gtk_accelerator_parse (accels[0], &accel_key, &accel_mods);
+          gtk_accel_group_connect (accel_group,
+                                  accel_key, accel_mods, 0,
+                                  g_cclosure_new (G_CALLBACK (welcome_dialog_open_image_accelerator),
+                                                  GUINT_TO_POINTER (i), NULL));
+          g_strfreev (accels);
+        }
     }
 
   return dialog;
@@ -468,15 +540,15 @@ welcome_dialog_create_welcome_page (Gimp      *gimp,
                     "\xf0\x9f\x8c\x90",
                     _("GIMP website"), "https://www.gimp.org/");
   welcome_add_link (GTK_GRID (grid), 0, &row,
-                    /* "graduation cap" emoticone in UTF-8. */
-                    "\xf0\x9f\x8e\x93",
-                    _("Tutorials"),
-                    "https://www.gimp.org/tutorials/");
-  welcome_add_link (GTK_GRID (grid), 0, &row,
                     /* "open book" emoticone in UTF-8. */
                     "\xf0\x9f\x93\x96",
                     _("Documentation"),
                     "https://docs.gimp.org/");
+  welcome_add_link (GTK_GRID (grid), 0, &row,
+                    /* "graduation cap" emoticone in UTF-8. */
+                    "\xf0\x9f\x8e\x93",
+                    _("Community Tutorials"),
+                    "https://www.gimp.org/tutorials/");
 
   /* XXX: should we add API docs for plug-in developers once it's
    * properly set up? */
@@ -552,7 +624,8 @@ welcome_dialog_create_personalize_page (Gimp       *gimp,
   gtk_widget_set_visible (hbox, TRUE);
 
   grid = prefs_grid_new (GTK_CONTAINER (hbox));
-  button = prefs_enum_combo_box_add (object, "theme-color-scheme", 0, 0,
+  button = prefs_enum_combo_box_add (object, "theme-color-scheme",
+                                     0, 0,
                                      _("Color scheme"), GTK_GRID (grid),
                                      0, size_group);
 
@@ -741,13 +814,10 @@ welcome_dialog_create_creation_page (Gimp       *gimp,
     {
       GimpImagefile *imagefile = NULL;
       GtkWidget     *row;
-      GtkWidget     *grid;
-      GtkWidget     *name_label;
-      GtkWidget     *thumbnail = NULL;
       GFile         *file;
-      GimpThumbnail *icon;
       const gchar   *name;
       gchar         *basename;
+      gchar         *action_name;
 
       imagefile = (GimpImagefile *)
         gimp_container_get_child_by_index (gimp->documents, i);
@@ -769,45 +839,15 @@ welcome_dialog_create_creation_page (Gimp       *gimp,
           continue;
         }
 
-      row = gtk_list_box_row_new ();
-      g_object_set_data_full (G_OBJECT (row),
-                              "file", file,
-                              NULL);
+      row = gimp_row_new (gimp_get_user_context (gimp),
+                          GIMP_VIEWABLE (imagefile),
+                          32, 0);
 
-      grid = gtk_grid_new ();
-      gtk_grid_set_column_spacing (GTK_GRID (grid), 12);
-      gtk_container_add (GTK_CONTAINER (row), grid);
+      action_name = g_strdup_printf ("file-open-recent-%02u", i + 1);
+      g_object_set_data_full (G_OBJECT (row), "action_name", action_name,
+                              g_free);
 
-      icon = gimp_imagefile_get_thumbnail (imagefile);
-      if (icon)
-        {
-          GdkPixbuf *pixbuf = NULL;
-
-          pixbuf = gimp_thumbnail_load_thumb (icon, 1, NULL);
-          if (! pixbuf)
-            pixbuf = gimp_widget_load_icon (grid, GIMP_ICON_DIALOG_QUESTION,
-                                            32);
-
-          if (pixbuf)
-            {
-              pixbuf = gdk_pixbuf_scale_simple (pixbuf,
-                                                32, 32,
-                                                GDK_INTERP_BILINEAR);
-
-              thumbnail = gtk_image_new_from_pixbuf (pixbuf);
-            }
-        }
-
-      if (thumbnail)
-        gtk_grid_attach (GTK_GRID (grid), thumbnail, 1, 0, 1, 1);
-
-      name_label = gtk_label_new (basename);
-      gtk_label_set_ellipsize (GTK_LABEL (name_label), PANGO_ELLIPSIZE_MIDDLE);
-      g_free (basename);
-      g_object_set (name_label, "xalign", 0.0, NULL);
-      gtk_grid_attach (GTK_GRID (grid), name_label, 2, 0, 1, 1);
-
-      gtk_widget_show_all (row);
+      gtk_widget_set_visible (row, TRUE);
       gtk_list_box_insert (GTK_LIST_BOX (listbox), row, -1);
     }
 
@@ -1007,19 +1047,20 @@ welcome_dialog_create_release_page (Gimp      *gimp,
         {
           GtkWidget *row;
           gchar     *markup;
+          gchar     *text;
+
+          text = g_markup_escape_text (_((gchar *) gimp_welcome_dialog_items[i]), -1);
 
           /* Add a bold dot for pretty listing. */
           if (i < gimp_welcome_dialog_n_items &&
               gimp_welcome_dialog_demos[i] != NULL)
             {
-              markup = g_strdup_printf ("<span weight='ultrabold'>\xe2\x96\xb6</span>  %s",
-                                        _((gchar *) gimp_welcome_dialog_items[i]));
+              markup = g_strdup_printf ("<span weight='ultrabold'>\xe2\x96\xb6</span>  %s", text);
               n_demos++;
             }
           else
             {
-              markup = g_strdup_printf ("<span weight='ultrabold'>\xe2\x80\xa2</span>  %s",
-                                        _((gchar *) gimp_welcome_dialog_items[i]));
+              markup = g_strdup_printf ("<span weight='ultrabold'>\xe2\x80\xa2</span>  %s", text);
             }
 
           row = gtk_list_box_row_new ();
@@ -1036,6 +1077,7 @@ welcome_dialog_create_release_page (Gimp      *gimp,
           gtk_widget_show_all (row);
 
           g_free (markup);
+          g_free (text);
         }
       gtk_container_add (GTK_CONTAINER (scrolled_window), listbox);
       gtk_list_box_set_selection_mode (GTK_LIST_BOX (listbox),
@@ -1081,13 +1123,26 @@ welcome_dialog_create_release_page (Gimp      *gimp,
       gtk_box_pack_start (GTK_BOX (main_vbox), hbox, FALSE, FALSE, 0);
       gtk_widget_set_visible (hbox, TRUE);
 
-      tmp = g_strdup_printf (GIMP_VERSION);
-      if (GIMP_MINOR_VERSION % 2 == 0 && ! strstr (tmp, "RC"))
-        release_link = g_strdup_printf ("https://www.gimp.org/release-notes/gimp-%d.%d.html",
-                                        GIMP_MAJOR_VERSION, GIMP_MINOR_VERSION);
+      if (GIMP_MINOR_VERSION % 2 == 0)
+        {
+          if (GIMP_MICRO_VERSION == 0)
+#ifdef GIMP_RC_VERSION
+            release_link = g_strdup_printf ("https://www.gimp.org/release/%d.%d.0-RC%d/",
+                                            GIMP_MAJOR_VERSION, GIMP_MINOR_VERSION,
+                                            GIMP_RC_VERSION);
+#else
+            release_link = g_strdup_printf ("https://www.gimp.org/release-notes/gimp-%d.%d.html",
+                                            GIMP_MAJOR_VERSION, GIMP_MINOR_VERSION);
+#endif
+          else
+            release_link = g_strdup_printf ("https://www.gimp.org/release/%d.%d.%d/",
+                                            GIMP_MAJOR_VERSION, GIMP_MINOR_VERSION,
+                                            GIMP_MICRO_VERSION);
+        }
       else
-        release_link = g_strdup ("https://www.gimp.org/");
-      g_free (tmp);
+        {
+          release_link = g_strdup ("https://www.gimp.org/");
+        }
 
       widget = gtk_link_button_new_with_label (release_link, _("Learn more"));
       gtk_widget_set_visible (widget, TRUE);
@@ -1130,12 +1185,13 @@ static void
 welcome_dialog_open_image_dialog (GtkWidget *button,
                                   GtkWidget *welcome_dialog)
 {
-  Gimp      *gimp = g_object_get_data (G_OBJECT (welcome_dialog), "gimp");
-  GtkWidget *dialog;
+  Gimp          *gimp    = g_object_get_data (G_OBJECT (welcome_dialog), "gimp");
+  GtkWidget     *dialog  = file_open_dialog_new (gimp);
+  GimpUIManager *manager = menus_get_image_manager_singleton (gimp);
 
-  dialog = file_open_dialog_new (gimp);
-
-  if (dialog)
+  if (gimp_ui_manager_activate_action (manager, "file", "file-open") &&
+      (dialog = gimp_dialog_factory_find_widget (gimp_dialog_factory_get_singleton (),
+                                                 "gimp-file-open-dialog")))
     {
       gtk_widget_set_visible (welcome_dialog, FALSE);
 
@@ -1207,18 +1263,17 @@ static void
 welcome_open_images_callback (GtkWidget  *button,
                               GtkListBox *listbox)
 {
-  GList     *rows   = NULL;
-  Gimp      *gimp   = NULL;
-  GError    *error  = NULL;
-  gboolean   opened = FALSE;
-  GtkWidget *parent;
+  GList         *rows   = NULL;
+  Gimp          *gimp   = NULL;
+  gboolean       opened = FALSE;
+  gchar         *action_name;
+  GimpUIManager *manager;
 
   if (! welcome_dialog)
     return;
 
   gimp = g_object_get_data (G_OBJECT (welcome_dialog), "gimp");
-
-  parent = gtk_widget_get_parent (welcome_dialog);
+  manager = menus_get_image_manager_singleton (gimp);
 
   rows = gtk_list_box_get_selected_rows (listbox);
   if (rows)
@@ -1227,30 +1282,11 @@ welcome_open_images_callback (GtkWidget  *button,
 
       for (GList *iter = rows; iter; iter = iter->next)
         {
-          GFile             *file  = NULL;
-          GimpImage         *image = NULL;
-          const gchar       *name;
-          GimpPDBStatusType  status;
+          action_name = (gchar *) g_object_get_data (G_OBJECT (iter->data),
+                                                     "action_name");
 
-          file = g_object_get_data (G_OBJECT (iter->data), "file");
-          name = gimp_file_get_utf8_name (file);
-
-          if (file && g_file_test (name, G_FILE_TEST_IS_REGULAR))
-            image = file_open_with_display (gimp, gimp_get_user_context (gimp),
-                                            NULL, file, FALSE, NULL, &status,
-                                            &error);
-
-          if (! image && status != GIMP_PDB_CANCEL)
-            {
-              gimp_message (gimp, G_OBJECT (parent), GIMP_MESSAGE_ERROR,
-                            _("Opening '%s' failed:\n\n%s"),
-                            gimp_file_get_utf8_name (file), error->message);
-              g_clear_error (&error);
-            }
-          else
-            {
-              opened = TRUE;
-            }
+          if (gimp_ui_manager_activate_action (manager, "file", action_name))
+            opened = TRUE;
         }
 
       g_list_free (rows);
@@ -1359,7 +1395,7 @@ welcome_dialog_release_item_activated (GtkListBox    *listbox,
     {
       GList *windows = gimp_get_image_windows (gimp);
 
-      /* Losing forcus on the welcome dialog on purpose for the main GUI
+      /* Losing focus on the welcome dialog on purpose for the main GUI
        * to be more readable.
        */
       if (windows)
@@ -1488,4 +1524,46 @@ welcome_scrollable_resize (gpointer data)
     }
 
   return G_SOURCE_REMOVE;
+}
+
+static void
+welcome_dialog_new_image_accelerator (GtkAccelGroup  *accel_group,
+                                      GObject        *accelerator_widget,
+                                      guint           keyval,
+                                      GdkModifierType mods,
+                                      gpointer        user_data)
+{
+  GtkWidget *dialog = GTK_WIDGET (user_data);
+
+  welcome_dialog_new_image_dialog (NULL, dialog);
+}
+
+static void
+welcome_dialog_open_image_dialog_accelerator (GtkAccelGroup  *accel_group,
+                                              GObject        *accelerator_widget,
+                                              guint           keyval,
+                                              GdkModifierType mods,
+                                              gpointer        user_data)
+{
+  GtkWidget *dialog = GTK_WIDGET (user_data);
+
+  welcome_dialog_open_image_dialog (NULL, dialog);
+}
+
+static void
+welcome_dialog_open_image_accelerator (GtkAccelGroup  *accel_group,
+                                       GObject        *accelerator_widget,
+                                       guint           keyval,
+                                       GdkModifierType mods,
+                                       gpointer        user_data)
+{
+  Gimp          *gimp    = g_object_get_data (G_OBJECT (welcome_dialog), "gimp");
+  GimpUIManager *manager = menus_get_image_manager_singleton (gimp);
+  guint          index   = GPOINTER_TO_UINT (user_data);
+  gchar          action_name[20];
+
+  g_snprintf (action_name, sizeof (action_name), "file-open-recent-%02u", index + 1);
+
+  if (gimp_ui_manager_activate_action (manager, "file", action_name))
+    gtk_widget_destroy (welcome_dialog);
 }

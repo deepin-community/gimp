@@ -172,7 +172,7 @@ To fill data for a new entry:
 		name="Bahasa Indonesia" />
 	<iso_639_entry
 		dl_code="is"
-		inno_code="Languages\\Icelandic.isl"
+		inno_code="Languages\\Unofficial\\Icelandic.isl"
 		name="Íslenska" />
 	<iso_639_entry
 		dl_code="it"
@@ -192,7 +192,7 @@ To fill data for a new entry:
 		name="Taqbaylit" />
 	<iso_639_entry
 		dl_code="kk"
-		inno_code=""
+		inno_code="Languages\\Unofficial\\Kazakh.islu"
 		name="Qazaq" />
 	<iso_639_entry
 		dl_code="km"
@@ -206,6 +206,10 @@ To fill data for a new entry:
 		dl_code="ko"
 		inno_code="Languages\\Korean.isl"
 		name="한국어" />
+	<iso_639_entry
+		dl_code="kw"
+		inno_code=""
+		name="Kernewek" />
 	<iso_639_entry
 		dl_code="ky"
 		inno_code=""
@@ -304,7 +308,7 @@ To fill data for a new entry:
 		name="Slovenščina (sl)" />
 	<iso_639_entry
 		dl_code="sr"
-		inno_code=""
+		inno_code="Languages\\Unofficial\\SerbianCyrillic.isl"
 		name="Cрпски језик" />
 	<iso_639_entry
 		dl_code="sr@latin"
@@ -324,7 +328,7 @@ To fill data for a new entry:
 		name="తెలుగు" />
 	<iso_639_entry
 		dl_code="th"
-		inno_code=""
+		inno_code="Languages\\Thai.isl"
 		name="ภาษาไทย" />
 	<iso_639_entry
 		dl_code="tr"

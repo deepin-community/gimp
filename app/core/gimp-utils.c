@@ -34,6 +34,8 @@
 
 #ifdef G_OS_WIN32
 #include <windows.h>
+#include <process.h>
+#define getpid _getpid
 #endif
 
 #include <cairo.h>
@@ -53,6 +55,7 @@
 #include "gimp-utils.h"
 #include "gimpasync.h"
 #include "gimpcontext.h"
+#include "gimpdata.h"
 #include "gimperror.h"
 #include "gimpimage.h"
 
@@ -101,6 +104,14 @@ static void         appstream_text_characters      (GMarkupParseContext  *contex
 static const gchar* gimp_extension_get_tag_lang    (const gchar         **attribute_names,
                                                     const gchar         **attribute_values);
 
+static gboolean     gimp_version_break             (const gchar          *v,
+                                                    gint                 *major,
+                                                    gint                 *minor,
+                                                    gint                 *micro,
+                                                    gint                 *rc,
+                                                    gboolean             *is_git);
+
+
 gint
 gimp_get_pid (void)
 {
@@ -145,7 +156,9 @@ gimp_get_default_language (const gchar *category)
 {
   gchar *lang;
   gchar *p;
+#ifndef G_OS_WIN32
   gint   cat = LC_CTYPE;
+#endif
 
   if (! category)
     category = "LC_CTYPE";
@@ -596,7 +609,7 @@ gimp_get_fill_params (GimpContext   *context,
  * @start_y:
  * @end_x:
  * @end_y:
- * @n_snap_lines: Number evenly disributed lines to snap to.
+ * @n_snap_lines: Number evenly distributed lines to snap to.
  * @offset_angle: The angle by which to offset the lines, in degrees.
  * @xres:         The horizontal resolution.
  * @yres:         The vertical resolution.
@@ -931,6 +944,195 @@ gimp_data_input_stream_read_line_always (GDataInputStream  *stream,
   g_clear_error (&temp_error);
 
   return result;
+}
+
+gboolean
+gimp_data_input_stream_read_char (GDataInputStream  *input,
+                                  gchar             *value,
+                                  GError           **error)
+{
+  gchar result;
+
+  result = g_data_input_stream_read_byte (input, NULL, error);
+  if (error && *error)
+    return FALSE;
+
+  *value = result;
+  return TRUE;
+}
+
+gboolean
+gimp_data_input_stream_read_short (GDataInputStream  *input,
+                                   gint16            *value,
+                                   GError           **error)
+{
+  gint16 result;
+
+  result = g_data_input_stream_read_int16 (input, NULL, error);
+  if (error && *error)
+    return FALSE;
+
+  *value = result;
+  return TRUE;
+}
+
+gboolean
+gimp_data_input_stream_read_long (GDataInputStream  *input,
+                                  gint32            *value,
+                                  GError           **error)
+{
+  gint32 result;
+
+  result = g_data_input_stream_read_int32 (input, NULL, error);
+  if (error && *error)
+    return FALSE;
+
+  *value = result;
+  return TRUE;
+}
+
+gboolean
+gimp_data_input_stream_read_ucs2_text (GDataInputStream  *input,
+                                       gchar            **value,
+                                       GError           **error)
+{
+  gchar *name_ucs2;
+  gint32 pslen = 0;
+  gint   len;
+  gint   i;
+
+  /* two-bytes characters encoded (UCS-2)
+   *  format:
+   *   long : number of characters in string
+   *   data : zero terminated UCS-2 string
+   */
+
+  if (! gimp_data_input_stream_read_long (input, &pslen, error) || pslen <= 0)
+    return FALSE;
+
+  len = 2 * pslen;
+
+  name_ucs2 = g_new (gchar, len);
+
+  for (i = 0; i < len; i++)
+    {
+      gchar mychar;
+
+      if (! gimp_data_input_stream_read_char (input, &mychar, error))
+        {
+          g_free (name_ucs2);
+          return FALSE;
+        }
+      name_ucs2[i] = mychar;
+    }
+
+  *value = g_convert (name_ucs2, len,
+                      "UTF-8", "UCS-2BE",
+                      NULL, NULL, NULL);
+
+  g_free (name_ucs2);
+
+  return (*value != NULL);
+}
+
+/* Photoshop resource (brush, pattern) rle decode */
+gboolean
+gimp_data_input_stream_rle_decode (GDataInputStream  *input,
+                                   gchar             *buffer,
+                                   gsize              buffer_size,
+                                   gint32             height,
+                                   GError           **error)
+{
+  gint      i, j;
+  gshort   *cscanline_len = NULL;
+  gchar    *cdata         = NULL;
+  gchar    *data          = buffer;
+  gboolean  result;
+
+  /* read compressed size foreach scanline */
+  cscanline_len = gegl_scratch_new (gshort, height);
+  for (i = 0; i < height; i++)
+    {
+      result = gimp_data_input_stream_read_short (input, &cscanline_len[i], error);
+      if (! result || cscanline_len[i] <= 0)
+        goto err;
+    }
+
+  /* unpack each scanline data */
+  for (i = 0; i < height; i++)
+    {
+      gint  len;
+      gsize bytes_read;
+
+      len = cscanline_len[i];
+
+      cdata = gegl_scratch_alloc (len);
+
+      if (! g_input_stream_read_all (G_INPUT_STREAM (input),
+                                     cdata, len,
+                                     &bytes_read, NULL, error) ||
+          bytes_read != len)
+        {
+          goto err;
+        }
+
+      for (j = 0; j < len;)
+        {
+          gint32 n = cdata[j++];
+
+          if (n >= 128)     /* force sign */
+            n -= 256;
+
+          if (n < 0)
+            {
+              /* copy the following char -n + 1 times */
+
+              if (n == -128)  /* it's a nop */
+                continue;
+
+              n = -n + 1;
+
+              if (j + 1 > len || (data - buffer) + n > buffer_size)
+                goto err;
+
+              memset (data, cdata[j], n);
+
+              j    += 1;
+              data += n;
+            }
+          else
+            {
+              /* read the following n + 1 chars (no compr) */
+
+              n = n + 1;
+
+              if (j + n > len || (data - buffer) + n > buffer_size)
+                goto err;
+
+              memcpy (data, &cdata[j], n);
+
+              j    += n;
+              data += n;
+            }
+        }
+
+      g_clear_pointer (&cdata, gegl_scratch_free);
+    }
+
+  g_clear_pointer (&cscanline_len, gegl_scratch_free);
+
+  return TRUE;
+
+err:
+  g_clear_pointer (&cdata, gegl_scratch_free);
+  g_clear_pointer (&cscanline_len, gegl_scratch_free);
+  if (error && ! *error)
+    {
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Fatal parse error in Photoshop resource file: "
+                     "RLE compressed data is corrupt."));
+    }
+  return FALSE;
 }
 
 gboolean
@@ -1361,6 +1563,118 @@ gimp_view_size_get_smaller (gint view_size)
   return GIMP_VIEW_SIZE_TINY;
 }
 
+/**
+ * gimp_version_cmp:
+ * @v1: a string representing a version, ex. "2.10.22".
+ * @v2: a string representing another version, ex. "2.99.2".
+ *
+ * If @v2 is %NULL, @v1 is compared to the currently running version.
+ *
+ * Returns: an integer less than, equal to, or greater than zero if @v1
+ *          is found to represent a version respectively, lower than,
+ *          matching, or greater than @v2.
+ */
+gint
+gimp_version_cmp (const gchar *v1,
+                  const gchar *v2)
+{
+  gint     major1;
+  gint     minor1;
+  gint     micro1;
+  gint     rc1;
+  gboolean is_git1;
+  gint     major2  = GIMP_MAJOR_VERSION;
+  gint     minor2  = GIMP_MINOR_VERSION;
+  gint     micro2  = GIMP_MICRO_VERSION;
+  gint     rc2     = 0;
+  gboolean is_git2 = FALSE;
+
+#if defined(GIMP_RC_VERSION)
+  rc2 = GIMP_RC_VERSION;
+#if defined(GIMP_IS_RC_GIT)
+  is_git2 = TRUE;
+#endif
+#endif
+
+  g_return_val_if_fail (v1 != NULL, -1);
+
+  if (! gimp_version_break (v1, &major1, &minor1, &micro1, &rc1, &is_git1))
+    {
+      /* If version is not properly parsed, something is wrong with
+       * upstream version number or parsing. This should not happen.
+       */
+      g_printerr ("%s: version not properly formatted: %s\n",
+                  G_STRFUNC, v1);
+
+      return -1;
+    }
+  if (v2 && ! gimp_version_break (v2, &major2, &minor2, &micro2, &rc2, &is_git2))
+    {
+      g_printerr ("%s: version not properly formatted: %s\n",
+                  G_STRFUNC, v2);
+
+      return 1;
+    }
+
+  if (major1 == major2 && minor1 == minor2 && micro1 == micro2 &&
+      rc1 == rc2 && is_git1 == is_git2)
+    return 0;
+  else if (major1 > major2                                                                    ||
+           (major1 == major2 && minor1 > minor2)                                              ||
+           (major1 == major2 && minor1 == minor2 && micro1 > micro2)                          ||
+           /* RC 0 is the real release, so it's "higher" than any other. */
+           (major1 == major2 && minor1 == minor2 && micro1 == micro2 && rc1 == 0 && rc2 > 0)  ||
+           (major1 == major2 && minor1 == minor2 && micro1 == micro2 && rc1 > rc2 && rc2 > 0) ||
+           (major1 == major2 && minor1 == minor2 && micro1 == micro2 && rc1 == rc2 && is_git1))
+    return 1;
+  else
+    return -1;
+}
+
+/**
+ * gimp_get_type_children:
+ * @type: the %GType to find children types for.
+ * @types: set %NULL for the initial call (internal variable for
+ *         recursive calls).
+ * @excluded: a list of types to exclude.
+ *
+ * Gather and recursively return all the subtypes of @type (except any
+ * type listed in @excluded).
+ *
+ * Note that @type itself is not included, so if you wished to have it,
+ * you must add it yourself after calling this function.
+ *
+ * Returns: a list of %Gtypes.
+ */
+GList *
+gimp_get_type_children (GType  type,
+                        GList *types,
+                        GList *excluded)
+{
+  GType *dtypes;
+  guint  n_types;
+
+  dtypes = g_type_children (type, &n_types);
+
+  /* TODO: when bumping GLib >= 2.80, use GTYPE_TO_POINTER instead. */
+#define GIMPTYPE_TO_POINTER(t) ((gpointer) (guintptr) (t))
+
+  for (gint i = 0; i < n_types; i++)
+    {
+      if (g_list_find (excluded, GIMPTYPE_TO_POINTER (dtypes[i])))
+        continue;
+
+      types = gimp_get_type_children (dtypes[i], types, excluded);
+      types = g_list_prepend (types, GIMPTYPE_TO_POINTER (dtypes[i]));
+    }
+
+#undef GIMPTYPE_TO_POINTER
+
+  g_free (dtypes);
+
+  return types;
+}
+
 /* Private functions */
 
 
@@ -1596,4 +1910,71 @@ gimp_extension_get_tag_lang (const gchar **attribute_names,
     }
 
   return NULL;
+}
+
+static gboolean
+gimp_version_break (const gchar *v,
+                    gint        *major,
+                    gint        *minor,
+                    gint        *micro,
+                    gint        *rc,
+                    gboolean    *is_git)
+{
+  gchar **versions;
+
+  *major  = 0;
+  *minor  = 0;
+  *micro  = 0;
+  *rc     = 0;
+  *is_git = FALSE;
+
+  if (v == NULL)
+    return FALSE;
+
+  versions = g_strsplit_set (v, ".", 3);
+  if (versions[0] != NULL)
+    {
+      *major = g_ascii_strtoll (versions[0], NULL, 10);
+      if (versions[1] != NULL)
+        {
+          *minor = g_ascii_strtoll (versions[1], NULL, 10);
+          if (versions[2] != NULL)
+            {
+              gchar **micro_rc_git;
+
+              *micro = g_ascii_strtoll (versions[2], NULL, 10);
+
+              micro_rc_git = g_strsplit_set (versions[2], "-", 2);
+
+              if (g_strv_length (micro_rc_git) > 1 &&
+                  strlen (micro_rc_git[1]) > 2     &&
+                  micro_rc_git[1][0] == 'R'           &&
+                  micro_rc_git[1][1] == 'C')
+                {
+                  gchar **rc_git;
+
+                  *rc = g_ascii_strtoll (micro_rc_git[1] + 2, NULL, 10);
+
+                  rc_git = g_strsplit_set (micro_rc_git[1], "+", 2);
+
+                  if (g_strv_length (rc_git) > 1 &&
+                      strlen (rc_git[1]) == 3    &&
+                      rc_git[1][0] == 'g'        &&
+                      rc_git[1][1] == 'i'        &&
+                      rc_git[1][2] == 't')
+                    {
+                      *is_git = TRUE;
+                    }
+
+                  g_strfreev (rc_git);
+                }
+
+              g_strfreev (micro_rc_git);
+            }
+        }
+    }
+
+  g_strfreev (versions);
+
+  return (*major > 0 || *minor > 0 || *micro > 0);
 }

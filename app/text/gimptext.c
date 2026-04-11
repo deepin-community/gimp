@@ -71,6 +71,7 @@ enum
   PROP_BOX_MODE,
   PROP_BOX_WIDTH,
   PROP_BOX_HEIGHT,
+  PROP_OUTLINE_DIRECTION,
   PROP_BOX_UNIT,
   PROP_TRANSFORMATION,
   PROP_OFFSET_X,
@@ -348,6 +349,16 @@ gimp_text_class_init (GimpTextClass *klass)
                             0.0, 8192.0, 4.0,
                             GIMP_PARAM_STATIC_STRINGS |
                             GIMP_CONFIG_PARAM_DEFAULTS);
+   GIMP_CONFIG_PROP_UNIT (object_class, PROP_OUTLINE_UNIT,
+                          "outline-unit",
+                          NULL, NULL,
+                          TRUE, FALSE, gimp_unit_pixel (),
+                          GIMP_PARAM_STATIC_STRINGS);
+   GIMP_CONFIG_PROP_ENUM (object_class, PROP_OUTLINE_DIRECTION,
+                          "outline-direction", NULL, NULL,
+                          GIMP_TYPE_TEXT_OUTLINE_DIRECTION,
+                          GIMP_TEXT_OUTLINE_DIRECTION_OUTER,
+                          GIMP_PARAM_STATIC_STRINGS);
    GIMP_CONFIG_PROP_ENUM (object_class, PROP_OUTLINE_CAP_STYLE,
                           "outline-cap-style", NULL, NULL,
                           GIMP_TYPE_CAP_STYLE, GIMP_CAP_BUTT,
@@ -359,7 +370,7 @@ gimp_text_class_init (GimpTextClass *klass)
    GIMP_CONFIG_PROP_DOUBLE (object_class, PROP_OUTLINE_MITER_LIMIT,
                             "outline-miter-limit",
                             NULL, NULL,
-                            0.0, 100.0, 10.0,
+                            0.0, 100.0, 2.0,
                             GIMP_PARAM_STATIC_STRINGS);
    GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_OUTLINE_ANTIALIAS,
                              "outline-antialias", NULL, NULL,
@@ -516,6 +527,12 @@ gimp_text_get_property (GObject      *object,
     case PROP_OUTLINE_WIDTH:
       g_value_set_double (value, text->outline_width);
       break;
+    case PROP_OUTLINE_UNIT:
+      g_value_set_object (value, text->outline_unit);
+      break;
+    case PROP_OUTLINE_DIRECTION:
+      g_value_set_enum (value, text->outline_direction);
+      break;
     case PROP_OUTLINE_CAP_STYLE:
       g_value_set_enum (value, text->outline_cap_style);
       break;
@@ -564,8 +581,7 @@ gimp_text_set_property (GObject      *object,
   switch (property_id)
     {
     case PROP_TEXT:
-      g_free (text->text);
-      text->text = g_value_dup_string (value);
+      g_set_str (&text->text, g_value_get_string (value));
       if (text->text && text->markup)
         {
           g_clear_pointer (&text->markup, g_free);
@@ -573,8 +589,7 @@ gimp_text_set_property (GObject      *object,
         }
       break;
     case PROP_MARKUP:
-      g_free (text->markup);
-      text->markup = g_value_dup_string (value);
+      g_set_str (&text->markup, g_value_get_string (value));
       if (text->markup && text->text)
         {
           g_clear_pointer (&text->text, g_free);
@@ -588,7 +603,7 @@ gimp_text_set_property (GObject      *object,
         if (font != text->font && font != NULL)
           g_set_object (&text->font, font);
         /* this is defensive to avoid some crashes */
-        else if (font == NULL) 
+        else if (font == NULL)
           g_set_object (&text->font, GIMP_FONT (gimp_font_get_standard ()));
       }
       break;
@@ -608,8 +623,7 @@ gimp_text_set_property (GObject      *object,
       text->kerning = g_value_get_boolean (value);
       break;
     case PROP_LANGUAGE:
-      g_free (text->language);
-      text->language = g_value_dup_string (value);
+      g_set_str (&text->language, g_value_get_string (value));
       break;
     case PROP_BASE_DIR:
       text->base_dir = g_value_get_enum (value);
@@ -675,6 +689,12 @@ gimp_text_set_property (GObject      *object,
       }
     case PROP_OUTLINE_WIDTH:
       text->outline_width = g_value_get_double (value);
+      break;
+    case PROP_OUTLINE_UNIT:
+      text->outline_unit = g_value_get_object (value);
+      break;
+    case PROP_OUTLINE_DIRECTION:
+      text->outline_direction = g_value_get_enum (value);
       break;
     case PROP_OUTLINE_CAP_STYLE:
       text->outline_cap_style = g_value_get_enum (value);
@@ -848,7 +868,7 @@ gimp_text_serialize_property (GimpConfig       *config,
                                                              (GimpContainerSearchFunc) gimp_font_match_by_lookup_name,
                                                              (gpointer) altered_font_name));
                   /* in case pango returns a non existant font name */
-                  if (font == NULL) 
+                  if (font == NULL)
                     {
                       font = GIMP_FONT (gimp_font_get_standard ());
                       font_name = "gimpfont";

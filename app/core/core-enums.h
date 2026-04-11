@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __CORE_ENUMS_H__
-#define __CORE_ENUMS_H__
-
+#pragma once
 
 #if 0
    This file is parsed by two scripts, enumgen.pl in pdb,
@@ -196,7 +194,7 @@ typedef enum  /*< pdb-skip >*/
 
 GType gimp_curve_point_type_get_type (void) G_GNUC_CONST;
 
-typedef enum  /*< pdb-skip >*/
+typedef enum
 {
   GIMP_CURVE_POINT_SMOOTH,   /*< desc="Smooth" >*/
   GIMP_CURVE_POINT_CORNER    /*< desc="Corner" >*/
@@ -207,7 +205,7 @@ typedef enum  /*< pdb-skip >*/
 
 GType gimp_curve_type_get_type (void) G_GNUC_CONST;
 
-typedef enum  /*< pdb-skip >*/
+typedef enum
 {
   GIMP_CURVE_SMOOTH,   /*< desc="Smooth"   >*/
   GIMP_CURVE_FREE      /*< desc="Freehand" >*/
@@ -482,7 +480,7 @@ typedef enum  /*< pdb-skip >*/
 
 GType gimp_trc_type_get_type (void) G_GNUC_CONST;
 
-typedef enum  /*< pdb-skip >*/
+typedef enum
 {
   GIMP_TRC_LINEAR,     /*< desc="Linear"     >*/
   GIMP_TRC_NON_LINEAR, /*< desc="Non-Linear" >*/
@@ -573,6 +571,7 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_GROUP_EDIT_PASTE,            /*< desc="Paste"                          >*/
   GIMP_UNDO_GROUP_EDIT_CUT,              /*< desc="Cut"                            >*/
   GIMP_UNDO_GROUP_TEXT,                  /*< desc="Text"                           >*/
+  GIMP_UNDO_GROUP_VECTOR,                /*< desc="Vector"                         >*/
   GIMP_UNDO_GROUP_TRANSFORM,             /*< desc="Transform"                      >*/
   GIMP_UNDO_GROUP_PAINT,                 /*< desc="Paint"                          >*/
   GIMP_UNDO_GROUP_PARASITE_ATTACH,       /*< desc="Attach parasite"                >*/
@@ -611,6 +610,7 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_LAYER_MODE,                  /*< desc="Set layer mode"                 >*/
   GIMP_UNDO_LAYER_OPACITY,               /*< desc="Set layer opacity"              >*/
   GIMP_UNDO_LAYER_LOCK_ALPHA,            /*< desc="Lock/Unlock alpha channel"      >*/
+  GIMP_UNDO_LINK_LAYER,                  /*< desc="Link layer"                     >*/
   GIMP_UNDO_GROUP_LAYER_SUSPEND_RESIZE,  /*< desc="Suspend group layer resize"     >*/
   GIMP_UNDO_GROUP_LAYER_RESUME_RESIZE,   /*< desc="Resume group layer resize"      >*/
   GIMP_UNDO_GROUP_LAYER_SUSPEND_MASK,    /*< desc="Suspend group layer mask"       >*/
@@ -619,8 +619,8 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_GROUP_LAYER_END_TRANSFORM,   /*< desc="End transforming group layer"   >*/
   GIMP_UNDO_GROUP_LAYER_CONVERT,         /*< desc="Convert group layer"            >*/
   GIMP_UNDO_TEXT_LAYER,                  /*< desc="Text layer"                     >*/
-  GIMP_UNDO_TEXT_LAYER_MODIFIED,         /*< desc="Text layer modification"        >*/
   GIMP_UNDO_TEXT_LAYER_CONVERT,          /*< desc="Convert text layer"             >*/
+  GIMP_UNDO_VECTOR_LAYER,                /*< desc="Vector layer"                   >*/
   GIMP_UNDO_LAYER_MASK_ADD,              /*< desc="Add layer masks"                >*/
   GIMP_UNDO_LAYER_MASK_REMOVE,           /*< desc="Delete layer masks"             >*/
   GIMP_UNDO_LAYER_MASK_APPLY,            /*< desc="Apply layer masks"              >*/
@@ -642,6 +642,7 @@ typedef enum /*< pdb-skip >*/
   GIMP_UNDO_FILTER_REMOVE,               /*< desc="Remove effect"                  >*/
   GIMP_UNDO_FILTER_REORDER,              /*< desc="Reorder effect"                 >*/
   GIMP_UNDO_FILTER_MODIFIED,             /*< desc="Effect modification"            >*/
+  GIMP_UNDO_RASTERIZABLE,                /*< desc="Text, link or vector layer"     >*/
 
   GIMP_UNDO_CANT                         /*< desc="Not undoable"                   >*/
 } GimpUndoType;
@@ -788,6 +789,3 @@ typedef enum  /*< pdb-skip, skip >*/
                              GIMP_ITEM_TYPE_CHANNELS |
                              GIMP_ITEM_TYPE_PATHS)
 } GimpItemTypeMask;
-
-
-#endif /* __CORE_ENUMS_H__ */

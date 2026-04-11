@@ -21,7 +21,18 @@
 #include "config.h"
 
 #include <string.h>
+#ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
+#endif
+#if defined(_WIN32) && !defined(HAVE_SYS_TIME_H)
+#include <time.h>
+#include <windows.h>
+#if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)
+#define DELTA_EPOCH_IN_MICROSECS 11644473600000000Ui64
+#else
+#define DELTA_EPOCH_IN_MICROSECS 11644473600000000ULL
+#endif
+#endif
 
 #include <gexiv2/gexiv2.h>
 
@@ -106,8 +117,6 @@ gimp_image_metadata_save_prepare (GimpImage             *image,
   if (metadata)
     {
       GDateTime      *datetime;
-      GimpParasite   *comment_parasite;
-      gchar          *comment = NULL;
       gint            image_width;
       gint            image_height;
       gdouble         xres;
@@ -121,16 +130,8 @@ gimp_image_metadata_save_prepare (GimpImage             *image,
 
       datetime = g_date_time_new_now_local ();
 
-      comment_parasite = gimp_image_get_parasite (image, "gimp-comment");
-      if (comment_parasite)
-        {
-          guint32  parasite_size;
-
-          comment = (gchar *) gimp_parasite_get_data (comment_parasite, &parasite_size);
-          comment = g_strndup (comment, parasite_size);
-
-          gimp_parasite_free (comment_parasite);
-        }
+      if (! gimp_update_metadata ())
+        *suggested_flags &= ~GIMP_METADATA_SAVE_UPDATE;
 
       /* Exif */
 
@@ -138,55 +139,37 @@ gimp_image_metadata_save_prepare (GimpImage             *image,
           ! gexiv2_metadata_has_exif (g2metadata))
         *suggested_flags &= ~GIMP_METADATA_SAVE_EXIF;
 
-      if (comment)
+      if (gimp_update_metadata ())
         {
+          datetime_buf = g_date_time_format (datetime, "%Y:%m:%d %T");
           gexiv2_metadata_try_set_tag_string (g2metadata,
-                                              "Exif.Photo.UserComment",
-                                              comment, &error);
+                                              "Exif.Image.DateTime",
+                                              datetime_buf, &error);
           if (error)
             {
               g_warning ("%s: failed to set metadata '%s': %s\n",
-                         G_STRFUNC, "Exif.Photo.UserComment", error->message);
+                         G_STRFUNC, "Exif.Image.DateTime", error->message);
               g_clear_error (&error);
             }
+          g_clear_pointer (&datetime_buf, g_free);
+
+          /* Timezone is separate */
+          datetime_buf = g_date_time_format (datetime, "\%:z");
+          gexiv2_metadata_try_set_tag_string (g2metadata,
+                                              "Exif.Photo.OffsetTime",
+                                              datetime_buf, NULL);
+          g_clear_pointer (&datetime_buf, g_free);
+
 
           gexiv2_metadata_try_set_tag_string (g2metadata,
-                                              "Exif.Image.ImageDescription",
-                                              comment, &error);
+                                              "Exif.Image.Software",
+                                              PACKAGE_STRING, &error);
           if (error)
             {
               g_warning ("%s: failed to set metadata '%s': %s\n",
-                         G_STRFUNC, "Exif.Image.ImageDescription", error->message);
+                         G_STRFUNC, "Exif.Image.Software", error->message);
               g_clear_error (&error);
             }
-        }
-
-      g_snprintf (buffer, sizeof (buffer),
-                  "%d:%02d:%02d %02d:%02d:%02d",
-                  g_date_time_get_year (datetime),
-                  g_date_time_get_month (datetime),
-                  g_date_time_get_day_of_month (datetime),
-                  g_date_time_get_hour (datetime),
-                  g_date_time_get_minute (datetime),
-                  g_date_time_get_second (datetime));
-      gexiv2_metadata_try_set_tag_string (g2metadata,
-                                          "Exif.Image.DateTime",
-                                          buffer, &error);
-      if (error)
-        {
-          g_warning ("%s: failed to set metadata '%s': %s\n",
-                     G_STRFUNC, "Exif.Image.DateTime", error->message);
-          g_clear_error (&error);
-        }
-
-      gexiv2_metadata_try_set_tag_string (g2metadata,
-                                          "Exif.Image.Software",
-                                          PACKAGE_STRING, &error);
-      if (error)
-        {
-          g_warning ("%s: failed to set metadata '%s': %s\n",
-                     G_STRFUNC, "Exif.Image.Software", error->message);
-          g_clear_error (&error);
         }
 
       gimp_metadata_set_pixel_size (metadata,
@@ -212,26 +195,29 @@ gimp_image_metadata_save_prepare (GimpImage             *image,
           g_clear_error (&error);
         }
 
-      /* XMP uses datetime in ISO 8601 format */
-      datetime_buf = g_date_time_format (datetime, "%Y:%m:%dT%T\%:z");
+      if (gimp_update_metadata ())
+        {
+          /* XMP uses datetime in ISO 8601 format */
+          datetime_buf = g_date_time_format (datetime, "%Y-%m-%dT%T\%:z");
 
-      gexiv2_metadata_try_set_tag_string (g2metadata,
-                                          "Xmp.xmp.ModifyDate",
-                                          datetime_buf, &error);
-      if (error)
-        {
-          g_warning ("%s: failed to set metadata '%s': %s\n",
-                      G_STRFUNC, "Xmp.xmp.ModifyDate", error->message);
-          g_clear_error (&error);
-        }
-      gexiv2_metadata_try_set_tag_string (g2metadata,
-                                          "Xmp.xmp.MetadataDate",
-                                          datetime_buf, &error);
-      if (error)
-        {
-          g_warning ("%s: failed to set metadata '%s': %s\n",
-                      G_STRFUNC, "Xmp.xmp.MetadataDate", error->message);
-          g_clear_error (&error);
+          gexiv2_metadata_try_set_tag_string (g2metadata,
+                                              "Xmp.xmp.ModifyDate",
+                                              datetime_buf, &error);
+          if (error)
+            {
+              g_warning ("%s: failed to set metadata '%s': %s\n",
+                          G_STRFUNC, "Xmp.xmp.ModifyDate", error->message);
+              g_clear_error (&error);
+            }
+          gexiv2_metadata_try_set_tag_string (g2metadata,
+                                              "Xmp.xmp.MetadataDate",
+                                              datetime_buf, &error);
+          if (error)
+            {
+              g_warning ("%s: failed to set metadata '%s': %s\n",
+                          G_STRFUNC, "Xmp.xmp.MetadataDate", error->message);
+              g_clear_error (&error);
+            }
         }
 
       if (! g_strcmp0 (mime_type, "image/tiff"))
@@ -260,14 +246,17 @@ gimp_image_metadata_save_prepare (GimpImage             *image,
               g_clear_error (&error);
             }
 
-          gexiv2_metadata_try_set_tag_string (g2metadata,
-                                              "Xmp.tiff.DateTime",
-                                              datetime_buf, &error);
-          if (error)
+          if (gimp_update_metadata ())
             {
-              g_warning ("%s: failed to set metadata '%s': %s\n",
-                         G_STRFUNC, "Xmp.tiff.DateTime", error->message);
-              g_clear_error (&error);
+              gexiv2_metadata_try_set_tag_string (g2metadata,
+                                                  "Xmp.tiff.DateTime",
+                                                  datetime_buf, &error);
+              if (error)
+                {
+                  g_warning ("%s: failed to set metadata '%s': %s\n",
+                             G_STRFUNC, "Xmp.tiff.DateTime", error->message);
+                  g_clear_error (&error);
+                }
             }
         }
 
@@ -279,7 +268,6 @@ gimp_image_metadata_save_prepare (GimpImage             *image,
 
       g_free (datetime_buf);
       g_date_time_unref (datetime);
-      g_clear_pointer (&comment, g_free);
 
       /* EXIF Thumbnail */
 
@@ -320,6 +308,9 @@ gimp_image_metadata_save_prepare (GimpImage             *image,
 
       if (! gimp_export_thumbnail ())
         *suggested_flags &= ~GIMP_METADATA_SAVE_THUMBNAIL;
+
+      if (! gimp_update_metadata ())
+        *suggested_flags &= ~GIMP_METADATA_SAVE_UPDATE;
     }
 
   /* Color profile */
@@ -639,6 +630,50 @@ gimp_image_metadata_set_xmp_structs (GList          *xmp_list,
   return exclude;
 }
 
+#if defined(_WIN32) && ! defined(HAVE_SYS_TIME_H)
+struct timezone
+{
+  int tz_minuteswest; /* minutes W of Greenwich */
+  int tz_dsttime;     /* type of dst correction */
+};
+
+int
+gettimeofday (struct timeval *tv, struct timezone *tz)
+{
+  FILETIME         ft;
+  unsigned __int64 tmpres = 0;
+  static int       tzflag = 0;
+
+  if (NULL != tv)
+    {
+      GetSystemTimeAsFileTime (&ft);
+
+      tmpres |= ft.dwHighDateTime;
+      tmpres <<= 32;
+      tmpres |= ft.dwLowDateTime;
+
+      tmpres /= 10; /*convert into microseconds*/
+      /*converting file time to unix epoch*/
+      tmpres -= DELTA_EPOCH_IN_MICROSECS;
+      tv->tv_sec  = (long) (tmpres / 1000000UL);
+      tv->tv_usec = (long) (tmpres % 1000000UL);
+    }
+
+  if (NULL != tz)
+    {
+      if (! tzflag)
+        {
+          _tzset ();
+          tzflag++;
+        }
+      tz->tz_minuteswest = _timezone / 60;
+      tz->tz_dsttime     = _daylight;
+    }
+
+  return 0;
+}
+#endif
+
 /**
  * gimp_image_metadata_save_filter:
  * @image:     The actually saved image
@@ -722,7 +757,51 @@ gimp_image_metadata_save_filter (GimpImage            *image,
 
   if ((flags & GIMP_METADATA_SAVE_EXIF) && support_exif)
     {
-      gchar **exif_data = gexiv2_metadata_get_exif_tags (GEXIV2_METADATA (metadata));
+      gchar **exif_data = NULL;
+
+      if (gimp_update_metadata () && (flags & GIMP_METADATA_SAVE_COMMENT))
+        {
+          GimpParasite *comment_parasite;
+
+          comment_parasite = gimp_image_get_parasite (image, "gimp-comment");
+          if (comment_parasite)
+            {
+              guint32  parasite_size;
+              gchar   *comment = NULL;
+
+              comment = (gchar *) gimp_parasite_get_data (comment_parasite, &parasite_size);
+              comment = g_strndup (comment, parasite_size);
+
+              gimp_parasite_free (comment_parasite);
+
+              if (comment)
+                {
+                  gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
+                                                      "Exif.Photo.UserComment",
+                                                      comment, &code_error);
+                  if (code_error)
+                    {
+                      g_warning ("%s: failed to set metadata '%s': %s\n",
+                                 G_STRFUNC, "Exif.Photo.UserComment", code_error->message);
+                      g_clear_error (&code_error);
+                    }
+
+                  gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
+                                                      "Exif.Image.ImageDescription",
+                                                      comment, &code_error);
+                  if (code_error)
+                    {
+                      g_warning ("%s: failed to set metadata '%s': %s\n",
+                                 G_STRFUNC, "Exif.Image.ImageDescription", code_error->message);
+                      g_clear_error (&code_error);
+                    }
+
+                  g_free (comment);
+                }
+            }
+        }
+
+      exif_data = gexiv2_metadata_get_exif_tags (GEXIV2_METADATA (metadata));
 
       for (i = 0; exif_data[i] != NULL; i++)
         {
@@ -748,72 +827,75 @@ gimp_image_metadata_save_filter (GimpImage            *image,
       GList          *exclude_list = NULL;
       GList          *list;
 
-      gettimeofday (&timer_usec, NULL);
-      timestamp_usec = ((gint64) timer_usec.tv_sec) * 1000000ll +
-                        (gint64) timer_usec.tv_usec;
-      g_snprintf (ts, sizeof (ts), "%" G_GINT64_FORMAT, timestamp_usec);
-
-      gimp_metadata_add_xmp_history (metadata, "");
-
-      gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
-                                          "Xmp.GIMP.TimeStamp",
-                                          ts, &code_error);
-      if (code_error)
+      if (gimp_update_metadata ())
         {
-          g_warning ("%s: failed to set metadata '%s': %s\n",
-                     G_STRFUNC, "Xmp.GIMP.TimeStamp", code_error->message);
-          g_clear_error (&code_error);
-        }
+          gettimeofday (&timer_usec, NULL);
+          timestamp_usec = ((gint64) timer_usec.tv_sec) * 1000000ll +
+                            (gint64) timer_usec.tv_usec;
+          g_snprintf (ts, sizeof (ts), "%" G_GINT64_FORMAT, timestamp_usec);
 
-      gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
-                                          "Xmp.xmp.CreatorTool",
-                                          N_("GIMP"), &code_error);
-      if (code_error)
-        {
-          g_warning ("%s: failed to set metadata '%s': %s\n",
-                     G_STRFUNC, "Xmp.xmp.CreatorTool", code_error->message);
-          g_clear_error (&code_error);
-        }
+          gimp_metadata_add_xmp_history (metadata, "");
 
-      gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
-                                          "Xmp.GIMP.Version",
-                                          GIMP_VERSION, &code_error);
-      if (code_error)
-        {
-          g_warning ("%s: failed to set metadata '%s': %s\n",
-                     G_STRFUNC, "Xmp.GIMP.Version", code_error->message);
-          g_clear_error (&code_error);
-        }
+          gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
+                                              "Xmp.GIMP.TimeStamp",
+                                              ts, &code_error);
+          if (code_error)
+            {
+              g_warning ("%s: failed to set metadata '%s': %s\n",
+                         G_STRFUNC, "Xmp.GIMP.TimeStamp", code_error->message);
+              g_clear_error (&code_error);
+            }
 
-      gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
-                                          "Xmp.GIMP.API",
-                                          GIMP_API_VERSION, &code_error);
-      if (code_error)
-        {
-          g_warning ("%s: failed to set metadata '%s': %s\n",
-                     G_STRFUNC, "Xmp.GIMP.API", code_error->message);
-          g_clear_error (&code_error);
-        }
+          gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
+                                              "Xmp.xmp.CreatorTool",
+                                              N_("GIMP"), &code_error);
+          if (code_error)
+            {
+              g_warning ("%s: failed to set metadata '%s': %s\n",
+                         G_STRFUNC, "Xmp.xmp.CreatorTool", code_error->message);
+              g_clear_error (&code_error);
+            }
 
-      gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
-                                          "Xmp.GIMP.Platform",
+          gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
+                                              "Xmp.GIMP.Version",
+                                              GIMP_VERSION, &code_error);
+          if (code_error)
+            {
+              g_warning ("%s: failed to set metadata '%s': %s\n",
+                         G_STRFUNC, "Xmp.GIMP.Version", code_error->message);
+              g_clear_error (&code_error);
+            }
+
+          gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
+                                              "Xmp.GIMP.API",
+                                              GIMP_API_VERSION, &code_error);
+          if (code_error)
+            {
+              g_warning ("%s: failed to set metadata '%s': %s\n",
+                         G_STRFUNC, "Xmp.GIMP.API", code_error->message);
+              g_clear_error (&code_error);
+            }
+
+          gexiv2_metadata_try_set_tag_string (GEXIV2_METADATA (metadata),
+                                              "Xmp.GIMP.Platform",
 #if defined(_WIN32) || defined(__CYGWIN__) || defined(__MINGW32__)
-                                          "Windows",
+                                              "Windows",
 #elif defined(__linux__)
-                                          "Linux",
+                                              "Linux",
 #elif defined(__APPLE__) && defined(__MACH__)
-                                          "Mac OS",
+                                              "Mac OS",
 #elif defined(unix) || defined(__unix__) || defined(__unix)
-                                          "Unix",
+                                              "Unix",
 #else
-                                          "Unknown",
+                                              "Unknown",
 #endif
-                                          &code_error);
-      if (code_error)
-        {
-          g_warning ("%s: failed to set metadata '%s': %s\n",
-                     G_STRFUNC, "Xmp.GIMP.Platform", code_error->message);
-          g_clear_error (&code_error);
+                                              &code_error);
+          if (code_error)
+            {
+              g_warning ("%s: failed to set metadata '%s': %s\n",
+                         G_STRFUNC, "Xmp.GIMP.Platform", code_error->message);
+              g_clear_error (&code_error);
+            }
         }
 
       xmp_data = gexiv2_metadata_get_xmp_tags (GEXIV2_METADATA (metadata));
@@ -869,6 +951,19 @@ gimp_image_metadata_save_filter (GimpImage            *image,
         }
 
       g_strfreev (iptc_data);
+    }
+
+  if (support_exif)
+    {
+      /* Remove all old thumbnail metadata: third-party software may have
+       * written tags we don't expect. */
+      gexiv2_metadata_try_erase_exif_thumbnail (new_g2metadata, &code_error);
+      if (code_error)
+        {
+          g_warning ("%s: failed to erase EXIF thumbnail: %s",
+                     G_STRFUNC, code_error->message);
+          g_clear_error (&code_error);
+        }
     }
 
   if (flags & GIMP_METADATA_SAVE_THUMBNAIL && support_exif)
@@ -989,17 +1084,6 @@ gimp_image_metadata_save_filter (GimpImage            *image,
         }
 
       g_object_unref (thumb_pixbuf);
-    }
-  else
-    {
-      /* Remove Thumbnail */
-      gexiv2_metadata_try_erase_exif_thumbnail (new_g2metadata, &code_error);
-      if (code_error)
-        {
-          g_warning ("%s: failed to erase EXIF thumbnail: %s\n",
-                     G_STRFUNC, code_error->message);
-          g_clear_error (&code_error);
-        }
     }
 
   if (flags & GIMP_METADATA_SAVE_COLOR_PROFILE)

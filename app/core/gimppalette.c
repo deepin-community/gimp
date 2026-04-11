@@ -75,7 +75,8 @@ static gboolean      gimp_palette_get_popup_size      (GimpViewable         *vie
 static GimpTempBuf * gimp_palette_get_new_preview     (GimpViewable         *viewable,
                                                        GimpContext          *context,
                                                        gint                  width,
-                                                       gint                  height);
+                                                       gint                  height,
+                                                       GeglColor            *fg_color);
 static gchar       * gimp_palette_get_description     (GimpViewable         *viewable,
                                                        gchar               **tooltip);
 static const gchar * gimp_palette_get_extension       (GimpData             *data);
@@ -125,6 +126,7 @@ gimp_palette_class_init (GimpPaletteClass *klass)
   gimp_object_class->get_memsize    = gimp_palette_get_memsize;
 
   viewable_class->default_icon_name = "gtk-select-color";
+  viewable_class->default_name      = _("Palette");
   viewable_class->get_preview_size  = gimp_palette_get_preview_size;
   viewable_class->get_popup_size    = gimp_palette_get_popup_size;
   viewable_class->get_new_preview   = gimp_palette_get_new_preview;
@@ -239,7 +241,8 @@ static GimpTempBuf *
 gimp_palette_get_new_preview (GimpViewable *viewable,
                               GimpContext  *context,
                               gint          width,
-                              gint          height)
+                              gint          height,
+                              GeglColor    *fg_color G_GNUC_UNUSED)
 {
   GimpPalette *palette  = GIMP_PALETTE (viewable);
   GimpTempBuf *temp_buf;
@@ -493,11 +496,7 @@ gimp_palette_restrict_format (GimpPalette *palette,
 
   if (push_undo_if_image && gimp_data_get_image (GIMP_DATA (palette)))
     gimp_image_undo_push_image_colormap (gimp_data_get_image (GIMP_DATA (palette)),
-                                         /* TODO: use localized string
-                                          * after string freeze.
-                                          */
-                                         /*C_("undo-type", "Change Colormap format restriction"));*/
-                                         "Change Colormap format restriction");
+                                         C_("undo-type", "Change Colormap format restriction"));
   palette->format = format;
 
   if (palette->format == NULL)

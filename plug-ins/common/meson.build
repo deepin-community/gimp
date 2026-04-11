@@ -10,9 +10,7 @@ common_plugins_list = [
   { 'name': 'colormap-remap', },
   { 'name': 'compose', },
   { 'name': 'contrast-retinex', },
-  { 'name': 'crop-zealous',
-    'deps': [ gtk3, gegl, gdk_pixbuf, cairo, ],
-  },
+  { 'name': 'crop-zealous' },
   { 'name': 'curve-bend', },
   { 'name': 'decompose', },
   { 'name': 'depth-merge', },
@@ -20,45 +18,44 @@ common_plugins_list = [
   { 'name': 'destripe', },
   { 'name': 'file-cel', },
   { 'name': 'file-compressor',
-    'deps': [ gegl, gdk_pixbuf, cairo, gio, liblzma, pango, bz2, zlib, ],
+    'deps': [ gio, libarchive, liblzma, pango, bz2, zlib, ],
   },
   { 'name': 'file-csource', },
-  { 'name': 'file-desktop-link',
-    'deps': [ gtk3, gegl, gdk_pixbuf, cairo, ],
-  },
   { 'name': 'file-dicom', },
   { 'name': 'file-farbfeld', },
   { 'name': 'file-gbr', },
   { 'name': 'file-gegl', },
   { 'name': 'file-gif-load',
-    'deps': [ gtk3, gegl, gdk_pixbuf, cairo, ],
+    'deps': [ zlib, ],
   },
   { 'name': 'file-gif-export', },
   { 'name': 'file-gih', },
-  { 'name': 'file-glob',
-    'deps': [ gtk3, gegl, gdk_pixbuf, cairo,  ],
-  },
+  { 'name': 'file-glob', },
   { 'name': 'file-header', },
   { 'name': 'file-html-table', },
+  { 'name': 'file-paa', },
   { 'name': 'file-pat', },
   { 'name': 'file-pcx', },
   { 'name': 'file-pdf-load',
-    'deps': [ gtk3, gegl, gdk_pixbuf, poppler ],
+    'deps': [ poppler ],
   },
   { 'name': 'file-pix', },
   { 'name': 'file-png',
-    'deps': [ gtk3, gegl, libpng, lcms ],
+    'deps': [ libpng, lcms ],
   },
   { 'name': 'file-pnm', },
   { 'name': 'file-psp',
-    'deps': [ gtk3, gegl, zlib, ],
+    'deps': [ zlib, ],
   },
+  { 'name': 'file-pvr', },
   { 'name': 'file-raw-data', },
+  { 'name': 'file-seattle-filmworks', },
   { 'name': 'file-sunras', },
   { 'name': 'file-svg',
-    'deps': [ gtk3, gegl, rsvg, ],
+    'deps': [ rsvg, ],
   },
   { 'name': 'file-tga', },
+  { 'name': 'file-tim', },
   { 'name': 'file-wbmp', },
   { 'name': 'file-xbm', },
   { 'name': 'file-xwd', },
@@ -88,26 +85,26 @@ common_plugins_list = [
 if libaa.found()
   common_plugins_list += {
     'name': 'file-aa',
-    'deps': [ gtk3, gegl, gdk_pixbuf, libaa, ],
+    'deps': [ libaa, ],
   }
 endif
 
 if have_heif
   common_plugins_list += { 'name': 'file-heif',
-    'deps': [ gtk3, gegl, libheif, gexiv2, lcms, ],
+    'deps': [ libheif, lcms, ],
   }
 endif
 
 if openjpeg.found()
-  common_plugins_list += { 'name': 'file-jp2-load',
-    'deps': [ gtk3, gegl, gdk_pixbuf, openjpeg, ],
+  common_plugins_list += { 'name': 'file-jp2',
+    'deps': [ openjpeg, ],
   }
 endif
 
 if libjxl.found() and libjxl_threads.found()
   common_plugins_list += {
     'name': 'file-jpegxl',
-    'deps': [ gtk3, gegl, gexiv2, libjxl, libjxl_threads, ],
+    'deps': [ libjxl, libjxl_threads, ],
   }
 endif
 
@@ -117,57 +114,55 @@ if libmng.found()
     mng_cflags = [ '-DMNG_USE_DLL' ]
   endif
   common_plugins_list += { 'name': 'file-mng',
-                           'deps': [ gtk3, gegl, libmng, libpng, ],
+                           'deps': [ libmng, libpng, ],
                            'cflags': mng_cflags,
   }
 endif
 
 if cairopdf.found()
   common_plugins_list += { 'name': 'file-pdf-export',
-    'deps': [ gtk3, gegl, gdk_pixbuf, poppler, cairo, cairopdf ],
+    'deps': [ poppler, cairopdf ],
   }
 endif
 
 if ghostscript.found()
   common_plugins_list += { 'name': 'file-ps',
-    'deps': [ gtk3, gegl, gdk_pixbuf, ghostscript, ],
+    'deps': [ ghostscript, ],
   }
 endif
 
 if wmf.found()
   common_plugins_list += { 'name': 'file-wmf',
-    'deps': [ gtk3, gegl, wmf, ],
+    'deps': [ wmf, ],
   }
 endif
 
 if xmc.found()
   common_plugins_list += { 'name': 'file-xmc',
-    'deps': [ gtk3, gegl, xmc, ],
+    'deps': [ xmc, ],
   }
 endif
 
 if libxpm.found()
   common_plugins_list += { 'name': 'file-xpm',
-    'deps': [ gtk3, gegl, libxpm, ],
+    'deps': [ libxpm, ],
   }
 endif
 
 if have_qoi
   common_plugins_list += {
     'name': 'file-qoi',
-    'deps': [ gtk3, gegl, ],
   }
 endif
 
 if libiff.found() and libilbm.found()
   common_plugins_list += {
     'name': 'file-iff',
-    'deps': [ gtk3, gegl, libiff, libilbm, ],
+    'deps': [ libiff, libilbm, ],
   }
 elif have_ilbm
   common_plugins_list += {
     'name': 'file-iff',
-    'deps': [ gtk3, gegl, ],
   }
 endif
 
@@ -175,20 +170,26 @@ if platform_windows
   common_plugins_list += { 'name': 'file-lnk', }
 endif
 
+if platform_linux
+  common_plugins_list += {
+    'name': 'file-desktop-link',
+  }
+endif
 if not platform_windows
   common_plugins_list += { 'name': 'mail', }
 endif
 
 if get_option('webkit-unmaintained')
   common_plugins_list += { 'name': 'web-page',
-    'deps': [ gtk3, gegl, gdk_pixbuf, webkit, ],
+    'deps': [ webkit, ],
   }
 endif
 
+plugin_custom_targets = []
 foreach plugin : common_plugins_list
   plugin_name = plugin.get('name')
   plugin_sources = [ plugin.get('sources', plugin_name + '.c') ]
-  plugin_deps = plugin.get('deps', [ gtk3, gegl, gdk_pixbuf, ])
+  plugin_deps = plugin.get('deps', [])
   plugin_cflags = plugin.get('cflags', [])
 
   if platform_windows
@@ -210,9 +211,8 @@ foreach plugin : common_plugins_list
     plugin_sources += windows.compile_resources(
       plugin_rc,
       args: [
-        '--define', 'ORIGINALFILENAME_STR="@0@"'.format(plugin_name+'.exe'),
-        '--define', 'INTERNALNAME_STR="@0@"'    .format(plugin_name),
-        '--define', 'TOP_SRCDIR="@0@"'          .format(meson.project_source_root()),
+        rc_define_flag, rc_define_fmt.format('ORIGINALFILENAME_STR', plugin_name+'.exe'),
+        rc_define_flag, rc_define_fmt.format('INTERNALNAME_STR', plugin_name),
       ],
       include_directories: [
         rootInclude, appInclude,
@@ -234,7 +234,7 @@ foreach plugin : common_plugins_list
                             libgimpui,
                             libgimpwidgets,
                           ],
-                          dependencies: [ plugin_deps, math ],
+                          dependencies: [ plugin_deps, math, libgimpui_dep ],
                           c_args: plugin_cflags,
                           win_subsystem: 'windows',
                           install: true,
@@ -242,10 +242,10 @@ foreach plugin : common_plugins_list
 
   # Ugly trick to copy executables into subfolders so that we can run GIMP from
   # the build directory without installing it.
-  custom_target('test-' + plugin_name,
+  plugin_custom_targets += custom_target('test-' + plugin_name,
                 input: [ plugin_exe ],
                 output: [ plugin_name + '.dummy' ],
-                command: [ python, meson.project_source_root() / 'build/meson/cp-plug-in-subfolder.py',
+                command: [ python, meson.project_source_root() / 'tools/cp-plug-in-subfolder.py',
                            plugin_exe, meson.current_build_dir() / 'test-plug-ins' / plugin_name,
                            '@OUTPUT@' ],
                 build_by_default: true)

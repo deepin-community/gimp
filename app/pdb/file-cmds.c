@@ -32,6 +32,7 @@
 #include "pdb-types.h"
 
 #include "core/gimp.h"
+#include "core/gimpimage-undo.h"
 #include "core/gimpimage.h"
 #include "core/gimplayer.h"
 #include "core/gimpparamspecs.h"
@@ -84,8 +85,17 @@ file_load_invoker (GimpProcedure         *procedure,
                      gimp_value_array_index (new_args, 1));
 
   for (i = 2; i < proc->num_args; i++)
-    if (G_IS_PARAM_SPEC_STRING (proc->args[i]))
-      g_value_set_static_string (gimp_value_array_index (new_args, i), "");
+    if (GIMP_IS_PARAM_SPEC_CHOICE (proc->args[i]))
+      {
+        GParamSpecString *string_spec = G_PARAM_SPEC_STRING (proc->args[i]);
+
+        g_value_set_static_string (gimp_value_array_index (new_args, i),
+                                   string_spec->default_value);
+      }
+    else if (G_IS_PARAM_SPEC_STRING (proc->args[i]))
+      {
+        g_value_set_static_string (gimp_value_array_index (new_args, i), "");
+      }
 
   return_vals =
     gimp_pdb_execute_procedure_by_name_args (gimp->pdb,
@@ -103,7 +113,20 @@ file_load_invoker (GimpProcedure         *procedure,
         {
           GimpImage *image =
             g_value_get_object (gimp_value_array_index (return_vals, 1));
-          gimp_image_set_load_proc (image, file_proc);
+
+          if (! gimp_image_get_load_proc (image))
+            /* Leave the initial load procedure if it already exists as
+             * it will give information about the source format. See
+             * similar code in file_open_image().
+             */
+            gimp_image_set_load_proc (image, file_proc);
+
+          if (! gimp_image_get_file (image))
+            gimp_image_set_imported_file (image, file);
+
+          gimp_image_clean_all (image);
+          gimp_image_undo_disable (image);
+          gimp_image_undo_enable (image);
         }
     }
 
@@ -135,7 +158,7 @@ file_load_layer_invoker (GimpProcedure         *procedure,
       GimpPDBStatusType  status;
 
       layers = file_open_layers (gimp, context, progress,
-                                 image, FALSE,
+                                 image, FALSE, FALSE,
                                  file, run_mode, NULL, &status, error);
 
       if (layers)
@@ -181,7 +204,7 @@ file_load_layers_invoker (GimpProcedure         *procedure,
       GimpPDBStatusType  status;
 
       layer_list = file_open_layers (gimp, context, progress,
-                                     image, FALSE,
+                                     image, FALSE, FALSE,
                                      file, run_mode, NULL, &status, error);
 
       if (layer_list)
@@ -285,6 +308,28 @@ file_save_invoker (GimpProcedure         *procedure,
                                              gimp_object_get_name (proc),
                                              new_args);
 
+  if (g_value_get_enum (gimp_value_array_index (return_vals, 0)) ==
+      GIMP_PDB_SUCCESS)
+    {
+      GimpImage *image =
+        g_value_get_object (gimp_value_array_index (new_args, 1));
+
+      if (! strcmp (gimp_object_get_name (proc), "gimp-xcf-save"))
+        {
+          gimp_image_set_file (image, file);
+
+          gimp_image_set_imported_file (image, NULL);
+          gimp_image_clean_all (image);
+        }
+      else
+        {
+          gimp_image_set_exported_file (image, file);
+          gimp_image_set_export_proc (image, file_proc);
+
+          gimp_image_set_imported_file (image, NULL);
+          gimp_image_export_clean_all (image);
+        }
+    }
   gimp_value_array_unref (new_args);
 
   return return_vals;
@@ -374,7 +419,7 @@ register_file_procs (GimpPDB *pdb)
                                "gimp-file-load");
   gimp_procedure_set_static_help (procedure,
                                   "Loads an image file by invoking the right load handler.",
-                                  "This procedure invokes the correct file load handler using magic if possible, and falling back on the file's extension and/or prefix if not.",
+                                  "This procedure invokes the correct file load handler using magic if possible, and falling back on the file's extension and/or prefix if not. Note that the loaded image will be marked as clean.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Josh MacDonald",

@@ -41,6 +41,7 @@
 #include "menus/menus.h"
 
 #include "widgets/gimpaction.h"
+#include "widgets/gimpcontrollermanager.h"
 #include "widgets/gimpcontrollers.h"
 #include "widgets/gimpcontrollerkeyboard.h"
 #include "widgets/gimpcontrollerwheel.h"
@@ -257,8 +258,13 @@ gimp_display_shell_events (GtkWidget        *widget,
       {
         GdkEventFocus *fevent = (GdkEventFocus *) event;
 
-        if (fevent->in && shell->display->config->activate_on_focus)
-          set_display = TRUE;
+        if (fevent->in)
+          {
+            gimp_set_focused_once (gimp);
+
+            if (shell->display->config->activate_on_focus)
+              set_display = TRUE;
+          }
       }
       break;
 
@@ -775,8 +781,12 @@ gimp_display_shell_canvas_tool_events (GtkWidget        *canvas,
 
     case GDK_SCROLL:
       {
-        GdkEventScroll *sevent = (GdkEventScroll *) event;
-        GimpController *wheel  = gimp_controllers_get_wheel (gimp);
+        GdkEventScroll        *sevent = (GdkEventScroll *) event;
+        GimpControllerManager *controller_manager;
+        GimpController        *wheel;
+
+        controller_manager = gimp_get_controller_manager (gimp);
+        wheel  = gimp_controller_manager_get_wheel (controller_manager);
 
         if (! wheel ||
             ! gimp_controller_wheel_scroll (GIMP_CONTROLLER_WHEEL (wheel),
@@ -1047,7 +1057,7 @@ gimp_display_shell_canvas_tool_events (GtkWidget        *canvas,
 
             if (gimp_display_shell_key_to_state (kevent->keyval) == GDK_MOD1_MASK)
               /* Make sure the picked layer is reset. */
-              shell->picked_layer = NULL;
+              g_clear_weak_pointer (&shell->picked_layer);
 
             switch (kevent->keyval)
               {
@@ -1069,7 +1079,11 @@ gimp_display_shell_canvas_tool_events (GtkWidget        *canvas,
 
                 if (! return_val)
                   {
-                    GimpController *keyboard = gimp_controllers_get_keyboard (gimp);
+                    GimpControllerManager *controller_manager;
+                    GimpController        *keyboard;
+
+                    controller_manager = gimp_get_controller_manager (gimp);
+                    keyboard = gimp_controller_manager_get_keyboard (controller_manager);
 
                     if (keyboard)
                       return_val =
@@ -1142,7 +1156,7 @@ gimp_display_shell_canvas_tool_events (GtkWidget        *canvas,
             statusbar = gimp_display_shell_get_statusbar (shell);
             gimp_statusbar_pop_temp (statusbar);
 
-            shell->picked_layer = NULL;
+            g_clear_weak_pointer (&shell->picked_layer);
             shell->mod_action = GIMP_MODIFIER_ACTION_NONE;
           }
         else if (shell->mod_action != GIMP_MODIFIER_ACTION_NONE &&
@@ -1664,7 +1678,7 @@ gimp_display_shell_check_device_cursor (GimpDisplayShell *shell)
 
   current_device = gimp_device_manager_get_current_device (manager);
 
-  shell->draw_cursor = ! gimp_device_info_has_cursor (current_device);
+  shell->draw_cursor = (current_device && ! gimp_device_info_has_cursor (current_device));
 }
 
 static void
@@ -1758,7 +1772,7 @@ gimp_display_shell_start_scrolling (GimpDisplayShell *shell,
                                             _("Layer picked: '%s'"),
                                             gimp_object_get_name (layer));
                 }
-              shell->picked_layer = layer;
+              g_set_weak_pointer (&shell->picked_layer, layer);
             }
         }
       break;

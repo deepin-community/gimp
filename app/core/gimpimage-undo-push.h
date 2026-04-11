@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_IMAGE_UNDO_PUSH_H__
-#define __GIMP_IMAGE_UNDO_PUSH_H__
+#pragma once
 
 
 /*  image undos  */
@@ -78,6 +77,7 @@ GimpUndo * gimp_image_undo_push_drawable_format     (GimpImage     *image,
 
 
 /*  drawable filter undos  */
+
 GimpUndo * gimp_image_undo_push_filter_add          (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpDrawable  *drawable,
@@ -200,6 +200,11 @@ GimpUndo * gimp_image_undo_push_group_layer_convert (GimpImage      *image,
                                                      const gchar    *undo_desc,
                                                      GimpGroupLayer *group);
 
+/*  rasterizable undos  */
+
+GimpUndo * gimp_image_undo_push_rasterizable        (GimpImage        *image,
+                                                     const gchar      *undo_desc,
+                                                     GimpRasterizable *rasterizable);
 
 /*  text layer undos  */
 
@@ -207,13 +212,22 @@ GimpUndo * gimp_image_undo_push_text_layer          (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpTextLayer *layer,
                                                      const GParamSpec *pspec);
-GimpUndo * gimp_image_undo_push_text_layer_modified (GimpImage     *image,
-                                                     const gchar   *undo_desc,
-                                                     GimpTextLayer *layer);
 GimpUndo * gimp_image_undo_push_text_layer_convert  (GimpImage     *image,
                                                      const gchar   *undo_desc,
                                                      GimpTextLayer *layer);
 
+/*  link layer undos  */
+
+GimpUndo * gimp_image_undo_push_link_layer          (GimpImage     *image,
+                                                     const gchar   *undo_desc,
+                                                     GimpLinkLayer *layer);
+
+/*  vector layer undos  */
+
+GimpUndo * gimp_image_undo_push_vector_layer        (GimpImage        *image,
+                                                     const gchar      *undo_desc,
+                                                     GimpVectorLayer  *layer,
+                                                     const GParamSpec *pspec);
 
 /*  layer mask undos  */
 
@@ -278,6 +292,3 @@ GimpUndo * gimp_image_undo_push_fs_to_layer         (GimpImage     *image,
 
 GimpUndo * gimp_image_undo_push_cantundo            (GimpImage     *image,
                                                      const gchar   *undo_desc);
-
-
-#endif  /* __GIMP_IMAGE_UNDO_PUSH_H__ */

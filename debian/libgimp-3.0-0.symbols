@@ -117,6 +117,8 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_context_get_line_width_unit@Base 2.10.0
  gimp_context_get_mypaint_brush@Base 2.10.0
  gimp_context_get_opacity@Base 2.4.0
+ gimp_context_get_paint_fade_length@Base 3.2.0~RC1
+ gimp_context_get_paint_fade_repeat@Base 3.2.0~RC1
  gimp_context_get_paint_method@Base 2.4.0
  gimp_context_get_paint_mode@Base 2.4.0
  gimp_context_get_palette@Base 2.4.0
@@ -180,6 +182,8 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_context_set_line_width_unit@Base 2.10.0
  gimp_context_set_mypaint_brush@Base 2.10.0
  gimp_context_set_opacity@Base 2.4.0
+ gimp_context_set_paint_fade_length@Base 3.2.0~RC1
+ gimp_context_set_paint_fade_repeat@Base 3.2.0~RC1
  gimp_context_set_paint_method@Base 2.4.0
  gimp_context_set_paint_mode@Base 2.4.0
  gimp_context_set_palette@Base 2.4.0
@@ -196,6 +200,25 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_convert_dither_type_get_type@Base 2.4.0
  gimp_convolve@Base 2.4.0
  gimp_convolve_default@Base 2.4.0
+ gimp_curve_add_point@Base 3.2.0~RC3
+ gimp_curve_clear_points@Base 3.2.0~RC3
+ gimp_curve_delete_point@Base 3.2.0~RC3
+ gimp_curve_get_curve_type@Base 3.2.0~RC3
+ gimp_curve_get_n_points@Base 3.2.0~RC3
+ gimp_curve_get_n_samples@Base 3.2.0~RC3
+ gimp_curve_get_point@Base 3.2.0~RC3
+ gimp_curve_get_point_type@Base 3.2.0~RC3
+ gimp_curve_get_sample@Base 3.2.0~RC3
+ gimp_curve_get_type@Base 3.2.0~RC3
+ gimp_curve_is_identity@Base 3.2.0~RC3
+ gimp_curve_new@Base 3.2.0~RC3
+ gimp_curve_point_type_get_type@Base 3.2.0~RC3
+ gimp_curve_set_curve_type@Base 3.2.0~RC3
+ gimp_curve_set_n_samples@Base 3.2.0~RC3
+ gimp_curve_set_point@Base 3.2.0~RC3
+ gimp_curve_set_point_type@Base 3.2.0~RC3
+ gimp_curve_set_sample@Base 3.2.0~RC3
+ gimp_curve_type_get_type@Base 3.2.0~RC3
  gimp_debug_timer_end@Base 2.10.0
  gimp_debug_timer_start@Base 2.10.0
  gimp_default_display@Base 2.4.0
@@ -245,6 +268,9 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_drawable_filter_id_is_valid@Base 3.0.0~RC2
  gimp_drawable_filter_is_valid@Base 3.0.0~RC2
  gimp_drawable_filter_new@Base 3.0.0~RC2
+ gimp_drawable_filter_operation_get_available@Base 3.2.0~RC1
+ gimp_drawable_filter_operation_get_details@Base 3.2.0~RC1
+ gimp_drawable_filter_operation_get_pspecs@Base 3.2.0~RC1
  gimp_drawable_filter_set_aux_input@Base 3.0.0~RC2
  gimp_drawable_filter_set_blend_mode@Base 3.0.0~RC2
  gimp_drawable_filter_set_opacity@Base 3.0.0~RC2
@@ -340,6 +366,7 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_file_procedure_get_format_name@Base 2.99.10
  gimp_file_procedure_get_handles_remote@Base 2.99.10
  gimp_file_procedure_get_magics@Base 2.99.10
+ gimp_file_procedure_get_meta@Base 3.2.0~RC1
  gimp_file_procedure_get_mime_types@Base 2.99.10
  gimp_file_procedure_get_prefixes@Base 2.99.10
  gimp_file_procedure_get_priority@Base 2.99.10
@@ -348,6 +375,7 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_file_procedure_set_format_name@Base 2.99.10
  gimp_file_procedure_set_handles_remote@Base 2.99.10
  gimp_file_procedure_set_magics@Base 2.99.10
+ gimp_file_procedure_set_meta@Base 3.2.0~RC1
  gimp_file_procedure_set_mime_types@Base 2.99.10
  gimp_file_procedure_set_prefixes@Base 2.99.10
  gimp_file_procedure_set_priority@Base 2.99.10
@@ -588,6 +616,9 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_image_undo_is_enabled@Base 2.4.0
  gimp_image_undo_thaw@Base 2.4.0
  gimp_image_unset_active_channel@Base 2.4.0
+ gimp_images_close_popup@Base 3.2.0~RC1
+ gimp_images_popup@Base 3.2.0~RC1
+ gimp_images_set_popup@Base 3.2.0~RC1
  gimp_item_attach_parasite@Base 2.8.0
  gimp_item_delete@Base 2.8.0
  gimp_item_detach_parasite@Base 2.8.0
@@ -612,20 +643,24 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_item_id_is_group_layer@Base 3.0.0~RC1
  gimp_item_id_is_layer@Base 2.99.10
  gimp_item_id_is_layer_mask@Base 2.99.10
+ gimp_item_id_is_link_layer@Base 3.2.0~RC1
  gimp_item_id_is_path@Base 3.0.0~RC1
  gimp_item_id_is_selection@Base 2.99.10
  gimp_item_id_is_text_layer@Base 2.99.10
  gimp_item_id_is_valid@Base 2.99.10
+ gimp_item_id_is_vector_layer@Base 3.2.0~RC1
  gimp_item_is_channel@Base 2.8.0
  gimp_item_is_drawable@Base 2.8.0
  gimp_item_is_group@Base 2.8.0
  gimp_item_is_group_layer@Base 3.0.0~RC1
  gimp_item_is_layer@Base 2.8.0
  gimp_item_is_layer_mask@Base 2.8.0
+ gimp_item_is_link_layer@Base 3.2.0~RC1
  gimp_item_is_path@Base 3.0.0~RC1
  gimp_item_is_selection@Base 2.8.0
  gimp_item_is_text_layer@Base 2.8.0
  gimp_item_is_valid@Base 2.8.0
+ gimp_item_is_vector_layer@Base 3.2.0~RC1
  gimp_item_list_children@Base 2.99.10
  gimp_item_set_color_tag@Base 2.10.0
  gimp_item_set_expanded@Base 2.10.0
@@ -645,6 +680,9 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_item_transform_scale@Base 2.8.0
  gimp_item_transform_shear@Base 2.8.0
  gimp_item_transform_translate@Base 2.10.0
+ gimp_items_close_popup@Base 3.2.0~RC1
+ gimp_items_popup@Base 3.2.0~RC1
+ gimp_items_set_popup@Base 3.2.0~RC1
  gimp_layer_add_alpha@Base 2.4.0
  gimp_layer_add_mask@Base 2.4.0
  gimp_layer_color_space_get_type@Base 2.10.0
@@ -688,6 +726,12 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_layer_set_offsets@Base 2.4.0
  gimp_layer_set_opacity@Base 2.4.0
  gimp_layer_set_show_mask@Base 2.4.0
+ gimp_link_layer_get_by_id@Base 3.2.0~RC1
+ gimp_link_layer_get_file@Base 3.2.0~RC1
+ gimp_link_layer_get_mime_type@Base 3.2.0~RC1
+ gimp_link_layer_get_type@Base 3.2.0~RC1
+ gimp_link_layer_new@Base 3.2.0~RC1
+ gimp_link_layer_set_file@Base 3.2.0~RC1
  gimp_list_images@Base 2.99.10
  gimp_load_procedure_get_handles_raw@Base 2.99.10
  gimp_load_procedure_get_thumbnail_loader@Base 2.99.10
@@ -724,6 +768,7 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_palettes_set_popup@Base 2.4.0
  gimp_param_brush_get_type@Base 2.99.16
  gimp_param_channel_get_type@Base 2.99.10
+ gimp_param_curve_get_type@Base 3.2.0~RC3
  gimp_param_display_get_type@Base 2.99.10
  gimp_param_drawable_filter_get_type@Base 3.0.0~RC2
  gimp_param_drawable_get_type@Base 2.99.10
@@ -734,13 +779,16 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_param_item_get_type@Base 2.99.10
  gimp_param_layer_get_type@Base 2.99.10
  gimp_param_layer_mask_get_type@Base 2.99.10
+ gimp_param_link_layer_get_type@Base 3.2.0~RC1
  gimp_param_palette_get_type@Base 2.99.16
  gimp_param_path_get_type@Base 3.0.0~RC1
  gimp_param_pattern_get_type@Base 2.99.16
+ gimp_param_rasterizable_get_type@Base 3.2.0~RC1
  gimp_param_resource_get_type@Base 2.99.16
  gimp_param_selection_get_type@Base 2.99.10
  gimp_param_spec_brush@Base 2.99.16
  gimp_param_spec_channel@Base 2.99.10
+ gimp_param_spec_curve@Base 3.2.0~RC3
  gimp_param_spec_display@Base 2.99.10
  gimp_param_spec_display_none_allowed@Base 3.0.0~RC3
  gimp_param_spec_drawable@Base 2.99.10
@@ -756,15 +804,19 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_param_spec_item_none_allowed@Base 3.0.0~RC3
  gimp_param_spec_layer@Base 2.99.10
  gimp_param_spec_layer_mask@Base 2.99.10
+ gimp_param_spec_link_layer@Base 3.2.0~RC1
  gimp_param_spec_palette@Base 2.99.16
  gimp_param_spec_path@Base 3.0.0~RC1
  gimp_param_spec_pattern@Base 2.99.16
+ gimp_param_spec_rasterizable@Base 3.2.0~RC1
  gimp_param_spec_resource@Base 2.99.16
  gimp_param_spec_resource_defaults_to_context@Base 3.0.0~RC3
  gimp_param_spec_resource_none_allowed@Base 3.0.0~RC3
  gimp_param_spec_selection@Base 2.99.10
  gimp_param_spec_text_layer@Base 2.99.14
+ gimp_param_spec_vector_layer@Base 3.2.0~RC1
  gimp_param_text_layer_get_type@Base 2.99.14
+ gimp_param_vector_layer_get_type@Base 3.2.0~RC1
  gimp_path_bezier_stroke_conicto@Base 3.0.0~RC1
  gimp_path_bezier_stroke_cubicto@Base 3.0.0~RC1
  gimp_path_bezier_stroke_lineto@Base 3.0.0~RC1
@@ -890,6 +942,9 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_procedure_add_layer_mask_aux_argument@Base 3.0.0~RC1
  gimp_procedure_add_layer_mask_return_value@Base 3.0.0~RC1
  gimp_procedure_add_layer_return_value@Base 3.0.0~RC1
+ gimp_procedure_add_link_layer_argument@Base 3.2.0~RC1
+ gimp_procedure_add_link_layer_aux_argument@Base 3.2.0~RC1
+ gimp_procedure_add_link_layer_return_value@Base 3.2.0~RC1
  gimp_procedure_add_menu_path@Base 2.99.10
  gimp_procedure_add_palette_argument@Base 3.0.0~RC1
  gimp_procedure_add_palette_aux_argument@Base 3.0.0~RC1
@@ -927,6 +982,9 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_procedure_add_unit_argument@Base 3.0.0~RC1
  gimp_procedure_add_unit_aux_argument@Base 3.0.0~RC1
  gimp_procedure_add_unit_return_value@Base 3.0.0~RC1
+ gimp_procedure_add_vector_layer_argument@Base 3.2.0~RC1
+ gimp_procedure_add_vector_layer_aux_argument@Base 3.2.0~RC1
+ gimp_procedure_add_vector_layer_return_value@Base 3.2.0~RC1
  gimp_procedure_config_get_choice_id@Base 2.99.18
  gimp_procedure_config_get_color_array@Base 3.0.0~RC1
  gimp_procedure_config_get_core_object_array@Base 3.0.0~RC1
@@ -992,6 +1050,10 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_progress_uninstall@Base 2.4.0
  gimp_progress_update@Base 2.4.0
  gimp_quit@Base 2.4.0
+ gimp_rasterizable_get_type@Base 3.2.0~RC1
+ gimp_rasterizable_is_rasterized@Base 3.2.0~RC1
+ gimp_rasterizable_rasterize@Base 3.2.0~RC1
+ gimp_rasterizable_restore@Base 3.2.0~RC1
  gimp_resource_delete@Base 2.99.16
  gimp_resource_duplicate@Base 2.99.16
  gimp_resource_get_by_id@Base 2.99.16
@@ -1052,6 +1114,15 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_text_layer_get_letter_spacing@Base 2.6.0
  gimp_text_layer_get_line_spacing@Base 2.6.0
  gimp_text_layer_get_markup@Base 2.8.0
+ gimp_text_layer_get_outline@Base 3.2.0~RC1
+ gimp_text_layer_get_outline_antialias@Base 3.2.0~RC1
+ gimp_text_layer_get_outline_cap_style@Base 3.2.0~RC1
+ gimp_text_layer_get_outline_color@Base 3.2.0~RC1
+ gimp_text_layer_get_outline_dash_offset@Base 3.2.0~RC1
+ gimp_text_layer_get_outline_direction@Base 3.2.0~RC1
+ gimp_text_layer_get_outline_join_style@Base 3.2.0~RC1
+ gimp_text_layer_get_outline_miter_limit@Base 3.2.0~RC1
+ gimp_text_layer_get_outline_width@Base 3.2.0~RC1
  gimp_text_layer_get_text@Base 2.6.0
  gimp_text_layer_get_type@Base 2.99.14
  gimp_text_layer_new@Base 2.6.0
@@ -1069,13 +1140,53 @@ libgimp-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_text_layer_set_letter_spacing@Base 2.6.0
  gimp_text_layer_set_line_spacing@Base 2.6.0
  gimp_text_layer_set_markup@Base 2.99.14
+ gimp_text_layer_set_outline@Base 3.2.0~RC1
+ gimp_text_layer_set_outline_antialias@Base 3.2.0~RC1
+ gimp_text_layer_set_outline_cap_style@Base 3.2.0~RC1
+ gimp_text_layer_set_outline_color@Base 3.2.0~RC1
+ gimp_text_layer_set_outline_dash_offset@Base 3.2.0~RC1
+ gimp_text_layer_set_outline_direction@Base 3.2.0~RC1
+ gimp_text_layer_set_outline_join_style@Base 3.2.0~RC1
+ gimp_text_layer_set_outline_miter_limit@Base 3.2.0~RC1
+ gimp_text_layer_set_outline_width@Base 3.2.0~RC1
  gimp_text_layer_set_text@Base 2.6.0
  gimp_thumbnail_procedure_get_type@Base 2.99.10
  gimp_thumbnail_procedure_new@Base 2.99.10
  gimp_tile_height@Base 2.4.0
  gimp_tile_width@Base 2.4.0
+ gimp_trc_type_get_type@Base 3.0.6
  gimp_unit_new@Base 3.0.0~RC1
+ gimp_update_metadata@Base 3.2.0~RC1
  gimp_user_time@Base 2.6.0
+ gimp_vector_layer_get_by_id@Base 3.2.0~RC1
+ gimp_vector_layer_get_enable_fill@Base 3.2.0~RC1
+ gimp_vector_layer_get_enable_stroke@Base 3.2.0~RC1
+ gimp_vector_layer_get_fill_color@Base 3.2.0~RC1
+ gimp_vector_layer_get_fill_pattern@Base 3.2.0~RC1
+ gimp_vector_layer_get_path@Base 3.2.0~RC1
+ gimp_vector_layer_get_stroke_cap_style@Base 3.2.0~RC1
+ gimp_vector_layer_get_stroke_color@Base 3.2.0~RC1
+ gimp_vector_layer_get_stroke_dash_offset@Base 3.2.0~RC1
+ gimp_vector_layer_get_stroke_dash_pattern@Base 3.2.0~RC1
+ gimp_vector_layer_get_stroke_join_style@Base 3.2.0~RC1
+ gimp_vector_layer_get_stroke_miter_limit@Base 3.2.0~RC1
+ gimp_vector_layer_get_stroke_pattern@Base 3.2.0~RC1
+ gimp_vector_layer_get_stroke_width@Base 3.2.0~RC1
+ gimp_vector_layer_get_stroke_width_unit@Base 3.2.0~RC1
+ gimp_vector_layer_get_type@Base 3.2.0~RC1
+ gimp_vector_layer_new@Base 3.2.0~RC1
+ gimp_vector_layer_refresh@Base 3.2.0~RC1
+ gimp_vector_layer_set_enable_fill@Base 3.2.0~RC1
+ gimp_vector_layer_set_enable_stroke@Base 3.2.0~RC1
+ gimp_vector_layer_set_fill_color@Base 3.2.0~RC1
+ gimp_vector_layer_set_stroke_cap_style@Base 3.2.0~RC1
+ gimp_vector_layer_set_stroke_color@Base 3.2.0~RC1
+ gimp_vector_layer_set_stroke_dash_offset@Base 3.2.0~RC1
+ gimp_vector_layer_set_stroke_dash_pattern@Base 3.2.0~RC1
+ gimp_vector_layer_set_stroke_join_style@Base 3.2.0~RC1
+ gimp_vector_layer_set_stroke_miter_limit@Base 3.2.0~RC1
+ gimp_vector_layer_set_stroke_width@Base 3.2.0~RC1
+ gimp_vector_layer_set_stroke_width_unit@Base 3.2.0~RC1
  gimp_vector_load_procedure_extract_dimensions@Base 3.0.0~RC1
  gimp_vector_load_procedure_get_type@Base 3.0.0~RC1
  gimp_vector_load_procedure_new@Base 3.0.0~RC1
@@ -1193,6 +1304,7 @@ libgimp-scriptfu-3.0.so.0 libgimp-3.0-0 #MINVER#
  scheme_set_output_port_file@Base 2.99.12
  script_error@Base 2.99.12
  script_float_range_error@Base 3.0.0~RC1
+ script_fu_add_i18n@Base 3.0.6
  script_fu_add_menu@Base 2.99.12
  script_fu_add_script@Base 2.99.12
  script_fu_add_script_filter@Base 2.99.12
@@ -1204,17 +1316,17 @@ libgimp-scriptfu-3.0.so.0 libgimp-3.0-0 #MINVER#
  script_fu_arg_generate_name_and_nick@Base 2.99.12
  script_fu_arg_reset@Base 2.99.12
  script_fu_arg_reset_name_generator@Base 2.99.12
+ script_fu_create_PDB_proc_plugin@Base 3.0.6
  script_fu_dialog_run_image_proc@Base 3.0.0~RC1
  script_fu_dialog_run_regular_proc@Base 3.0.0~RC1
  script_fu_extension_is_busy@Base 2.99.12
  script_fu_find_and_register_scripts@Base 2.99.12
  script_fu_find_script@Base 2.99.12
  script_fu_find_scripts@Base 2.99.12
- script_fu_find_scripts_create_PDB_proc_plugin@Base 2.99.12
- script_fu_find_scripts_into_tree@Base 2.99.12
  script_fu_find_scripts_list_proc_names@Base 2.99.12
  script_fu_get_error_msg@Base 3.0.0~RC1
  script_fu_get_gerror@Base 3.0.0~RC1
+ script_fu_get_i18n_for_proc@Base 3.0.6
  script_fu_get_init_subdirectory@Base 3.0.0~RC1
  script_fu_get_menu_list@Base 2.99.12
  script_fu_get_success_msg@Base 2.99.12
@@ -1226,6 +1338,8 @@ libgimp-scriptfu-3.0.so.0 libgimp-3.0-0 #MINVER#
  script_fu_interpret_string@Base 2.99.12
  script_fu_is_defined@Base 2.99.12
  script_fu_is_init_directory@Base 3.0.0~RC1
+ script_fu_is_scripts_loaded@Base 3.0.6
+ script_fu_load_scripts_into_tree@Base 3.0.6
  script_fu_print_welcome@Base 2.99.12
  script_fu_proc_factory_list_names@Base 2.99.12
  script_fu_proc_factory_make_PLUGIN@Base 2.99.12
@@ -1250,6 +1364,7 @@ libgimp-scriptfu-3.0.so.0 libgimp-3.0-0 #MINVER#
  script_fu_script_get_command_for_image_proc@Base 2.99.12
  script_fu_script_get_command_for_regular_proc@Base 3.0.0~RC1
  script_fu_script_get_command_from_params@Base 2.99.12
+ script_fu_script_get_i18n@Base 3.0.6
  script_fu_script_get_is_old_style@Base 3.0.0~RC1
  script_fu_script_get_title@Base 2.99.12
  script_fu_script_infer_drawable_arity@Base 2.99.12
@@ -1260,8 +1375,11 @@ libgimp-scriptfu-3.0.so.0 libgimp-3.0-0 #MINVER#
  script_fu_script_parse_drawable_arity_arg@Base 2.99.12
  script_fu_script_reset@Base 2.99.12
  script_fu_script_set_drawable_arity_none@Base 3.0.0~RC1
+ script_fu_script_set_i18n@Base 3.0.6
  script_fu_script_set_is_old_style@Base 3.0.0~RC1
  script_fu_script_uninstall_proc@Base 2.99.12
+ script_fu_scripts_are_loaded@Base 3.0.6
+ script_fu_scripts_load_into_tree@Base 3.0.6
  script_fu_search_path@Base 2.99.12
  script_fu_set_print_flag@Base 2.99.12
  script_fu_set_run_mode@Base 2.99.12
@@ -1542,6 +1660,8 @@ libgimpbase-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_text_direction_get_type@Base 2.6.0
  gimp_text_hint_style_get_type@Base 2.8.0
  gimp_text_justification_get_type@Base 2.6.0
+ gimp_text_outline_direction_get_type@Base 3.2.0~RC1
+ gimp_text_outline_get_type@Base 3.2.0~RC1
  gimp_transfer_mode_get_type@Base 2.4.0
  gimp_transform_direction_get_type@Base 2.4.0
  gimp_transform_resize_get_type@Base 2.4.0
@@ -1636,6 +1756,7 @@ libgimpcolor-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_bilinear_rgb@Base 2.4.0
  gimp_cairo_checkerboard_create@Base 2.6.0
  gimp_cairo_surface_create_buffer@Base 2.10.0
+ gimp_cairo_surface_get_buffer@Base 3.2.0~RC1
  gimp_cairo_surface_get_format@Base 2.10.0
  gimp_color_is_out_of_gamut@Base 2.99.18
  gimp_color_is_out_of_self_gamut@Base 2.99.18
@@ -1737,6 +1858,7 @@ libgimpconfig-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_config_duplicate@Base 2.4.0
  gimp_config_error_quark@Base 2.4.0
  gimp_config_get_type@Base 2.10.6
+ gimp_config_get_xcf_version@Base 3.2.0~RC3
  gimp_config_is_equal_to@Base 2.4.0
  gimp_config_param_spec_duplicate@Base 2.99.10
  gimp_config_path_expand@Base 2.4.0
@@ -1757,6 +1879,7 @@ libgimpconfig-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_config_serialize_to_stream@Base 2.10.0
  gimp_config_serialize_to_string@Base 2.4.0
  gimp_config_serialize_value@Base 2.4.0
+ gimp_config_set_xcf_version@Base 3.2.0~RC3
  gimp_config_string_append_escaped@Base 2.4.0
  gimp_config_sync@Base 2.4.0
  gimp_config_type_register@Base 2.99.10
@@ -1963,8 +2086,18 @@ libgimpui-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_font_chooser_new@Base 2.99.18
  gimp_gradient_chooser_get_type@Base 2.99.18
  gimp_gradient_chooser_new@Base 2.99.18
+ gimp_image_chooser_get_image@Base 3.2.0~RC1
+ gimp_image_chooser_get_label@Base 3.2.0~RC1
+ gimp_image_chooser_get_type@Base 3.2.0~RC1
+ gimp_image_chooser_new@Base 3.2.0~RC1
+ gimp_image_chooser_set_image@Base 3.2.0~RC1
  gimp_image_combo_box_get_type@Base 2.4.0
  gimp_image_combo_box_new@Base 2.4.0
+ gimp_item_chooser_get_item@Base 3.2.0~RC1
+ gimp_item_chooser_get_label@Base 3.2.0~RC1
+ gimp_item_chooser_get_type@Base 3.2.0~RC1
+ gimp_item_chooser_new@Base 3.2.0~RC1
+ gimp_item_chooser_set_item@Base 3.2.0~RC1
  gimp_layer_combo_box_get_type@Base 2.4.0
  gimp_layer_combo_box_new@Base 2.4.0
  gimp_palette_chooser_get_type@Base 2.99.18
@@ -1990,8 +2123,8 @@ libgimpui-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_procedure_dialog_fill_paned@Base 2.99.18
  gimp_procedure_dialog_fill_scrolled_window@Base 2.99.16
  gimp_procedure_dialog_get_color_widget@Base 2.99.10
+ gimp_procedure_dialog_get_coordinates@Base 3.2.0~RC1
  gimp_procedure_dialog_get_drawable_preview@Base 2.99.18
-#MISSING: 3.0.0~RC3# gimp_procedure_dialog_get_file_chooser@Base 2.99.12
  gimp_procedure_dialog_get_int_combo@Base 2.99.10
  gimp_procedure_dialog_get_int_radio@Base 2.99.12
  gimp_procedure_dialog_get_label@Base 2.99.10
@@ -2011,6 +2144,8 @@ libgimpui-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_prop_drawable_chooser_new@Base 2.99.18
  gimp_prop_font_chooser_new@Base 2.99.18
  gimp_prop_gradient_chooser_new@Base 2.99.18
+ gimp_prop_image_chooser_new@Base 3.2.0~RC1
+ gimp_prop_item_chooser_new@Base 3.2.0~RC1
  gimp_prop_palette_chooser_new@Base 2.99.18
  gimp_prop_pattern_chooser_new@Base 2.99.18
  gimp_prop_resolution_entry_new@Base 3.0.0~RC1
@@ -2477,6 +2612,7 @@ libgimpwidgets-3.0.so.0 libgimp-3.0-0 #MINVER#
  gimp_prop_string_combo_box_new@Base 2.4.0
  gimp_prop_switch_new@Base 2.99.10
  gimp_prop_text_buffer_new@Base 2.4.0
+ gimp_prop_toggle_new@Base 3.0.6
  gimp_prop_unit_combo_box_new@Base 2.8.0
  gimp_prop_widget_set_factor@Base 2.99.10
  gimp_query_boolean_box@Base 2.4.0

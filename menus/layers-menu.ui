@@ -7,6 +7,7 @@
       <attribute name="icon">gimp-layers</attribute>
 
       <item><attribute name="action">app.layers-edit-text</attribute></item>
+      <item><attribute name="action">app.layers-edit-vector</attribute></item>
       <item><attribute name="action">app.layers-edit-attributes</attribute></item>
       <submenu>
         <attribute name="label" translatable="yes" context="layers-action">Blend Space</attribute>
@@ -59,9 +60,11 @@
         <item><attribute name="action">app.layers-delete</attribute></item>
       </section>
       <section>
-        <item><attribute name="action">app.layers-text-discard</attribute></item>
-        <item><attribute name="action">app.layers-text-to-vectors</attribute></item>
-        <item><attribute name="action">app.layers-text-along-vectors</attribute></item>
+        <item><attribute name="action">app.layers-text-to-path</attribute></item>
+        <item><attribute name="action">app.layers-text-along-path</attribute></item>
+
+        <item><attribute name="action">app.layers-rasterize</attribute></item>
+        <item><attribute name="action">app.layers-revert-rasterize</attribute></item>
       </section>
       <section>
         <item><attribute name="action">app.layers-resize</attribute></item>

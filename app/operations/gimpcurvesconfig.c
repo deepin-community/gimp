@@ -44,7 +44,6 @@ enum
 {
   PROP_0,
   PROP_TRC,
-  PROP_LINEAR,
   PROP_CHANNEL,
   PROP_CURVE
 };
@@ -102,18 +101,20 @@ gimp_curves_config_class_init (GimpCurvesConfigClass *klass)
 
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_TRC,
                          "trc",
-                         _("Linear/Perceptual"),
-                         _("Work on linear or perceptual RGB"),
+                         _("Tone Reproduction Curve"),
+                         _("Work on linear or perceptual RGB, or following the image's TRC"),
                          GIMP_TYPE_TRC_TYPE,
-                         GIMP_TRC_NON_LINEAR, 0);
+                         GIMP_TRC_PERCEPTUAL, 0);
 
-  /* compat */
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_LINEAR,
-                            "linear",
-                            _("Linear"),
-                            _("Work on linear RGB"),
-                            FALSE, 0);
-
+  /* Only channels GIMP_HISTOGRAM_VALUE to GIMP_HISTOGRAM_ALPHA are
+   * supported right now in this op. Unfortunately this is not visible
+   * through the param specification. The GimpParamSpecEnum would allow
+   * to make it visible, but it does not exist on libgimp side right
+   * now, so plug-in writers would see it listed as allowed.
+   *
+   * TODO: GimpParamSpecEnum should be moved to libgimpbase
+   * (libgimpbase/gimpparamspecs.h) and passed through PDB.
+   */
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_CHANNEL,
                          "channel",
                          _("Channel"),
@@ -189,10 +190,6 @@ gimp_curves_config_get_property (GObject    *object,
       g_value_set_enum (value, self->trc);
       break;
 
-    case PROP_LINEAR:
-      g_value_set_boolean (value, self->trc == GIMP_TRC_LINEAR ? TRUE : FALSE);
-      break;
-
     case PROP_CHANNEL:
       g_value_set_enum (value, self->channel);
       break;
@@ -221,15 +218,13 @@ gimp_curves_config_set_property (GObject      *object,
       self->trc = g_value_get_enum (value);
       break;
 
-    case PROP_LINEAR:
-      self->trc = g_value_get_boolean (value) ?
-                  GIMP_TRC_LINEAR : GIMP_TRC_NON_LINEAR;
-      g_object_notify (object, "trc");
-      break;
-
     case PROP_CHANNEL:
-      self->channel = g_value_get_enum (value);
-      g_object_notify (object, "curve");
+      if (g_value_get_enum (value) >= GIMP_HISTOGRAM_VALUE &&
+          g_value_get_enum (value) <= GIMP_HISTOGRAM_ALPHA)
+        {
+          self->channel = g_value_get_enum (value);
+          g_object_notify (object, "curve");
+        }
       break;
 
     case PROP_CURVE:
@@ -463,9 +458,9 @@ gimp_curves_config_new_explicit (gint32         channel,
   gimp_curve_set_n_samples (curve, n_samples);
 
   for (i = 0; i < n_samples; i++)
-    gimp_curve_set_curve (curve,
-                          (gdouble) i / (gdouble) (n_samples - 1),
-                          (gdouble) samples[i]);
+    gimp_curve_set_sample (curve,
+                           (gdouble) i / (gdouble) (n_samples - 1),
+                           (gdouble) samples[i]);
 
   gimp_data_thaw (GIMP_DATA (curve));
 
@@ -711,4 +706,102 @@ gimp_curves_config_save_cruft (GimpCurvesConfig  *config,
   g_string_free (string, TRUE);
 
   return TRUE;
+}
+
+#define PS_CURVE_N_MAX_POINTS 19
+
+/* Loads Photoshop .acv Curves preset */
+gboolean
+gimp_curves_config_load_acv (GimpCurvesConfig  *config,
+                             GInputStream      *input,
+                             GError           **error)
+{
+  GDataInputStream *data_input;
+  guint16           version = 0;
+  guint16           count   = 0;
+  gint              in[5][PS_CURVE_N_MAX_POINTS];
+  gint              out[5][PS_CURVE_N_MAX_POINTS];
+
+  g_return_val_if_fail (GIMP_IS_CURVES_CONFIG (config), FALSE);
+  g_return_val_if_fail (G_IS_INPUT_STREAM (input), FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  data_input = g_data_input_stream_new (input);
+
+  g_data_input_stream_set_byte_order (data_input,
+                                      G_DATA_STREAM_BYTE_ORDER_BIG_ENDIAN);
+
+  version = g_data_input_stream_read_uint16 (data_input, NULL, error);
+  if (! version)
+    goto error;
+
+  count = g_data_input_stream_read_uint16 (data_input, NULL, error);
+  if (! count)
+    goto error;
+
+  count = CLAMP (count, 1, 5);
+  for (gint i = 0; i < count; i++)
+    {
+      guint16 points = 0;
+
+      points = g_data_input_stream_read_uint16 (data_input, NULL, error);
+      if (! points || points > PS_CURVE_N_MAX_POINTS)
+        goto error;
+
+      for (gint j = 0; j < points; j++)
+        {
+          /* Curves can start at 0, 0, so we'll check for an error instead */
+          out[i][j] = g_data_input_stream_read_uint16 (data_input, NULL, error);
+          if (error && *error)
+            goto error;
+
+          in[i][j] = g_data_input_stream_read_uint16 (data_input, NULL, error);
+          if (error && *error)
+            goto error;
+        }
+      if (points < PS_CURVE_N_MAX_POINTS)
+        {
+          in[i][points]  = -1;
+          out[i][points] = -1;
+        }
+    }
+
+  g_object_unref (data_input);
+  g_object_freeze_notify (G_OBJECT (config));
+
+  for (gint i = 0; i < count; i++)
+    {
+      GimpCurve *curve = config->curve[i];
+
+      gimp_data_freeze (GIMP_DATA (curve));
+
+      gimp_curve_set_curve_type (curve, GIMP_CURVE_SMOOTH);
+      gimp_curve_clear_points (curve);
+
+      for (gint j = 0; j < PS_CURVE_N_MAX_POINTS; j++)
+        {
+          if (in[i][j] > -1 && out[i][j] > -1)
+            gimp_curve_add_point (curve, in[i][j] / 255.0, out[i][j] / 255.0);
+          else
+            break;
+        }
+      gimp_data_thaw (GIMP_DATA (curve));
+    }
+
+  config->trc = GIMP_TRC_NON_LINEAR;
+  g_object_notify (G_OBJECT (config), "trc");
+
+  g_object_thaw_notify (G_OBJECT (config));
+
+  return TRUE;
+
+  error:
+      if (error && *error)
+        g_prefix_error (error, _("Could not read header: "));
+      else
+        g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                     _("Could not read header: "));
+    g_object_unref (data_input);
+
+    return FALSE;
 }

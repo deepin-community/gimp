@@ -54,6 +54,11 @@ static void   gimp_export_procedure_dialog_fill_list (GimpProcedureDialog *dialo
                                                       GimpProcedureConfig *config,
                                                       GList               *properties);
 
+static void   gimp_export_procedure_dialog_notify_comment
+                                                     (GimpProcedureConfig *config,
+                                                      GParamSpec          *pspec,
+                                                      GtkWidget           *widget);
+
 static gpointer gimp_export_procedure_dialog_edit_metadata_thread   (gpointer                 data);
 static gboolean gimp_export_procedure_dialog_activate_edit_metadata (GtkLinkButton           *link,
                                                                      GimpExportProcedureDialog *dialog);
@@ -280,7 +285,7 @@ gimp_export_procedure_dialog_fill_end (GimpProcedureDialog *dialog,
           gtk_text_view_set_bottom_margin (GTK_TEXT_VIEW (widget), 3);
           gtk_text_view_set_left_margin (GTK_TEXT_VIEW (widget), 3);
           gtk_text_view_set_right_margin (GTK_TEXT_VIEW (widget), 3);
-          gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (widget), GTK_WRAP_WORD);
+          gtk_text_view_set_wrap_mode (GTK_TEXT_VIEW (widget), GTK_WRAP_WORD_CHAR);
           g_object_unref (buffer);
 
           tooltip = g_param_spec_get_blurb (pspec);
@@ -291,7 +296,7 @@ gimp_export_procedure_dialog_fill_end (GimpProcedureDialog *dialog,
           gtk_widget_set_size_request (scrolled_window, -1, 100);
           gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (scrolled_window), GTK_SHADOW_OUT);
           gtk_scrolled_window_set_policy (GTK_SCROLLED_WINDOW (scrolled_window),
-                                          GTK_POLICY_NEVER,
+                                          GTK_POLICY_EXTERNAL,
                                           GTK_POLICY_AUTOMATIC);
           gtk_container_add (GTK_CONTAINER (frame2), scrolled_window);
           gtk_widget_show (scrolled_window);
@@ -299,6 +304,13 @@ gimp_export_procedure_dialog_fill_end (GimpProcedureDialog *dialog,
           gtk_widget_set_vexpand (widget, TRUE);
           gtk_container_add (GTK_CONTAINER (scrolled_window), widget);
           gtk_widget_show (widget);
+
+          /* Comment field should only be editable when "Save Comment" is
+           * sensitive. */
+          g_signal_connect_object (config, "notify::include-comment",
+                                   G_CALLBACK (gimp_export_procedure_dialog_notify_comment),
+                                   widget, 0);
+          gimp_export_procedure_dialog_notify_comment (config, NULL, widget);
 
           gtk_grid_attach (GTK_GRID (grid), frame2, 0, top, 6, 1);
           gtk_widget_show (frame2);
@@ -349,6 +361,18 @@ gimp_export_procedure_dialog_fill_list (GimpProcedureDialog *dialog,
   properties2 = g_list_reverse (properties2);
   GIMP_PROCEDURE_DIALOG_CLASS (parent_class)->fill_list (dialog, procedure, config, properties2);
   g_list_free (properties2);
+}
+
+static void
+gimp_export_procedure_dialog_notify_comment (GimpProcedureConfig *config,
+                                             GParamSpec          *pspec,
+                                             GtkWidget           *widget)
+{
+  gboolean sensitive;
+
+  g_object_get (config, "include-comment", &sensitive, NULL);
+
+  gtk_widget_set_sensitive (widget, sensitive);
 }
 
 static gpointer

@@ -25,6 +25,7 @@
 #include "gui/gui-types.h"
 
 #include "gui/gui.h"
+#include "gui/gimpapp.h"
 
 #include "actions/actions.h"
 
@@ -141,7 +142,10 @@ static Gimp *
 gimp_init_for_gui_testing_internal (gboolean  show_gui,
                                     GFile    *gimprc)
 {
-  Gimp *gimp;
+  Gimp           *gimp;
+#if defined (G_OS_WIN32)
+  GLogLevelFlags  fatal_mask;
+#endif
 
   /* Load configuration from the source dir */
   gimp_test_utils_set_gimp3_directory ("GIMP_TESTING_ABS_TOP_SRCDIR",
@@ -152,15 +156,16 @@ gimp_init_for_gui_testing_internal (gboolean  show_gui,
      testing default. Nevertheless the Windows platform may have a few
      quirks generating warnings, yet we want to finish tests. So we
      allow some relaxed rules on this platform. */
-
-  GLogLevelFlags fatal_mask;
-
   fatal_mask = (GLogLevelFlags) (G_LOG_FATAL_MASK | G_LOG_LEVEL_CRITICAL);
   g_log_set_always_fatal (fatal_mask);
 #endif
 
   /* from main() */
   gimp_log_init ();
+  g_object_set (gegl_config (),
+                "use-opencl",          FALSE,
+                "application-license", "GPL3",
+                NULL);
   gegl_init (NULL, NULL);
 
   /* Introduce an error margin for positions written to sessionrc */

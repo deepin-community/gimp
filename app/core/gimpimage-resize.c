@@ -42,6 +42,8 @@
 
 #include "text/gimptextlayer.h"
 
+#include "path/gimpvectorlayer.h"
+
 #include "gimp-intl.h"
 
 
@@ -115,6 +117,9 @@ gimp_image_resize_with_layers (GimpImage    *image,
     {
       GimpItem *item = list->data;
 
+      if (gimp_item_is_vector_layer (item))
+        continue;
+
       gimp_item_translate (item, offset_x, offset_y, TRUE);
     }
 
@@ -142,13 +147,13 @@ gimp_image_resize_with_layers (GimpImage    *image,
     }
 
   g_list_free (resize_layers);
-  
+
   gimp_object_queue_push (queue, gimp_image_get_mask (image));
   gimp_object_queue_push_container (queue, gimp_image_get_channels (image));
   gimp_object_queue_push_container (queue, gimp_image_get_paths (image));
 
   /*  Resize all resize_layers, channels (including selection mask), and
-   *  vectors
+   *  paths
    */
   while ((item = gimp_object_queue_pop (queue)))
     {

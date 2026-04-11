@@ -44,9 +44,12 @@
 #include "pdb/gimppdb.h"
 #include "pdb/gimpprocedure.h"
 
-#include "vectors/gimppath.h"
-#include "vectors/gimppath-export.h"
-#include "vectors/gimppath-import.h"
+#include "path/gimppath.h"
+#include "path/gimppath-export.h"
+#include "path/gimppath-import.h"
+#include "path/gimpvectorlayer.h"
+
+#include "tools/gimptools-utils.h"
 
 #include "widgets/gimpaction.h"
 #include "widgets/gimpclipboard.h"
@@ -54,7 +57,7 @@
 
 #include "display/gimpdisplay.h"
 
-#include "tools/gimpvectortool.h"
+#include "tools/gimppathtool.h"
 #include "tools/tool_manager.h"
 
 #include "dialogs/dialogs.h"
@@ -125,10 +128,10 @@ paths_edit_cmd_callback (GimpAction *action,
 
   active_tool = tool_manager_get_active (image->gimp);
 
-  if (! GIMP_IS_VECTOR_TOOL (active_tool))
+  if (! GIMP_IS_PATH_TOOL (active_tool))
     {
-      GimpToolInfo  *tool_info = gimp_get_tool_info (image->gimp,
-                                                     "gimp-vector-tool");
+      GimpToolInfo *tool_info = gimp_get_tool_info (image->gimp,
+                                                    "gimp-path-tool");
 
       if (GIMP_IS_TOOL_INFO (tool_info))
         {
@@ -137,8 +140,8 @@ paths_edit_cmd_callback (GimpAction *action,
         }
     }
 
-  if (GIMP_IS_VECTOR_TOOL (active_tool))
-    gimp_vector_tool_set_vectors (GIMP_VECTOR_TOOL (active_tool), paths->data);
+  if (GIMP_IS_PATH_TOOL (active_tool))
+    gimp_path_tool_set_path (GIMP_PATH_TOOL (active_tool), NULL, paths->data);
 }
 
 void
@@ -469,9 +472,27 @@ paths_delete_cmd_callback (GimpAction *action,
 {
   GimpImage *image;
   GList     *paths;
+  GtkWidget *widget;
   return_if_no_paths (image, paths, data);
+  return_if_no_widget (widget, data);
 
   paths = g_list_copy (paths);
+
+  /* Initial check to make sure none are connected to vector layers */
+  for (GList *iter = paths; iter; iter = iter->next)
+    {
+      if (gimp_path_attached_to_vector_layer (GIMP_PATH (iter->data), image))
+        {
+          gimp_message_literal (image->gimp, G_OBJECT (widget),
+                                GIMP_MESSAGE_WARNING,
+                                _("Cannot delete paths attached to vector "
+                                  "layers"));
+          gimp_tools_blink_item (image->gimp, GIMP_ITEM (iter->data));
+          g_list_free (paths);
+          return;
+        }
+    }
+
   /* TODO: proper undo group. */
   gimp_image_undo_group_start (image,
                                GIMP_UNDO_GROUP_PATHS_IMPORT,
@@ -493,9 +514,30 @@ paths_merge_visible_cmd_callback (GimpAction *action,
   GimpImage   *image;
   GList       *paths;
   GtkWidget   *widget;
+  GimpPath    *path;
+  GList       *list;
   GError      *error = NULL;
   return_if_no_paths (image, paths, data);
   return_if_no_widget (widget, data);
+
+  /* Make sure none of the visible paths are attached to vector layers
+   * before attempting to merge them. */
+  for (list = gimp_image_get_path_iter (image);
+       list; list = g_list_next (list))
+    {
+      path = list->data;
+
+      if (gimp_item_get_visible (GIMP_ITEM (path)) &&
+          gimp_path_attached_to_vector_layer (path, image))
+        {
+          gimp_message_literal (image->gimp, G_OBJECT (widget),
+                                GIMP_MESSAGE_WARNING,
+                                _("Cannot merge paths attached to vector "
+                                  "layers"));
+          gimp_tools_blink_item (image->gimp, GIMP_ITEM (path));
+          return;
+        }
+    }
 
   if (! gimp_image_merge_visible_paths (image, &error))
     {
@@ -505,6 +547,28 @@ paths_merge_visible_cmd_callback (GimpAction *action,
       g_clear_error (&error);
       return;
     }
+
+  gimp_image_flush (image);
+}
+
+void
+path_to_vector_layer_cmd_callback (GimpAction *action,
+                                   GVariant   *value,
+                                   gpointer    data)
+{
+  GimpImage       *image;
+  GList           *paths;
+  GimpVectorLayer *layer;
+  return_if_no_paths (image, paths, data);
+
+  layer = gimp_vector_layer_new (image, paths->data,
+                                 gimp_get_user_context (image->gimp));
+  gimp_image_add_layer (image,
+                        GIMP_LAYER (layer),
+                        GIMP_IMAGE_ACTIVE_PARENT,
+                        -1,
+                        TRUE);
+  gimp_vector_layer_refresh (layer);
 
   gimp_image_flush (image);
 }
@@ -924,8 +988,8 @@ paths_import_callback (GtkWidget *dialog,
                        GimpImage *image,
                        GFile     *file,
                        GFile     *import_folder,
-                       gboolean   merge_vectors,
-                       gboolean   scale_vectors,
+                       gboolean   merge_paths,
+                       gboolean   scale_paths,
                        gpointer   user_data)
 {
   GimpDialogConfig *config = GIMP_DIALOG_CONFIG (image->gimp->config);
@@ -937,8 +1001,8 @@ paths_import_callback (GtkWidget *dialog,
 
   g_object_set (config,
                 "path-import-path",  path,
-                "path-import-merge", merge_vectors,
-                "path-import-scale", scale_vectors,
+                "path-import-merge", merge_paths,
+                "path-import-scale", scale_paths,
                 NULL);
 
   if (path)

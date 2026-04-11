@@ -57,7 +57,22 @@
 
 .view header button {
   background-color: @bg-color;
-  border: 1px solid @stronger-border-color;
+  border:           1px solid @stronger-border-color;
+  margin-right:     0px;
+}
+
+/* ListBox when used as a view. Selected items. */
+.view row {
+  background-color: @extreme-bg-color;
+  color: @fg-color;
+}
+
+.view row:hover {
+  background-color: unset;
+}
+
+.view row:selected {
+  background-color: @extreme-selected-color;
 }
 
 /* Define color for drag and drop borders
@@ -65,6 +80,11 @@
 GimpDock .view:drop(active) {
   border-bottom-color: @dimmed-fg-color;
   border-top-color: @dimmed-fg-color;
+}
+
+/* Widget for various previews and icon tabs  */
+GimpView {
+  background-color: @extreme-bg-color;
 }
 
 /* Define the mouse-over color for the path
@@ -103,7 +123,7 @@ stack {
 }
 
 /* GtkTextView */
-textview text, textview {
+textview, textview.view, textview text {
   background-color: @extreme-bg-color;
   color: @fg-color;
 }
@@ -172,11 +192,17 @@ notebook stack {
 
 notebook header {
   background-color: @bg-color;
-  border-color: @edge-border-color;
+  border-bottom:    1px solid @edge-border-color;
+  box-shadow:       none;
 }
 
 notebook header button {
   box-shadow: none;
+}
+
+notebook header button:hover {
+  background-color: @selected-color;
+  border-color:     @edge-border-color;
 }
 
 notebook header tabs {
@@ -295,6 +321,10 @@ toolbar {
   background-color: @widget-bg-color;
 }
 
+toolbar.flat {
+  background-color: @bg-color;
+}
+
 /* Prevent overly thick border around image buttons */
 .image-button image, button image {
   -gtk-icon-shadow: 0 0 transparent;
@@ -380,6 +410,11 @@ scrolledwindow viewport grid, scrolledwindow viewport box {
   background-color: @extreme-bg-color;
 }
 
+/* 9 button toggles on some transformation tools */
+GimpPivotSelector .toggle {
+  margin-right: 0px;
+}
+
 /* Define background on items in Preferences header */
 GimpPrefsBox widget box label,
 GimpPrefsBox widget box image {
@@ -432,6 +467,20 @@ paned menu separator {
     padding: 0px;
 }
 
+
+/* Highlight icons in Grid View when hovered over */
+iconview:hover {
+  border: 2px solid @dimmed-fg-color;
+}
+
+iconview:selected {
+  border: 2px solid @fg-color;
+}
+
+GimpContainerIconView scrolledwindow {
+  background-color: @extreme-bg-color;
+}
+
 .view button {
   background-color: @bg-color;
   border-color: @border-color;
@@ -459,6 +508,12 @@ button.titlebutton
 {
   border-color: transparent;
   box-shadow: none;
+  color: @fg-color;
+}
+
+button.titlebutton image
+{
+  color: @fg-color;
 }
 
 button:checked, button.titlebutton:hover {
@@ -536,7 +591,7 @@ GimpSpinScale entry {
   border-radius:      5px 0px 0px 5px;
   border-right-width: 0px;
   box-shadow:         none;
-  padding:            0px 8px 0px 5px;
+  padding:            0px;
 }
 
 GimpSpinScale entry progress {
@@ -544,7 +599,7 @@ GimpSpinScale entry progress {
   background-image: none;
   border-width:     0px;
   border-radius:    3px 0px 0px 3px;
-  margin:           0px -8px 0px -5px;
+  margin:           0px;
 }
 
 GimpSpinScale button {
@@ -552,18 +607,21 @@ GimpSpinScale button {
   border-color:     @border-color;
   border-radius:    0px 0px 0px 0px;
   box-shadow:       0px 0.5px @stronger-border-color;
+  margin-right:     0px;
 }
 
 /* Round the right-side edge of the end button */
 GimpSpinScale button:nth-child(odd) {
   border-left-width: 0px;
   border-radius:     0px 5px 5px 0px;
+  margin-right:      0px;
 }
 
 /* Checkboxes */
 checkbutton, checkbutton.text-button, radiobutton, radiobutton.text-button, checkbutton label {
-  color: @fg-color;
+  color:            @fg-color;
   background-color: @bg-color;
+  outline-style:    none;
 }
 
 checkbutton:hover, checkbutton.text-button:hover, checkbutton:hover label, radiobutton:hover, checkbutton label:hover {
@@ -614,6 +672,32 @@ button.radio image {
   padding: 4px;
 }
 
+/* Create appearance of toggle group for enum radio buttons */
+buttonbox.horizontal button.radio
+{
+  border-top:    1px solid @edge-border-color;
+  border-bottom: 1px solid @edge-border-color;
+  border-left:   1px solid @edge-border-color;
+}
+
+buttonbox.horizontal button.radio:last-child
+{
+  border-right: 1px solid @edge-border-color;
+}
+
+buttonbox.vertical button.radio
+{
+  border-top:   1px solid @edge-border-color;
+  border-left:  1px solid @edge-border-color;
+  border-right: 1px solid @edge-border-color;
+  margin-right: 0px;
+}
+
+buttonbox.vertical button.radio:last-child
+{
+  border-bottom: 1px solid @edge-border-color;
+}
+
 /* Removes "blurred" effect from tooltip label */
 tooltip {
   background-color: @bg-color;
@@ -638,11 +722,20 @@ tooltip decoration {
   background-color: @bg-color;
   border-color: @border-color;
   border-width: 1px;
+  border-style: solid;
 }
 
 /* The border around a frame */
 border {
   border: 0px;
+}
+
+/* The border around frames in dialogs */
+dialog notebook.frame {
+  border: 1px solid @border-color;
+}
+GimpColorNotebook notebook.frame {
+  border-width: 0px;
 }
 
 /* The border around GimpOffsetArea frame in resize dialogs */
@@ -684,6 +777,11 @@ menuitem:hover, menuitem:selected
 menuitem menuitem {
   color: @fg-color;
   background: @extreme-bg-color;
+}
+
+menubar menuitem {
+  min-height: 16px;
+  padding: 4px 8px;
 }
 
 /* A top (File, Edit) menubar item when its menu is expanded. */
@@ -755,6 +853,11 @@ actionbar revealer box {
   border-top-color: @strong-border-color;
 }
 
+statusbar progressbar trough,
+statusbar progressbar progress {
+  min-height: 10px;
+}
+
 /* Sidebar in File > Open */
 
 /* The background to either side of the directory buttons.
@@ -776,6 +879,7 @@ actionbar revealer box {
 
 list, list row {
   background-color: @widget-bg-color;
+  outline-style:    none;
 }
 
 list row:selected {
@@ -784,6 +888,16 @@ list row:selected {
 
 list row:hover {
   background-color: @hover-color;
+}
+
+/* NDE Popover */
+popover scrolledwindow list, popover list row {
+  background-color: @extreme-bg-color;
+  color:            @fg-color;
+}
+
+popover list row:selected {
+  background-color: @extreme-selected-color;
 }
 
 /* GtkSwitch buttons */

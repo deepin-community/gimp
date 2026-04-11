@@ -400,6 +400,82 @@ gimp_prop_switch_new (GObject     *config,
   return hbox;
 }
 
+/**
+ * gimp_prop_toggle_new:
+ * @config:        Object to which property is attached.
+ * @property_name: Name of boolean property controlled by the toggle button.
+ * @icon_name:     Icon to display in the toggle.
+ * @label:         Label to give the toggle (including mnemonic).
+ * @image_out: (out) (optional) (transfer none): The generated #GtkImage
+ *                 if @icon_name was not %NULL.
+ *
+ * Creates a [class@Gtk.ToggleButton] that sets the specified boolean
+ * property.
+ *
+ * If @icon_name is %NULL, @label will be used. If @label is %NULL too,
+ * the @property_name's nick will be used as label.
+ *
+ * Returns: (transfer full): The newly #GtkToggleButton.
+ *
+ * Since: 3.2
+ */
+GtkWidget *
+gimp_prop_toggle_new (GObject      *config,
+                      const gchar  *property_name,
+                      const gchar  *icon_name,
+                      const gchar  *label,
+                      GtkWidget   **image_out)
+{
+  GParamSpec  *param_spec;
+  const gchar *tooltip;
+  GtkWidget   *button;
+
+  g_return_val_if_fail (G_IS_OBJECT (config), NULL);
+  g_return_val_if_fail (property_name != NULL, NULL);
+
+  param_spec = check_param_spec_w (config, property_name,
+                                   G_TYPE_PARAM_BOOLEAN, G_STRFUNC);
+  if (! param_spec)
+    return NULL;
+
+  if (icon_name == NULL && label == NULL)
+    label = g_param_spec_get_nick (param_spec);
+
+  tooltip = g_param_spec_get_blurb (param_spec);
+
+  if (label != NULL)
+    button = gtk_toggle_button_new_with_mnemonic (label);
+  else
+    button = gtk_toggle_button_new ();
+
+  g_object_bind_property (config, property_name, button, "active",
+                          G_BINDING_BIDIRECTIONAL | G_BINDING_SYNC_CREATE);
+  gimp_help_set_help_data (button, tooltip, NULL);
+  gtk_widget_show (button);
+
+  if (image_out)
+    *image_out = NULL;
+
+  if (label == NULL)
+    {
+      GtkWidget *image;
+
+      g_return_val_if_fail (icon_name != NULL, NULL);
+
+      image = gtk_image_new_from_icon_name (icon_name, GTK_ICON_SIZE_SMALL_TOOLBAR);
+      gtk_container_add (GTK_CONTAINER (button), image);
+      gtk_widget_show (image);
+
+      if (image_out)
+        *image_out = image;
+    }
+
+  gimp_widget_set_bound_property (button, config, property_name);
+
+  return button;
+}
+
+
 
 /*************************/
 /*  int/enum combo box   */
@@ -3853,6 +3929,9 @@ static void   gimp_prop_coordinates_notify_unit (GObject       *config,
  * properties, which will usually represent X and Y coordinates, and
  * their associated unit property.
  *
+ * If @unit_format is %NULL, the unit will default to inch. Otherwise it
+ * must be the name of a property of type %GimpParamUnit:
+ *
  * Returns: (transfer full): A new #GimpSizeEntry widget.
  *
  * Since: 2.4
@@ -3868,12 +3947,38 @@ gimp_prop_coordinates_new (GObject                   *config,
                            gdouble                    yresolution,
                            gboolean                   has_chainbutton)
 {
+  GimpUnit  *unit_type;
   GtkWidget *entry;
-  GtkWidget *chainbutton = NULL;
+  GtkWidget *chainbutton     = NULL;
+  gboolean   show_pixels     = FALSE;
+  gboolean   show_percents   = FALSE;
+  gboolean   show_resolution = TRUE;
 
-  entry = gimp_size_entry_new (2, gimp_unit_inch (), unit_format,
-                               FALSE, FALSE, TRUE, 10,
-                               update_policy);
+  if (unit_property_name != NULL)
+    {
+      GParamSpec *pspec_unit = NULL;
+
+      pspec_unit = check_param_spec_w (config, unit_property_name,
+                                       GIMP_TYPE_PARAM_UNIT, G_STRFUNC);
+
+      g_return_val_if_fail (pspec_unit != NULL, NULL);
+
+      show_pixels   = gimp_param_spec_unit_pixel_allowed (pspec_unit);
+      show_percents = gimp_param_spec_unit_percent_allowed (pspec_unit);
+
+      if (show_pixels)
+        show_resolution = FALSE;
+
+      g_object_get (config, unit_property_name, &unit_type, NULL);
+    }
+  else
+    {
+      unit_type = gimp_unit_inch ();
+    }
+
+  entry = gimp_size_entry_new (2, unit_type, unit_format,
+                               show_pixels, show_percents, show_resolution,
+                               10, update_policy);
 
   if (has_chainbutton)
     {

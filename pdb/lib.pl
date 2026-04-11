@@ -139,7 +139,8 @@ sub generate_fun {
             $retarg_len = $retarg->{array}->{name};
             $annotate   = " (array length=$retarg_len)";
         }
-        if (exists $retarg->{none_ok}) {
+
+        if (exists $retarg->{none_ok} && $type ne 'sample_point' && $type ne 'guide') {
             $annotate .= " (nullable)";
         }
 
@@ -199,6 +200,7 @@ sub generate_fun {
         my $desc = exists $_->{desc} ? $_->{desc} : "";
         my $var_len;
         my $value;
+        my $n_annotations = 0;
 
         if (exists $_->{nopdb}) {
             $argc--;
@@ -284,16 +286,20 @@ sub generate_fun {
 
         if (exists $arg->{array}) {
             $argdesc .= " (array length=$var_len)";
+            $n_annotations++;
         }
 
         if (exists $arg->{in_annotate}) {
             $argdesc .= " $arg->{in_annotate}";
-        }
-        if (exists $_->{none_ok}) {
-            $argdesc .= " (nullable)";
+            $n_annotations++;
         }
 
-        if (exists $arg->{array} || exists $_->{none_ok} || exists $arg->{in_annotate}) {
+        if (exists $_->{none_ok} && $type ne 'sample_point' && $type ne 'guide') {
+            $argdesc .= " (nullable)";
+            $n_annotations++;
+        }
+
+        if ($n_annotations > 0) {
             $argdesc .= ":";
         }
 
@@ -544,6 +550,10 @@ CODE
     my $procdesc = '';
 
     if ($proc->{deprecated}) {
+        if (! $proc->{deprecated_since}) {
+          die "ERROR: missing 'deprecated_since' variable on $name.\n";
+        }
+        $deprecated_since = $proc->{deprecated_since};
         if ($proc->{deprecated} eq 'NONE') {
             if ($proc->{blurb}) {
                 $procdesc = &desc_wrap($proc->{blurb}) . "\n *\n";
@@ -551,12 +561,25 @@ CODE
             if ($proc->{help}) {
                 $procdesc .= &desc_wrap($proc->{help}) . "\n *\n";
             }
-            $procdesc .= &desc_wrap("Deprecated: There is no replacement " .
+            $procdesc .= &desc_wrap("Deprecated: $deprecated_since: There is no replacement " .
                                     "for this procedure.");
         }
         else {
-            my $underscores = $proc->{deprecated};
-            $underscores =~ s/-/_/g;
+            my $replacement = $proc->{deprecated};
+            chomp $replacement;
+            if ($replacement =~ / /) {
+              # Use the deprecated string as-is.
+              #$replacement =~ s/"/\\"/g;
+            }
+            elsif ($replacement =~ /:/) {
+              # Replacement is a GEGL operation.
+              $replacement = "filter \"$replacement\"";
+            }
+            else {
+              # Replacement is another function.
+              $replacement =~ s/-/_/g;
+              $replacement .= '()';
+            }
 
             if ($proc->{blurb}) {
                 $procdesc = &desc_wrap($proc->{blurb}) . "\n *\n";
@@ -564,8 +587,8 @@ CODE
             if ($proc->{help}) {
                 $procdesc .= &desc_wrap($proc->{help}) . "\n *\n";
             }
-            $procdesc .= &desc_wrap("Deprecated: " .
-                                    "Use $underscores() instead.");
+            $procdesc .= &desc_wrap("Deprecated: $deprecated_since: " .
+                                    "Use $replacement instead.");
         }
     }
     else {

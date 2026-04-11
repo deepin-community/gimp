@@ -91,10 +91,10 @@
 #include "text-editor-actions.h"
 #include "text-tool-actions.h"
 #include "tool-options-actions.h"
+#include "tool-path-actions.h"
 #include "tool-presets-actions.h"
 #include "tool-preset-editor-actions.h"
 #include "tools-actions.h"
-#include "vector-toolpath-actions.h"
 #include "view-actions.h"
 #include "windows-actions.h"
 
@@ -104,6 +104,7 @@
 /*  global variables  */
 
 GimpActionFactory *global_action_factory = NULL;
+GHashTable        *aux_filter_hash_table = NULL;
 
 
 /*  private variables  */
@@ -233,12 +234,12 @@ static const GimpActionFactoryEntry action_groups[] =
   { "tool-options", N_("Tool Options"), GIMP_ICON_DIALOG_TOOL_OPTIONS,
     tool_options_actions_setup,
     tool_options_actions_update },
+  { "tool-path", N_("Tool Path"), GIMP_ICON_PATH,
+    tool_path_actions_setup,
+    tool_path_actions_update },
   { "tools", N_("Tools"), GIMP_ICON_DIALOG_TOOLS,
     tools_actions_setup,
     tools_actions_update },
-  { "vector-toolpath", N_("Path Toolpath"), GIMP_ICON_PATH,
-    vector_toolpath_actions_setup,
-    vector_toolpath_actions_update },
   { "paths", N_("Paths"), GIMP_ICON_PATH,
     paths_actions_setup,
     paths_actions_update },
@@ -270,6 +271,8 @@ actions_init (Gimp *gimp)
                                         action_groups[i].icon_name,
                                         action_groups[i].setup_func,
                                         action_groups[i].update_func);
+
+  aux_filter_hash_table = g_hash_table_new_full (g_str_hash, g_str_equal, g_free, NULL);
 }
 
 void
@@ -280,6 +283,23 @@ actions_exit (Gimp *gimp)
   g_return_if_fail (global_action_factory->gimp == gimp);
 
   g_clear_object (&global_action_factory);
+  g_hash_table_unref (aux_filter_hash_table);
+}
+
+/* XXX Temporary code to store the list of filter operations with an
+ * "aux" input. This won't be necessary anymore once these filters can
+ * be applied non-destructively too in the future.
+ */
+void
+actions_filter_set_aux (const gchar *action_name)
+{
+  g_hash_table_add (aux_filter_hash_table, (gpointer) g_strdup (action_name));
+}
+
+gboolean
+actions_filter_get_aux (const gchar *action_name)
+{
+  return g_hash_table_lookup (aux_filter_hash_table, action_name) != NULL;
 }
 
 Gimp *
@@ -490,10 +510,9 @@ action_data_sel_count (gpointer data)
 {
   if (GIMP_IS_CONTAINER_EDITOR (data))
     {
-      GimpContainerEditor  *editor;
+      GimpContainerEditor *editor = GIMP_CONTAINER_EDITOR (data);
 
-      editor = GIMP_CONTAINER_EDITOR (data);
-      return gimp_container_view_get_selected (editor->view, NULL, NULL);
+      return gimp_container_view_get_selected (editor->view, NULL);
     }
   else
     {

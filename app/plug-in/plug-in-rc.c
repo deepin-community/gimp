@@ -95,6 +95,7 @@ enum
   HANDLES_VECTOR,
   THUMB_LOADER,
   BATCH_INTERPRETER,
+  META_EXTENSIONS,
 };
 
 
@@ -152,6 +153,8 @@ plug_in_rc_parse (Gimp    *gimp,
   g_scanner_scope_add_symbol (scanner, LOAD_PROC,
                               "extensions", GINT_TO_POINTER (EXTENSIONS));
   g_scanner_scope_add_symbol (scanner, LOAD_PROC,
+                              "meta-extensions", GINT_TO_POINTER (META_EXTENSIONS));
+  g_scanner_scope_add_symbol (scanner, LOAD_PROC,
                               "prefixes", GINT_TO_POINTER (PREFIXES));
   g_scanner_scope_add_symbol (scanner, LOAD_PROC,
                               "magics", GINT_TO_POINTER (MAGICS));
@@ -170,6 +173,8 @@ plug_in_rc_parse (Gimp    *gimp,
 
   g_scanner_scope_add_symbol (scanner, SAVE_PROC,
                               "extensions", GINT_TO_POINTER (EXTENSIONS));
+  g_scanner_scope_add_symbol (scanner, SAVE_PROC,
+                              "meta-extensions", GINT_TO_POINTER (META_EXTENSIONS));
   g_scanner_scope_add_symbol (scanner, SAVE_PROC,
                               "prefixes", GINT_TO_POINTER (PREFIXES));
   g_scanner_scope_add_symbol (scanner, SAVE_PROC,
@@ -664,6 +669,18 @@ plug_in_file_or_batch_proc_deserialize (GScanner            *scanner,
                 }
               break;
 
+            case META_EXTENSIONS:
+                {
+                  gchar *extensions;
+
+                  if (! gimp_scanner_parse_string (scanner, &extensions))
+                    return G_TOKEN_STRING;
+
+                  g_free (proc->meta_extensions);
+                  proc->meta_extensions = extensions;
+                }
+              break;
+
             case PREFIXES:
                 {
                   gchar *prefixes;
@@ -1031,6 +1048,15 @@ plug_in_proc_arg_deserialize (GScanner      *scanner,
           goto error;
         }
       break;
+
+    case GP_PARAM_DEF_TYPE_CURVE:
+      if (! gimp_scanner_parse_int (scanner,
+                                    &param_def.meta.m_curve.none_ok))
+        {
+          token = G_TOKEN_INT;
+          goto error;
+        }
+      break;
     }
 
   if (! gimp_scanner_parse_token (scanner, G_TOKEN_RIGHT_PAREN))
@@ -1102,6 +1128,9 @@ plug_in_proc_arg_deserialize (GScanner      *scanner,
     case GP_PARAM_DEF_TYPE_FILE:
       g_free (param_def.meta.m_file.default_uri);
       break;
+
+    case GP_PARAM_DEF_TYPE_CURVE:
+      break;
     }
 
   return token;
@@ -1152,7 +1181,7 @@ plug_in_rc_write_proc_arg (GimpConfigWriter *writer,
 {
   GPParamDef param_def = { 0, };
 
-  _gimp_param_spec_to_gp_param_def (pspec, &param_def);
+  _gimp_param_spec_to_gp_param_def (pspec, &param_def, FALSE);
 
   gimp_config_writer_open (writer, "proc-arg");
   gimp_config_writer_printf (writer, "%d", param_def.param_def_type);
@@ -1301,6 +1330,11 @@ plug_in_rc_write_proc_arg (GimpConfigWriter *writer,
       gimp_config_writer_string (writer,
                                  param_def.meta.m_file.default_uri);
       break;
+
+    case GP_PARAM_DEF_TYPE_CURVE:
+      gimp_config_writer_printf (writer, "%d",
+                                 param_def.meta.m_curve.none_ok);
+      break;
     }
 
   gimp_config_writer_close (writer);
@@ -1426,6 +1460,13 @@ plug_in_rc_write (GSList  *plug_in_defs,
                     {
                       gimp_config_writer_open (writer, "extensions");
                       gimp_config_writer_string (writer, proc->extensions);
+                      gimp_config_writer_close (writer);
+                    }
+
+                  if (proc->meta_extensions && *proc->meta_extensions)
+                    {
+                      gimp_config_writer_open (writer, "meta-extensions");
+                      gimp_config_writer_string (writer, proc->meta_extensions);
                       gimp_config_writer_close (writer);
                     }
 

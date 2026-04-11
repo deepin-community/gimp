@@ -18,9 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_CONTAINER_ICON_VIEW_H__
-#define __GIMP_CONTAINER_ICON_VIEW_H__
-
+#pragma once
 
 #include "gimpcontainerbox.h"
 
@@ -48,8 +46,6 @@ struct _GimpContainerIconView
 
   GtkCellRenderer              *renderer_cell;
 
-  Gimp                         *dnd_gimp; /* eek */
-
   GimpContainerIconViewPrivate *priv;
 };
 
@@ -65,6 +61,3 @@ GtkWidget * gimp_container_icon_view_new      (GimpContainer *container,
                                                GimpContext   *context,
                                                gint           view_size,
                                                gint           view_border_width);
-
-
-#endif  /*  __GIMP_CONTAINER_ICON_VIEW_H__  */

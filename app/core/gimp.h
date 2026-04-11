@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_H__
-#define __GIMP_H__
-
+#pragma once
 
 #include "gimpobject.h"
 #include "gimp-gui.h"
@@ -95,6 +93,8 @@ struct _Gimp
 
   GList                  *image_windows;
 
+  GObject                *controller_manager;
+
   GimpImage              *clipboard_image;
   GimpBuffer             *clipboard_buffer;
   GimpContainer          *named_buffers;
@@ -133,6 +133,9 @@ struct _Gimp
 
   /*  the context used by the interface  */
   GimpContext            *user_context;
+
+  /*  GUI focus occured. See gtk#7534.  */
+  gboolean                focused_once;
 };
 
 struct _GimpClass
@@ -189,6 +192,9 @@ gboolean       gimp_is_restored            (Gimp                *gimp);
 void           gimp_exit                   (Gimp                *gimp,
                                             gboolean             force);
 
+void           gimp_set_focused_once       (Gimp                *gimp);
+gboolean       gimp_has_focused_once       (Gimp                *gimp);
+
 GList        * gimp_get_image_iter         (Gimp                *gimp);
 GList        * gimp_get_display_iter       (Gimp                *gimp);
 GList        * gimp_get_image_windows      (Gimp                *gimp);
@@ -225,6 +231,10 @@ GimpContext  * gimp_get_user_context       (Gimp                *gimp);
 GimpToolInfo * gimp_get_tool_info          (Gimp                *gimp,
                                             const gchar         *tool_name);
 
+void           gimp_set_last_template      (Gimp                *gimp,
+                                            GimpTemplate        *_template);
+GimpTemplate * gimp_get_last_template      (Gimp                *gimp);
+
 void           gimp_message                (Gimp                *gimp,
                                             GObject             *handler,
                                             GimpMessageSeverity  severity,
@@ -248,5 +258,6 @@ void           gimp_image_opened           (Gimp                *gimp,
 GFile        * gimp_get_temp_file          (Gimp                *gimp,
                                             const gchar         *extension);
 
-
-#endif  /* __GIMP_H__ */
+GimpDataFactory *
+               gimp_get_data_factory       (Gimp                *gimp,
+                                            GType                data_type);

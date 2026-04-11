@@ -289,6 +289,17 @@ gimp_plug_in_class_init (GimpPlugInClass *klass)
                         G_PARAM_CONSTRUCT_ONLY);
 
   g_object_class_install_properties (object_class, N_PROPS, props);
+
+  /* libgimp creates GeglColor-s in _gimp_config(), which requires at
+   * least babl to be initialized.
+   * We don't call gegl_init() because gegl_config() does not appreciate
+   * being called after, which generates a bunch of CRITICALs (see
+   * commit b06fe36970c and gegl#427).
+   * Therefore gegl_init() still needs to be called manually by plug-ins
+   * if necessary (it is called by gimp_ui_init() too, but this only
+   * applies to GUI plug-ins).
+   */
+  babl_init ();
 }
 
 static void
@@ -1798,6 +1809,18 @@ _gimp_plug_in_get_item (GimpPlugIn *plug_in,
       if (gimp_item_id_is_text_layer (item_id))
         {
           item = g_object_new (GIMP_TYPE_TEXT_LAYER,
+                               "id", item_id,
+                               NULL);
+        }
+      else if (gimp_item_id_is_vector_layer (item_id))
+        {
+          item = g_object_new (GIMP_TYPE_VECTOR_LAYER,
+                               "id", item_id,
+                               NULL);
+        }
+      else if (gimp_item_id_is_link_layer (item_id))
+        {
+          item = g_object_new (GIMP_TYPE_LINK_LAYER,
                                "id", item_id,
                                NULL);
         }

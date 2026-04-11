@@ -18,8 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_CANVAS_ITEM_UTILS_H__
-#define __GIMP_CANVAS_ITEM_UTILS_H__
+#pragma once
 
 
 gboolean   gimp_canvas_item_on_handle           (GimpCanvasItem    *item,
@@ -32,8 +31,8 @@ gboolean   gimp_canvas_item_on_handle           (GimpCanvasItem    *item,
                                                  gint               height,
                                                  GimpHandleAnchor   anchor);
 
-gboolean   gimp_canvas_item_on_vectors_handle   (GimpCanvasItem    *item,
-                                                 GimpPath          *vectors,
+gboolean   gimp_canvas_item_on_path_handle      (GimpCanvasItem    *item,
+                                                 GimpPath          *path,
                                                  const GimpCoords  *coord,
                                                  gint               width,
                                                  gint               height,
@@ -41,8 +40,8 @@ gboolean   gimp_canvas_item_on_vectors_handle   (GimpCanvasItem    *item,
                                                  gboolean           exclusive,
                                                  GimpAnchor       **ret_anchor,
                                                  GimpStroke       **ret_stroke);
-gboolean   gimp_canvas_item_on_vectors_curve    (GimpCanvasItem    *item,
-                                                 GimpPath          *vectors,
+gboolean   gimp_canvas_item_on_path_curve       (GimpCanvasItem    *item,
+                                                 GimpPath          *path,
                                                  const GimpCoords  *coord,
                                                  gint               width,
                                                  gint               height,
@@ -76,6 +75,3 @@ void       gimp_canvas_item_shift_to_center     (GimpHandleAnchor   anchor,
                                                  gint               height,
                                                  gdouble           *shifted_x,
                                                  gdouble           *shifted_y);
-
-
-#endif /* __GIMP_CANVAS_ITEM_UTILS_H__ */

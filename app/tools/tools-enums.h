@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __TOOLS_ENUMS_H__
-#define __TOOLS_ENUMS_H__
+#pragma once
 
 
 /*
@@ -166,16 +165,6 @@ typedef enum
 } GimpWarpBehavior;
 
 
-#define GIMP_TYPE_PAINT_SELECT_MODE (gimp_paint_select_mode_get_type ())
-
-GType gimp_paint_select_mode_get_type (void) G_GNUC_CONST;
-
-typedef enum
-{
-  GIMP_PAINT_SELECT_MODE_ADD,      /*< desc="Add to selection" >*/
-  GIMP_PAINT_SELECT_MODE_SUBTRACT, /*< desc="Subtract from selection" >*/
-} GimpPaintSelectMode;
-
 /*
  * non-registered enums; register them if needed
  */
@@ -192,7 +181,7 @@ typedef enum /*< skip >*/
 /*  Modes of GimpEditSelectionTool  */
 typedef enum /*< skip >*/
 {
-  GIMP_TRANSLATE_MODE_VECTORS,
+  GIMP_TRANSLATE_MODE_PATH,
   GIMP_TRANSLATE_MODE_CHANNEL,
   GIMP_TRANSLATE_MODE_LAYER_MASK,
   GIMP_TRANSLATE_MODE_MASK,
@@ -208,6 +197,3 @@ typedef enum /*< skip >*/
   GIMP_MOTION_MODE_EXACT,
   GIMP_MOTION_MODE_COMPRESS
 } GimpMotionMode;
-
-
-#endif /* __TOOLS_ENUMS_H__ */

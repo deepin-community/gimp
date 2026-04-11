@@ -59,6 +59,7 @@ static void    file_actions_last_opened_update  (GimpContainer   *container,
 static void    file_actions_last_opened_reorder (GimpContainer   *container,
                                                  GimpImagefile   *unused1,
                                                  gint             unused2,
+                                                 gint             unused3,
                                                  GimpActionGroup *group);
 static void    file_actions_close_all_update    (GimpContainer   *images,
                                                  GimpObject      *unused,
@@ -80,6 +81,12 @@ static const GimpActionEntry file_actions[] =
     NC_("file-action", "Open an image file as layers"),
     file_open_as_layers_cmd_callback,
     GIMP_HELP_FILE_OPEN_AS_LAYER },
+
+  { "file-open-as-link-layers", GIMP_ICON_LAYER,
+    NC_("file-action", "Op_en as Link Layer..."), NULL, { "<primary><alt><shift>O", NULL },
+    NC_("file-action", "Open an image file as Link layer"),
+    file_open_as_link_layer_cmd_callback,
+    GIMP_HELP_FILE_OPEN_AS_LINK_LAYER },
 
   { "file-open-location", GIMP_ICON_WEB,
     NC_("file-action", "Open _Location..."), NULL, { NULL },
@@ -254,7 +261,6 @@ file_actions_update (GimpActionGroup *group,
 {
   Gimp         *gimp           = action_data_get_gimp (data);
   GimpImage    *image          = action_data_get_image (data);
-  GList        *drawables      = NULL;
   GFile        *file           = NULL;
   GFile        *source         = NULL;
   GFile        *export         = NULL;
@@ -262,8 +268,6 @@ file_actions_update (GimpActionGroup *group,
 
   if (image)
     {
-      drawables = gimp_image_get_selected_drawables (image);
-
       file   = gimp_image_get_file (image);
       source = gimp_image_get_imported_file (image);
       export = gimp_image_get_exported_file (image);
@@ -280,16 +284,16 @@ file_actions_update (GimpActionGroup *group,
 #define SET_SENSITIVE(action,condition) \
         gimp_action_group_set_action_sensitive (group, action, (condition) != 0, NULL)
 
-  SET_SENSITIVE ("file-save",                 drawables);
-  SET_SENSITIVE ("file-save-as",              drawables);
-  SET_SENSITIVE ("file-save-a-copy",          drawables);
-  SET_SENSITIVE ("file-save-and-close",       drawables);
+  SET_SENSITIVE ("file-save",                 image);
+  SET_SENSITIVE ("file-save-as",              image);
+  SET_SENSITIVE ("file-save-a-copy",          image);
+  SET_SENSITIVE ("file-save-and-close",       image);
   SET_SENSITIVE ("file-revert",               file || source);
-  SET_SENSITIVE ("file-export",               drawables);
+  SET_SENSITIVE ("file-export",               image);
   SET_VISIBLE   ("file-export",               ! show_overwrite);
   SET_SENSITIVE ("file-overwrite",            show_overwrite);
   SET_VISIBLE   ("file-overwrite",            show_overwrite);
-  SET_SENSITIVE ("file-export-as",            drawables);
+  SET_SENSITIVE ("file-export-as",            image);
   SET_SENSITIVE ("file-create-template",      image);
   SET_SENSITIVE ("file-copy-location",        file || source || export);
   SET_SENSITIVE ("file-show-in-file-manager", file || source || export);
@@ -350,8 +354,6 @@ file_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("file-close-all", image);
 
 #undef SET_SENSITIVE
-
-  g_list_free (drawables);
 }
 
 
@@ -434,6 +436,7 @@ static void
 file_actions_last_opened_reorder (GimpContainer   *container,
                                   GimpImagefile   *unused1,
                                   gint             unused2,
+                                  gint             unused3,
                                   GimpActionGroup *group)
 {
   file_actions_last_opened_update (container, unused1, group);

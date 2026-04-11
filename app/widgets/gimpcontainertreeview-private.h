@@ -18,8 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_CONTAINER_TREE_VIEW_PRIVATE_H__
-#define __GIMP_CONTAINER_TREE_VIEW_PRIVATE_H__
+#pragma once
 
 
 struct _GimpContainerTreeViewPrivate
@@ -41,11 +40,4 @@ struct _GimpContainerTreeViewPrivate
   GdkScrollDirection  scroll_dir;
 
   gboolean            dnd_drop_to_empty;
-
-  gdouble             zoom_accumulated_scroll_delta;
-  GtkGesture         *zoom_gesture;
-  gdouble             zoom_gesture_last_set_value;
 };
-
-
-#endif  /*  __GIMP_CONTAINER_TREE_VIEW_PRIVATE_H__  */

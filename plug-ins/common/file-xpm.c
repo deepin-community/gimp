@@ -50,11 +50,9 @@ Previous...Inherited code from Ray Lehtiniemi, who inherited it from S & P.
 
 #include <gdk/gdk.h>          /* For GDK_WINDOWING_WIN32 */
 
-#ifndef GDK_WINDOWING_X11
-#ifndef XPM_NO_X
-#define XPM_NO_X
-#endif
-#else
+#ifdef GDK_WINDOWING_X11
+#include <gdk/gdkx.h>
+
 #include <X11/Xlib.h>
 #endif
 
@@ -125,7 +123,8 @@ static GimpImage      * load_image           (GFile                 *file,
 static guchar         * parse_colors         (XpmImage               *xpm_image);
 static void             parse_image          (GimpImage              *image,
                                               XpmImage               *xpm_image,
-                                              guchar                 *cmap);
+                                              guchar                 *cmap,
+                                              GError                **error);
 static gboolean         export_image         (GFile                  *file,
                                               GimpImage              *image,
                                               GimpDrawable           *drawable,
@@ -385,12 +384,28 @@ load_image (GFile   *file,
 
   cmap = parse_colors (&xpm_image);
 
+  if (xpm_image.width > GIMP_MAX_IMAGE_SIZE)
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Unsupported or invalid image width: %d"),
+                   xpm_image.width);
+      return NULL;
+    }
+
+  if (xpm_image.height > GIMP_MAX_IMAGE_SIZE)
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   _("Unsupported or invalid image height: %d"),
+                   xpm_image.height);
+      return NULL;
+    }
+
   image = gimp_image_new (xpm_image.width,
                           xpm_image.height,
                           GIMP_RGB);
 
   /* fill it */
-  parse_image (image, &xpm_image, cmap);
+  parse_image (image, &xpm_image, cmap, error);
 
   g_free (cmap);
 
@@ -400,20 +415,29 @@ load_image (GFile   *file,
 static guchar *
 parse_colors (XpmImage *xpm_image)
 {
-#ifndef XPM_NO_X
+#ifdef GDK_WINDOWING_X11
   Display  *display;
   Colormap  colormap;
 #endif
   gint      i, j;
   guchar   *cmap;
+  gboolean use_x_api = FALSE;;
 
-#ifndef XPM_NO_X
-  /* open the display and get the default color map */
-  display  = XOpenDisplay (NULL);
-  if (display == NULL)
-    g_printerr ("Could not open display\n");
+#ifdef GDK_WINDOWING_X11
+  use_x_api = (gdk_display_get_default () &&
+               GDK_IS_X11_DISPLAY (gdk_display_get_default ()));
+#endif
 
-  colormap = DefaultColormap (display, DefaultScreen (display));
+#ifdef GDK_WINDOWING_X11
+  if (use_x_api)
+    {
+      /* open the display and get the default color map */
+      display  = XOpenDisplay (NULL);
+      if (display == NULL)
+        g_printerr ("Could not open display\n");
+
+      colormap = DefaultColormap (display, DefaultScreen (display));
+    }
 #endif
 
   /* alloc a buffer to hold the parsed colors */
@@ -422,13 +446,8 @@ parse_colors (XpmImage *xpm_image)
   /* parse each color in the file */
   for (i = 0, j = 0; i < xpm_image->ncolors; i++)
     {
-      gchar     *colorspec = "None";
-      XpmColor  *xpm_color;
-#ifndef XPM_NO_X
-      XColor     xcolor;
-#else
-      GdkRGBA    xcolor;
-#endif
+      gchar    *colorspec = "None";
+      XpmColor *xpm_color;
 
       xpm_color = &(xpm_image->colorTable[i]);
 
@@ -445,17 +464,26 @@ parse_colors (XpmImage *xpm_image)
       /* parse if it's not transparent */
       if (strcmp (colorspec, "None") != 0)
         {
-#ifndef XPM_NO_X
-          XParseColor (display, colormap, colorspec, &xcolor);
-          cmap[j++] = xcolor.red >> 8;
-          cmap[j++] = xcolor.green >> 8;
-          cmap[j++] = xcolor.blue >> 8;
-#else
-          gdk_rgba_parse (&xcolor, colorspec);
-          cmap[j++] = CLAMP (xcolor.red * G_MAXUINT8, 0, G_MAXUINT8);
-          cmap[j++] = CLAMP (xcolor.green * G_MAXUINT8, 0, G_MAXUINT8);
-          cmap[j++] = CLAMP (xcolor.blue * G_MAXUINT8, 0, G_MAXUINT8);
+#ifdef GDK_WINDOWING_X11
+          if (use_x_api)
+            {
+              XColor xcolor;
+
+              XParseColor (display, colormap, colorspec, &xcolor);
+              cmap[j++] = xcolor.red >> 8;
+              cmap[j++] = xcolor.green >> 8;
+              cmap[j++] = xcolor.blue >> 8;
+            }
+          else
 #endif
+            {
+              GdkRGBA xcolor;
+
+              gdk_rgba_parse (&xcolor, colorspec);
+              cmap[j++] = CLAMP (xcolor.red * G_MAXUINT8, 0, G_MAXUINT8);
+              cmap[j++] = CLAMP (xcolor.green * G_MAXUINT8, 0, G_MAXUINT8);
+              cmap[j++] = CLAMP (xcolor.blue * G_MAXUINT8, 0, G_MAXUINT8);
+            }
           cmap[j++] = ~0;
         }
       else
@@ -463,16 +491,20 @@ parse_colors (XpmImage *xpm_image)
           j += 4;
         }
     }
-#ifndef XPM_NO_X
-  XCloseDisplay (display);
+
+#ifdef GDK_WINDOWING_X11
+  if (use_x_api)
+    XCloseDisplay (display);
 #endif
+
   return cmap;
 }
 
 static void
 parse_image (GimpImage *image,
              XpmImage  *xpm_image,
-             guchar    *cmap)
+             guchar    *cmap,
+             GError   **error)
 {
   GeglBuffer *buffer;
   gint        tile_height;
@@ -498,7 +530,13 @@ parse_image (GimpImage *image,
 
   tile_height = gimp_tile_height ();
 
-  buf  = g_new (guchar, tile_height * xpm_image->width * 4);
+  buf = g_try_new (guchar, tile_height * xpm_image->width * 4);
+  if (buf == NULL)
+    {
+      g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                   "%s", _("XPM file invalid"));
+      return;
+    }
 
   src  = xpm_image->data;
   for (i = 0; i < xpm_image->height; i += tile_height)
@@ -865,8 +903,8 @@ save_dialog (GimpImage     *image,
                                              GIMP_PROCEDURE_CONFIG (config),
                                              image);
 
-  gimp_procedure_dialog_get_scale_entry (GIMP_PROCEDURE_DIALOG (dialog),
-                                         "threshold", 1.0);
+  gimp_procedure_dialog_get_spin_scale (GIMP_PROCEDURE_DIALOG (dialog),
+                                        "threshold", 1.0);
 
   gimp_procedure_dialog_fill (GIMP_PROCEDURE_DIALOG (dialog), NULL);
   gtk_widget_show (dialog);

@@ -734,6 +734,10 @@ load_resource_lsct (const PSDlayerres  *res_a,
   return 0;
 }
 
+/* Adobe uses fixed point ints which consist of four bytes: a 16-bit number and
+ * 16-bit fraction */
+#define FIXED_TO_FLOAT(num,fract) (gfloat) num + fract / 65535.0f
+
 static gint
 load_resource_lrfx (const PSDlayerres  *res_a,
                     PSDlayer           *lyr_a,
@@ -786,56 +790,74 @@ load_resource_lrfx (const PSDlayerres  *res_a,
                   return -1;
                 }
             }
-          else if (memcmp (effectname, "dsdw", 4) == 0
-                   || memcmp (effectname, "isdw", 4) == 0)
+          else if (memcmp (effectname, "dsdw", 4) == 0 ||
+                   memcmp (effectname, "isdw", 4) == 0)
             {
-              PSDLayerStyleShadow shadow;
+              PSDLayerStyleShadow *shadow;
+              gchar                bim[4];
+              guint16              temp[8];
 
               if (memcmp (effectname, "dsdw", 4) == 0)
-                shadow = ls_a->dsdw;
+                shadow = &ls_a->dsdw;
               else
-                shadow = ls_a->isdw;
+                shadow = &ls_a->isdw;
 
-              if (psd_read (input, &shadow.size,        4, error) < 4 ||
-                  psd_read (input, &shadow.ver,         4, error) < 4 ||
-                  psd_read (input, &shadow.blur,        4, error) < 4 ||
-                  psd_read (input, &shadow.intensity,   4, error) < 4 ||
-                  psd_read (input, &shadow.angle,       4, error) < 4 ||
-                  psd_read (input, &shadow.distance,    4, error) < 4 ||
-                  psd_read (input, &shadow.color[0],    2, error) < 2 ||
-                  psd_read (input, &shadow.color[1],    2, error) < 2 ||
-                  psd_read (input, &shadow.color[2],    2, error) < 2 ||
-                  psd_read (input, &shadow.color[3],    2, error) < 2 ||
-                  psd_read (input, &shadow.color[4],    2, error) < 2 ||
-                  psd_read (input, &shadow.blendsig,    4, error) < 4 ||
-                  psd_read (input, &shadow.effect,      4, error) < 4 ||
-                  psd_read (input, &shadow.effecton,    1, error) < 1 ||
-                  psd_read (input, &shadow.anglefx,     1, error) < 1 ||
-                  psd_read (input, &shadow.opacity,     1, error) < 1 ||
-                  psd_read (input, &shadow.natcolor[0], 2, error) < 2 ||
-                  psd_read (input, &shadow.natcolor[1], 2, error) < 2 ||
-                  psd_read (input, &shadow.natcolor[2], 2, error) < 2 ||
-                  psd_read (input, &shadow.natcolor[3], 2, error) < 2 ||
-                  psd_read (input, &shadow.natcolor[4], 2, error) < 2)
+              if (psd_read (input, &shadow->size,      4, error) < 4  ||
+                  psd_read (input, &shadow->ver,       4, error) < 4  ||
+                  psd_read (input, &temp,             16, error) < 16 ||
+                  psd_read (input, &shadow->color[0],  2, error) < 2  ||
+                  psd_read (input, &shadow->color[1],  2, error) < 2  ||
+                  psd_read (input, &shadow->color[2],  2, error) < 2  ||
+                  psd_read (input, &shadow->color[3],  2, error) < 2  ||
+                  psd_read (input, &shadow->color[4],  2, error) < 2  ||
+                  psd_read (input, &bim,               4, error) < 4  ||
+                  psd_read (input, &shadow->blendsig,  4, error) < 4  ||
+                  psd_read (input, &shadow->effecton,  1, error) < 1  ||
+                  psd_read (input, &shadow->anglefx,   1, error) < 1  ||
+                  psd_read (input, &shadow->opacity,   1, error) < 1)
                 {
                   psd_set_error (error);
                   return -1;
                 }
+              shadow->size      = GUINT32_TO_BE (shadow->size);
+              shadow->ver       = GUINT32_TO_BE (shadow->ver);
+              shadow->blur      = FIXED_TO_FLOAT (GUINT16_TO_BE (temp[0]),
+                                                  GUINT16_TO_BE (temp[1]));
+              shadow->intensity = FIXED_TO_FLOAT (GUINT16_TO_BE (temp[2]),
+                                                  GUINT16_TO_BE (temp[3]));
+              shadow->angle     = FIXED_TO_FLOAT (GINT16_TO_BE (temp[4]),
+                                                  GINT16_TO_BE (temp[5]));
+              shadow->distance  = FIXED_TO_FLOAT (GUINT16_TO_BE (temp[6]),
+                                                  GUINT16_TO_BE (temp[7]));
+
+              if (shadow->ver == 2)
+                {
+                  if (psd_read (input, &shadow->natcolor[0], 2, error) < 2 ||
+                      psd_read (input, &shadow->natcolor[1], 2, error) < 2 ||
+                      psd_read (input, &shadow->natcolor[2], 2, error) < 2 ||
+                      psd_read (input, &shadow->natcolor[3], 2, error) < 2 ||
+                      psd_read (input, &shadow->natcolor[4], 2, error) < 2)
+                    {
+                      psd_set_error (error);
+                      return -1;
+                    }
+                }
             }
           else if (memcmp (effectname, "oglw", 4) == 0)
             {
+              gchar   bim[4];
+              guint16 temp[4];
 
               if (psd_read (input, &ls_a->oglw.size,      4, error) < 4 ||
                   psd_read (input, &ls_a->oglw.ver,       4, error) < 4 ||
-                  psd_read (input, &ls_a->oglw.blur,      4, error) < 4 ||
-                  psd_read (input, &ls_a->oglw.intensity, 4, error) < 4 ||
+                  psd_read (input, &temp,                 8, error) < 8 ||
                   psd_read (input, &ls_a->oglw.color[0],  2, error) < 2 ||
                   psd_read (input, &ls_a->oglw.color[1],  2, error) < 2 ||
                   psd_read (input, &ls_a->oglw.color[2],  2, error) < 2 ||
                   psd_read (input, &ls_a->oglw.color[3],  2, error) < 2 ||
                   psd_read (input, &ls_a->oglw.color[4],  2, error) < 2 ||
+                  psd_read (input, &bim,                  4, error) < 4 ||
                   psd_read (input, &ls_a->oglw.blendsig,  4, error) < 4 ||
-                  psd_read (input, &ls_a->oglw.effect,    4, error) < 4 ||
                   psd_read (input, &ls_a->oglw.effecton,  1, error) < 1 ||
                   psd_read (input, &ls_a->oglw.opacity,   1, error) < 1)
                 {
@@ -843,7 +865,13 @@ load_resource_lrfx (const PSDlayerres  *res_a,
                   return -1;
                 }
 
-              ls_a->oglw.size = GUINT32_TO_BE (ls_a->oglw.size);
+              ls_a->oglw.size      = GUINT32_TO_BE (ls_a->oglw.size);
+              ls_a->oglw.ver       = GUINT32_TO_BE (ls_a->oglw.ver);
+              ls_a->oglw.blur      = FIXED_TO_FLOAT (GUINT16_TO_BE (temp[0]),
+                                                     GUINT16_TO_BE (temp[1]));
+              ls_a->oglw.intensity = FIXED_TO_FLOAT (GUINT16_TO_BE (temp[2]),
+                                                     GUINT16_TO_BE (temp[3]));
+
               if (ls_a->oglw.size == 42)
                 {
                   if (psd_read (input, &ls_a->oglw.natcolor[0], 2, error) < 2 ||
@@ -979,6 +1007,7 @@ load_resource_lrfx (const PSDlayerres  *res_a,
 
   return 0;
 }
+#undef FIXED_TO_FLOAT
 
 static gint
 load_resource_lyvr (const PSDlayerres  *res_a,

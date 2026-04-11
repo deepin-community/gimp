@@ -15,12 +15,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_PDB_UTILS_H__
-#define __GIMP_PDB_UTILS_H__
+#pragma once
 
-
-GimpDataFactory * gimp_pdb_get_data_factory       (Gimp               *gimp,
-                                                   GType               data_type);
 
 GList           * gimp_pdb_get_resources          (Gimp               *gimp,
                                                    GType               data_type,
@@ -109,6 +105,3 @@ GimpStroke      * gimp_pdb_get_path_stroke        (GimpPath           *path,
 
 gboolean          gimp_pdb_is_canonical_procedure (const gchar        *procedure_name,
                                                    GError            **error);
-
-
-#endif /* __GIMP_PDB_UTILS_H__ */

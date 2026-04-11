@@ -7,14 +7,20 @@ This list was created through `git` archeology, especially since some of them
 apparently never made it to a release (not even a development release). If any
 image was missed, we welcome edits.
 
-For reminder, GIMP website also displays a [list of past
-splashes](https://www.gimp.org/about/splash/) which may not be as exhaustive.
-
 # Stable releases
-# 3.0 series
+# 3 series
 
 *Note: from the 3.0 series and onward, we are planning to release with a new
 splash screen for every minor version increments.*
+
+## GIMP 3.0
+
+* [GIMP 3.0 series](https://gitlab.gnome.org/GNOME/gimp-data/-/commit/e62f1905dcef7ec831ea6c052bb035eb37eaa69e)
+  by Sevenix, CC by-sa 4.0.
+
+  ![Splash for GIMP 3.0](https://www.gimp.org/news/2025/03/16/gimp-3-0-released/gimp-3.0-splash.jpg)
+
+  *Note: the "3.0.0" on the bottom right was replaced to "3.0" in GIMP 3.0.4*
 
 # Up to 2.10 series
 
@@ -62,6 +68,48 @@ The following splash images didn't make it for a stable release:
   ![Splash for GIMP 2.8](https://gitlab.gnome.org/GNOME/gimp/-/raw/b1d09cc7264899b8fec50a2e3a20f57506fa1da8/data/images/gimp-splash.png)
 
 # Development releases
+## 3.2 RCs
+
+* [GIMP 3.2.0 RC3](https://gitlab.gnome.org/GNOME/gimp-data/-/commit/70b0fe579da3acffcf3ea28c9f3cb6d23fbe51c3)
+  by Mark McCaughrean, CC by-sa 4.0.
+
+  ![Splash for GIMP 3.2.0 RC3](https://www.gimp.org/news/2026/03/02/gimp-3-2-RC3-released/gimp-splash-3.2-rc3.jpeg)
+
+* [GIMP 3.2.0 RC2](https://gitlab.gnome.org/GNOME/gimp-data/-/commit/1e1d7077b38a29d37835de600af64a8df494ba9a)
+  by Mark McCaughrean, CC by-sa 2.0.
+
+  ![Splash for GIMP 3.2.0 RC2](https://www.gimp.org/news/2025/12/15/gimp-3-2-RC2-released/gimp-splash-3.2-rc2.jpg)
+
+
+* [GIMP 3.2.0 RC1](https://gitlab.gnome.org/GNOME/gimp-data/-/commit/7f74eb8af2e95e425567ee5bcb30395a82b17681)
+  by Mark McCaughrean, CC by-sa 2.0.
+
+  ![Splash for GIMP 3.2.0 RC1](https://www.gimp.org/news/2025/11/17/gimp-3-2-RC1-released/gimp-splash.jpeg)
+
+## 3.1 series
+
+* [GIMP 3.1.4](https://gitlab.gnome.org/GNOME/gimp-data/-/commit/a53c0fecc3e3daf1332891caaaa82370862f3347)
+  by Michael Schumacher (photography) and Aryeom (editing, design), CC by-sa 4.0.
+
+  ![Splash for GIMP 3.1.4](https://www.gimp.org/news/2025/09/01/gimp-3-1-4-released/gimp-splash.jpg)
+
+* [GIMP 3.1.2](https://gitlab.gnome.org/GNOME/gimp-data/-/commit/23998fee749b456f1062ce05e02e82911586e46c)
+  by Ville Pätsi, CC by-sa 4.0.
+
+  ![Splash for GIMP 3.1.4](https://www.gimp.org/news/2025/06/23/gimp-3-1-2-released/gimp-splash.jpg)
+
+## 3.0 RCs
+
+* [GIMP 3.0.0 RC2](https://gitlab.gnome.org/GNOME/gimp-data/-/commit/adf34d068663fa17758d8fb1af9a427e7f34fe1e)
+  by Sevenix, CC by-sa 4.0.
+
+  ![Splash for GIMP 3.0.0 RC2](https://www.gimp.org/news/2024/12/27/gimp-3-0-RC2-released/gimp-3.0.RC2-splash.jpg)
+
+* [GIMP 3.0.0 RC1](https://gitlab.gnome.org/GNOME/gimp-data/-/commit/be37d3fee97be70bb5856f0c8c6d3e756f71f2ff)
+  by Sevenix, CC by-sa 4.0.
+
+  ![Splash for GIMP 3.0.0 RC1](https://www.gimp.org/news/2024/11/06/gimp-3-0-RC1-released/gimp-3.0.RC1-splash.jpg)
+
 ## 2.99 series
 
 * [GIMP 2.99.16 and 2.99.18](https://gitlab.gnome.org/GNOME/gimp/-/blob/7eea3c8622e38924fcf7e37c45e5a675d6c04040/data/images/gimp-splash.png)
@@ -153,7 +201,7 @@ The following splash images didn't make a release:
 
   ![Splash for GIMP 2.7.4](https://gitlab.gnome.org/GNOME/gimp/-/raw/5b4db22ae1b3d3c9aa7a91cb64e29e4f1b15ed18/data/images/gimp-splash.png)
 
-* [GIMP 2.7.2](https://gitlab.gnome.org/GNOME/gimp/-/commit/eb0591f97dca152ec827db083f910b6a9ea16369)
+* [GIMP 2.7.2 and 2.7.3](https://gitlab.gnome.org/GNOME/gimp/-/commit/eb0591f97dca152ec827db083f910b6a9ea16369)
   by Alexia Death.
 
   ![Splash for GIMP 2.7.2](https://gitlab.gnome.org/GNOME/gimp/-/raw/eb0591f97dca152ec827db083f910b6a9ea16369/data/images/gimp-splash.png)
@@ -170,24 +218,24 @@ The following splash images didn't make a release:
 
 ## 2.5 series
 
-* [GIMP 2.5.3](https://gitlab.gnome.org/GNOME/gimp/-/commit/9973e56a80322773b3eb65b743428acaf803000d)
+* [GIMP 2.5.3 and 2.5.4](https://gitlab.gnome.org/GNOME/gimp/-/commit/9973e56a80322773b3eb65b743428acaf803000d)
   by Aurore Derriennic.
 
   ![Splash for GIMP 2.5.3](https://gitlab.gnome.org/GNOME/gimp/-/raw/9973e56a80322773b3eb65b743428acaf803000d/data/images/gimp-splash.png)
 
-* [GIMP 2.5.0](https://gitlab.gnome.org/GNOME/gimp/-/commit/8ebfd5f3bf761f6fd99f5b12fe0461e0ca538bca)
+* [GIMP 2.5.0 to 2.5.2](https://gitlab.gnome.org/GNOME/gimp/-/commit/8ebfd5f3bf761f6fd99f5b12fe0461e0ca538bca)
   by Jakub Steiner.
 
   ![Splash for GIMP 2.5.0](https://gitlab.gnome.org/GNOME/gimp/-/raw/8ebfd5f3bf761f6fd99f5b12fe0461e0ca538bca/data/images/gimp-splash.png)
 
 ## 2.3 series
 
-* [GIMP 2.3.13](https://gitlab.gnome.org/GNOME/gimp/-/commit/bc502b0a659a4e8dc2ca6c8ab577fc54f6df1c35):
+* [GIMP 2.3.13 to 2.3.19](https://gitlab.gnome.org/GNOME/gimp/-/commit/bc502b0a659a4e8dc2ca6c8ab577fc54f6df1c35):
   Image taken by Kristian Rietveld; Retouching by Simon Budig and Michael Natterer.
 
   ![Splash for GIMP 2.3.13](https://gitlab.gnome.org/GNOME/gimp/-/raw/bc502b0a659a4e8dc2ca6c8ab577fc54f6df1c35/data/images/gimp-splash.png)
 
-* [GIMP 2.3.10](https://gitlab.gnome.org/GNOME/gimp/-/commit/8557dee2a5092ed6a0f588b656ceacc9b7c9ccd1)
+* [GIMP 2.3.10 to 2.3.12](https://gitlab.gnome.org/GNOME/gimp/-/commit/8557dee2a5092ed6a0f588b656ceacc9b7c9ccd1)
   by Philip Lafleur.
 
   ![Splash for GIMP 2.3.13](https://gitlab.gnome.org/GNOME/gimp/-/raw/8557dee2a5092ed6a0f588b656ceacc9b7c9ccd1/data/images/gimp-splash.png)
@@ -212,12 +260,12 @@ The following splash images didn't make a release:
 
   ![Splash for GIMP 2.3.13](https://gitlab.gnome.org/GNOME/gimp/-/raw/f51155e0a25a4ec356eabe0cd0818f0d6f5b62fe/data/images/gimp-splash.png)
 
-* [GIMP 2.3.3](https://gitlab.gnome.org/GNOME/gimp/-/commit/6151bd2d48ab65439ffdcddc8acdabd054c4a797)
+* [GIMP 2.3.3 to 2.3.5](https://gitlab.gnome.org/GNOME/gimp/-/commit/6151bd2d48ab65439ffdcddc8acdabd054c4a797)
   by antenne: "What The GIMP"
 
   ![Splash for GIMP 2.3.13](https://gitlab.gnome.org/GNOME/gimp/-/raw/6151bd2d48ab65439ffdcddc8acdabd054c4a797/data/images/gimp-splash.png)
 
-* [GIMP 2.3.1](https://gitlab.gnome.org/GNOME/gimp/-/commit/811427255121873a856172d4ae578f02d4e8d231)
+* [GIMP 2.3.1 and 2.3.2](https://gitlab.gnome.org/GNOME/gimp/-/commit/811427255121873a856172d4ae578f02d4e8d231)
   by Raphael Quinet, a twist on the original PixelPusher concept by jimmac:
   "PixelDumper"
 
@@ -258,7 +306,7 @@ The following splash image didn't make a release:
 
   ![Splash for GIMP 2.2-pre2](https://gitlab.gnome.org/GNOME/gimp/-/raw/dc9caf5ce7c22e85dda4725aba1bbf86993ef410/data/images/gimp-splash.png)
 
-* [GIMP 2.1.0](https://gitlab.gnome.org/GNOME/gimp/-/commit/95ca9b90f01470caa45a58d9e953b5e21057a65d)
+* [GIMP 2.1.0 to 2.1.5](https://gitlab.gnome.org/GNOME/gimp/-/commit/95ca9b90f01470caa45a58d9e953b5e21057a65d)
   by Jakub Steiner.
 
   ![Splash for GIMP 2.2-pre2](https://gitlab.gnome.org/GNOME/gimp/-/raw/95ca9b90f01470caa45a58d9e953b5e21057a65d/data/images/gimp_splash.png)
@@ -270,17 +318,17 @@ The following splash image didn't make a release:
 
   ![Splash for GIMP 2.2-pre2](https://gitlab.gnome.org/GNOME/gimp/-/raw/fcf5d8484f895b7e9d2eb87a11131ae189430015/data/images/gimp_splash.png)
 
-* [GIMP 1.3.22](https://gitlab.gnome.org/GNOME/gimp/-/commit/30a56dfd57d0af323ad5d626811eeb78796282a9)
+* [GIMP 1.3.21 to 1.3.23](https://gitlab.gnome.org/GNOME/gimp/-/commit/30a56dfd57d0af323ad5d626811eeb78796282a9)
   by Jakub Steiner: "a tiny tribute to the path tool"
 
   ![Splash image for GIMP 1.3.22](https://gitlab.gnome.org/GNOME/gimp/-/raw/c3ffc1f25d3d9f9daa80ad2dd02ddf85fcf9b565/data/images/gimp_splash.png)
 
-* [GIMP 1.3.19](https://gitlab.gnome.org/GNOME/gimp/-/commit/be0998d95e211fa15703823b36cf8fc6844c10b1)
+* [GIMP 1.3.19 and 1.3.20](https://gitlab.gnome.org/GNOME/gimp/-/commit/be0998d95e211fa15703823b36cf8fc6844c10b1)
   by Jakub Steiner: "post-cccamp splash"
 
   ![Splash for GIMP 2.2-pre2](https://gitlab.gnome.org/GNOME/gimp/-/raw/be0998d95e211fa15703823b36cf8fc6844c10b1/data/images/gimp_splash.png)
 
-* [GIMP 1.3.17](https://gitlab.gnome.org/GNOME/gimp/-/commit/a1d33d15c486a581580fc0aa2741c48565b7f03e)
+* [GIMP 1.3.17 and 1.3.18](https://gitlab.gnome.org/GNOME/gimp/-/commit/a1d33d15c486a581580fc0aa2741c48565b7f03e)
   by Jakub Steiner: "special Gimpcon splash"
 
   ![Splash for GIMP 2.2-pre2](https://gitlab.gnome.org/GNOME/gimp/-/raw/a1d33d15c486a581580fc0aa2741c48565b7f03e/data/images/gimp_splash.png)
@@ -290,7 +338,7 @@ The following splash image didn't make a release:
 
   ![Splash for GIMP 2.2-pre2](https://gitlab.gnome.org/GNOME/gimp/-/raw/8abc548d4780cb99a527a3676ac468b8e0668fe2/data/images/gimp_splash.png)
 
-* [GIMP 1.3.14](https://gitlab.gnome.org/GNOME/gimp/-/commit/b8aaa6f33facd90376fc3008472689e50d8805b9)
+* [GIMP 1.3.14 and 1.3.15](https://gitlab.gnome.org/GNOME/gimp/-/commit/b8aaa6f33facd90376fc3008472689e50d8805b9)
   by Jakub Steiner: "lighten up a bit"
 
   ![Splash image for GIMP 1.3.14](https://gitlab.gnome.org/GNOME/gimp/-/raw/1741894e737e246fdf50fa26b2ffd184b86fb3a9/data/images/gimp_splash.png)
@@ -310,22 +358,22 @@ The following splash image didn't make a release:
 
   ![Splash image for GIMP 1.3.14](https://gitlab.gnome.org/GNOME/gimp/-/raw/2b01d3979c75698eb1cd41ce0e1d81cdbf939a5d/data/images/gimp_splash.png)
 
-* [GIMP 1.3.9](https://gitlab.gnome.org/GNOME/gimp/-/commit/e5595d6153852b79612d4a3fd1fa44b2121b14fa):
+* [GIMP 1.3.9 and 1.3.10](https://gitlab.gnome.org/GNOME/gimp/-/commit/e5595d6153852b79612d4a3fd1fa44b2121b14fa):
   "new blinkensplash from Paris"
 
   ![Splash image for GIMP 1.3.14](https://gitlab.gnome.org/GNOME/gimp/-/raw/e5595d6153852b79612d4a3fd1fa44b2121b14fa/data/images/gimp_splash.png)
 
-* [GIMP 1.3.4](https://gitlab.gnome.org/GNOME/gimp/-/commit/f738b2ce5745d4501c1f411ed750be5837fdbb34):
+* [GIMP 1.3.4 to 1.3.8](https://gitlab.gnome.org/GNOME/gimp/-/commit/f738b2ce5745d4501c1f411ed750be5837fdbb34):
   "blinkenwilber as seen from the berlinerfernsehturm.de"
 
   ![Splash image for GIMP 1.3.4](https://gitlab.gnome.org/GNOME/gimp/-/raw/cf6564838acfa7d7e5fa69838eb73a6b54fa2ad7/data/images/gimp_splash.png)
 
-* [GIMP 1.3.2](https://gitlab.gnome.org/GNOME/gimp/-/commit/24c5a6f2ca5097a3a829df28e7dad9a1a4654c0a)
+* [GIMP 1.3.2 and 1.3.3](https://gitlab.gnome.org/GNOME/gimp/-/commit/24c5a6f2ca5097a3a829df28e7dad9a1a4654c0a)
   by Simon Budig and Sven Neumann: "blinking splash" (our first animated splash)
 
   ![Splash image for GIMP 1.3.2](https://gitlab.gnome.org/GNOME/gimp/-/raw/24c5a6f2ca5097a3a829df28e7dad9a1a4654c0a/data/images/gimp_splash.gif)
 
-* [GIMP 1.3.0](https://gitlab.gnome.org/GNOME/gimp/-/commit/a78110b873949b2d04b7afd170c2dfe9e9d88483)
+* [GIMP 1.3.0 and 1.3.1](https://gitlab.gnome.org/GNOME/gimp/-/commit/a78110b873949b2d04b7afd170c2dfe9e9d88483)
   by Simon Budig.
 
   ![Splash image for GIMP 1.3.0](https://gitlab.gnome.org/GNOME/gimp/-/raw/757017a8e2164f6251cac8bdaf3edca4d6ed8148/data/images/gimp_splash.png)

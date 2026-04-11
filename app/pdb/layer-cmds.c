@@ -36,9 +36,7 @@
 
 #include "core/gimp.h"
 #include "core/gimpcontainer.h"
-#include "core/gimpdrawable-filters.h"
 #include "core/gimpdrawable.h"
-#include "core/gimpdrawablefilter.h"
 #include "core/gimpimage-color-profile.h"
 #include "core/gimpimage-undo.h"
 #include "core/gimpimage.h"
@@ -239,43 +237,7 @@ layer_new_from_drawable_invoker (GimpProcedure         *procedure,
 
       if (new_item)
         {
-          GimpContainer *filters;
-
           layer_copy = GIMP_LAYER (new_item);
-
-          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (drawable));
-          if (gimp_container_get_n_children (filters) > 0)
-            {
-              GList        *filter_list;
-              GimpDrawable *drawable_copy;
-
-              drawable_copy = GIMP_DRAWABLE (layer_copy);
-
-              for (filter_list = GIMP_LIST (filters)->queue->tail;
-                   filter_list;
-                   filter_list = g_list_previous (filter_list))
-                {
-                  if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
-                    {
-                      GimpDrawableFilter *old_filter = filter_list->data;
-                      GimpDrawableFilter *filter;
-
-                      filter =
-                        gimp_drawable_filter_duplicate (drawable_copy,
-                                                        old_filter);
-
-                      if (filter != NULL)
-                        {
-                          gimp_drawable_filter_apply (filter, NULL);
-                          gimp_drawable_filter_commit (filter, TRUE, NULL,
-                                                       FALSE);
-
-                          gimp_drawable_filter_layer_mask_freeze (filter);
-                          g_object_unref (filter);
-                        }
-                    }
-                }
-            }
         }
       else
         {
@@ -311,48 +273,8 @@ layer_copy_invoker (GimpProcedure         *procedure,
     {
       layer_copy = GIMP_LAYER (gimp_item_duplicate (GIMP_ITEM (layer),
                                                     G_TYPE_FROM_INSTANCE (layer)));
-      if (layer_copy)
-        {
-          GimpContainer *filters;
-
-          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (layer));
-          if (gimp_container_get_n_children (filters) > 0)
-            {
-              GList        *filter_list;
-              GimpDrawable *drawable_copy;
-
-              drawable_copy = GIMP_DRAWABLE (layer_copy);
-
-              for (filter_list = GIMP_LIST (filters)->queue->tail;
-                   filter_list;
-                   filter_list = g_list_previous (filter_list))
-                {
-                  if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
-                    {
-                      GimpDrawableFilter *old_filter = filter_list->data;
-                      GimpDrawableFilter *filter;
-
-                      filter =
-                        gimp_drawable_filter_duplicate (drawable_copy,
-                                                        old_filter);
-
-                      if (filter != NULL)
-                        {
-                          gimp_drawable_filter_apply (filter, NULL);
-                          gimp_drawable_filter_commit (filter, TRUE, NULL,
-                                                       FALSE);
-
-                          gimp_drawable_filter_layer_mask_freeze (filter);
-                          g_object_unref (filter);
-                        }
-                    }
-                }
-            }
-        }
-      else
-        {
-          success = FALSE;
-        }
+      if (! layer_copy)
+        success = FALSE;
     }
 
   return_vals = gimp_procedure_get_return_values (procedure, success,
@@ -700,7 +622,7 @@ layer_add_mask_invoker (GimpProcedure         *procedure,
       if (gimp_pdb_item_is_floating (GIMP_ITEM (mask),
                                      gimp_item_get_image (GIMP_ITEM (layer)),
                                      error))
-        success = (gimp_layer_add_mask (layer, mask, TRUE, error) == mask);
+        success = (gimp_layer_add_mask (layer, mask, TRUE, TRUE, error) == mask);
       else
         success = FALSE;
     }
@@ -1303,7 +1225,7 @@ register_layer_procs (GimpPDB *pdb)
                                   "\n"
                                   "The new layer still needs to be added to the image as this is not automatic. Add the new layer with the [method@Image.insert_layer] method.\n"
                                   "\n"
-                                  "Other attributes such as layer mask modes and offsets should be set with explicit procedure calls.",
+                                  "Other attributes such as layer mask and offsets should be set with explicit procedure calls.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Spencer Kimball & Peter Mattis",
@@ -1371,7 +1293,11 @@ register_layer_procs (GimpPDB *pdb)
                                "gimp-layer-new-from-visible");
   gimp_procedure_set_static_help (procedure,
                                   "Create a new layer from what is visible in an image.",
-                                  "This procedure creates a new layer from what is visible in the given image. The new layer still needs to be added to the destination image, as this is not automatic. Add the new layer with the 'gimp-image-insert-layer' command. Other attributes such as layer mask modes, and offsets should be set with explicit procedure calls.",
+                                  "This procedure creates a new layer from what is visible in the given image.\n"
+                                  "\n"
+                                  "The new layer still needs to be added to the image as this is not automatic. Add the new layer with the [method@Image.insert_layer] method.\n"
+                                  "\n"
+                                  "Other attributes such as layer mask and offsets should be set with explicit procedure calls.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Sven Neumann <sven@gimp.org>",
@@ -1413,7 +1339,11 @@ register_layer_procs (GimpPDB *pdb)
                                "gimp-layer-new-from-drawable");
   gimp_procedure_set_static_help (procedure,
                                   "Create a new layer by copying an existing drawable.",
-                                  "This procedure creates a new layer as a copy of the specified drawable. The new layer still needs to be added to the image, as this is not automatic. Add the new layer with the 'gimp-image-insert-layer' command. Other attributes such as layer mask modes, and offsets should be set with explicit procedure calls.",
+                                  "This procedure creates a new layer as a copy of the specified drawable.\n"
+                                  "\n"
+                                  "The new layer still needs to be added to the image as this is not automatic. Add the new layer with the [method@Image.insert_layer] method.\n"
+                                  "\n"
+                                  "Other attributes such as layer mask and offsets should be set with explicit procedure calls.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Spencer Kimball & Peter Mattis",
@@ -1448,7 +1378,11 @@ register_layer_procs (GimpPDB *pdb)
                                "gimp-layer-copy");
   gimp_procedure_set_static_help (procedure,
                                   "Copy a layer.",
-                                  "This procedure copies the specified layer and returns the copy. The newly copied layer is for use within the original layer's image. It should not be subsequently added to any other image.",
+                                  "This procedure copies the specified layer and returns the copy. The newly copied layer is for use within the original layer's image. It should not be subsequently added to any other image.\n"
+                                  "\n"
+                                  "The new layer still needs to be added to the image as this is not automatic. Add the new layer with the [method@Image.insert_layer] method.\n"
+                                  "\n"
+                                  "Other attributes such as layer mask and offsets should be set with explicit procedure calls.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Spencer Kimball & Peter Mattis",
@@ -1671,6 +1605,7 @@ register_layer_procs (GimpPDB *pdb)
                                   "Create a layer mask for the specified layer.",
                                   "This procedure creates a layer mask for the specified layer.\n"
                                   "Layer masks serve as an additional alpha channel for a layer. Different types of masks are allowed for initialisation:\n"
+                                  "\n"
                                   "- white mask (leaves the layer fully visible);\n"
                                   "- black mask (gives the layer complete transparency);\n"
                                   "- the layer's alpha channel (either a copy, or a transfer, which leaves the layer fully visible, but which may be more useful than a white mask);\n"

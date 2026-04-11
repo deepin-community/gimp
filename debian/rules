@@ -11,14 +11,6 @@ else
 	BUGTRACKER = https://www.debian.org/Bugs/Reporting
 endif
 
-built_binaries := $(shell dh_listpackages)
-
-ifneq ($(filter %-doc,$(built_binaries)),)
-	BUILD_DOCS := -Dgi-docgen=enabled
-else
-	BUILD_DOCS := -Dgi-docgen=disabled
-endif
-
 # Check Filters > Development > Plug-in Examples
 # If this is enabled, a JavaScript version is installed but there is no menu button for it
 # Therefore, we disable it
@@ -36,6 +28,10 @@ else
 	LUA = false
 endif
 
+ifneq ($(DEB_HOST_ARCH_OS), linux)
+	NON_LINUX = -Dalsa=disabled -Dgudev=disabled
+endif
+
 %:
 	dh $@
 
@@ -43,15 +39,18 @@ override_dh_auto_configure:
 	dh_auto_configure -- \
 		-Dlibexecdir=/usr/lib/$(DEB_HOST_MULTIARCH)/gimp \
 		-Dauto_features=enabled \
-		$(BUILD_DOCS) \
-		-Dcheck-update=no \
 		-Dappdata-test=disabled \
-		-Dheadless-tests=disabled \
+		-Dbug-report-url=$(BUGTRACKER) \
+		-Dcheck-update=no \
+		-Dgi-docgen=$(if $(filter %-doc,$(shell dh_listpackages)),enabled,disabled) \
+		-Dheadless-tests=$(if $(filter nocheck,$(DEB_BUILD_OPTIONS)),disabled,enabled) \
+		-Dilbm=disabled \
 		-Djavascript=$(JS) \
 		-Dlua=$(LUA) \
-		-Dmng=disabled \
-		-Dilbm=disabled \
-		-Dbug-report-url=$(BUGTRACKER)
+		$(NON_LINUX)
+
+override_dh_auto_build:
+	localehelper LANG=en_US.UTF-8 dh_auto_build
 
 override_dh_makeshlibs:
 	dh_makeshlibs -X/usr/lib/$(DEB_HOST_MULTIARCH)/gimp/3.0/modules

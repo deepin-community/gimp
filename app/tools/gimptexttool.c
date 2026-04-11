@@ -45,6 +45,7 @@
 #include "core/gimpimage-undo-push.h"
 #include "core/gimplayer-floating-selection.h"
 #include "core/gimplist.h"
+#include "core/gimprasterizable.h"
 #include "core/gimptoolinfo.h"
 #include "core/gimpundostack.h"
 
@@ -56,15 +57,16 @@
 #include "text/gimptextlayout.h"
 #include "text/gimptextundo.h"
 
-#include "vectors/gimpstroke.h"
-#include "vectors/gimppath.h"
-#include "vectors/gimppath-warp.h"
+#include "path/gimpstroke.h"
+#include "path/gimppath.h"
+#include "path/gimppath-warp.h"
 
 #include "widgets/gimpdialogfactory.h"
 #include "widgets/gimpdockcontainer.h"
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimpmenufactory.h"
 #include "widgets/gimptextbuffer.h"
+#include "widgets/gimptextstyleeditor.h"
 #include "widgets/gimpuimanager.h"
 #include "widgets/gimpviewabledialog.h"
 
@@ -242,6 +244,7 @@ gimp_text_tool_class_init (GimpTextToolClass *klass)
   tool_class->oper_update      = gimp_text_tool_oper_update;
   tool_class->cursor_update    = gimp_text_tool_cursor_update;
   tool_class->get_popup        = gimp_text_tool_get_popup;
+  tool_class->is_destructive   = FALSE;
 
   draw_tool_class->draw        = gimp_text_tool_draw;
 }
@@ -328,7 +331,7 @@ gimp_text_tool_remove_empty_text_layer (GimpTextTool *text_tool)
 {
   GimpTextLayer *text_layer = text_tool->layer;
 
-  if (text_layer && text_layer->auto_rename)
+  if (text_layer && gimp_rasterizable_get_auto_rename (GIMP_RASTERIZABLE (text_layer)))
     {
       GimpText *text = gimp_text_layer_get_text (text_layer);
 
@@ -548,6 +551,13 @@ gimp_text_tool_button_press (GimpTool            *tool,
 
               if (text_tool->text && text_tool->text != text)
                 {
+                  if (text_tool->style_overlay)
+                    {
+                      gtk_widget_destroy (text_tool->style_overlay);
+                      text_tool->style_overlay = NULL;
+                      text_tool->style_editor  = NULL;
+                    }
+
                   gimp_text_tool_editor_start (text_tool);
                 }
             }
@@ -1349,7 +1359,7 @@ gimp_text_tool_layer_notify (GimpTextLayer    *layer,
 
   if (! strcmp (pspec->name, "modified"))
     {
-      if (layer->modified)
+      if (gimp_rasterizable_is_rasterized (GIMP_RASTERIZABLE (layer)))
         gimp_tool_control (tool, GIMP_TOOL_ACTION_HALT, tool->display);
     }
   else if (! strcmp (pspec->name, "text"))
@@ -1772,15 +1782,15 @@ gimp_text_tool_confirm_dialog (GimpTextTool *text_tool)
 
                                      _("Create _New Layer"), RESPONSE_NEW,
                                      _("_Cancel"),           GTK_RESPONSE_CANCEL,
-                                     _("_Edit"),             GTK_RESPONSE_ACCEPT,
+                                     _("_Edit Anyway"),      GTK_RESPONSE_ACCEPT,
 
                                      NULL);
 
   gimp_dialog_set_alternative_button_order (GTK_DIALOG (dialog),
-                                           RESPONSE_NEW,
-                                           GTK_RESPONSE_ACCEPT,
-                                           GTK_RESPONSE_CANCEL,
-                                           -1);
+                                            RESPONSE_NEW,
+                                            GTK_RESPONSE_ACCEPT,
+                                            GTK_RESPONSE_CANCEL,
+                                            -1);
 
   gtk_window_set_resizable (GTK_WINDOW (dialog), FALSE);
 
@@ -1794,13 +1804,8 @@ gimp_text_tool_confirm_dialog (GimpTextTool *text_tool)
                       vbox, FALSE, FALSE, 0);
   gtk_widget_show (vbox);
 
-  label = gtk_label_new (_("The layer you selected is a text layer but "
-                           "it has been modified using other tools. "
-                           "Editing the layer with the text tool will "
-                           "discard these modifications."
-                           "\n\n"
-                           "You can edit the layer or create a new "
-                           "text layer from its text attributes."));
+  label = gtk_label_new (_("The text layer you picked was rasterized. "
+                           "Editing its text will discard any modifications."));
   gtk_label_set_xalign (GTK_LABEL (label), 0.0);
   gtk_label_set_line_wrap (GTK_LABEL (label), TRUE);
   gtk_box_pack_start (GTK_BOX (vbox), label, FALSE, FALSE, 0);
@@ -1913,7 +1918,7 @@ gimp_text_tool_set_drawable (GimpTextTool *text_tool,
       if (layer == text_tool->layer && layer->text == text_tool->text)
         return TRUE;
 
-      if (layer->modified)
+      if (gimp_rasterizable_is_rasterized (GIMP_RASTERIZABLE (layer)))
         {
           if (confirm)
             {
@@ -2113,12 +2118,10 @@ gimp_text_tool_apply (GimpTextTool *text_tool,
 
   if (push_undo)
     {
-      if (layer->modified)
+      if (gimp_rasterizable_is_rasterized (GIMP_RASTERIZABLE (layer)))
         {
           undo_group = TRUE;
           gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_TEXT, NULL);
-
-          gimp_image_undo_push_text_layer_modified (image, NULL, layer);
 
           /*  see comment in gimp_text_layer_set()  */
           gimp_image_undo_push_drawable_mod (image, NULL,
@@ -2133,12 +2136,10 @@ gimp_text_tool_apply (GimpTextTool *text_tool,
   g_list_free (text_tool->pending);
   text_tool->pending = NULL;
 
-  if (push_undo)
+  if (undo_group)
     {
-      g_object_set (layer, "modified", FALSE, NULL);
-
-      if (undo_group)
-        gimp_image_undo_group_end (image);
+      gimp_rasterizable_restore (GIMP_RASTERIZABLE (layer));
+      gimp_image_undo_group_end (image);
     }
 
   gimp_text_tool_frame_item (text_tool);
@@ -2310,7 +2311,78 @@ gimp_text_tool_paste_clipboard (GimpTextTool *text_tool)
 }
 
 void
-gimp_text_tool_create_vectors (GimpTextTool *text_tool)
+gimp_text_tool_toggle_tag (GimpTextTool *text_tool,
+                           GtkTextTag   *tag)
+{
+  GtkTextBuffer *buffer;
+
+  g_return_if_fail (GIMP_IS_TEXT_TOOL (text_tool));
+  g_return_if_fail (GTK_IS_TEXT_BUFFER (text_tool->buffer));
+
+  buffer = GTK_TEXT_BUFFER (text_tool->buffer);
+
+  if (gtk_text_buffer_get_has_selection (buffer))
+    {
+      GtkTextIter start;
+      GtkTextIter end;
+      GtkTextIter iter;
+      gboolean    is_tag_active = FALSE;
+
+      gtk_text_buffer_get_selection_bounds (buffer, &start, &end);
+
+      iter = start;
+      while (! gtk_text_iter_equal (&iter, &end))
+        {
+          if (gtk_text_iter_has_tag (&iter, tag))
+            {
+              is_tag_active = TRUE;
+              break;
+            }
+          gtk_text_iter_forward_char (&iter);
+        }
+
+      gtk_text_buffer_begin_user_action (buffer);
+
+      if (is_tag_active)
+        gtk_text_buffer_remove_tag (buffer, tag, &start, &end);
+      else
+        gtk_text_buffer_apply_tag (buffer, tag, &start, &end);
+
+      gtk_text_buffer_end_user_action (buffer);
+    }
+}
+
+void
+gimp_text_tool_paste_clipboard_unformatted (GimpTextTool *text_tool)
+{
+  GimpDisplayShell *shell;
+  GtkClipboard     *clipboard;
+  gchar            *unformatted_text;
+
+  g_return_if_fail (GIMP_IS_TEXT_TOOL (text_tool));
+
+  shell = gimp_display_get_shell (GIMP_TOOL (text_tool)->display);
+
+  clipboard = gtk_widget_get_clipboard (GTK_WIDGET (shell),
+                                        GDK_SELECTION_CLIPBOARD);
+
+  unformatted_text = gtk_clipboard_wait_for_text (clipboard);
+
+  if (unformatted_text)
+    {
+      /* First delete text in the current selection (possibly empty),
+       * in order to allow overwriting. */
+      gtk_text_buffer_delete_selection (GTK_TEXT_BUFFER (text_tool->buffer),
+                                        TRUE, TRUE);
+
+      gimp_text_buffer_insert (text_tool->buffer, unformatted_text);
+    }
+
+  g_free (unformatted_text);
+}
+
+void
+gimp_text_tool_create_path (GimpTextTool *text_tool)
 {
   GimpPath *path;
 
@@ -2336,11 +2408,11 @@ gimp_text_tool_create_vectors (GimpTextTool *text_tool)
 }
 
 gboolean
-gimp_text_tool_create_vectors_warped (GimpTextTool  *text_tool,
-                                      GError       **error)
+gimp_text_tool_create_path_warped (GimpTextTool  *text_tool,
+                                   GError       **error)
 {
-  GList             *vectors0;
-  GimpPath          *vectors;
+  GList             *paths0;
+  GimpPath          *path;
   gdouble            box_width;
   gdouble            box_height;
   GimpTextDirection  dir;
@@ -2365,15 +2437,15 @@ gimp_text_tool_create_vectors_warped (GimpTextTool  *text_tool,
   box_width  = gimp_item_get_width  (GIMP_ITEM (text_tool->layer));
   box_height = gimp_item_get_height (GIMP_ITEM (text_tool->layer));
 
-  vectors0 = gimp_image_get_selected_paths (text_tool->image);
-  if (g_list_length (vectors0) != 1)
+  paths0 = gimp_image_get_selected_paths (text_tool->image);
+  if (g_list_length (paths0) != 1)
     {
       g_set_error_literal (error, GIMP_ERROR, GIMP_FAILED,
                            _("Exactly one path must be selected."));
       return FALSE;
     }
 
-  vectors = gimp_text_path_new (text_tool->image, text_tool->text);
+  path = gimp_text_path_new (text_tool->image, text_tool->text);
 
   offset = 0;
   dir = gimp_text_tool_get_direction (text_tool);
@@ -2390,7 +2462,7 @@ gimp_text_tool_create_vectors_warped (GimpTextTool  *text_tool,
       {
         GimpStroke *stroke = NULL;
 
-        while ((stroke = gimp_path_stroke_get_next (vectors, stroke)))
+        while ((stroke = gimp_path_stroke_get_next (path, stroke)))
           {
             gimp_stroke_rotate (stroke, 0, 0, 270);
             gimp_stroke_translate (stroke, 0, box_width);
@@ -2400,11 +2472,11 @@ gimp_text_tool_create_vectors_warped (GimpTextTool  *text_tool,
       break;
     }
 
-  gimp_path_warp_path (vectors0->data, vectors, offset);
+  gimp_path_warp_path (paths0->data, path, offset);
 
-  gimp_item_set_visible (GIMP_ITEM (vectors), TRUE, FALSE);
+  gimp_item_set_visible (GIMP_ITEM (path), TRUE, FALSE);
 
-  gimp_image_add_path (text_tool->image, vectors,
+  gimp_image_add_path (text_tool->image, path,
                        GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
 
   gimp_image_flush (text_tool->image);
@@ -2417,4 +2489,16 @@ gimp_text_tool_get_direction  (GimpTextTool *text_tool)
 {
   GimpTextOptions *options = GIMP_TEXT_TOOL_GET_OPTIONS (text_tool);
   return options->base_dir;
+}
+
+void
+gimp_text_tool_restore_on_canvas_editor_position (GimpTextTool *text_tool)
+{
+  GimpTextStyleEditor *editor = GIMP_TEXT_STYLE_EDITOR (text_tool->style_editor);
+
+  if (text_tool->layer)
+    gimp_text_layer_set_style_overlay_position (text_tool->layer, FALSE, 0, 0);
+
+  gimp_text_tool_editor_position (text_tool);
+  gimp_text_style_show_restore_position_button (editor, FALSE);
 }

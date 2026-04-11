@@ -1,17 +1,17 @@
 --------------------------------------
-Installation instructions for GIMP 3.0
+Installation instructions for GIMP 3.2
 --------------------------------------
 
 There are some basic steps to building and installing GIMP.
 
-GIMP 3.0 replaces earlier GIMP 2.10.x versions. It is advised to
-uninstall them before installing GIMP 3.0. Since libgimp* libraries
-and data are all versioned anyway, it is possible to keep your older
-GIMP 2.x installation in parallel to GIMP 3.0 on a same prefix.
+GIMP 3.2 replaces earlier GIMP versions. It is advised to uninstall
+them before installing GIMP 3.2. Since libgimp* libraries and data
+are all versioned anyway, it is possible to keep your older GIMP 2.x
+installation in parallel to GIMP 3.2 on a same prefix.
 
-GIMP 3.0 is not backward compatible with GIMP 2.10 and earlier
-versions. Plug-ins and scripts written for GIMP 2.10, 2.8, 2.6 or
-earlier GIMP 2.x versions will not work because the API changed.
+GIMP 3.2 is not backward compatible with GIMP 2 and earlier versions.
+Plug-ins and scripts written for GIMP 2.10, 2.8, 2.6 or earlier
+versions will not work because the API changed in GIMP 3.0.
 
 The most important part is to make sure the requirements for a build
 are fulfilled. We depend on a number of tools and libraries which are
@@ -46,9 +46,8 @@ help in that regard:
   2. You need gettext version 0.19.8 or newer. Older versions did not have support yet
      for certain file formats.
 
-  3. You need to have GEGL version 0.4.62 or newer and babl version
-     0.1.114 or newer. You can get them from https://gegl.org/ or clone
-     them from the GNOME git repository:
+  3. You need to have GEGL version 0.4.66 or newer and babl version 0.1.118
+     or newer. You can get them from https://gegl.org/ or clone them from the GNOME git repository:
 
        https://gitlab.gnome.org/GNOME/babl.git
        https://gitlab.gnome.org/GNOME/gegl.git
@@ -102,7 +101,8 @@ help in that regard:
   7. The file-compressor plug-in requires zlib, libbzip2, and liblzma to
      be installed. All these libraries are required dependencies.
 
-  8. For metadata access GIMP requires the gexiv2 0.14.0 or newer library.
+  8. For metadata access, GIMP requires GExiv2 0.14.0 or newer, but
+     below 0.15.0 (as the API changed).
      It is hosted at: https://gitlab.gnome.org/GNOME/gexiv2/
 
   9. libpng, libjpeg, libtiff, librsvg and lcms are hard dependencies
@@ -131,7 +131,7 @@ help in that regard:
      first-class file format, yet explaining how you could ignore it if
      you really wanted or needed to.
 
- 10. For MyPaint brushes, brushlib (libmypaint) 1.3.0 is used.
+ 10. For MyPaint brushes, brushlib (libmypaint) 1.5.0 is used.
      The libmypaint repository is hosted at:
 
         https://github.com/mypaint/libmypaint
@@ -146,18 +146,11 @@ help in that regard:
      incompatible with the version 2 (which is still experimental anyway
      and has no stable release at time of writing).
 
- 11. We also need the mypaint-brushes data package:
+ 11. We also need the mypaint-brushes v2 data package:
 
         https://github.com/mypaint/mypaint-brushes
 
-     If installing from repository, install from branch "v1.3.x" or the
-     last tag "v1.y.z" (e.g. "v1.3.1" at time of writing).
-     In particular do NOT install from `master` branch which installs
-     brushes incompatible with GIMP (the `master` branch and v2 brushes
-     are targeted to software using recent libmypaint which GIMP wasn't
-     ported to yet).
-
-     Also this is a data packages and therefore it will install the
+     Note that this is a data packages and therefore it will install the
      pkg-config file inside `$PREFIX/share/pkgconfig/`. If you install
      mypaint-brushes from repository in a non-standard prefix, you will
      have to make sure your $PKG_CONFIG_PATH environment variable also
@@ -207,7 +200,7 @@ help in that regard:
      * HEIC: e.g. libde265 and libx265 support (for
              respectively decoding and encoding of HEVC).
      * AVIF: e.g. libaom decoder and encoder (for AV1 encoding and
-             decoding), prefered over rav1e.
+             decoding), preferred over rav1e.
      * HEJ2: OpenJPEG (for JPEG2000 inside HEIF).
 
      If you don't compile libheif with the correct flags (see libheif
@@ -227,32 +220,48 @@ help in that regard:
 
         https://github.com/jrfonseca/drmingw
 
- 17. Optional step if compiling GIMP from git (unneeded from tarball): you need
+ 17. When optional language selection is configured in (i.e. iso-codes
+     is found), GIMP will use language data not only at runtime, but
+     will also use this package to self-localize the list of supported
+     languages during build-time. It means that the build system must be
+     set up for localization. In particular the build system will either
+     need to be set to any locale other than C or POSIX (these 2 locales
+     block all localization attempts), or you will need to have at least
+     the en_US.UTF-8 locale installed.
+     The latter can be done with the following commands with root access:
+
+         echo 'en_US.UTF-8 UTF-8' >> /etc/locale.gen
+         locale-gen
+
+     If this locale is installed, our build script will try and set it
+     as temporary locale when current locale is C or POSIX.
+
+ 18. Optional step if compiling GIMP from git (unneeded from tarball): you need
      to initialize submodules with command `git submodule update --init`.
 
- 18. Configure GIMP by running `meson _build`. You may want to pass some
+ 19. Configure GIMP by running `meson _build`. You may want to pass some
      options to it, see below.
 
- 19. Build GIMP by running `ninja -C _build'.
+ 20. Build GIMP by running `ninja -C _build'.
 
- 20. Install GIMP by running `ninja -C _build install'. In order to
+ 21. Install GIMP by running `ninja -C _build install'. In order to
      avoid clashes with other versions of GIMP, we install a binary
-     called gimp-3.0. By default there's also a link created so that
-     you can type 'gimp' to start gimp-3.0.
+     called gimp-3.2. By default there's also a link created so that
+     you can type 'gimp' to start gimp-3.2.
 
- 21. Summary of required packages and what version you need:
+ 22. Summary of required packages and what version you need:
 
      Package Name         Version
 
-     appstream-glib       0.7.7
+     appstream            0.16.1
      ATK                  2.4.0
-     babl                 0.1.114
+     babl                 0.1.118
      cairo                1.14.0
      Fontconfig           2.12.4
      freetype2            2.1.7
      GDK-PixBuf           2.30.8
-     GEGL                 0.4.62
-     gexiv2               0.14.0
+     GEGL                 0.4.66
+     gexiv2               0.14.0 (< 0.15.0)
      GIO
      GLib                 2.70.0
      glib-networking
@@ -264,27 +273,31 @@ help in that regard:
      libbzip2
      libjpeg
      liblzma              5.0.0
-     libmypaint           1.3.0
+     libmypaint           1.5.0
      libpng               1.6.25
      libpoppler-glib      0.69.0
      librsvg              2.40.6
      libtiff              4.0.0
      Little CMS           2.8
-     mypaint-brushes-1.0
+     mypaint-brushes-2.0
      pangocairo           1.50.0
      poppler-data         0.4.9
-     PyGObject
+     Pycairo
+     PyGObject            >=3.0
      Python               >=3.6
      zlib
 
- 22. Summary of optional packages:
+ 23. Summary of optional packages:
 
      Package Name        Version        Feature
 
+     bash-completion     -              Bash Completion script
+     bison               -              Image Map plug-in
      cairo-pdf           1.12.2         PDF export
      cfitsio             -              FITS
      iso-codes           -              Language selection
      ExcHndl             -              Crash logs on Windows with Dr. MinGW
+     flex                -              Image Map plug-in
      gs                  -              ghostscript
      libaa               -              ASCII art
      libheif             1.15.1         HEIF (HEIC, AVIF)
@@ -301,7 +314,7 @@ help in that regard:
      webkit              2.20.3         Help browser & webpage
      vala                -              Vala plug-ins
 
- 23. Summary of optional runtime dependencies:
+ 24. Summary of optional runtime dependencies:
 
      darktable >= 1.7, with lua support enabled for raw loading
      RawTherapee >= 5.2 for raw loading
@@ -313,7 +326,7 @@ help in that regard:
      dot for "Show Image Graph" (unstable branches)
      xdg-desktop-portal implemented for your desktop for various D-Bus API (screenshot, color-picking…)
 
- 24. Summary of experimental or unmaintained dependencies:
+ 25. Summary of experimental or unmaintained dependencies:
 
      Lua 5.1 (or LuaJIT) and LGI: Lua plug-in example is disabled by
        default because of stability issues with the Lua binding.
@@ -329,14 +342,14 @@ packages are included below. Here is an illustration of commands that
 might be used to build and install GIMP. The actual configuration,
 compilation and installation output is not shown.
 
-  % tar xvf gimp-3.0.4.tar.xz   # unpack the sources
-  % cd gimp-3.0.4               # change to the toplevel directory
+  % tar xvf gimp-3.2.2.tar.xz       # unpack the sources
+  % cd gimp-3.2.2                   # change to the toplevel directory
   % meson setup _build              # `configure' step
   % ninja -C _build                 # build GIMP
   % ninja -C _build install         # install GIMP
 
 
-The `configure' step examines your system, and adapts GIMP to run on
+The `setup' step examines your system, and adapts GIMP to run on
 it. The script has many options, some of which are described in the
 generic instructions included at the end of this file. All of the
 options can be listed using the command `meson configure' if you
@@ -357,10 +370,10 @@ These are:
      a convenience for developers.
 
   -Dgimpdir=DIR.  This option changes the default directory GIMP uses to
-     search for its configuration files from $XDG_CONFIG_HOME/GIMP/3.0/
+     search for its configuration files from $XDG_CONFIG_HOME/GIMP/3.2/
      (per XDG Base Directory Specification, $XDG_CONFIG_HOME defaults to
      the directory .config/ in the user's home directory) to
-     $XDG_CONFIG_HOME/DIR/3.0/.
+     $XDG_CONFIG_HOME/DIR/3.2/.
      If DIR is an absolute path, the directory will be changed to DIR.
 
   -Dshmem-type=[none|sysv|posix|win32|auto].  This option allows you to
@@ -408,21 +421,21 @@ These are:
      be searched in your $PATH at runtime.
 
   -Denable-default-bin=false  Use this option if you don't want to make
-     gimp-3.0 the default GIMP installation. Otherwise a link called
-     gimp pointing to the gimp-3.0 executable will be installed.
+     gimp-3.2 the default GIMP installation. Otherwise a link called
+     gimp pointing to the gimp-3.2 executable will be installed.
 
   -Denable-console-bin=false  Use this option if you don't want the
      gimp-console binary to be built in addition to the standard binary.
      gimp-console is useful for command-line batch mode or as a server.
 
   -Djavascript=disabled  If for some reason you don't want to install the
-     JavaScript plug-ins, you can use -Djavascript=false.
+     JavaScript plug-ins, you can use -Djavascript=disabled.
 
   -Dlua=true  Lua binding is experimental because of stability issues.
      You may test the feature by enabling it.
 
-  -Dvala-plugins=disabled  If for some reason you don't want to install the
-     Vala plug-ins, you can use -Dvala-plugins=disabled.
+  -Dvala=disabled  If for some reason you don't want to install the
+     Vala plug-ins, you can use -Dvala=disabled.
 
 
 This list is manually maintained. To get an exhaustive listing of options,
@@ -434,7 +447,9 @@ The `ninja' command builds several things:
  - A bunch of public libraries in the directories starting with 'libgimp'.
  - The plug-in programs in the 'plug-ins' directory.
  - Some modules in the 'modules' subdirectory.
- - The main GIMP program 'gimp-3.0' in `app'.
+ - The main GIMP program 'gimp-3.2' in `app'.
+ - A CLI GIMP program 'gimp-console-3.2' in `app' (unless
+   -Denable-console-bin=false was set).
 
 The `ninja install' command installs the GIMP header files associated
 with the libgimp libraries, the plug-ins, some data files and the GIMP
@@ -451,7 +466,7 @@ will very likely tell you the exact problem.
 A detailed log of the meson output is written to the file meson-logs/meson-log.txt.
 This may help diagnose problems.
 
-The configuration step verify that various tools are installed, such as:
+The configuration step verifies that various tools are installed, such as:
 C and C++ compilers, pkg-config or pkgconf (tools that replaces the old
 foo-config scripts), and more. Make sure these are installed.
 
@@ -493,5 +508,5 @@ reconfiguration:
   % ninja reconfigure
 
 Verify that the optional features you wanted are now shown as `true`,
-otherwise follow similar advices than above to make sure they are
+otherwise follow similar advice as above to make sure they are
 visible to your setup.

@@ -343,6 +343,17 @@ gimp_param_spec_pattern ("$name",
                          $flags)
 CODE
     }
+    elsif ($pdbtype eq 'curve') {
+  $none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+  $default = exists $arg->{default} ? $arg->{default} : NULL;
+  $pspec = <<CODE;
+gimp_param_spec_curve ("$name",
+                       "$nick",
+                       "$blurb",
+                       $none_ok,
+                       $flags)
+CODE
+    }
     elsif ($pdbtype eq 'item') {
 	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
 	$pspec = <<CODE;
@@ -381,6 +392,36 @@ gimp_param_spec_text_layer ("$name",
                             "$blurb",
                             $none_ok,
                             $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'vector_layer') {
+	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+	$pspec = <<CODE;
+gimp_param_spec_vector_layer ("$name",
+                              "$nick",
+                              "$blurb",
+                              $none_ok,
+                              $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'link_layer') {
+	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+	$pspec = <<CODE;
+gimp_param_spec_link_layer ("$name",
+                            "$nick",
+                            "$blurb",
+                            $none_ok,
+                            $flags)
+CODE
+    }
+    elsif ($pdbtype eq 'rasterizable') {
+	$none_ok = exists $arg->{none_ok} ? 'TRUE' : 'FALSE';
+	$pspec = <<CODE;
+gimp_param_spec_rasterizable ("$name",
+                              "$nick",
+                              "$blurb",
+                              $none_ok,
+                              $flags)
 CODE
     }
     elsif ($pdbtype eq 'layer') {
@@ -472,20 +513,22 @@ g_param_spec_uint ("$name",
 CODE
     }
     elsif ($pdbtype eq 'guide') {
+        $min = exists $arg->{none_ok} ? 0 : 1,
 	$pspec = <<CODE;
 g_param_spec_uint ("$name",
                    "$nick",
                    "$blurb",
-                   1, G_MAXUINT32, 1,
+                   $min, G_MAXUINT32, $min,
                    $flags)
 CODE
     }
     elsif ($pdbtype eq 'sample_point') {
+        $min = exists $arg->{none_ok} ? 0 : 1,
 	$pspec = <<CODE;
 g_param_spec_uint ("$name",
                    "$nick",
                    "$blurb",
-                   1, G_MAXUINT32, 1,
+                   $min, G_MAXUINT32, $min,
                    $flags)
 CODE
     }
@@ -903,13 +946,29 @@ sub generate {
 		$help .= "Deprecated: There is no replacement for this procedure.";
 	    }
 	    else {
+                my $replacement = $proc->{deprecated};
+                chomp $replacement;
+                if ($replacement =~ / /) {
+                  # Use the deprecated string as-is.
+                  $replacement =~ s/"/\\"/g;
+                }
+                elsif ($replacement =~ /:/) {
+                  # Replacement is a GEGL operation.
+                  $replacement = "filter \\\"$replacement\\\"";
+                }
+                else {
+                  # Replacement is another function.
+                  $replacement =~ s/-/_/g;
+                  $replacement .= '()';
+                }
+
 		if (!$blurb) {
 		    $blurb = "Deprecated: Use '$proc->{deprecated}' instead.";
 		}
 		if ($help) {
 		    $help .= "\n\n";
 		}
-		$help .= "Deprecated: Use '$proc->{deprecated}' instead.";
+		$help .= "Deprecated: Use $replacement instead.";
 	    }
 	}
 
@@ -948,9 +1007,14 @@ sub generate {
 CODE
 
         if ($proc->{deprecated}) {
+            my $replacement = $proc->{deprecated};
+            chomp $replacement;
+            if ($replacement =~ /"/) {
+              $replacement =~ s/"/\\"/g;
+            }
 	    $out->{register} .= <<CODE;
   gimp_procedure_set_deprecated (procedure,
-                                 "\"$proc->{deprecated}\"");
+                                 "$replacement");
 CODE
 	}
 
@@ -1109,6 +1173,9 @@ GPL
 		elsif (!/libgimp/) {
 		    s/^/~/;
 		}
+		elsif (/libgimp[a-z]/) {
+		    s/^/"/;
+                }
 	    }
 	    $x cmp $y;
 	} keys %{$out->{headers}};
@@ -1135,7 +1202,7 @@ GPL
 
 	    $seen = 0 if !/^</;
 
-	    if (/libgimp/) {
+	    if (/libgimp[a-z]/) {
 		$lib = 1;
 	    }
 	    else {
@@ -1207,10 +1274,9 @@ GPL
 	my $internal = "$builddir/internal-procs.h$FILE_EXT";
 	open IFILE, "> $internal" or die "Can't open $internal: $!\n";
 	print IFILE $gpl;
-	my $guard = "__INTERNAL_PROCS_H__";
 	print IFILE <<HEADER;
-#ifndef $guard
-#define $guard
+#pragma once
+
 
 HEADER
 
@@ -1220,11 +1286,6 @@ HEADER
 	foreach (@group_decls) {
 	    print IFILE "void   $_" . ' ' x ($longest - length $_) . " (GimpPDB *pdb);\n";
 	}
-
-	print IFILE <<HEADER;
-
-#endif /* $guard */
-HEADER
 	close IFILE;
 	&write_file($internal, $destdir);
 

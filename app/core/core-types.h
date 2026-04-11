@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __CORE_TYPES_H__
-#define __CORE_TYPES_H__
-
+#pragma once
 
 #include "libgimpbase/gimpbasetypes.h"
 #include "libgimpmath/gimpmathtypes.h"
@@ -92,6 +90,7 @@ typedef struct _GimpViewable                    GimpViewable;
 typedef struct _GimpFilter                      GimpFilter;
 typedef struct _GimpItem                        GimpItem;
 typedef struct _GimpAuxItem                     GimpAuxItem;
+typedef struct _GimpLink                        GimpLink;
 
 typedef struct _Gimp                            Gimp;
 typedef struct _GimpImage                       GimpImage;
@@ -164,11 +163,13 @@ typedef struct _GimpTagCache                    GimpTagCache;
 
 typedef struct _GimpDrawable                    GimpDrawable;
 typedef struct _GimpDrawableFilterMask          GimpDrawableFilterMask;
+typedef struct _GimpRasterizable                GimpRasterizable;
 typedef struct _GimpChannel                     GimpChannel;
 typedef struct _GimpLayerMask                   GimpLayerMask;
 typedef struct _GimpSelection                   GimpSelection;
 typedef struct _GimpLayer                       GimpLayer;
 typedef struct _GimpGroupLayer                  GimpGroupLayer;
+typedef struct _GimpLinkLayer                   GimpLinkLayer;
 
 
 /*  auxiliary image items  */
@@ -317,9 +318,7 @@ struct _GimpSegment
 #include "gegl/gimp-gegl-types.h"
 #include "paint/paint-types.h"
 #include "text/text-types.h"
-#include "vectors/vectors-types.h"
+#include "path/path-types.h"
 #include "pdb/pdb-types.h"
 #include "plug-in/plug-in-types.h"
 
-
-#endif /* __CORE_TYPES_H__ */

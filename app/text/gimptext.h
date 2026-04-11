@@ -18,9 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_TEXT_H__
-#define __GIMP_TEXT_H__
-
+#pragma once
 
 #include "core/gimpobject.h"
 
@@ -37,44 +35,46 @@ typedef struct _GimpTextClass  GimpTextClass;
 
 struct _GimpText
 {
-  GimpObject             parent_instance;
+  GimpObject                parent_instance;
 
-  gchar                 *text;
-  gchar                 *markup;
-  GimpFont              *font;
-  GimpUnit              *unit;
-  gdouble                font_size;
-  gboolean               antialias;
-  GimpTextHintStyle      hint_style;
-  gboolean               kerning;
-  gchar                 *language;
-  GimpTextDirection      base_dir;
-  GeglColor             *color;
-  GimpCustomStyle        outline_style;
-  GimpPattern           *outline_pattern;
-  GeglColor             *outline_foreground;
-  gdouble                outline_width;
-  GimpCapStyle           outline_cap_style;
-  GimpJoinStyle          outline_join_style;
-  gdouble                outline_miter_limit;
-  gboolean               outline_antialias;
-  gdouble                outline_dash_offset;
-  GArray                *outline_dash_info;
-  GimpTextOutline        outline;
-  GimpTextJustification  justify;
-  gdouble                indent;
-  gdouble                line_spacing;
-  gdouble                letter_spacing;
-  GimpTextBoxMode        box_mode;
-  gdouble                box_width;
-  gdouble                box_height;
-  GimpUnit              *box_unit;
-  GimpMatrix2            transformation;
-  gdouble                offset_x;
-  gdouble                offset_y;
+  gchar                    *text;
+  gchar                    *markup;
+  GimpFont                 *font;
+  GimpUnit                 *unit;
+  gdouble                   font_size;
+  gboolean                  antialias;
+  GimpTextHintStyle         hint_style;
+  gboolean                  kerning;
+  gchar                    *language;
+  GimpTextDirection         base_dir;
+  GeglColor                *color;
+  GimpCustomStyle           outline_style;
+  GimpPattern              *outline_pattern;
+  GeglColor                *outline_foreground;
+  gdouble                   outline_width;
+  GimpUnit                 *outline_unit;
+  GimpTextOutlineDirection  outline_direction;
+  GimpCapStyle              outline_cap_style;
+  GimpJoinStyle             outline_join_style;
+  gdouble                   outline_miter_limit;
+  gboolean                  outline_antialias;
+  gdouble                   outline_dash_offset;
+  GArray                   *outline_dash_info;
+  GimpTextOutline           outline;
+  GimpTextJustification     justify;
+  gdouble                   indent;
+  gdouble                   line_spacing;
+  gdouble                   letter_spacing;
+  GimpTextBoxMode           box_mode;
+  gdouble                   box_width;
+  gdouble                   box_height;
+  GimpUnit                 *box_unit;
+  GimpMatrix2               transformation;
+  gdouble                   offset_x;
+  gdouble                   offset_y;
 
-  gdouble                border;
-  Gimp                  *gimp;
+  gdouble                   border;
+  Gimp                     *gimp;
 };
 
 struct _GimpTextClass
@@ -89,6 +89,3 @@ GType  gimp_text_get_type           (void) G_GNUC_CONST;
 
 void   gimp_text_get_transformation (GimpText    *text,
                                      GimpMatrix3 *matrix);
-
-
-#endif /* __GIMP_TEXT_H__ */

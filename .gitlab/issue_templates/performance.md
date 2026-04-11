@@ -1,16 +1,22 @@
+﻿<!-- ⚠️ IMPORTANT: READ ME! ⚠️
+This is the template for PERFORMANCE ISSUES.
+For bug reports, feature requests and security reports, please see:
+https://gimp.org/bugs/report.html#select-the-issue-template
+
+It is important that you fill all the fields of the template. -->
+
 ### Environment/Versions
 
-- GIMP Version:
-- Package: <!--[flatpak? Installer from gimp.org? If another installer, tell us where from] (write it after the > symbol)-->
-- Operating System: <!--[Windows? macOS? Linux? All?] (write it after the > symbol) -->
+- GIMP version number: <!-- Please see: https://gimp.org/bugs/report.html#ensure-to-use-the-latest-gimp -->
+- Package: <!--[Flatpak? Snap? Installer from gimp.org? MS Store package? If another installer, tell us where from] (write it after the > symbol)-->
+- Operating System: <!--[Windows? macOS? Linux? All? Add OS versions too] (write it after the > symbol) -->
+- (if Linux) Display system: <!--[X11? Wayland? Which compositor and version?] (write it after the > symbol) -->
 
-<!-- Note: bug reporters are expected to have verified the bug still exists
-either in the last stable version of GIMP or on updated development code
-(master branch). -->
+### Description of the performance issue
 
-### Issue Description
-
-<!-- Please provide a general description of the issue. -->
+<!-- Please provide a general description of the issue,
+then fill the rest of the template. Please see:
+https://developer.gimp.org/core/debug/performance-logs/-->
 
 ### Performance Log
 
@@ -25,9 +31,9 @@ For more information, see
 
 <!-- Please describe in detail the actions performed in the performance log.
 If you added empty event markers to the log, please provide a description for them here.
-If you recorded a screencast while recording the log, please attach it here.  -->
+If you recorded a screencast while recording the log, please attach it here. -->
 
-### Additional Information
+### Additional information
 
 <!-- If there is any additional information, please provide it here. -->
 

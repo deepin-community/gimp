@@ -133,7 +133,8 @@ static gboolean      gimp_font_get_popup_size     (GimpViewable          *viewab
 static GimpTempBuf * gimp_font_get_new_preview    (GimpViewable          *viewable,
                                                    GimpContext           *context,
                                                    gint                   width,
-                                                   gint                   height);
+                                                   gint                   height,
+                                                   GeglColor             *fg_color);
 
 static void          gimp_font_config_iface_init  (GimpConfigInterface  *iface);
 static gboolean      gimp_font_serialize          (GimpConfig           *config,
@@ -599,6 +600,7 @@ gimp_font_class_init (GimpFontClass *klass)
   viewable_class->get_new_preview   = gimp_font_get_new_preview;
 
   viewable_class->default_icon_name = "gtk-select-font";
+  viewable_class->default_name      = _("Font");
 }
 
 static void
@@ -710,7 +712,8 @@ static GimpTempBuf *
 gimp_font_get_new_preview (GimpViewable *viewable,
                            GimpContext  *context,
                            gint          width,
-                           gint          height)
+                           gint          height,
+                           GeglColor    *fg_color)
 {
   GimpFont        *font = GIMP_FONT (viewable);
   PangoContext    *pango_context;
@@ -724,14 +727,16 @@ gimp_font_get_new_preview (GimpViewable *viewable,
   GimpTempBuf     *temp_buf;
   cairo_t         *cr;
   cairo_surface_t *surface;
+  gint             stride;
 
   pango_context = gimp_font_factory_get_pango_context (GIMP_FONT_CLASS (g_type_class_peek (GIMP_TYPE_FONT))->font_factory);
 
   if (! pango_context)
     return NULL;
 
-  if (! font->popup_layout ||
-      font->popup_width != width || font->popup_height != height)
+  if (! font->popup_layout        ||
+      font->popup_width  != width ||
+      font->popup_height != height)
     {
       PangoFontDescription *font_desc;
       const gchar          *name;
@@ -761,14 +766,14 @@ gimp_font_get_new_preview (GimpViewable *viewable,
       layout = g_object_ref (font->popup_layout);
     }
 
-  width = cairo_format_stride_for_width (CAIRO_FORMAT_A8, width);
+  stride = cairo_format_stride_for_width (CAIRO_FORMAT_ARGB32, width);
 
-  temp_buf = gimp_temp_buf_new (width, height, babl_format ("Y' u8"));
-  memset (gimp_temp_buf_get_data (temp_buf), 255, width * height);
+  temp_buf = gimp_temp_buf_new (width, height, babl_format ("cairo-ARGB32"));
+  memset (gimp_temp_buf_get_data (temp_buf), 0, width * height * 4);
 
   surface = cairo_image_surface_create_for_data (gimp_temp_buf_get_data (temp_buf),
-                                                 CAIRO_FORMAT_A8,
-                                                 width, height, width);
+                                                 CAIRO_FORMAT_ARGB32,
+                                                 width, height, stride);
 
   pango_layout_get_pixel_extents (layout, &ink, &logical);
 
@@ -787,7 +792,18 @@ gimp_font_get_new_preview (GimpViewable *viewable,
   cr = cairo_create (surface);
 
   cairo_translate (cr, layout_x, layout_y);
-  cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
+  cairo_set_operator (cr, CAIRO_OPERATOR_OVER);
+  if (fg_color)
+    {
+      gfloat rgb[3];
+
+      gegl_color_get_pixel (fg_color, babl_format ("R'G'B' float"), rgb);
+      cairo_set_source_rgb (cr, rgb[0], rgb[1], rgb[2]);
+    }
+  else
+    {
+      cairo_set_source_rgb (cr, 0.0, 0.0, 0.0);
+    }
   pango_cairo_show_layout (cr, layout);
 
   cairo_destroy (cr);
@@ -1174,10 +1190,7 @@ gimp_font_get_sample_string (PangoContext         *context,
    */
   hb_font = hb_font_create_sub_font (hb_font);
   hb_ft_font_set_funcs (hb_font);
-  /* TODO: use hb_ft_font_lock_face/hb_ft_font_unlock_face() when we
-   * bump to harfbuzz >= 2.6.5.
-   */
-  face = hb_ft_font_get_face (hb_font);
+  face = hb_ft_font_lock_face (hb_font);
 
   /* Are there actual cases where this function could return NULL while
    * it's not a bug in the code?
@@ -1265,6 +1278,7 @@ gimp_font_get_sample_string (PangoContext         *context,
         }
     }
 
+  hb_ft_font_unlock_face (hb_font);
   hb_font_destroy (hb_font);
   g_object_unref (font);
 
@@ -1335,6 +1349,8 @@ gimp_font_get_sample_string (PangoContext         *context,
 static const gchar *
 gimp_font_get_hash (GimpFont *font)
 {
+  g_return_val_if_fail (font, NULL);
+
   /* Computing the hash is expensive, so it's only done in a few case, such as
    * when serializing, when a similar fonts at deserialization looks like it
    * could be a good identity candidate.
@@ -1351,6 +1367,16 @@ gimp_font_get_hash (GimpFont *font)
       guint                 length;
       const char           *hb_data;
 
+      /* Some people had a crash in pango_fc_font_get_pattern() though
+       * we didn't have anyone providing further test results. The
+       * theory right now is that pango_font was NULL. Adding some
+       * CRITICAL here will protect from the direct crash, and it should
+       * also trigger better traces with variable listing if ever this
+       * happened again (though it may never happen again, because now
+       * we only run this once fonts are fully loaded).
+       * See #14139.
+       */
+      g_return_val_if_fail (pango_font, NULL);
       FcPatternGetString (pango_fc_font_get_pattern (pango_font), FC_FILE, 0, (FcChar8 **) &file);
 
       hb_blob  = hb_blob_create_from_file (file);

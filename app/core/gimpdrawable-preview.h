@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_DRAWABLE__PREVIEW_H__
-#define __GIMP_DRAWABLE__PREVIEW_H__
+#pragma once
 
 
 /*
@@ -25,11 +24,13 @@
 GimpTempBuf * gimp_drawable_get_new_preview       (GimpViewable *viewable,
                                                    GimpContext  *context,
                                                    gint          width,
-                                                   gint          height);
+                                                   gint          height,
+                                                   GeglColor    *fg_color);
 GdkPixbuf   * gimp_drawable_get_new_pixbuf        (GimpViewable *viewable,
                                                    GimpContext  *context,
                                                    gint          width,
-                                                   gint          height);
+                                                   gint          height,
+                                                   GeglColor    *fg_color);
 
 /*
  *  normal functions (no virtuals)
@@ -58,6 +59,3 @@ GimpAsync   * gimp_drawable_get_sub_preview_async (GimpDrawable *drawable,
                                                    gint          src_height,
                                                    gint          dest_width,
                                                    gint          dest_height);
-
-
-#endif /* __GIMP_DRAWABLE__PREVIEW_H__ */

@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_DRAWABLE_H__
-#define __GIMP_DRAWABLE_H__
-
+#pragma once
 
 #include "gimpitem.h"
 
@@ -134,6 +132,8 @@ void            gimp_drawable_update                  (GimpDrawable       *drawa
                                                        gint                height);
 void            gimp_drawable_update_all              (GimpDrawable       *drawable);
 
+void            gimp_drawable_filters_changed         (GimpDrawable       *drawable);
+
 void           gimp_drawable_invalidate_boundary      (GimpDrawable       *drawable);
 void         gimp_drawable_get_active_components      (GimpDrawable       *drawable,
                                                        gboolean           *active);
@@ -235,7 +235,4 @@ gboolean          gimp_drawable_end_paint            (GimpDrawable    *drawable)
 gboolean          gimp_drawable_flush_paint          (GimpDrawable    *drawable);
 gboolean          gimp_drawable_is_painting          (GimpDrawable    *drawable);
 
-void              gimp_drawable_filters_changed      (GimpDrawable    *drawable);
-
-
-#endif /* __GIMP_DRAWABLE_H__ */
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GimpDrawable, g_object_unref);

@@ -121,6 +121,7 @@ enum
   PROP_EXPORT_METADATA_EXIF,
   PROP_EXPORT_METADATA_XMP,
   PROP_EXPORT_METADATA_IPTC,
+  PROP_EXPORT_UPDATE_METADATA,
   PROP_DEBUG_POLICY,
   PROP_CHECK_UPDATES,
   PROP_CHECK_UPDATE_TIMESTAMP,
@@ -197,8 +198,8 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
   GIMP_CONFIG_PROP_STRING (object_class, PROP_PREV_LANGUAGE,
                            "prev-language",
                            "Language used in previous run",
-                           NULL, NULL,
-                           GIMP_PARAM_STATIC_STRINGS);
+                           PREV_LANGUAGE_BLURB,
+                           NULL, GIMP_PARAM_STATIC_STRINGS);
 
   /* This is the version of the config files, which must map to the
    * version of GIMP. It is used right now only to detect the last run
@@ -311,7 +312,7 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
 #ifdef ENABLE_RELOCATABLE_RESOURCES
   mypaint_brushes = g_build_filename ("${gimp_installation_dir}",
                                       "share", "mypaint-data",
-                                      "1.0", "brushes", NULL);
+                                      "2.0", "brushes", NULL);
 #else
   mypaint_brushes = g_strdup (MYPAINT_BRUSHES_DIR);
 #endif
@@ -681,7 +682,7 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
   GIMP_CONFIG_PROP_STRING (object_class, PROP_LAST_RELEASE_COMMENT,
                            "last-release-comment",
                            "Comment for last release",
-                           LAST_KNOWN_RELEASE_BLURB,
+                           LAST_RELEASE_COMMENT_BLURB,
                            NULL,
                            GIMP_PARAM_STATIC_STRINGS);
 
@@ -695,7 +696,7 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
   GIMP_CONFIG_PROP_INT (object_class, PROP_LAST_REVISION,
                         "last-revision",
                         "Last revision of current release",
-                        LAST_RELEASE_TIMESTAMP_BLURB,
+                        LAST_REVISION_BLURB,
                         0, G_MAXINT, 0,
                         GIMP_PARAM_STATIC_STRINGS);
 
@@ -790,6 +791,13 @@ gimp_core_config_class_init (GimpCoreConfigClass *klass)
                             "export-metadata-iptc",
                             "Export IPTC metadata",
                             EXPORT_METADATA_IPTC_BLURB,
+                            TRUE,
+                            GIMP_PARAM_STATIC_STRINGS);
+
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_EXPORT_UPDATE_METADATA,
+                            "export-update-metadata",
+                            "Update metadata automatically",
+                            EXPORT_UPDATE_METADATA_BLURB,
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS);
 
@@ -909,9 +917,9 @@ gimp_core_config_finalize (GObject *object)
   g_free (core_config->plug_in_rc_path);
   g_free (core_config->import_raw_plug_in);
 
-  g_clear_pointer (&core_config->last_known_release, g_free);
+  g_clear_pointer (&core_config->last_known_release,   g_free);
   g_clear_pointer (&core_config->last_release_comment, g_free);
-  g_clear_pointer (&core_config->config_version, g_free);
+  g_clear_pointer (&core_config->config_version,       g_free);
 
   g_clear_object (&core_config->default_image);
   g_clear_object (&core_config->default_grid);
@@ -932,12 +940,12 @@ gimp_core_config_set_property (GObject      *object,
   switch (property_id)
     {
     case PROP_LANGUAGE:
-      g_free (core_config->language);
-      core_config->language = g_value_dup_string (value);
+      g_set_str (&core_config->language,
+                 g_value_get_string (value));
       break;
     case PROP_PREV_LANGUAGE:
-      g_free (core_config->prev_language);
-      core_config->prev_language = g_value_dup_string (value);
+      g_set_str (&core_config->prev_language,
+                 g_value_get_string (value));
       break;
     case PROP_INTERPOLATION_TYPE:
       core_config->interpolation_type = g_value_get_enum (value);
@@ -946,116 +954,116 @@ gimp_core_config_set_property (GObject      *object,
       core_config->default_threshold = g_value_get_int (value);
       break;
     case PROP_PLUG_IN_PATH:
-      g_free (core_config->plug_in_path);
-      core_config->plug_in_path = g_value_dup_string (value);
+      g_set_str (&core_config->plug_in_path,
+                 g_value_get_string (value));
       break;
     case PROP_MODULE_PATH:
-      g_free (core_config->module_path);
-      core_config->module_path = g_value_dup_string (value);
+      g_set_str (&core_config->module_path,
+                 g_value_get_string (value));
       break;
     case PROP_INTERPRETER_PATH:
-      g_free (core_config->interpreter_path);
-      core_config->interpreter_path = g_value_dup_string (value);
+      g_set_str (&core_config->interpreter_path,
+                 g_value_get_string (value));
       break;
     case PROP_ENVIRON_PATH:
-      g_free (core_config->environ_path);
-      core_config->environ_path = g_value_dup_string (value);
+      g_set_str (&core_config->environ_path,
+                 g_value_get_string (value));
       break;
     case PROP_BRUSH_PATH:
-      g_free (core_config->brush_path);
-      core_config->brush_path = g_value_dup_string (value);
+      g_set_str (&core_config->brush_path,
+                 g_value_get_string (value));
       break;
     case PROP_BRUSH_PATH_WRITABLE:
-      g_free (core_config->brush_path_writable);
-      core_config->brush_path_writable = g_value_dup_string (value);
+      g_set_str (&core_config->brush_path_writable,
+                 g_value_get_string (value));
       break;
     case PROP_DYNAMICS_PATH:
-      g_free (core_config->dynamics_path);
-      core_config->dynamics_path = g_value_dup_string (value);
+      g_set_str (&core_config->dynamics_path,
+                 g_value_get_string (value));
       break;
     case PROP_DYNAMICS_PATH_WRITABLE:
-      g_free (core_config->dynamics_path_writable);
-      core_config->dynamics_path_writable = g_value_dup_string (value);
+      g_set_str (&core_config->dynamics_path_writable,
+                 g_value_get_string (value));
       break;
     case PROP_MYPAINT_BRUSH_PATH:
-      g_free (core_config->mypaint_brush_path);
-      core_config->mypaint_brush_path = g_value_dup_string (value);
+      g_set_str (&core_config->mypaint_brush_path,
+                 g_value_get_string (value));
       break;
     case PROP_MYPAINT_BRUSH_PATH_WRITABLE:
-      g_free (core_config->mypaint_brush_path_writable);
-      core_config->mypaint_brush_path_writable = g_value_dup_string (value);
+      g_set_str (&core_config->mypaint_brush_path_writable,
+                 g_value_get_string (value));
       break;
     case PROP_PATTERN_PATH:
-      g_free (core_config->pattern_path);
-      core_config->pattern_path = g_value_dup_string (value);
+      g_set_str (&core_config->pattern_path,
+                 g_value_get_string (value));
       break;
     case PROP_PATTERN_PATH_WRITABLE:
-      g_free (core_config->pattern_path_writable);
-      core_config->pattern_path_writable = g_value_dup_string (value);
+      g_set_str (&core_config->pattern_path_writable,
+                 g_value_get_string (value));
       break;
     case PROP_PALETTE_PATH:
-      g_free (core_config->palette_path);
-      core_config->palette_path = g_value_dup_string (value);
+      g_set_str (&core_config->palette_path,
+                 g_value_get_string (value));
       break;
     case PROP_PALETTE_PATH_WRITABLE:
-      g_free (core_config->palette_path_writable);
-      core_config->palette_path_writable = g_value_dup_string (value);
+      g_set_str (&core_config->palette_path_writable,
+                 g_value_get_string (value));
       break;
     case PROP_GRADIENT_PATH:
-      g_free (core_config->gradient_path);
-      core_config->gradient_path = g_value_dup_string (value);
+      g_set_str (&core_config->gradient_path,
+                 g_value_get_string (value));
       break;
     case PROP_GRADIENT_PATH_WRITABLE:
-      g_free (core_config->gradient_path_writable);
-      core_config->gradient_path_writable = g_value_dup_string (value);
+      g_set_str (&core_config->gradient_path_writable,
+                 g_value_get_string (value));
       break;
     case PROP_TOOL_PRESET_PATH:
-      g_free (core_config->tool_preset_path);
-      core_config->tool_preset_path = g_value_dup_string (value);
+      g_set_str (&core_config->tool_preset_path,
+                 g_value_get_string (value));
       break;
     case PROP_TOOL_PRESET_PATH_WRITABLE:
-      g_free (core_config->tool_preset_path_writable);
-      core_config->tool_preset_path_writable = g_value_dup_string (value);
+      g_set_str (&core_config->tool_preset_path_writable,
+                 g_value_get_string (value));
       break;
     case PROP_FONT_PATH:
-      g_free (core_config->font_path);
-      core_config->font_path = g_value_dup_string (value);
+      g_set_str (&core_config->font_path,
+                 g_value_get_string (value));
       break;
     case PROP_FONT_PATH_WRITABLE:
-      g_free (core_config->font_path_writable);
-      core_config->font_path_writable = g_value_dup_string (value);
+      g_set_str (&core_config->font_path_writable,
+                 g_value_get_string (value));
       break;
     case PROP_DEFAULT_BRUSH:
-      g_free (core_config->default_brush);
-      core_config->default_brush = g_value_dup_string (value);
+      g_set_str (&core_config->default_brush,
+                 g_value_get_string (value));
       break;
     case PROP_DEFAULT_DYNAMICS:
-      g_free (core_config->default_dynamics);
-      core_config->default_dynamics = g_value_dup_string (value);
+      g_set_str (&core_config->default_dynamics,
+                 g_value_get_string (value));
       break;
     case PROP_DEFAULT_MYPAINT_BRUSH:
-      g_free (core_config->default_mypaint_brush);
-      core_config->default_mypaint_brush = g_value_dup_string (value);
+      g_set_str (&core_config->default_mypaint_brush,
+                 g_value_get_string (value));
       break;
     case PROP_DEFAULT_PATTERN:
-      g_free (core_config->default_pattern);
-      core_config->default_pattern = g_value_dup_string (value);
+      g_set_str (&core_config->default_pattern,
+                 g_value_get_string (value));
       break;
     case PROP_DEFAULT_PALETTE:
-      g_free (core_config->default_palette);
-      core_config->default_palette = g_value_dup_string (value);
+      g_set_str (&core_config->default_palette,
+                 g_value_get_string (value));
       break;
     case PROP_DEFAULT_GRADIENT:
-      g_free (core_config->default_gradient);
-      core_config->default_gradient = g_value_dup_string (value);
+      g_set_str (&core_config->default_gradient,
+                 g_value_get_string (value));
       break;
     case PROP_DEFAULT_TOOL_PRESET:
-      g_free (core_config->default_tool_preset);
-      core_config->default_tool_preset = g_value_dup_string (value);
+      g_set_str (&core_config->default_tool_preset,
+                 g_value_get_string (value));
       break;
     case PROP_DEFAULT_FONT:
-      g_free (core_config->default_font);
-      core_config->default_font = g_value_dup_string (value);
+      g_set_str (&core_config->default_font,
+                 g_value_get_string (value));
       break;
     case PROP_GLOBAL_BRUSH:
       core_config->global_brush = g_value_get_boolean (value);
@@ -1101,8 +1109,8 @@ gimp_core_config_set_property (GObject      *object,
       core_config->undo_preview_size = g_value_get_enum (value);
       break;
     case PROP_PLUGINRC_PATH:
-      g_free (core_config->plug_in_rc_path);
-      core_config->plug_in_rc_path = g_value_dup_string (value);
+      g_set_str (&core_config->plug_in_rc_path,
+                 g_value_get_string (value));
       break;
     case PROP_LAYER_PREVIEWS:
       core_config->layer_previews = g_value_get_boolean (value);
@@ -1134,8 +1142,8 @@ gimp_core_config_set_property (GObject      *object,
       core_config->last_release_timestamp = g_value_get_int64 (value);
       break;
     case PROP_LAST_RELEASE_COMMENT:
-      g_clear_pointer (&core_config->last_release_comment, g_free);
-      core_config->last_release_comment = g_value_dup_string (value);
+      g_set_str (&core_config->last_release_comment,
+                 g_value_get_string (value));
       break;
     case PROP_LAST_REVISION:
       core_config->last_revision = g_value_get_int (value);
@@ -1143,13 +1151,15 @@ gimp_core_config_set_property (GObject      *object,
     case PROP_LAST_KNOWN_RELEASE:
       if (core_config->last_known_release != g_value_get_string (value))
         {
-          g_clear_pointer (&core_config->last_known_release, g_free);
-          core_config->last_known_release = g_value_dup_string (value);
+          const gchar *version = g_value_get_string (value);
+
+          if (gimp_version_cmp (version, NULL) > 0)
+            g_set_str (&core_config->last_known_release, version);
         }
       break;
     case PROP_CONFIG_VERSION:
-      g_clear_pointer (&core_config->config_version, g_free);
-      core_config->config_version = g_value_dup_string (value);
+      g_set_str (&core_config->config_version,
+                 g_value_get_string (value));
       break;
     case PROP_SAVE_DOCUMENT_HISTORY:
       core_config->save_document_history = g_value_get_boolean (value);
@@ -1168,8 +1178,8 @@ gimp_core_config_set_property (GObject      *object,
       core_config->import_add_alpha = g_value_get_boolean (value);
       break;
     case PROP_IMPORT_RAW_PLUG_IN:
-      g_free (core_config->import_raw_plug_in);
-      core_config->import_raw_plug_in = g_value_dup_string (value);
+      g_set_str (&core_config->import_raw_plug_in,
+                 g_value_get_string (value));
       break;
     case PROP_EXPORT_FILE_TYPE:
       core_config->export_file_type = g_value_get_enum (value);
@@ -1191,6 +1201,9 @@ gimp_core_config_set_property (GObject      *object,
       break;
     case PROP_EXPORT_METADATA_IPTC:
       core_config->export_metadata_iptc = g_value_get_boolean (value);
+      break;
+    case PROP_EXPORT_UPDATE_METADATA:
+      core_config->export_update_metadata = g_value_get_boolean (value);
       break;
     case PROP_DEBUG_POLICY:
       core_config->debug_policy = g_value_get_enum (value);
@@ -1459,6 +1472,9 @@ gimp_core_config_get_property (GObject    *object,
       break;
     case PROP_EXPORT_METADATA_IPTC:
       g_value_set_boolean (value, core_config->export_metadata_iptc);
+      break;
+    case PROP_EXPORT_UPDATE_METADATA:
+      g_value_set_boolean (value, core_config->export_update_metadata);
       break;
     case PROP_DEBUG_POLICY:
       g_value_set_enum (value, core_config->debug_policy);

@@ -71,7 +71,7 @@
 #define GRADIENT_RESOLUTION 360
 
 #define GFLARE_NAME_MAX     256
-#define GFLARE_FILE_HEADER  "GIMP GFlare 0.25\n"
+#define GFLARE_FILE_HEADER  "GIMP GFlare 0.25"
 #define SFLARE_NUM           30
 
 #define DLG_PREVIEW_WIDTH   256
@@ -1366,8 +1366,8 @@ gflare_load (const gchar *filename,
       return NULL;
     }
 
-  if (fgets (header, sizeof(header), fp) == NULL
-      || strcmp (header, GFLARE_FILE_HEADER) != 0)
+  if (fgets (header, sizeof(header), fp) == NULL ||
+      ! g_str_has_prefix (header, GFLARE_FILE_HEADER))
     {
       g_warning (_("'%s' is not a valid GFlare file."),
                   gimp_filename_to_utf8 (filename));
@@ -1588,7 +1588,7 @@ gflare_save (GFlare *gflare)
       return;
     }
 
-  fprintf (fp, "%s", GFLARE_FILE_HEADER);
+  fprintf (fp, "%s\n", GFLARE_FILE_HEADER);
   g_ascii_dtostr (buf[0],
                   G_ASCII_DTOSTR_BUF_SIZE, gflare->glow_opacity);
   fprintf (fp, "%s %s\n", buf[0], gflare_modes[gflare->glow_mode]);
@@ -1712,7 +1712,6 @@ gflares_list_remove (GFlare *gflare)
       if (tmp->data == gflare)
         {
           /* Found! */
-          if (tmp->next == NULL)
           num_gflares--;
           gflares_list = g_list_remove (gflares_list, gflare);
           return n;
@@ -2577,6 +2576,10 @@ dlg_run (GimpProcedure       *procedure,
   dlg_preview_update ();
 
   run = gimp_procedure_dialog_run (GIMP_PROCEDURE_DIALOG (shell));
+
+  if (! dlg->gflare)
+    run = FALSE;
+
   if (run)
     {
       g_object_set (config,
@@ -2768,7 +2771,7 @@ dlg_preview_init_func (Preview *preview,
 
   /* call init_params first, and iterate init_progress while
      it returns true */
-  if (dlg->init_params_done == FALSE)
+  if (dlg->init_params_done == FALSE && dlg->gflare)
     {
       gint    xcenter;
       gint    ycenter;
@@ -3369,8 +3372,8 @@ dlg_selector_do_delete_callback (GtkWidget *widget,
       dlg->gflare = NULL;
 
       /* Remove from listbox */
-      if (!gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (dlg->selector_list),
-                                          &iter, NULL, i))
+      if (! gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (dlg->selector_list),
+                                           &iter, NULL, i))
         {
           g_warning ("Unsynchronized lists. Bad things will happen!");
           return;
@@ -3380,7 +3383,7 @@ dlg_selector_do_delete_callback (GtkWidget *widget,
       /* Calculate new position of gflare and select it */
       new_i = (i < num_gflares) ? i : num_gflares - 1;
       if ((tmp = g_list_nth (gflares_list, new_i)))
-          dlg->gflare = tmp->data;
+        dlg->gflare = tmp->data;
       if (!gtk_tree_model_iter_nth_child (GTK_TREE_MODEL (dlg->selector_list),
                                           &iter, NULL, i))
         {

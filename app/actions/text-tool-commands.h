@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __TEXT_TOOL_COMMANDS_H__
-#define __TEXT_TOOL_COMMANDS_H__
+#pragma once
 
 
 void   text_tool_cut_cmd_callback             (GimpAction *action,
@@ -26,6 +25,20 @@ void   text_tool_copy_cmd_callback            (GimpAction *action,
                                                GVariant   *value,
                                                gpointer    data);
 void   text_tool_paste_cmd_callback           (GimpAction *action,
+                                               GVariant   *value,
+                                               gpointer    data);
+void   text_tool_paste_unformatted_cmd_callback
+                                              (GimpAction *action,
+                                               GVariant   *value,
+                                               gpointer    data);
+void   text_tool_toggle_bold_cmd_callback     (GimpAction *action,
+                                               GVariant   *value,
+                                               gpointer    data);
+void   text_tool_toggle_italic_cmd_callback   (GimpAction *action,
+                                               GVariant   *value,
+                                               gpointer    data);
+void   text_tool_toggle_underline_cmd_callback
+                                              (GimpAction *action,
                                                GVariant   *value,
                                                gpointer    data);
 void   text_tool_delete_cmd_callback          (GimpAction *action,
@@ -46,6 +59,7 @@ void   text_tool_text_along_path_cmd_callback (GimpAction *action,
 void   text_tool_direction_cmd_callback       (GimpAction *action,
                                                GVariant   *value,
                                                gpointer    data);
-
-
-#endif /* __TEXT_TOOL_COMMANDS_H__ */
+void   text_tool_restore_on_canvas_editor_position_cmd_callback
+                                              (GimpAction *action,
+                                               GVariant   *value,
+                                               gpointer    data);

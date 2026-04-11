@@ -15,14 +15,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_DATA_FACTORIES_H__
-#define __GIMP_DATA_FACTORIES_H__
+#pragma once
 
 
 void      gimp_data_factories_init        (Gimp               *gimp);
 void      gimp_data_factories_add_builtin (Gimp               *gimp);
 void      gimp_data_factories_clear       (Gimp               *gimp);
 void      gimp_data_factories_exit        (Gimp               *gimp);
+
+gboolean  gimp_data_factories_wait        (Gimp               *gimp);
 
 gint64    gimp_data_factories_get_memsize (Gimp   *gimp,
                                            gint64 *gui_size);
@@ -31,6 +32,3 @@ void      gimp_data_factories_data_clean  (Gimp   *gimp);
 void      gimp_data_factories_load        (Gimp               *gimp,
                                            GimpInitStatusFunc  status_callback);
 void      gimp_data_factories_save        (Gimp               *gimp);
-
-
-#endif /* __GIMP_DATA_FACTORIES_H__ */

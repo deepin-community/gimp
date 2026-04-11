@@ -474,12 +474,35 @@ load_image (GFile        *file,
                                     NULL);
         }
 
-      /* If RGB FITS image, we need to read in the whole image so we can convert
-       * the planes format to RGB */
+      if (width  <= 0                  ||
+          height <= 0                  ||
+          width  > GIMP_MAX_IMAGE_SIZE ||
+          height > GIMP_MAX_IMAGE_SIZE)
+        {
+          g_set_error (error, GIMP_PLUG_IN_ERROR, 0,
+                       _("'%s' has a larger image size (%d x %d) "
+                         "than GIMP can handle."),
+                       gimp_file_get_utf8_name (file), width, height);
+          fits_close_file (ifp, &status);
+          return NULL;
+        }
+
+      /* If RGB FITS image, we need to read in the whole image so we can
+       * convert the planes format to RGB */
       if (hdu.naxis == 2)
-        pixels = (gdouble *) malloc (width * sizeof (gdouble) * channels);
+        pixels =
+          (gdouble *) g_try_malloc (width * sizeof (gdouble) * channels);
       else
-        pixels = (gdouble *) malloc (width * height * sizeof (gdouble) * channels);
+        pixels =
+          (gdouble *) g_try_malloc (width * height * sizeof (gdouble) * channels);
+
+      if (pixels == NULL)
+        {
+          g_set_error (error, G_FILE_ERROR, 0,
+                       "Memory could not be allocated.");
+          fits_close_file (ifp, &status);
+          return NULL;
+        }
 
       if (! image)
         {
@@ -551,6 +574,15 @@ load_image (GFile        *file,
               gdouble *temp;
 
               temp = (gdouble *) malloc (width * height * sizeof (gdouble) * channels);
+
+              if (temp == NULL)
+                {
+                  g_set_error (error, G_FILE_ERROR, 0,
+                               "Memory could not be allocated.");
+                  fits_close_file (ifp, &status);
+                  g_object_unref (buffer);
+                  return image;
+                }
 
               if (datamin < datamax)
                 {
@@ -889,11 +921,13 @@ export_fits (GFile        *file,
     }
   else
     {
+      glong       fpixel[3]     = {1, 1, 1};
       gdouble    *rgb_data;
       gdouble    *rgb_output;
       const Babl *rgb_format;
       const Babl *output_format = babl_format ("Y' double");
       const Babl *converted_format;
+
 
       rgb_format = (channelnum == 3) ? babl_format ("R'G'B' double") :
                                        babl_format ("R'G'B'A double");
@@ -943,12 +977,13 @@ export_fits (GFile        *file,
           babl_process (babl_fish (output_format, converted_format),
                         rgb_output, converted_output, nelements);
 
-          if (fits_write_img (fptr, export_type, 1, nelements,
+          if (fits_write_pix (fptr, export_type, fpixel, nelements,
                               converted_output, &status))
             {
               show_fits_errors (status);
               return FALSE;
             }
+          fpixel[2]++;
 
           g_free (converted_output);
         }

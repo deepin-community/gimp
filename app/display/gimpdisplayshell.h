@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_DISPLAY_SHELL_H__
-#define __GIMP_DISPLAY_SHELL_H__
+#pragma once
 
 
 /* Apply to a float the same rounding mode used in the renderer */
@@ -122,7 +121,7 @@ struct _GimpDisplayShell
   GimpCanvasItem    *unrotated_item;   /*  unrotated items for e.g. cursor    */
   GimpCanvasItem    *passe_partout;    /*  item for the highlight             */
   GimpCanvasItem    *preview_items;    /*  item for previews                  */
-  GimpCanvasItem    *vectors;          /*  item proxy of vectors              */
+  GimpCanvasItem    *paths;            /*  item proxy of paths                */
   GimpCanvasItem    *grid;             /*  item proxy of the grid             */
   GimpCanvasItem    *guides;           /*  item proxies of guides             */
   GimpCanvasItem    *sample_points;    /*  item proxies of sample points      */
@@ -183,9 +182,9 @@ struct _GimpDisplayShell
 
   gint               paused_count;
 
-  GimpTreeHandler   *vectors_freeze_handler;
-  GimpTreeHandler   *vectors_thaw_handler;
-  GimpTreeHandler   *vectors_visible_handler;
+  GimpTreeHandler   *path_freeze_handler;
+  GimpTreeHandler   *path_thaw_handler;
+  GimpTreeHandler   *path_visible_handler;
 
   gboolean           zoom_on_resize;
 
@@ -365,5 +364,12 @@ void              gimp_display_shell_set_mask      (GimpDisplayShell   *shell,
 
 gboolean          gimp_display_shell_is_drawn      (GimpDisplayShell   *shell);
 
-
-#endif /* __GIMP_DISPLAY_SHELL_H__ */
+void              gimp_display_shell_get_overlay_corners
+                                                   (GimpDisplayShell   *shell,
+                                                    GtkWidget          *child,
+                                                    gdouble             image_x,
+                                                    gdouble             image_y,
+                                                    gdouble            *top_left_x,
+                                                    gdouble            *top_left_y,
+                                                    gdouble            *bottom_right_x,
+                                                    gdouble            *bottom_right_y);

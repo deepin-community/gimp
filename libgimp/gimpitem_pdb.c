@@ -212,6 +212,46 @@ gimp_item_id_is_text_layer (gint item_id)
 }
 
 /**
+ * gimp_item_id_is_vector_layer:
+ * @item_id: The item ID.
+ *
+ * Returns whether the item ID is a vector layer.
+ *
+ * This procedure returns %TRUE if the specified item ID is a vector
+ * layer.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+ *
+ * Returns: TRUE if the item is a vector layer, FALSE otherwise.
+ *
+ * Since: 3.2
+ **/
+gboolean
+gimp_item_id_is_vector_layer (gint item_id)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean vector_layer = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-vector-layer",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    vector_layer = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return vector_layer;
+}
+
+/**
  * gimp_item_id_is_group_layer:
  * @item_id: The item ID.
  *
@@ -249,6 +289,46 @@ gimp_item_id_is_group_layer (gint item_id)
   gimp_value_array_unref (return_vals);
 
   return group_layer;
+}
+
+/**
+ * gimp_item_id_is_link_layer:
+ * @item_id: The item ID.
+ *
+ * Returns whether the item ID is a link layer.
+ *
+ * This procedure returns %TRUE if the specified item ID is a link
+ * layer.
+ *
+ * *Note*: in most use cases, you should not use this function. See
+ * [func@Gimp.Item.id_is_layer] for a discussion on alternatives.
+ *
+ * Returns: TRUE if the item is a text layer, FALSE otherwise.
+ *
+ * Since: 3.2
+ **/
+gboolean
+gimp_item_id_is_link_layer (gint item_id)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean text_layer = FALSE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_INT, item_id,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-item-id-is-link-layer",
+                                               args);
+  gimp_value_array_unref (args);
+
+  if (GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS)
+    text_layer = GIMP_VALUES_GET_BOOLEAN (return_vals, 1);
+
+  gimp_value_array_unref (return_vals);
+
+  return text_layer;
 }
 
 /**
@@ -1346,4 +1426,118 @@ gimp_item_get_parasite_list (GimpItem *item)
   gimp_value_array_unref (return_vals);
 
   return parasites;
+}
+
+/**
+ * gimp_items_popup:
+ * @callback: The callback PDB proc to call when user chooses an item.
+ * @popup_title: Title of the item selection dialog.
+ * @item_type: The name of the GIMP_TYPE_ITEM subtype.
+ * @initial_item: (nullable): The item to set as the initial choice.
+ * @parent_window: (nullable): An optional parent window handle for the popup to be set transient to.
+ *
+ * Invokes the item selection dialog.
+ *
+ * Opens a dialog letting a user choose an item .
+ *
+ * Returns: TRUE on success.
+ **/
+gboolean
+gimp_items_popup (const gchar *callback,
+                  const gchar *popup_title,
+                  const gchar *item_type,
+                  GimpItem    *initial_item,
+                  GBytes      *parent_window)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, callback,
+                                          G_TYPE_STRING, popup_title,
+                                          G_TYPE_STRING, item_type,
+                                          GIMP_TYPE_ITEM, initial_item,
+                                          G_TYPE_BYTES, parent_window,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-items-popup",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_items_close_popup:
+ * @callback: The name of the callback registered for this pop-up.
+ *
+ * Close the item selection dialog.
+ *
+ * Closes an open item selection dialog.
+ *
+ * Returns: TRUE on success.
+ **/
+gboolean
+gimp_items_close_popup (const gchar *callback)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, callback,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-items-close-popup",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
+}
+
+/**
+ * gimp_items_set_popup:
+ * @callback: The name of the callback registered for this pop-up.
+ * @item: The item to set as selected.
+ *
+ * Sets the selected item in a item selection dialog.
+ *
+ * Sets the selected item in a item selection dialog.
+ *
+ * Returns: TRUE on success.
+ **/
+gboolean
+gimp_items_set_popup (const gchar *callback,
+                      GimpItem    *item)
+{
+  GimpValueArray *args;
+  GimpValueArray *return_vals;
+  gboolean success = TRUE;
+
+  args = gimp_value_array_new_from_types (NULL,
+                                          G_TYPE_STRING, callback,
+                                          GIMP_TYPE_ITEM, item,
+                                          G_TYPE_NONE);
+
+  return_vals = _gimp_pdb_run_procedure_array (gimp_get_pdb (),
+                                               "gimp-items-set-popup",
+                                               args);
+  gimp_value_array_unref (args);
+
+  success = GIMP_VALUES_GET_ENUM (return_vals, 0) == GIMP_PDB_SUCCESS;
+
+  gimp_value_array_unref (return_vals);
+
+  return success;
 }

@@ -1683,9 +1683,20 @@ load_xwd_f2_d16_b16 (GFile           *file,
           greenval = (green * 255) / maxgreen;
           for (blue = 0; blue <= maxblue; blue++)
             {
+              guint32 offset = ((red << redshift) + (green << greenshift) +
+                                (blue << blueshift)) * 3;
+
+              if (offset+2 >= maxval)
+                {
+                  g_set_error (error, GIMP_PLUG_IN_ERROR, 0,
+                               _("Invalid colormap offset. Possibly corrupt image."));
+                  g_free (data);
+                  g_free (ColorMap);
+                  g_object_unref (buffer);
+                  return NULL;
+                }
               blueval = (blue * 255) / maxblue;
-              cm = ColorMap + ((red << redshift) + (green << greenshift)
-                               + (blue << blueshift)) * 3;
+              cm = ColorMap + offset;
               *(cm++) = redval;
               *(cm++) = greenval;
               *cm = blueval;
@@ -1701,7 +1712,15 @@ load_xwd_f2_d16_b16 (GFile           *file,
 
   for (j = 0; j < ncols; j++)
     {
-      cm = ColorMap + xwdcolmap[j].l_pixel * 3;
+      goffset offset = xwdcolmap[j].l_pixel * 3;
+
+      if (offset+2 >= maxval)
+        {
+          g_set_error (error, GIMP_PLUG_IN_ERROR, 0,
+                       _("Invalid colormap offset. Possibly corrupt image."));
+          return NULL;
+        }
+      cm = ColorMap + offset;
       *(cm++) = (xwdcolmap[j].l_red >> 8);
       *(cm++) = (xwdcolmap[j].l_green >> 8);
       *cm = (xwdcolmap[j].l_blue >> 8);
@@ -2230,6 +2249,7 @@ load_xwd_f1_d24_b1 (GFile            *file,
   guint32          redmask, greenmask, bluemask;
   guint            redshift, greenshift, blueshift;
   guint32          g;
+  guint32          maxval;
   guchar           redmap[256], greenmap[256], bluemap[256];
   guchar           bit_reverse[256];
   guchar          *xwddata, *xwdin, *data;
@@ -2321,7 +2341,8 @@ load_xwd_f1_d24_b1 (GFile            *file,
                             &layer, &buffer);
 
   tile_height = gimp_tile_height ();
-  data = g_malloc (tile_height * width * bytes_per_pixel);
+  data        = g_malloc (tile_height * width * bytes_per_pixel);
+  maxval      = tile_height * width * bytes_per_pixel;
 
   ncols = xwdhdr->l_colormap_entries;
   if (xwdhdr->l_ncolors < ncols)
@@ -2346,6 +2367,8 @@ load_xwd_f1_d24_b1 (GFile            *file,
 
   for (tile_start = 0; tile_start < height; tile_start += tile_height)
     {
+      guint current_dest = 0;
+
       memset (data, 0, width*tile_height*bytes_per_pixel);
 
       tile_end = tile_start + tile_height - 1;
@@ -2373,7 +2396,18 @@ load_xwd_f1_d24_b1 (GFile            *file,
           else           /* 3 bytes per pixel */
             {
               fromright = xwdhdr->l_pixmap_depth-1-plane;
-              dest += 2 - fromright/8;
+
+              current_dest += 2 - fromright / 8;
+              if (current_dest < maxval)
+                {
+                  dest += 2 - fromright / 8;
+                }
+              else
+                {
+                  err = 1;
+                  break;
+                }
+
               outmask = (1 << (fromright % 8));
             }
 
@@ -2428,7 +2462,17 @@ load_xwd_f1_d24_b1 (GFile            *file,
 
                   if (g & inmask)
                     *dest |= outmask;
-                  dest += bytes_per_pixel;
+
+                  current_dest += bytes_per_pixel;
+                  if (current_dest < maxval)
+                    {
+                      dest += bytes_per_pixel;
+                    }
+                  else
+                    {
+                      err = 1;
+                      break;
+                    }
 
                   inmask >>= 1;
                 }

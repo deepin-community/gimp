@@ -78,12 +78,12 @@ app/actions/text-tool-actions.c
 app/actions/text-tool-commands.c
 app/actions/tool-options-actions.c
 app/actions/tool-options-commands.c
+app/actions/tool-path-actions.c
 app/actions/tool-preset-editor-actions.c
 app/actions/tool-preset-editor-commands.c
 app/actions/tool-presets-actions.c
 app/actions/tool-presets-commands.c
 app/actions/tools-actions.c
-app/actions/vector-toolpath-actions.c
 app/actions/view-actions.c
 app/actions/view-commands.c
 app/actions/window-actions.c
@@ -127,6 +127,7 @@ app/core/gimpbrushgenerated-save.c
 app/core/gimpbrushgenerated.c
 app/core/gimpbrushpipe-load.c
 app/core/gimpbrushpipe.c
+app/core/gimpbuffer.c
 app/core/gimpchannel-select.c
 app/core/gimpchannel.c
 app/core/gimpcontext.c
@@ -148,9 +149,11 @@ app/core/gimpdrawable-levels.c
 app/core/gimpdrawable-offset.c
 app/core/gimpdrawable-stroke.c
 app/core/gimpdrawable-transform.c
+app/core/gimpdrawablefilter.c
 app/core/gimpdrawablefiltermask.c
 app/core/gimpdynamicsoutput.c
 app/core/gimpfilloptions.c
+app/core/gimpgradient.c
 app/core/gimpgradient-load.c
 app/core/gimpgradient-save.c
 app/core/gimpgrid.c
@@ -180,6 +183,8 @@ app/core/gimplayer-floating-selection.c
 app/core/gimplayer.c
 app/core/gimplayermask.c
 app/core/gimplineart.c
+app/core/gimplink.c
+app/core/gimplinklayer.c
 app/core/gimpmybrush-load.c
 app/core/gimppalette.c
 app/core/gimppalette-import.c
@@ -192,6 +197,7 @@ app/core/gimppattern-save.c
 app/core/gimppatternclipboard.c
 app/core/gimppdbprogress.c
 app/core/gimpprogress.c
+app/core/gimprasterizable.c
 app/core/gimpselection.c
 app/core/gimpsettings.c
 app/core/gimpstrokeoptions.c
@@ -268,6 +274,7 @@ app/display/gimpdisplayshell-scale-dialog.c
 app/display/gimpdisplayshell-title.c
 app/display/gimpdisplayshell-tool-events.c
 app/display/gimpdisplayshell-utils.c
+app/display/gimpimagewindow.c
 app/display/gimpmodifiersmanager.c
 app/display/gimpnavigationeditor.c
 app/display/gimpstatusbar.c
@@ -356,6 +363,12 @@ app/paint/gimpsourcecore.c
 app/paint/gimpsourceoptions.c
 app/paint/paint-enums.c
 
+app/path/gimppath.c
+app/path/gimppath-export.c
+app/path/gimppath-import.c
+app/path/gimpvectorlayer.c
+app/path/gimpvectorlayeroptions.c
+
 app/pdb/channel-cmds.c
 app/pdb/drawable-cmds.c
 app/pdb/drawable-color-cmds.c
@@ -378,11 +391,14 @@ app/pdb/image-transform-cmds.c
 app/pdb/image-undo-cmds.c
 app/pdb/item-transform-cmds.c
 app/pdb/layer-cmds.c
+app/pdb/link-layer-cmds.c
 app/pdb/path-cmds.c
 app/pdb/pdb-cmds.c
+app/pdb/rasterizable-cmds.c
 app/pdb/resource-cmds.c
 app/pdb/selection-cmds.c
 app/pdb/text-layer-cmds.c
+app/pdb/vector-layer-cmds.c
 
 app/plug-in/gimpenvirontable.c
 app/plug-in/gimpinterpreterdb.c
@@ -496,6 +512,8 @@ app/tools/gimppaintoptions-gui.c
 app/tools/gimppaintselectoptions.c
 app/tools/gimppaintselecttool.c
 app/tools/gimppainttool.c
+app/tools/gimppathoptions.c
+app/tools/gimppathtool.c
 app/tools/gimppenciltool.c
 app/tools/gimpperspectiveclonetool.c
 app/tools/gimpperspectivetool.c
@@ -526,15 +544,9 @@ app/tools/gimptransform3dtool.c
 app/tools/gimptransformoptions.c
 app/tools/gimptransformtool.c
 app/tools/gimpunifiedtransformtool.c
-app/tools/gimpvectoroptions.c
-app/tools/gimpvectortool.c
 app/tools/gimpwarpoptions.c
 app/tools/gimpwarptool.c
 app/tools/tools-enums.c
-
-app/vectors/gimppath.c
-app/vectors/gimppath-export.c
-app/vectors/gimppath-import.c
 
 app/widgets/gimpactioneditor.c
 app/widgets/gimpactiongroup.c
@@ -579,6 +591,7 @@ app/widgets/gimpdockbook.c
 app/widgets/gimpdockwindow.c
 app/widgets/gimpdocumentview.c
 app/widgets/gimpdrawabletreeview.c
+app/widgets/gimpdrawabletreeview-filters.c
 app/widgets/gimpdynamicseditor.c
 app/widgets/gimpdynamicsoutputeditor.c
 app/widgets/gimpeditor.c
@@ -594,10 +607,13 @@ app/widgets/gimpgrideditor.c
 app/widgets/gimphelp.c
 app/widgets/gimphistogrameditor.c
 app/widgets/gimpiconpicker.c
+app/widgets/gimpimagechooser.c
 app/widgets/gimpimagecommenteditor.c
 app/widgets/gimpimageprofileview.c
 app/widgets/gimpimagepropview.c
+app/widgets/gimpitemchooser.c
 app/widgets/gimpitemtreeview.c
+app/widgets/gimpitemtreeview-search.c
 app/widgets/gimplayermodebox.c
 app/widgets/gimplayertreeview.c
 app/widgets/gimpmenudock.c
@@ -612,6 +628,7 @@ app/widgets/gimppickablepopup.c
 app/widgets/gimppluginview.c
 app/widgets/gimpprogressdialog.c
 app/widgets/gimppropwidgets.c
+app/widgets/gimprow.c
 app/widgets/gimpsamplepointeditor.c
 app/widgets/gimpsavedialog.c
 app/widgets/gimpsearchpopup.c
@@ -657,8 +674,6 @@ app/xcf/xcf-seek.c
 app/xcf/xcf-write.c
 
 app-tools/gimp-debug-tool.c
-
-data/tags/gimp-tags-default.xml.in
 
 menus/brush-editor-menu.ui
 menus/brushes-menu.ui

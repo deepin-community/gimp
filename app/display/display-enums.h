@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __DISPLAY_ENUMS_H__
-#define __DISPLAY_ENUMS_H__
+#pragma once
 
 
 #define GIMP_TYPE_BUTTON_PRESS_TYPE (gimp_button_press_type_get_type ())
@@ -146,7 +145,7 @@ GType gimp_path_style_get_type (void) G_GNUC_CONST;
 typedef enum
 {
   GIMP_PATH_STYLE_DEFAULT,
-  GIMP_PATH_STYLE_VECTORS,
+  GIMP_PATH_STYLE_PATH,
   GIMP_PATH_STYLE_OUTLINE
 } GimpPathStyle;
 
@@ -226,16 +225,16 @@ typedef enum
 } GimpTransformHandleMode;
 
 
-#define GIMP_TYPE_VECTOR_MODE (gimp_vector_mode_get_type ())
+#define GIMP_TYPE_PATH_MODE (gimp_path_mode_get_type ())
 
-GType gimp_vector_mode_get_type (void) G_GNUC_CONST;
+GType gimp_path_mode_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_VECTOR_MODE_DESIGN,      /*< desc="Design" >*/
-  GIMP_VECTOR_MODE_EDIT,        /*< desc="Edit"   >*/
-  GIMP_VECTOR_MODE_MOVE         /*< desc="Move"   >*/
-} GimpVectorMode;
+  GIMP_PATH_MODE_DESIGN,      /*< desc="Design" >*/
+  GIMP_PATH_MODE_EDIT,        /*< desc="Edit"   >*/
+  GIMP_PATH_MODE_MOVE         /*< desc="Move"   >*/
+} GimpPathMode;
 
 
 #define GIMP_TYPE_ZOOM_FOCUS (gimp_zoom_focus_get_type ())
@@ -295,6 +294,3 @@ typedef enum  /*< pdb-skip, skip >*/
   GIMP_HIT_INDIRECT,
   GIMP_HIT_DIRECT
 } GimpHit;
-
-
-#endif /* __DISPLAY_ENUMS_H__ */

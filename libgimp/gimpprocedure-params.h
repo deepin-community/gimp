@@ -313,6 +313,42 @@ G_BEGIN_DECLS
   g_value_set_object (gimp_value_array_index (args, n), value)
 
 
+/*  vector layer */
+
+#define GIMP_VALUES_GET_VECTOR_LAYER(args, n) \
+  g_value_get_object (gimp_value_array_index (args, n))
+
+#define GIMP_VALUES_GET_VECTOR_LAYER_ID(args, n) \
+  gimp_item_get_id (g_value_get_object (gimp_value_array_index (args, n)))
+
+#define GIMP_VALUES_SET_VECTOR_LAYER(args, n, value) \
+  g_value_set_object (gimp_value_array_index (args, n), value)
+
+
+/*  link layer */
+
+#define GIMP_VALUES_GET_LINK_LAYER(args, n) \
+  g_value_get_object (gimp_value_array_index (args, n))
+
+#define GIMP_VALUES_GET_LINK_LAYER_ID(args, n) \
+  gimp_item_get_id (g_value_get_object (gimp_value_array_index (args, n)))
+
+#define GIMP_VALUES_SET_LINK_LAYER(args, n, value) \
+  g_value_set_object (gimp_value_array_index (args, n), value)
+
+
+/*  rasterizable  */
+
+#define GIMP_VALUES_GET_RASTERIZABLE(args, n) \
+  g_value_get_object (gimp_value_array_index (args, n))
+
+#define GIMP_VALUES_GET_RASTERIZABLE_ID(args, n) \
+  gimp_item_get_id (g_value_get_object (gimp_value_array_index (args, n)))
+
+#define GIMP_VALUES_SET_RASTERIZABLE(args, n, value) \
+  g_value_set_object (gimp_value_array_index (args, n), value)
+
+
 /*  group layer */
 
 #define GIMP_VALUES_GET_GROUP_LAYER(args, n) \
@@ -432,6 +468,20 @@ G_BEGIN_DECLS
 #define GIMP_VALUES_SET_PATTERN(args, n, value) \
   g_value_set_object (gimp_value_array_index (args, n), value)
 
+
+/*  Curve */
+
+#define GIMP_VALUES_GET_CURVE(args, n) \
+  g_value_get_object (gimp_value_array_index (args, n))
+
+#define GIMP_VALUES_DUP_CURVE(args, n) \
+  g_value_dup_object (gimp_value_array_index (args, n))
+
+#define GIMP_VALUES_SET_CURVE(args, n, value) \
+  g_value_set_object (gimp_value_array_index (args, n), value)
+
+#define GIMP_VALUES_TAKE_CURVE(args, n, value) \
+  g_value_take_object (gimp_value_array_index (args, n), value)
 
 /*  Unit  */
 
@@ -893,6 +943,44 @@ void gimp_procedure_add_text_layer_aux_argument        (GimpProcedure *procedure
                                                         gboolean       none_ok,
                                                         GParamFlags    flags);
 void gimp_procedure_add_text_layer_return_value        (GimpProcedure *procedure,
+                                                        const gchar   *name,
+                                                        const gchar   *nick,
+                                                        const gchar   *blurb,
+                                                        gboolean       none_ok,
+                                                        GParamFlags    flags);
+
+void gimp_procedure_add_vector_layer_argument          (GimpProcedure *procedure,
+                                                        const gchar   *name,
+                                                        const gchar   *nick,
+                                                        const gchar   *blurb,
+                                                        gboolean       none_ok,
+                                                        GParamFlags    flags);
+void gimp_procedure_add_vector_layer_aux_argument      (GimpProcedure *procedure,
+                                                        const gchar   *name,
+                                                        const gchar   *nick,
+                                                        const gchar   *blurb,
+                                                        gboolean       none_ok,
+                                                        GParamFlags    flags);
+void gimp_procedure_add_vector_layer_return_value      (GimpProcedure *procedure,
+                                                        const gchar   *name,
+                                                        const gchar   *nick,
+                                                        const gchar   *blurb,
+                                                        gboolean       none_ok,
+                                                        GParamFlags    flags);
+
+void gimp_procedure_add_link_layer_argument            (GimpProcedure *procedure,
+                                                        const gchar   *name,
+                                                        const gchar   *nick,
+                                                        const gchar   *blurb,
+                                                        gboolean       none_ok,
+                                                        GParamFlags    flags);
+void gimp_procedure_add_link_layer_aux_argument        (GimpProcedure *procedure,
+                                                        const gchar   *name,
+                                                        const gchar   *nick,
+                                                        const gchar   *blurb,
+                                                        gboolean       none_ok,
+                                                        GParamFlags    flags);
+void gimp_procedure_add_link_layer_return_value        (GimpProcedure *procedure,
                                                         const gchar   *name,
                                                         const gchar   *nick,
                                                         const gchar   *blurb,

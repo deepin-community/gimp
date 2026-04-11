@@ -30,6 +30,8 @@
 
 #include "gui/gui-types.h"
 
+#include "config/gimpguiconfig.h"
+
 #include "core/gimp.h"
 #include "core/gimpcontainer.h"
 
@@ -39,8 +41,13 @@
 
 #include "file/file-open.h"
 
+#include "menus/menus.h"
+
+#include "widgets/gimpuimanager.h"
+
 #include "gimpdbusservice.h"
 #include "gui-unique.h"
+#include "themes.h"
 
 
 #ifdef G_OS_WIN32
@@ -53,16 +60,22 @@ static HWND  proxy_window = NULL;
 
 #elif defined (GDK_WINDOWING_QUARTZ)
 
-static void gui_unique_quartz_init (Gimp *gimp);
-static void gui_unique_quartz_exit (void);
+static void     gui_unique_quartz_init         (Gimp *gimp);
+static void     gui_unique_quartz_exit         (void);
+static gboolean gui_unique_quartz_trigger_quit (gpointer data);
 
 @interface GimpAppleEventHandler : NSObject {}
 - (void) handleEvent:(NSAppleEventDescriptor *) inEvent
         andReplyWith:(NSAppleEventDescriptor *) replyEvent;
 @end
 
-static Gimp                   *unique_gimp   = NULL;
-static GimpAppleEventHandler  *event_handler = NULL;
+@interface GimpAppDelegate : NSObject <NSApplicationDelegate>
+@end
+
+
+static Gimp                   *unique_gimp                            = NULL;
+static GimpAppleEventHandler  *event_handler                          = NULL;
+static void                  (^themeChangeHandler) (NSNotification *) = NULL;
 
 #else
 
@@ -202,9 +215,21 @@ gui_unique_win32_message_handler (HWND   hWnd,
         }
       return TRUE;
 
-    default:
-      return DefWindowProcW (hWnd, uMsg, wParam, lParam);
+    case WM_SETTINGCHANGE:
+      /* This message is not about the unique GUI code, but we reuse the
+       * existing top-level (hidden) window used for receiving messages
+       * for other purposes too, such as color scheme in this case.
+       * See !2308.
+       */
+      if (lParam != 0 && lstrcmpW((LPCWSTR)lParam, L"ImmersiveColorSet") == 0)
+        {
+          themes_theme_change_notify (GIMP_GUI_CONFIG (unique_gimp->config), NULL, unique_gimp);
+          return 0;
+        }
+      break;
     }
+
+    return DefWindowProcW (hWnd, uMsg, wParam, lParam);
 }
 
 static void
@@ -323,6 +348,15 @@ gui_unique_quartz_idle_open (GFile *file)
 }
 @end
 
+@implementation GimpAppDelegate
+- (NSApplicationTerminateReply) applicationShouldTerminate:(NSApplication *) sender
+{
+    g_idle_add ((GSourceFunc) gui_unique_quartz_trigger_quit, unique_gimp);
+
+    return NSTerminateCancel;
+}
+@end
+
 static void
 gui_unique_quartz_init (Gimp *gimp)
 {
@@ -330,6 +364,22 @@ gui_unique_quartz_init (Gimp *gimp)
   g_return_if_fail (unique_gimp == NULL);
 
   unique_gimp = gimp;
+
+  themeChangeHandler = ^(NSNotification *notification)
+  {
+    themes_theme_change_notify (GIMP_GUI_CONFIG (unique_gimp->config), NULL, unique_gimp);
+  };
+
+  /* Observe macOS theme changes (Light, Dark) via distributed notifications.
+   * When the "AppleInterfaceThemeChangedNotification" fires, the block runs
+   * on the main thread (via mainQueue), calling themes_theme_change_notify()
+   * to update GIMP's UI theme accordingly.
+   */
+  [[NSDistributedNotificationCenter defaultCenter]
+    addObserverForName: @"AppleInterfaceThemeChangedNotification"
+                object: nil
+                 queue: [NSOperationQueue mainQueue]
+            usingBlock: themeChangeHandler];
 
   /* Using the event handler is a hack, it is necessary because
    * gtkosx_application will drop the file open events if any
@@ -343,6 +393,13 @@ gui_unique_quartz_init (Gimp *gimp)
           andSelector: @selector (handleEvent: andReplyWith:)
         forEventClass: kCoreEventClass
            andEventID: kAEOpenDocuments];
+
+  /* When quitting the application using "Quit" from the dock's right-click menu,
+   * GIMP does not follow our standard quit procedure. Instead, macOS forces the
+   * application to close, which may result in losing unsaved changes.
+   * This delegate intercepts the applicationShouldTerminate call and uses our
+   * existing quit code, preventing macOS from handling the shutdown directly. */
+  [NSApp setDelegate:[[GimpAppDelegate alloc] init]];
 }
 
 static void
@@ -356,9 +413,26 @@ gui_unique_quartz_exit (void)
       removeEventHandlerForEventClass: kCoreEventClass
                            andEventID: kAEOpenDocuments];
 
+  [[NSDistributedNotificationCenter defaultCenter]
+    removeObserver: themeChangeHandler
+              name: @"AppleInterfaceThemeChangedNotification"
+            object: nil];
+
+  themeChangeHandler = NULL;
   [event_handler release];
 
   event_handler = NULL;
+}
+
+static gboolean
+gui_unique_quartz_trigger_quit (gpointer data)
+{
+  Gimp          *gimp       = (Gimp *)data;
+  GimpUIManager *ui_manager = menus_get_image_manager_singleton (gimp);
+
+  gimp_ui_manager_activate_action (ui_manager, "file", "file-quit");
+
+  return FALSE;
 }
 
 #else

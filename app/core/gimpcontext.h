@@ -18,9 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_CONTEXT_H__
-#define __GIMP_CONTEXT_H__
-
+#pragma once
 
 #include "gimpviewable.h"
 
@@ -241,8 +239,8 @@ void             gimp_context_display_changed     (GimpContext     *context);
 GimpToolInfo   * gimp_context_get_tool            (GimpContext     *context);
 void             gimp_context_set_tool            (GimpContext     *context,
                                                    GimpToolInfo    *tool_info);
-void             gimp_context_tool_changed        (GimpContext     *context);
 
+void             gimp_context_tool_changed        (GimpContext     *context);
 
 /*  paint info  */
 GimpPaintInfo  * gimp_context_get_paint_info      (GimpContext     *context);
@@ -367,6 +365,3 @@ void             gimp_context_template_changed    (GimpContext     *context);
 GimpLineArt    * gimp_context_take_line_art       (GimpContext     *context);
 void             gimp_context_store_line_art      (GimpContext     *context,
                                                    GimpLineArt     *line_art);
-
-
-#endif /* __GIMP_CONTEXT_H__ */

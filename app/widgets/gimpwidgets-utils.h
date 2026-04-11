@@ -66,9 +66,8 @@ GdkModifierType   gimp_get_all_modifiers_mask      (void);
 void              gimp_get_monitor_resolution      (GdkMonitor           *monitor,
                                                     gdouble              *xres,
                                                     gdouble              *yres);
-gboolean          gimp_get_style_color             (GtkWidget            *widget,
-                                                    const gchar          *property_name,
-                                                    GdkRGBA              *color);
+GeglColor       * gimp_get_style_color             (GtkWidget            *widget,
+                                                    const gchar          *color_name);
 void              gimp_window_set_hint             (GtkWindow            *window,
                                                     GimpWindowHint        hint);
 void              gimp_window_set_transient_for    (GtkWindow            *window,
@@ -167,6 +166,7 @@ gboolean          gimp_utils_are_menu_path_identical   (const gchar       *path1
 #ifdef G_OS_WIN32
 void              gimp_window_set_title_bar_theme      (Gimp              *gimp,
                                                         GtkWidget         *dialog);
+gboolean          gimp_is_win32_system_theme_dark      (void);
 #endif
 
 #endif /* __APP_GIMP_WIDGETS_UTILS_H__ */

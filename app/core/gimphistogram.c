@@ -37,7 +37,10 @@
 #include "gimp-atomic.h"
 #include "gimp-parallel.h"
 #include "gimpasync.h"
+#include "gimpchannel.h"
+#include "gimpdrawable.h"
 #include "gimphistogram.h"
+#include "gimpimage.h"
 #include "gimpwaitable.h"
 
 
@@ -119,6 +122,9 @@ static void       gimp_histogram_calculate_area           (const GeglRectangle  
                                                            CalculateData        *data);
 static void       gimp_histogram_calculate_async_callback (GimpAsync            *async,
                                                            CalculateContext     *context);
+static guint      hash_color_bytes                        (gpointer             *key);
+static gboolean   color_bytes_equal                       (gpointer             *key1,
+                                                           gpointer             *key2);
 
 
 G_DEFINE_TYPE_WITH_PRIVATE (GimpHistogram, gimp_histogram, GIMP_TYPE_OBJECT)
@@ -227,6 +233,49 @@ gimp_histogram_get_memsize (GimpObject *object,
 
   return memsize + GIMP_OBJECT_CLASS (parent_class)->get_memsize (object,
                                                                   gui_size);
+}
+
+static guint
+hash_color_bytes (gpointer *key)
+{
+  GBytes       *bytes     = (GBytes *) key;
+  gsize         size;
+  const guint8 *data;
+  gdouble       max_value = 0.0;
+  gdouble       value     = 0.0;
+  guint         hash;
+
+  data = g_bytes_get_data (bytes, &size);
+
+  for (gsize i = 0; i < size; ++i)
+    {
+      value     = value * 256.0 + data[i];
+      max_value = max_value * 256.0 + 255.0;
+    }
+
+  if (max_value == 0)
+    return 0;
+
+  hash = (guint) (value * G_MAXUINT / max_value);
+
+  return hash;
+}
+
+static gboolean
+color_bytes_equal (gpointer *key1,
+                   gpointer *key2)
+{
+  GBytes       *bytes1 = (GBytes *) key1;
+  GBytes       *bytes2 = (GBytes *) key2;
+  gsize         size1;
+  gsize         size2;
+  const guint8 *data1  = g_bytes_get_data (bytes1, &size1);
+  const guint8 *data2  = g_bytes_get_data (bytes2, &size2);
+
+  if (size1 != size2)
+    return FALSE;
+
+  return memcmp (data1, data2, size1) == 0;
 }
 
 /*  public functions  */
@@ -1229,4 +1278,65 @@ gimp_histogram_calculate_async_callback (GimpAsync        *async,
     g_object_unref (context->mask);
 
   g_slice_free (CalculateContext, context);
+}
+
+guint
+gimp_histogram_unique_colors (GimpDrawable *drawable)
+{
+  GimpImage          *image;
+  const Babl         *format;
+  guint               bpp;
+  GeglBufferIterator *iter;
+  GHashTable         *hash_table;
+  guint               uniques = 0;
+  gboolean            selection_empty;
+  GeglRectangle       area;
+
+  g_return_val_if_fail (GIMP_IS_DRAWABLE (drawable), 0);
+
+  image  = gimp_item_get_image (GIMP_ITEM (drawable));
+  format = gimp_drawable_get_format (drawable);
+  bpp    = babl_format_get_bytes_per_pixel (format);
+
+  selection_empty = gimp_channel_is_empty (gimp_image_get_mask (image));
+  if (! selection_empty)
+    gimp_item_mask_intersect (GIMP_ITEM (drawable), &area.x, &area.y,
+                              &area.width, &area.height);
+
+  iter = gegl_buffer_iterator_new (gimp_drawable_get_buffer (drawable),
+                                   selection_empty ? NULL : &area,
+                                   0, format,
+                                   GEGL_ACCESS_READ, GEGL_ABYSS_NONE, 1);
+
+
+  hash_table = g_hash_table_new_full ((GHashFunc)      hash_color_bytes,
+                                      (GEqualFunc)     color_bytes_equal,
+                                      (GDestroyNotify) g_bytes_unref,
+                                      NULL);
+
+  while (gegl_buffer_iterator_next (iter))
+    {
+      guint8 *data   = iter->items[0].data;
+      guint   length = iter->length;
+
+      while (length--)
+        {
+          GBytes *key = g_bytes_new (data, bpp);
+
+          if (! g_hash_table_lookup_extended (hash_table, key, NULL, NULL))
+            {
+              g_hash_table_insert (hash_table, key, NULL);
+              key = NULL;
+              uniques++;
+            }
+
+          g_bytes_unref (key);
+
+          data += bpp;
+        }
+    }
+
+  g_hash_table_destroy (hash_table);
+
+  return uniques;
 }

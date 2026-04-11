@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_TOOL_H__
-#define __GIMP_TOOL_H__
-
+#pragma once
 
 #include "core/gimpobject.h"
 
@@ -165,6 +163,8 @@ struct _GimpToolClass
   void            (* options_notify)      (GimpTool              *tool,
                                            GimpToolOptions       *options,
                                            const GParamSpec      *pspec);
+
+  gboolean           is_destructive;
 };
 
 
@@ -295,6 +295,3 @@ void              gimp_tool_set_cursor          (GimpTool            *tool,
                                                  GimpCursorType       cursor,
                                                  GimpToolCursorType   tool_cursor,
                                                  GimpCursorModifier   modifier);
-
-
-#endif  /*  __GIMP_TOOL_H__  */

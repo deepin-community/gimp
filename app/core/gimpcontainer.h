@@ -18,9 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_CONTAINER_H__
-#define __GIMP_CONTAINER_H__
-
+#pragma once
 
 #include "gimpobject.h"
 
@@ -58,6 +56,7 @@ struct _GimpContainerClass
                                        GimpObject              *object);
   void         (* reorder)            (GimpContainer           *container,
                                        GimpObject              *object,
+                                       gint                     old_index,
                                        gint                     new_index);
   void         (* freeze)             (GimpContainer           *container);
   void         (* thaw)               (GimpContainer           *container);
@@ -86,7 +85,7 @@ struct _GimpContainerClass
 
 GType        gimp_container_get_type           (void) G_GNUC_CONST;
 
-GType        gimp_container_get_children_type  (GimpContainer           *container);
+GType        gimp_container_get_child_type     (GimpContainer           *container);
 GimpContainerPolicy gimp_container_get_policy  (GimpContainer           *container);
 gint         gimp_container_get_n_children     (GimpContainer           *container);
 
@@ -149,5 +148,4 @@ void         gimp_container_remove_handlers_by_data
                                                (GimpContainer           *container,
                                                 gpointer                 callback_data);
 
-
-#endif  /* __GIMP_CONTAINER_H__ */
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GimpContainer, g_object_unref);

@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_SELECTION_OPTIONS_H__
-#define __GIMP_SELECTION_OPTIONS_H__
-
+#pragma once
 
 #include "core/gimptooloptions.h"
 
@@ -48,9 +46,12 @@ struct _GimpSelectionOptions
 };
 
 
-GType       gimp_selection_options_get_type (void) G_GNUC_CONST;
+GType        gimp_selection_options_get_type    (void) G_GNUC_CONST;
 
-GtkWidget * gimp_selection_options_gui      (GimpToolOptions *tool_options);
+GtkWidget  * gimp_selection_options_gui         (GimpToolOptions *tool_options);
 
+/* For usage in gimppaintselectoptions.c */
 
-#endif  /*  __GIMP_SELECTION_OPTIONS_H__  */
+GtkWidget * gimp_selection_options_get_mode_box (GimpToolOptions *tool_options,
+                                                 GimpChannelOps   min_op,
+                                                 GimpChannelOps   max_op);

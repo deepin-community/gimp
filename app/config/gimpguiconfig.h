@@ -18,8 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_GUI_CONFIG_H__
-#define __GIMP_GUI_CONFIG_H__
+#pragma once
 
 #include "config/gimpdisplayconfig.h"
 
@@ -70,6 +69,7 @@ struct _GimpGuiConfig
   gdouble              font_relative_size;
   gboolean             override_icon_size;
   GimpIconSize         custom_icon_size;
+  gboolean             viewables_follow_theme;
   gboolean             use_help;
   gboolean             show_help_button;
   gchar               *help_locales;
@@ -86,6 +86,7 @@ struct _GimpGuiConfig
   gboolean             playground_npd_tool;
   gboolean             playground_seamless_clone_tool;
   gboolean             playground_paint_select_tool;
+  gboolean             playground_use_list_box;
 
   /* saved in sessionrc */
   gboolean             hide_docks;
@@ -107,6 +108,3 @@ struct _GimpGuiConfigClass
 
 
 GType  gimp_gui_config_get_type (void) G_GNUC_CONST;
-
-
-#endif /* GIMP_GUI_CONFIG_H__ */

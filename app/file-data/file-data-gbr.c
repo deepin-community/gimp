@@ -275,6 +275,9 @@ file_gbr_drawable_to_brush (GimpDrawable        *drawable,
   width  = rect->width;
   height = rect->height;
 
+  if (width < 0 || height < 0)
+    return NULL;
+
   brush = g_object_new (GIMP_TYPE_BRUSH,
                         "name",      name,
                         "mime-type", "image/x-gimp-gbr",
@@ -311,8 +314,8 @@ file_gbr_drawable_to_brush (GimpDrawable        *drawable,
                   if (data[1] < 1.0)
                     data[0] = (1.0 - data[1]) + (data[0] * data[1]);
 
-                  x = iter->items[0].roi.x + j % iter->items[0].roi.width;
-                  y = iter->items[0].roi.y + j / iter->items[0].roi.width;
+                  x = j % iter->items[0].roi.width;
+                  y = j / iter->items[0].roi.width;
 
                   dest = y * width + x;
 
@@ -399,7 +402,7 @@ file_gbr_brush_to_image (Gimp      *gimp,
 
   gimp_config_writer_finish (writer, NULL, NULL);
 
-  parasite = gimp_parasite_new ("GimpProcedureConfig-file-gbr-save-last",
+  parasite = gimp_parasite_new ("GimpProcedureConfigRun-file-gbr-export-last",
                                 GIMP_PARASITE_PERSISTENT,
                                 string->len + 1, string->str);
   gimp_image_parasite_attach (image, parasite, FALSE);
@@ -421,7 +424,7 @@ file_gbr_image_to_brush (GimpImage     *image,
                          const gchar   *name,
                          gdouble        spacing)
 {
-  GimpBrush    *brush;
+  GimpBrush    *brush    = NULL;
   GimpImage    *subimage = NULL;
   GimpDrawable *drawable;
   gint          width;

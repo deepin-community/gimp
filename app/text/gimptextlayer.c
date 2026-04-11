@@ -46,9 +46,9 @@
 #include "core/gimpimage-color-profile.h"
 #include "core/gimpimage-undo.h"
 #include "core/gimpimage-undo-push.h"
-#include "core/gimpitemtree.h"
 #include "core/gimpparasitelist.h"
 #include "core/gimppattern.h"
+#include "core/gimprasterizable.h"
 #include "core/gimptempbuf.h"
 
 #include "gimptext.h"
@@ -63,14 +63,22 @@ enum
 {
   PROP_0,
   PROP_TEXT,
-  PROP_AUTO_RENAME,
-  PROP_MODIFIED
 };
 
 struct _GimpTextLayerPrivate
 {
   GimpTextDirection base_dir;
+
+  /* on-canvas editor position */
+  gboolean          style_overlay_positioned;
+  gdouble           style_overlay_x;
+  gdouble           style_overlay_y;
+  gdouble           style_overlay_offset_x;
+  gdouble           style_overlay_offset_y;
 };
+
+static void       gimp_text_layer_rasterizable_iface_init
+                                                 (GimpRasterizableInterface *iface);
 
 static void       gimp_text_layer_finalize       (GObject           *object);
 static void       gimp_text_layer_get_property   (GObject           *object,
@@ -82,15 +90,14 @@ static void       gimp_text_layer_set_property   (GObject           *object,
                                                   const GValue      *value,
                                                   GParamSpec        *pspec);
 
+static void       gimp_text_layer_set_rasterized (GimpRasterizable  *rasterizable,
+                                                  gboolean           rasterized);
+
 static gint64     gimp_text_layer_get_memsize    (GimpObject        *object,
                                                   gint64            *gui_size);
 
 static GimpItem * gimp_text_layer_duplicate      (GimpItem          *item,
                                                   GType              new_type);
-static gboolean   gimp_text_layer_rename         (GimpItem          *item,
-                                                  const gchar       *new_name,
-                                                  const gchar       *undo_desc,
-                                                  GError           **error);
 
 static void       gimp_text_layer_set_buffer     (GimpDrawable      *drawable,
                                                   gboolean           push_undo,
@@ -121,7 +128,10 @@ static void       gimp_text_layer_render_layout  (GimpTextLayer     *layer,
                                                   GimpTextLayout    *layout);
 
 
-G_DEFINE_TYPE_WITH_PRIVATE (GimpTextLayer, gimp_text_layer, GIMP_TYPE_LAYER)
+G_DEFINE_TYPE_WITH_CODE (GimpTextLayer, gimp_text_layer, GIMP_TYPE_LAYER,
+                         G_ADD_PRIVATE (GimpTextLayer)
+                         G_IMPLEMENT_INTERFACE (GIMP_TYPE_RASTERIZABLE,
+                                                gimp_text_layer_rasterizable_iface_init))
 
 #define parent_class gimp_text_layer_parent_class
 
@@ -143,9 +153,10 @@ gimp_text_layer_class_init (GimpTextLayerClass *klass)
   gimp_object_class->get_memsize    = gimp_text_layer_get_memsize;
 
   viewable_class->default_icon_name = "gimp-text-layer";
+  viewable_class->default_name      = _("Text Layer");
 
   item_class->duplicate             = gimp_text_layer_duplicate;
-  item_class->rename                = gimp_text_layer_rename;
+  item_class->rename                = gimp_rasterizable_rename;
 
 #if 0
   item_class->scale                 = gimp_text_layer_scale;
@@ -154,7 +165,6 @@ gimp_text_layer_class_init (GimpTextLayerClass *klass)
   item_class->transform             = gimp_text_layer_transform;
 #endif
 
-  item_class->default_name          = _("Text Layer");
   item_class->rename_desc           = _("Rename Text Layer");
   item_class->translate_desc        = _("Move Text Layer");
   item_class->scale_desc            = _("Scale Text Layer");
@@ -173,18 +183,6 @@ gimp_text_layer_class_init (GimpTextLayerClass *klass)
                            NULL, NULL,
                            GIMP_TYPE_TEXT,
                            GIMP_PARAM_STATIC_STRINGS);
-
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_AUTO_RENAME,
-                            "auto-rename",
-                            NULL, NULL,
-                            TRUE,
-                            GIMP_PARAM_STATIC_STRINGS);
-
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_MODIFIED,
-                            "modified",
-                            NULL, NULL,
-                            FALSE,
-                            GIMP_PARAM_STATIC_STRINGS);
 }
 
 static void
@@ -194,6 +192,12 @@ gimp_text_layer_init (GimpTextLayer *layer)
   layer->text_parasite        = NULL;
   layer->text_parasite_is_old = FALSE;
   layer->private              = gimp_text_layer_get_instance_private (layer);
+}
+
+static void
+gimp_text_layer_rasterizable_iface_init (GimpRasterizableInterface *iface)
+{
+  iface->set_rasterized = gimp_text_layer_set_rasterized;
 }
 
 static void
@@ -219,12 +223,6 @@ gimp_text_layer_get_property (GObject      *object,
     case PROP_TEXT:
       g_value_set_object (value, text_layer->text);
       break;
-    case PROP_AUTO_RENAME:
-      g_value_set_boolean (value, text_layer->auto_rename);
-      break;
-    case PROP_MODIFIED:
-      g_value_set_boolean (value, text_layer->modified);
-      break;
 
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
@@ -245,16 +243,23 @@ gimp_text_layer_set_property (GObject      *object,
     case PROP_TEXT:
       gimp_text_layer_set_text (text_layer, g_value_get_object (value));
       break;
-    case PROP_AUTO_RENAME:
-      text_layer->auto_rename = g_value_get_boolean (value);
-      break;
-    case PROP_MODIFIED:
-      text_layer->modified = g_value_get_boolean (value);
-      break;
 
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, property_id, pspec);
       break;
+    }
+}
+
+static void
+gimp_text_layer_set_rasterized (GimpRasterizable *rasterizable,
+                                gboolean          rasterized)
+{
+  if (! rasterized)
+    {
+      if (! gimp_drawable_has_alpha (GIMP_DRAWABLE (rasterizable)))
+        gimp_layer_add_alpha (GIMP_LAYER (rasterizable));
+
+      gimp_text_layer_render (GIMP_TEXT_LAYER (rasterizable));
     }
 }
 
@@ -306,25 +311,14 @@ gimp_text_layer_duplicate (GimpItem *item,
         }
 
       new_layer->private->base_dir = layer->private->base_dir;
+      gimp_rasterizable_set_auto_rename (GIMP_RASTERIZABLE (new_layer),
+                                         gimp_rasterizable_get_auto_rename (GIMP_RASTERIZABLE (layer)));
+
+      if (gimp_rasterizable_is_rasterized (GIMP_RASTERIZABLE (layer)))
+        gimp_rasterizable_set_undo_rasterized (GIMP_RASTERIZABLE (new_layer), TRUE);
     }
 
   return new_item;
-}
-
-static gboolean
-gimp_text_layer_rename (GimpItem     *item,
-                        const gchar  *new_name,
-                        const gchar  *undo_desc,
-                        GError      **error)
-{
-  if (GIMP_ITEM_CLASS (parent_class)->rename (item, new_name, undo_desc, error))
-    {
-      g_object_set (item, "auto-rename", FALSE, NULL);
-
-      return TRUE;
-    }
-
-  return FALSE;
 }
 
 static void
@@ -336,8 +330,11 @@ gimp_text_layer_set_buffer (GimpDrawable        *drawable,
 {
   GimpTextLayer *layer = GIMP_TEXT_LAYER (drawable);
   GimpImage     *image = gimp_item_get_image (GIMP_ITEM (layer));
+  gboolean       is_rasterized;
 
-  if (push_undo && ! layer->modified)
+  is_rasterized = gimp_rasterizable_is_rasterized (GIMP_RASTERIZABLE (layer));
+
+  if (push_undo && ! is_rasterized)
     gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_DRAWABLE_MOD,
                                  undo_desc);
 
@@ -345,12 +342,9 @@ gimp_text_layer_set_buffer (GimpDrawable        *drawable,
                                                   push_undo, undo_desc,
                                                   buffer, bounds);
 
-  if (push_undo && ! layer->modified)
+  if (push_undo && ! is_rasterized)
     {
-      gimp_image_undo_push_text_layer_modified (image, NULL, layer);
-
-      g_object_set (drawable, "modified", TRUE, NULL);
-
+      gimp_rasterizable_rasterize (GIMP_RASTERIZABLE (layer), push_undo);
       gimp_image_undo_group_end (image);
     }
 }
@@ -366,20 +360,20 @@ gimp_text_layer_push_undo (GimpDrawable *drawable,
 {
   GimpTextLayer *layer = GIMP_TEXT_LAYER (drawable);
   GimpImage     *image = gimp_item_get_image (GIMP_ITEM (layer));
+  gboolean       is_rasterized;
 
-  if (! layer->modified)
+  is_rasterized = gimp_rasterizable_is_rasterized (GIMP_RASTERIZABLE (layer));
+
+  if (! is_rasterized)
     gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_DRAWABLE, undo_desc);
 
   GIMP_DRAWABLE_CLASS (parent_class)->push_undo (drawable, undo_desc,
                                                  buffer,
                                                  x, y, width, height);
 
-  if (! layer->modified)
+  if (! is_rasterized)
     {
-      gimp_image_undo_push_text_layer_modified (image, NULL, layer);
-
-      g_object_set (drawable, "modified", TRUE, NULL);
-
+      gimp_rasterizable_rasterize (GIMP_RASTERIZABLE (layer), TRUE);
       gimp_image_undo_group_end (image);
     }
 }
@@ -398,8 +392,8 @@ gimp_text_layer_convert_type (GimpLayer         *layer,
   GimpTextLayer *text_layer = GIMP_TEXT_LAYER (layer);
   GimpImage     *image      = gimp_item_get_image (GIMP_ITEM (text_layer));
 
-  if (! text_layer->text   ||
-      text_layer->modified ||
+  if (! text_layer->text                                          ||
+      gimp_rasterizable_is_rasterized (GIMP_RASTERIZABLE (layer)) ||
       layer_dither_type != GEGL_DITHER_NONE)
     {
       GIMP_LAYER_CLASS (parent_class)->convert_type (layer, dest_image,
@@ -534,10 +528,8 @@ gimp_text_layer_set (GimpTextLayer *layer,
 
   g_object_freeze_notify (G_OBJECT (layer));
 
-  if (layer->modified)
+  if (gimp_rasterizable_is_rasterized (GIMP_RASTERIZABLE (layer)))
     {
-      gimp_image_undo_push_text_layer_modified (image, NULL, layer);
-
       /*  pass copy_tiles = TRUE so we not only ref the tiles; after
        *  being a text layer again, undo doesn't care about the
        *  layer's pixels any longer because they are generated, so
@@ -552,47 +544,109 @@ gimp_text_layer_set (GimpTextLayer *layer,
   gimp_image_undo_push_text_layer (image, undo_desc, layer, NULL);
 
   va_start (var_args, first_property_name);
-
   g_object_set_valist (G_OBJECT (text), first_property_name, var_args);
-
   va_end (var_args);
 
-  g_object_set (layer, "modified", FALSE, NULL);
+  if (gimp_rasterizable_is_rasterized (GIMP_RASTERIZABLE (layer)))
+    gimp_rasterizable_restore (GIMP_RASTERIZABLE (layer));
 
   g_object_thaw_notify (G_OBJECT (layer));
 
   gimp_image_undo_group_end (image);
 }
 
-/**
- * gimp_text_layer_discard:
- * @layer: a #GimpTextLayer
- *
- * Discards the text information. This makes @layer behave like a
- * normal layer.
- */
-void
-gimp_text_layer_discard (GimpTextLayer *layer)
-{
-  g_return_if_fail (GIMP_IS_TEXT_LAYER (layer));
-  g_return_if_fail (gimp_item_is_attached (GIMP_ITEM (layer)));
-
-  if (! layer->text)
-    return;
-
-  gimp_image_undo_push_text_layer (gimp_item_get_image (GIMP_ITEM (layer)),
-                                   _("Discard Text Information"),
-                                   layer, NULL);
-
-  gimp_text_layer_set_text (layer, NULL);
-}
-
 gboolean
 gimp_item_is_text_layer (GimpItem *item)
 {
-  return (GIMP_IS_TEXT_LAYER (item)    &&
-          GIMP_TEXT_LAYER (item)->text &&
-          GIMP_TEXT_LAYER (item)->modified == FALSE);
+  return (GIMP_IS_TEXT_LAYER (item) &&
+          ! gimp_rasterizable_is_rasterized (GIMP_RASTERIZABLE (item)));
+}
+
+
+void
+gimp_text_layer_set_style_overlay_position (GimpTextLayer *layer,
+                                            gboolean       positioned,
+                                            gdouble        x,
+                                            gdouble        y)
+{
+  GimpTextLayerPrivate *priv;
+
+  g_return_if_fail (GIMP_IS_TEXT_LAYER (layer));
+
+  priv = layer->private;
+
+  priv->style_overlay_positioned = positioned;
+
+  /* We want to set "style_overlay_x" and "style_overlay_y" only
+   * when "positioned" is TRUE. Otherwhise, we only want to set
+   * "style_overlay_positioned" to FALSE */
+  if (positioned)
+    {
+      priv->style_overlay_x = x;
+      priv->style_overlay_y = y;
+    }
+}
+
+gboolean
+gimp_text_layer_get_style_overlay_position (GimpTextLayer *layer,
+                                            gdouble       *x,
+                                            gdouble       *y)
+{
+  GimpTextLayerPrivate *priv;
+
+  g_return_val_if_fail (GIMP_IS_TEXT_LAYER (layer), FALSE);
+
+  priv = layer->private;
+
+  if (! priv->style_overlay_positioned)
+    return FALSE;
+
+  *x = priv->style_overlay_x;
+  *y = priv->style_overlay_y;
+
+  return TRUE;
+}
+
+gboolean
+gimp_text_layer_is_style_overlay_positioned (GimpTextLayer *layer)
+{
+  GimpTextLayerPrivate *priv;
+
+  g_return_val_if_fail (GIMP_IS_TEXT_LAYER (layer), FALSE);
+
+  priv = layer->private;
+
+  return priv->style_overlay_positioned;
+}
+
+void
+gimp_text_layer_set_style_overlay_offset (GimpTextLayer *layer,
+                                          gdouble        offset_x,
+                                          gdouble        offset_y)
+{
+  GimpTextLayerPrivate *priv;
+
+  g_return_if_fail (GIMP_IS_TEXT_LAYER (layer));
+
+  priv = layer->private;
+
+  priv->style_overlay_offset_x = offset_x;
+  priv->style_overlay_offset_y = offset_y;
+}
+
+void
+gimp_text_layer_get_style_overlay_offset (GimpTextLayer *layer,
+                                          gdouble       *offset_x,
+                                          gdouble       *offset_y)
+{
+  GimpTextLayerPrivate *priv;
+
+  g_return_if_fail (GIMP_IS_TEXT_LAYER (layer));
+
+  priv = layer->private;
+
+  *offset_x = priv->style_overlay_offset_x;
+  *offset_y = priv->style_overlay_offset_y;
 }
 
 
@@ -698,6 +752,7 @@ gimp_text_layer_render (GimpTextLayer *layer)
   GimpImage      *image;
   GimpContainer  *container;
   GimpTextLayout *layout;
+  gchar          *name = NULL;
   gdouble         xres;
   gdouble         yres;
   gint            width;
@@ -761,39 +816,19 @@ gimp_text_layer_render (GimpTextLayer *layer)
         }
     }
 
-  if (layer->auto_rename)
+  if (layer->text->text)
     {
-      GimpItem *item = GIMP_ITEM (layer);
-      gchar    *name = NULL;
-
-      if (layer->text->text)
-        {
-          name = gimp_utf8_strtrim (layer->text->text, 30);
-        }
-      else if (layer->text->markup)
-        {
-          gchar *tmp = gimp_markup_extract_text (layer->text->markup);
-          name = gimp_utf8_strtrim (tmp, 30);
-          g_free (tmp);
-        }
-
-      if (! name || ! name[0])
-        {
-          g_free (name);
-          name = g_strdup (_("Empty Text Layer"));
-        }
-
-      if (gimp_item_is_attached (item))
-        {
-          gimp_item_tree_rename_item (gimp_item_get_tree (item), item,
-                                      name, FALSE, NULL);
-          g_free (name);
-        }
-      else
-        {
-          gimp_object_take_name (GIMP_OBJECT (layer), name);
-        }
+      name = gimp_utf8_strtrim (layer->text->text, 30);
     }
+  else if (layer->text->markup)
+    {
+      gchar *tmp = gimp_markup_extract_text (layer->text->markup);
+      name = gimp_utf8_strtrim (tmp, 30);
+      g_free (tmp);
+    }
+
+  gimp_rasterizable_auto_rename (GIMP_RASTERIZABLE (layer), NULL, name);
+  g_free (name);
 
   if (width > 0 && height > 0)
     gimp_text_layer_render_layout (layer, layout);
@@ -1014,10 +1049,31 @@ gimp_text_layer_render_layout (GimpTextLayer  *layer,
       cairo_set_line_width (cr, text->outline_width * 2);
 
       gimp_text_layout_render (layout, cr, text->base_dir, TRUE);
-      cairo_clip_preserve (cr);
-      cairo_stroke (cr);
+
+      if (text->outline_direction == GIMP_TEXT_OUTLINE_DIRECTION_INNER)
+        cairo_clip_preserve (cr);
+
+      cairo_stroke_preserve (cr);
+
+      /* Clears inner outline if outline direction is outward */
+      if (text->outline_direction == GIMP_TEXT_OUTLINE_DIRECTION_OUTER &&
+          text->outline == GIMP_TEXT_OUTLINE_STROKE_ONLY)
+        {
+          cairo_set_operator (cr, CAIRO_OPERATOR_CLEAR);
+          cairo_fill_preserve (cr);
+        }
 
       cairo_restore (cr);
+
+      if (text->outline_direction == GIMP_TEXT_OUTLINE_DIRECTION_OUTER &&
+          text->outline != GIMP_TEXT_OUTLINE_STROKE_ONLY)
+        {
+          cairo_save (cr);
+
+          gimp_text_layout_render (layout, cr, layer->text->base_dir, FALSE);
+
+          cairo_restore (cr);
+        }
     }
 
   cairo_destroy (cr);
@@ -1043,7 +1099,7 @@ gimp_text_layer_render_layout (GimpTextLayer  *layer,
 #else
   format = babl_format_with_space ("cairo-ARGB32", gimp_text_layout_get_space (layout));
 #endif
-  buffer = gimp_cairo_surface_create_buffer (surface, format);
+  buffer = gimp_cairo_surface_get_buffer (surface, format, FALSE);
 
   gimp_gegl_buffer_copy (buffer, NULL, GEGL_ABYSS_NONE,
                          gimp_drawable_get_buffer (drawable), NULL);

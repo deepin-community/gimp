@@ -1,4 +1,4 @@
-/* GIMP - The GNU Image Manipulation Program
+﻿/* GIMP - The GNU Image Manipulation Program
  * Copyright (C) 1995 Spencer Kimball and Peter Mattis
  *
  * This program is free software: you can redistribute it and/or modify
@@ -46,6 +46,9 @@
 
 #ifndef GIMP_CONSOLE_COMPILATION
 #include <gtk/gtk.h>
+#ifdef GDK_WINDOWING_X11
+#include <gdk/gdkx.h>
+#endif
 #else
 #include <gdk-pixbuf/gdk-pixbuf.h>
 #endif
@@ -113,9 +116,9 @@ static void      gimp_init_i18n               (void);
 static void      gimp_init_malloc             (void);
 
 #if defined (G_OS_WIN32) && !defined (GIMP_CONSOLE_COMPILATION)
-static void      gimp_open_console_window     (void);
+static void      gimp_attach_console_window     (void);
 #else
-#define gimp_open_console_window() /* as nothing */
+#define gimp_attach_console_window() /* as nothing */
 #endif
 
 static const gchar        *system_gimprc     = NULL;
@@ -181,7 +184,20 @@ static const GOptionEntry main_entries[] =
     N_("Open images as new"), NULL
   },
   {
-    "no-interface", 'i', 0,
+    "no-interface", 'i',
+#ifdef GIMP_CONSOLE_COMPILATION
+    /* The CLI option is not removed for gimp-console because it allows
+     * to set the same options on either the GUI or the console
+     * binaries, as a no-brainer. We in fact also use this in build
+     * scripts which may make use of either one of the binaries to
+     * construct some images.
+     * Yet it's unnecessary to show this option in the CLI tool usage as
+     * it's basically a no-op.
+     */
+    G_OPTION_FLAG_HIDDEN,
+#else
+    0,
+#endif
     G_OPTION_ARG_NONE, &no_interface,
     N_("Run without a user interface"), NULL
   },
@@ -294,7 +310,7 @@ static const GOptionEntry main_entries[] =
     N_("Show a preferences page with experimental features"), NULL
   },
   {
-    "show-debug-menu", 0, G_OPTION_FLAG_HIDDEN,
+    "show-debug-menu", 0, 0,
     G_OPTION_ARG_NONE, &show_debug_menu,
     N_("Show an image submenu with debug actions"), NULL
   },
@@ -311,8 +327,10 @@ static void
 gimp_macos_setenv (const char * progname)
 {
   /* helper to set environment variables for GIMP to be relocatable.
-   * Due to the latest changes it is not recommended to set it in the shell
-   * wrapper anymore.
+   * Due to the changes on macOS 10.15, it is not recommended to set it in
+   * a shell wrapper inside Contents/MacOS (like AppImage's AppRun) anymore.
+   * LSEnvironment on Info.plist, limited to bundle scope, would not be enough.
+   * That way, we make sure our python is called instead of system one etc
    */
   gchar  *resolved_path;
   /* on some OSX installations open file limit is 256 and GIMP needs more */
@@ -324,67 +342,55 @@ gimp_macos_setenv (const char * progname)
   resolved_path = g_canonicalize_filename (progname, NULL);
   if (resolved_path && ! g_getenv ("GIMP_NO_WRAPPER"))
     {
-      /* set path to the app folder to make sure that our python is called
-       * instead of system one
-       */
-      static gboolean            show_playground   = TRUE;
-
       gchar   *path;
       gchar   *tmp;
-      gchar   *app_dir;
-      gchar   *res_dir;
+      gchar   *bin_dir;
+      gchar   *lib_dir;
+      gchar   *share_dir;
+      gchar   *etc_dir;
       size_t   path_len;
       struct   stat sb;
-      gboolean need_pythonhome = TRUE;
 
-      app_dir = g_path_get_dirname (resolved_path);
-      tmp = g_strdup_printf ("%s/../Resources", app_dir);
-      res_dir = g_canonicalize_filename (tmp, NULL);
+      bin_dir = g_path_get_dirname (resolved_path);
+      tmp = g_strdup_printf ("%s/lib", gimp_installation_directory());
+      lib_dir = g_canonicalize_filename (tmp, NULL);
       g_free (tmp);
-      if (res_dir && !stat (res_dir, &sb) && S_ISDIR (sb.st_mode))
+      tmp = g_strdup_printf ("%s/share", gimp_installation_directory());
+      share_dir = g_canonicalize_filename (tmp, NULL);
+      g_free (tmp);
+      tmp = g_strdup_printf ("%s/etc", gimp_installation_directory());
+      etc_dir = g_canonicalize_filename (tmp, NULL);
+      g_free (tmp);
+
+      /* Detect if we are running from bundle or from prefix */
+      if (g_str_has_suffix (bin_dir, "MacOS"))
         {
           g_print ("GIMP is started as MacOS application\n");
         }
       else
         {
-          tmp = g_strdup_printf ("%s/../share", app_dir);
-          res_dir = g_canonicalize_filename (tmp, NULL);
+          tmp = g_strdup_printf ("%s/share", gimp_installation_directory());
+          share_dir = g_canonicalize_filename (tmp, NULL);
           g_free (tmp);
-          if (res_dir && !stat (res_dir, &sb) && S_ISDIR (sb.st_mode))
+          if (share_dir && !stat (share_dir, &sb) && S_ISDIR (sb.st_mode))
             {
-              g_free (res_dir);
+              g_free (share_dir);
 
               g_print ("GIMP is started in the build directory\n");
 
-              tmp = g_strdup_printf ("%s/..", app_dir); /* running in build dir */
-              res_dir = g_canonicalize_filename (tmp, NULL);
+              tmp = g_strdup_printf ("%s", gimp_installation_directory()); /* running in build dir */
+              share_dir = g_canonicalize_filename (tmp, NULL);
               g_free (tmp);
             }
           else
             {
-              g_free (res_dir);
+              g_free (share_dir);
               return;
             }
         }
 
-      /* Detect we were built in homebrew for MacOS */
-      tmp = g_strdup_printf ("%s/Frameworks/Python.framework", res_dir);
-      if (tmp && !stat (tmp, &sb) && S_ISDIR (sb.st_mode))
-        {
-          g_print ("GIMP was built with homebrew\n");
-          need_pythonhome = FALSE;
-        }
-      g_free (tmp);
-      /* Detect we were built in MacPorts for MacOS */
-      tmp = g_strdup_printf ("%s/Library/Frameworks/Python.framework", res_dir);
-      if (tmp && !stat (tmp, &sb) && S_ISDIR (sb.st_mode))
-        {
-          g_print ("GIMP was built with MacPorts\n");
-          need_pythonhome = FALSE;
-        }
-      g_free (tmp);
-
-      path_len = strlen (g_getenv ("PATH") ? g_getenv ("PATH") : "") + strlen (app_dir) + 2;
+      /* Minimum runtime paths */
+      path_len = strlen (g_getenv ("PATH") ? g_getenv ("PATH") : "") + strlen (bin_dir) + 2;
       path = g_try_malloc (path_len);
       if (path == NULL)
         {
@@ -392,59 +398,69 @@ gimp_macos_setenv (const char * progname)
           app_exit (EXIT_FAILURE);
         }
       if (g_getenv ("PATH"))
-        g_snprintf (path, path_len, "%s:%s", app_dir, g_getenv ("PATH"));
+        g_snprintf (path, path_len, "%s:%s", bin_dir, g_getenv ("PATH"));
       else
-        g_snprintf (path, path_len, "%s", app_dir);
-      g_free (app_dir);
+        g_snprintf (path, path_len, "%s", bin_dir);
+      g_free (bin_dir);
       g_setenv ("PATH", path, TRUE);
       g_free (path);
-      tmp = g_strdup_printf ("%s/lib/gtk-3.0/3.0.0", res_dir);
-      g_setenv ("GTK_PATH", tmp, TRUE);
-      g_free (tmp);
-      tmp = g_strdup_printf ("%s/lib/gegl-0.4", res_dir);
-      g_setenv ("GEGL_PATH", tmp, TRUE);
-      g_free (tmp);
-      tmp = g_strdup_printf ("%s/lib/babl-0.1", res_dir);
-      g_setenv ("BABL_PATH", tmp, TRUE);
-      g_free (tmp);
-      tmp = g_strdup_printf ("%s/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache", res_dir);
-      g_setenv ("GDK_PIXBUF_MODULE_FILE", tmp, TRUE);
-      g_free (tmp);
-      tmp = g_strdup_printf ("%s/etc/fonts", res_dir);
-      g_setenv ("FONTCONFIG_PATH", tmp, TRUE);
-      g_free (tmp);
-      if (need_pythonhome)
-        {
-          tmp = g_strdup_printf ("%s", res_dir);
-          g_setenv ("PYTHONHOME", tmp, TRUE);
-          g_free (tmp);
-        }
-      tmp = g_strdup_printf ("%s/lib/python3.9", res_dir);
-      g_setenv ("PYTHONPATH", tmp, TRUE);
-      g_free (tmp);
-      tmp = g_strdup_printf ("%s/lib/gio/modules", res_dir);
-      g_setenv ("GIO_MODULE_DIR", tmp, TRUE);
-      g_free (tmp);
-      tmp = g_strdup_printf ("%s/share/libwmf/fonts", res_dir);
-      g_setenv ("WMF_FONTDIR", tmp, TRUE);
-      g_free (tmp);
       if (g_getenv ("XDG_DATA_DIRS"))
-        tmp = g_strdup_printf ("%s/share:%s", res_dir, g_getenv ("XDG_DATA_DIRS"));
+        tmp = g_strdup_printf ("%s:%s", share_dir, g_getenv ("XDG_DATA_DIRS"));
       else
-        tmp = g_strdup_printf ("%s/share", res_dir);
+        tmp = g_strdup_printf ("%s", share_dir);
       g_setenv ("XDG_DATA_DIRS", tmp, TRUE);
-      g_free (tmp);
-      tmp = g_strdup_printf ("%s/lib/girepository-1.0", res_dir);
-      g_setenv ("GI_TYPELIB_PATH", tmp, TRUE);
       g_free (tmp);
       if (g_getenv ("HOME") != NULL)
         {
-          tmp = g_strdup_printf ("%s/Library/Application Support/GIMP/3.00/cache",
-                                 g_getenv ("HOME"));
+          tmp = g_strdup_printf ("%s/Library/Application Support/GIMP/%s/cache",
+                                 g_getenv ("HOME"), GIMP_APP_VERSION);
           g_setenv ("XDG_CACHE_HOME", tmp, TRUE);
           g_free (tmp);
         }
-      g_free (res_dir);
+
+      /* Bare minimum to run GTK apps */
+      tmp = g_strdup_printf ("%s/gio/modules", lib_dir);
+      g_setenv ("GIO_MODULE_DIR", tmp, TRUE);
+      g_free (tmp);
+      tmp = g_strdup_printf ("%s/gdk-pixbuf-2.0/2.10.0/loaders.cache", lib_dir);
+      g_setenv ("GDK_PIXBUF_MODULE_FILE", tmp, TRUE);
+      g_free (tmp);
+      tmp = g_strdup_printf ("%s/gtk-3.0/3.0.0", lib_dir);
+      g_setenv ("GTK_PATH", tmp, TRUE);
+      g_free (tmp);
+      tmp = g_strdup_printf ("%s/gtk-3.0/3.0.0/immodules.cache", lib_dir);
+      g_setenv ("GTK_IM_MODULE_FILE", tmp, TRUE);
+      g_free (tmp);
+      tmp = g_strdup ("quartz");
+      g_setenv ("GTK_IM_MODULE", tmp, TRUE);
+      g_free (tmp);
+
+      /* Other needed runtime paths (related to features) */
+      tmp = g_strdup_printf ("%s/fonts", etc_dir);
+      g_setenv ("FONTCONFIG_PATH", tmp, TRUE);
+      g_free (tmp);
+      tmp = g_strdup_printf ("%s/libthai", share_dir);
+      g_setenv ("LIBTHAI_DICTDIR", tmp, TRUE);
+      g_free (tmp);
+      tmp = g_strdup_printf ("%s/ghostscript/Resource/Init", share_dir);
+      g_setenv ("GS_LIB", tmp, TRUE);
+      g_free (tmp);
+      tmp = g_strdup_printf ("%s/libwmf/fonts", share_dir);
+      g_setenv ("WMF_FONTDIR", tmp, TRUE);
+      g_free (tmp);
+      tmp = g_strdup_printf ("%s/girepository-1.0", lib_dir);
+      g_setenv ("GI_TYPELIB_PATH", tmp, TRUE);
+      g_free (tmp);
+      tmp = g_strdup_printf ("%s/Frameworks/Python.framework/Versions/%s", gimp_installation_directory(), PYTHON_VERSION);
+      if (tmp && !stat (tmp, &sb) && S_ISDIR (sb.st_mode))
+        {
+          g_setenv ("PYTHONHOME", tmp, TRUE);
+        }
+      g_free (tmp);
+
+      g_free (lib_dir);
+      g_free (share_dir);
+      g_free (etc_dir);
     }
   g_free (resolved_path);
 }
@@ -468,7 +484,7 @@ gimp_early_configuration (void)
   if (user_gimprc)
     user_gimprc_file = g_file_new_for_commandline_arg (user_gimprc);
 
-  /* GimpEarlyRc is reponsible for reading "gimprc" files for the
+  /* GimpEarlyRc is responsible for reading "gimprc" files for the
    * sole purpose of getting some configuration data that is needed
    * in the early initialization phase
    */
@@ -542,18 +558,21 @@ main (int    argc,
       char **argv)
 {
   GOptionContext *context;
-  GError         *error = NULL;
   const gchar    *abort_message;
   GFile          *system_gimprc_file = NULL;
   GFile          *user_gimprc_file   = NULL;
   GOptionGroup   *gimp_group         = NULL;
   gchar          *backtrace_file     = NULL;
+  GError         *error              = NULL;
+#ifdef G_OS_WIN32
+  gchar          *utf8_name;
+  wchar_t        *name;
+#endif
   gint            retval;
   gint            i;
 
-#ifdef ENABLE_WIN32_DEBUG_CONSOLE
-  gimp_open_console_window ();
-#endif
+  gimp_attach_console_window ();
+
 #if defined(ENABLE_RELOCATABLE_RESOURCES) && defined(__APPLE__)
   /* remove MacOS session identifier from the command line args */
   gint newargc = 0;
@@ -565,6 +584,7 @@ main (int    argc,
           newargc++;
         }
     }
+
   if (argc > newargc)
     {
       argv[newargc] = NULL; /* glib expects NULL terminated array */
@@ -595,28 +615,33 @@ main (int    argc,
 
 #ifdef G_OS_WIN32
   /* Make Inno aware of gimp process avoiding broken install/unninstall */
-  char    *utf8_name = g_strdup_printf ("GIMP-%s", GIMP_MUTEX_VERSION);
-  wchar_t *name      = g_utf8_to_utf16 (utf8_name, -1, NULL, NULL, NULL);
-  
+  utf8_name = g_strdup_printf ("GIMP-%s", GIMP_MUTEX_VERSION);
+  name      = g_utf8_to_utf16 (utf8_name, -1, NULL, NULL, NULL);
+
   CreateMutexW (NULL, FALSE, name);
-  
+
   g_free (utf8_name);
   g_free (name);
-  
+
   /* Enable Anti-Aliasing*/
   g_setenv ("PANGOCAIRO_BACKEND", "fc", TRUE);
 
   /* Reduce risks */
   SetDllDirectoryW (L"");
 
-  /* On Windows, set DLL search path to $INSTALLDIR/bin so that .exe
-     plug-ins in the plug-ins directory can find libgimp and file
-     library DLLs without needing to set external PATH. */
   {
     const gchar *install_dir;
     gchar       *bin_dir;
     LPWSTR       w_bin_dir;
+#ifdef ENABLE_RELOCATABLE_RESOURCES
+    size_t       path_len;
+    gchar       *path;
+#endif
 
+    /* On Windows, set DLL search path to $INSTALLDIR/bin so that .exe
+     * plug-ins processes in the plug-ins directory can find libgimp and
+     * file library DLLs.
+     */
     w_bin_dir = NULL;
     install_dir = gimp_installation_directory ();
     bin_dir = g_build_filename (install_dir, "bin", NULL);
@@ -627,6 +652,25 @@ main (int    argc,
         SetDllDirectoryW (w_bin_dir);
         g_free (w_bin_dir);
       }
+
+#ifdef ENABLE_RELOCATABLE_RESOURCES
+    /* We also set external PATH variable to other processes just in case
+     * (see #14716 and many other issues labeled as 'DLL Hell').
+     */
+    path_len = strlen (g_getenv ("PATH") ? g_getenv ("PATH") : "") + strlen (bin_dir) + 2;
+    path = g_try_malloc (path_len);
+    if (path == NULL)
+      {
+        g_warning ("Failed to allocate memory");
+        app_exit (EXIT_FAILURE);
+      }
+    if (g_getenv ("PATH"))
+      g_snprintf (path, path_len, "%s;%s", bin_dir, g_getenv ("PATH"));
+    else
+      g_snprintf (path, path_len, "%s", bin_dir);
+    g_setenv ("PATH", path, TRUE);
+    g_free (path);
+#endif
 
     g_free (bin_dir);
   }
@@ -640,7 +684,8 @@ main (int    argc,
       (t_SetProcessDEPPolicy) GetProcAddress (GetModuleHandleW (L"kernel32.dll"),
                                               "SetProcessDEPPolicy");
     if (p_SetProcessDEPPolicy)
-      (*p_SetProcessDEPPolicy) (PROCESS_DEP_ENABLE|PROCESS_DEP_DISABLE_ATL_THUNK_EMULATION);
+      (*p_SetProcessDEPPolicy) (PROCESS_DEP_ENABLE |
+                                PROCESS_DEP_DISABLE_ATL_THUNK_EMULATION);
   }
 #endif
 
@@ -710,7 +755,7 @@ main (int    argc,
                (strcmp (arg, "-?") == 0) ||
                (strncmp (arg, "--help-", 7) == 0))
         {
-          gimp_open_console_window ();
+          gimp_attach_console_window ();
         }
 #endif
     }
@@ -724,14 +769,16 @@ main (int    argc,
 
   g_option_context_add_main_entries (context, main_entries, GETTEXT_PACKAGE);
 
-  /* The GIMP option group is just an empty option group, created for the sole
-   * purpose of running a post-parse hook before any other of dependant libraries
-   * are run. This makes it possible to apply options from configuration data
-   * obtained from "gimprc" files, before other libraries have a chance to run
-   * some of their intialization code.
+  /* The GIMP option group is just an empty option group, created for
+   * the sole purpose of running a post-parse hook before any other of
+   * dependent libraries are run. This makes it possible to apply
+   * options from configuration data obtained from "gimprc" files,
+   * before other libraries have a chance to run some of their
+   * initialization code.
    */
   gimp_group = g_option_group_new ("gimp", "", "", NULL, NULL);
-  g_option_group_set_parse_hooks (gimp_group, NULL, gimp_options_group_parse_hook);
+  g_option_group_set_parse_hooks (gimp_group, NULL,
+                                  gimp_options_group_parse_hook);
   g_option_context_add_group (context, gimp_group);
 
   app_libs_init (context, no_interface);
@@ -740,7 +787,7 @@ main (int    argc,
     {
       if (error)
         {
-          gimp_open_console_window ();
+          gimp_attach_console_window ();
           g_print ("%s\n", error->message);
           g_error_free (error);
         }
@@ -755,8 +802,53 @@ main (int    argc,
       app_exit (EXIT_FAILURE);
     }
 
-  if (no_interface || be_verbose || console_messages || batch_commands != NULL)
-    gimp_open_console_window ();
+#if GLIB_CHECK_VERSION(2,72,0)
+  /* g_set_prgname() can only be called several times since 2.72.0. */
+#ifndef GIMP_CONSOLE_COMPILATION
+  if (! no_interface)
+    {
+      GKeyFile *flatpak_keyfile;
+
+      g_return_val_if_fail (gdk_display_get_default () != NULL, EXIT_FAILURE);
+
+      flatpak_keyfile = g_key_file_new ();
+
+      if (
+#ifdef GDK_WINDOWING_X11
+          ! GDK_IS_X11_DISPLAY (gdk_display_get_default ()) &&
+#endif
+          g_key_file_load_from_file (flatpak_keyfile, "/.flatpak-info",
+                                     G_KEY_FILE_NONE, NULL))
+        {
+          /* Flatpak renames the desktop file. The .flatpak-info file
+           * tells us the right desktop name we must associate our process
+           * to, especially as we have flatpaks with different IDs.
+           *
+           * This logic should not apply on X11 which will instead
+           * apparently use the StartupWMClass set in the desktop file and
+           * expect it to be the same as the name set by g_set_prgname().
+           *
+           * Cf. #13183 and #14233.
+           */
+          gchar *flatpak_name = g_key_file_get_string (flatpak_keyfile,
+                                                       "Application", "name", NULL);
+
+          if (flatpak_name != NULL)
+            {
+              g_set_prgname (flatpak_name);
+              g_free (flatpak_name);
+            }
+          /* The else case should never happen unless we are in some kind
+           * of broken flatpak environment or somehow in a non-flatpak
+           * environment with a .flatpak-info file at the root, which
+           * seems improbable. Fail silently.
+           */
+        }
+
+      g_key_file_free (flatpak_keyfile);
+    }
+#endif
+#endif
 
   if (no_interface)
     new_instance = TRUE;
@@ -835,17 +927,11 @@ main (int    argc,
  * used on MSVC builds only.
  */
 
-#ifdef __GNUC__
-#  ifndef _stdcall
-#    define _stdcall  __attribute__((stdcall))
-#  endif
-#endif
-
-int _stdcall
-WinMain (struct HINSTANCE__ *hInstance,
-         struct HINSTANCE__ *hPrevInstance,
-         char               *lpszCmdLine,
-         int                 nCmdShow)
+int WINAPI
+WinMain (HINSTANCE hInstance,
+         HINSTANCE hPrevInstance,
+         LPSTR     lpCmdLine,
+         int       nCmdShow)
 {
   return main (__argc, __argv);
 }
@@ -855,27 +941,37 @@ WinMain (struct HINSTANCE__ *hInstance,
 static void
 wait_console_window (void)
 {
-  FILE *console = g_fopen ("CONOUT$", "w");
-
-  SetConsoleTitleW (g_utf8_to_utf16 (_("GIMP output. Type any character to close this window."), -1, NULL, NULL, NULL));
-  fprintf (console, _("(Type any character to close this window)\n"));
-  fflush (console);
-  _getch ();
+  g_print (_ ("(Type any character to close this window)\n"));
 }
 
 static void
-gimp_open_console_window (void)
+gimp_attach_console_window (void)
 {
-  if (((HANDLE) _get_osfhandle (fileno (stdout)) == INVALID_HANDLE_VALUE ||
-       (HANDLE) _get_osfhandle (fileno (stderr)) == INVALID_HANDLE_VALUE) && AllocConsole ())
+  /* If run on non-native shell, do nothing */
+  if (g_getenv ("TERM") || g_getenv ("SHELL"))
     {
-      if ((HANDLE) _get_osfhandle (fileno (stdout)) == INVALID_HANDLE_VALUE)
-        freopen ("CONOUT$", "w", stdout);
+      g_printerr ("Non-native shell detected, GIMP may "
+                  "behave unexpectedly on Unix shells in Windows.\n");
+      return;
+    }
 
-      if ((HANDLE) _get_osfhandle (fileno (stderr)) == INVALID_HANDLE_VALUE)
-        freopen ("CONOUT$", "w", stderr);
+  /* If run on native shell, attach to it */
+  if (AttachConsole (ATTACH_PARENT_PROCESS) != 0)
+    {
+      /* 'r' is needed to prevent interleaving and '+' to support colors */
+      freopen ("CONOUT$", "r+", stdout);
+      freopen ("CONOUT$", "r+", stderr);
+      _flushall ();
 
-      SetConsoleTitleW (g_utf8_to_utf16 (_("GIMP output. You can minimize this window, but don't close it."), -1, NULL, NULL, NULL));
+      {
+        /* CTRL+C handling */
+        HANDLE hIn = GetStdHandle (STD_INPUT_HANDLE);
+        DWORD  mode;
+
+        GetConsoleMode (hIn, &mode);
+        mode |= ENABLE_PROCESSED_INPUT;
+        SetConsoleMode (hIn, mode);
+      }
 
       atexit (wait_console_window);
     }
@@ -945,7 +1041,7 @@ gimp_option_dump_gimprc (const gchar  *option_name,
 {
   GimpConfigDumpFormat format = GIMP_CONFIG_DUMP_NONE;
 
-  gimp_open_console_window ();
+  gimp_attach_console_window ();
 
   if (strcmp (option_name, "--dump-gimprc") == 0)
     format = GIMP_CONFIG_DUMP_GIMPRC;
@@ -1017,7 +1113,7 @@ gimp_option_dump_pdb_procedures_deprecated (const gchar  *option_name,
 static void
 gimp_show_version_and_exit (void)
 {
-  gimp_open_console_window ();
+  gimp_attach_console_window ();
   gimp_version_show (be_verbose);
 
   app_exit (EXIT_SUCCESS);
@@ -1026,12 +1122,10 @@ gimp_show_version_and_exit (void)
 static void
 gimp_show_license_and_exit (void)
 {
-  gimp_open_console_window ();
+  gimp_attach_console_window ();
   gimp_version_show (be_verbose);
 
-  g_print ("\n");
-  g_print (GIMP_LICENSE);
-  g_print ("\n\n");
+  g_print ("\n%s\n\n", GIMP_LICENSE);
 
   app_exit (EXIT_SUCCESS);
 }
@@ -1081,6 +1175,21 @@ gimp_init_i18n (void)
   gimp_bind_text_domain (GETTEXT_PACKAGE, gimp_locale_directory ());
 #ifdef HAVE_BIND_TEXTDOMAIN_CODESET
   bind_textdomain_codeset (GETTEXT_PACKAGE, "UTF-8");
+#endif
+
+#ifdef HAVE_ISO_CODES
+  /* This iso-codes domain is the only external text domain our core
+   * code is using. Let's make usre it's properly initialized.
+   */
+#ifdef ENABLE_RELOCATABLE_RESOURCES
+  gimp_bind_text_domain ("iso_639_3", gimp_locale_directory ());
+#else
+  gimp_bind_text_domain ("iso_639_3", ISO_CODES_LOCALEDIR);
+#endif
+
+#ifdef HAVE_BIND_TEXTDOMAIN_CODESET
+  bind_textdomain_codeset ("iso_639_3", "UTF-8");
+#endif
 #endif
 
   textdomain (GETTEXT_PACKAGE);

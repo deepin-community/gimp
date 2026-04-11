@@ -22,6 +22,7 @@
 
 #include "libgimpbase/gimpbase.h"
 #include "libgimpwidgets/gimpwidgets.h"
+#include "libgimpwidgets/gimpwidgets-private.h"
 
 #include "widgets-types.h"
 
@@ -48,6 +49,18 @@ enum
 {
   PROP_0,
   PROP_TRC
+};
+
+enum
+{
+  LABEL_MEAN,
+  LABEL_STD_DEV,
+  LABEL_MEDIAN,
+  LABEL_PIXELS,
+  LABEL_COUNT,
+  LABEL_PERCENTILE,
+  LABEL_N_COLORS,
+  N_LABELS
 };
 
 
@@ -132,12 +145,12 @@ gimp_histogram_editor_init (GimpHistogramEditor *editor)
 
   const gchar *gimp_histogram_editor_labels[] =
     {
-      N_("Mean:"),
-      N_("Std dev:"),
-      N_("Median:"),
-      N_("Pixels:"),
-      N_("Count:"),
-      N_("Percentile:")
+      N_("Mean: "),
+      N_("Std dev: "),
+      N_("Median: "),
+      N_("Pixels: "),
+      N_("Count: "),
+      N_("Percentile: ")
     };
 
   editor->box = gimp_histogram_box_new ();
@@ -194,7 +207,7 @@ gimp_histogram_editor_init (GimpHistogramEditor *editor)
   gtk_box_pack_start (GTK_BOX (editor), grid, FALSE, FALSE, 0);
   gtk_widget_show (grid);
 
-  for (i = 0; i < 6; i++)
+  for (i = 0; i <= LABEL_PERCENTILE; i++)
     {
       gint x = (i / 3) * 2;
       gint y = (i % 3);
@@ -221,6 +234,34 @@ gimp_histogram_editor_init (GimpHistogramEditor *editor)
       gtk_grid_attach (GTK_GRID (grid), label, x + 1, y, 1, 1);
       gtk_widget_show (label);
     }
+
+  hbox = gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4);
+  gtk_box_pack_start (GTK_BOX (editor), hbox, FALSE, FALSE, 0);
+  gtk_widget_show (hbox);
+
+  editor->toggle = gtk_check_button_new_with_label (_("Compute unique colors:"));
+  gimp_widget_set_identifier (editor->toggle, "toggle-compute-unique-colors");
+  gimp_label_set_attributes (GTK_LABEL (gtk_bin_get_child (GTK_BIN (editor->toggle))),
+                             PANGO_ATTR_SCALE, PANGO_SCALE_SMALL,
+                             -1);
+  gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (editor->toggle), FALSE);
+  gtk_box_pack_start (GTK_BOX (hbox), editor->toggle, FALSE, FALSE, 0);
+  gtk_widget_show (editor->toggle);
+
+  g_signal_connect_swapped (editor->toggle, "toggled",
+                            G_CALLBACK (gimp_histogram_editor_info_update),
+                            editor);
+
+  editor->labels[6] = label = g_object_new (GTK_TYPE_LABEL,
+                                            "xalign",      0.0,
+                                            "yalign",      0.5,
+                                            "width-chars", 9,
+                                            NULL);
+  gimp_label_set_attributes (GTK_LABEL (label),
+                             PANGO_ATTR_SCALE, PANGO_SCALE_SMALL,
+                             -1);
+  gtk_box_pack_start (GTK_BOX (hbox), label, FALSE, FALSE, 0);
+  gtk_widget_show (label);
 }
 
 static void
@@ -512,14 +553,14 @@ gimp_histogram_editor_validate (GimpHistogramEditor *editor)
   if (editor->recompute || ! editor->histogram)
     {
       if (editor->drawable &&
-          /* avoid calculating the histogram of a detached layer.  this can
-           * happen during gimp_image_remove_layer(), as a result of a pending
-           * "expose-event" signal (handled in
+          /* avoid calculating the histogram of a detached layer.
+           * this can happen during gimp_image_remove_layer(), as a
+           * result of a pending "expose-event" signal (handled in
            * gimp_histogram_editor_view_expose()) executed through
            * gtk_tree_view_clamp_node_visible(), as a result of the
-           * GimpLayerTreeView in the Layers dialog receiving the image's
-           * "selected-layers-changed" signal before us.  See bug #795716,
-           * comment 6.
+           * GimpLayerTreeView in the Layers dialog receiving the
+           * image's "selected-layers-changed" signal before us.  See
+           * bug #795716, comment 6.
            */
           gimp_item_is_attached (GIMP_ITEM (editor->drawable)))
         {
@@ -744,35 +785,50 @@ gimp_histogram_editor_info_update (GimpHistogramEditor *editor)
       g_snprintf (text, sizeof (text), "%.3f",
                   gimp_histogram_get_mean (hist, view->channel,
                                            view->start, view->end));
-      gtk_label_set_text (GTK_LABEL (editor->labels[0]), text);
+      gtk_label_set_text (GTK_LABEL (editor->labels[LABEL_MEAN]), text);
 
       g_snprintf (text, sizeof (text), "%.3f",
                   gimp_histogram_get_std_dev (hist, view->channel,
                                               view->start, view->end));
-      gtk_label_set_text (GTK_LABEL (editor->labels[1]), text);
+      gtk_label_set_text (GTK_LABEL (editor->labels[LABEL_STD_DEV]), text);
 
       g_snprintf (text, sizeof (text), "%.3f",
                   gimp_histogram_get_median  (hist, view->channel,
                                               view->start,
                                               view->end));
-      gtk_label_set_text (GTK_LABEL (editor->labels[2]), text);
+      gtk_label_set_text (GTK_LABEL (editor->labels[LABEL_MEDIAN]), text);
 
-      g_snprintf (text, sizeof (text), "%d", (gint) pixels);
-      gtk_label_set_text (GTK_LABEL (editor->labels[3]), text);
+      g_snprintf (text, sizeof (text), "%" G_GSIZE_FORMAT, (gsize) pixels);
+      gtk_label_set_text (GTK_LABEL (editor->labels[LABEL_PIXELS]), text);
 
-      g_snprintf (text, sizeof (text), "%d", (gint) count);
-      gtk_label_set_text (GTK_LABEL (editor->labels[4]), text);
+      g_snprintf (text, sizeof (text), "%" G_GSIZE_FORMAT, (gsize) count);
+      gtk_label_set_text (GTK_LABEL (editor->labels[LABEL_COUNT]), text);
 
       g_snprintf (text, sizeof (text), "%.1f", (pixels > 0 ?
                                                  (100.0 * count / pixels) :
                                                  0.0));
-      gtk_label_set_text (GTK_LABEL (editor->labels[5]), text);
+      gtk_label_set_text (GTK_LABEL (editor->labels[LABEL_PERCENTILE]), text);
+
+      if (gtk_toggle_button_get_active (GTK_TOGGLE_BUTTON (editor->toggle)))
+        {
+          g_snprintf (text, sizeof (text), "%d",
+                      gimp_histogram_unique_colors (editor->drawable));
+          gtk_label_set_text (GTK_LABEL (editor->labels[LABEL_N_COLORS]), text);
+        }
+      else
+        {
+          gchar *markup = g_strdup_printf ("<i>%s</i>", _("n/a"));
+
+          gtk_label_set_markup (GTK_LABEL (editor->labels[LABEL_N_COLORS]),
+                                markup);
+          g_free (markup);
+        }
     }
   else
     {
       gint i;
 
-      for (i = 0; i < 6; i++)
+      for (i = 0; i < N_LABELS; i++)
         gtk_label_set_text (GTK_LABEL (editor->labels[i]), NULL);
     }
 }

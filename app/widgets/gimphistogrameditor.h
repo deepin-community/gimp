@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_HISTOGRAM_EDITOR_H__
-#define __GIMP_HISTOGRAM_EDITOR_H__
-
+#pragma once
 
 #include "gimpimageeditor.h"
 
@@ -51,7 +49,8 @@ struct _GimpHistogramEditor
 
   GtkWidget            *menu;
   GtkWidget            *box;
-  GtkWidget            *labels[6];
+  GtkWidget            *labels[7];
+  GtkWidget            *toggle;
 };
 
 struct _GimpHistogramEditorClass
@@ -63,6 +62,3 @@ struct _GimpHistogramEditorClass
 GType       gimp_histogram_editor_get_type (void) G_GNUC_CONST;
 
 GtkWidget * gimp_histogram_editor_new      (void);
-
-
-#endif /* __GIMP_HISTOGRAM_EDITOR_H__ */

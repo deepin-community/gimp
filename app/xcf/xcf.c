@@ -92,6 +92,8 @@ static GimpXcfLoaderFunc * const xcf_loaders[] =
   xcf_load_image,   /* version 21 */
   xcf_load_image,   /* version 22 */
   xcf_load_image,   /* version 23 */
+  xcf_load_image,   /* version 24 */
+  xcf_load_image,   /* version 25 */
 };
 
 
@@ -128,7 +130,7 @@ xcf_init (Gimp *gimp)
                                    strlen ("gimp-wilber") + 1,
                                    NULL);
   gimp_plug_in_procedure_set_image_types (proc, "RGB*, GRAY*, INDEXED*");
-  gimp_plug_in_procedure_set_file_proc (proc, "xcf", "", NULL);
+  gimp_plug_in_procedure_set_file_proc (proc, "xcf", NULL, "", NULL);
   gimp_plug_in_procedure_set_mime_types (proc, "image/x-xcf");
   gimp_plug_in_procedure_set_handles_remote (proc);
 
@@ -184,7 +186,7 @@ xcf_init (Gimp *gimp)
                                    strlen ("gimp-wilber") + 1,
                                    NULL);
   gimp_plug_in_procedure_set_image_types (proc, NULL);
-  gimp_plug_in_procedure_set_file_proc (proc, "xcf", "",
+  gimp_plug_in_procedure_set_file_proc (proc, "xcf", NULL, "",
                                         "0,string,gimp\\040xcf\\040");
   gimp_plug_in_procedure_set_mime_types (proc, "image/x-xcf");
   gimp_plug_in_procedure_set_handles_remote (proc);
@@ -243,7 +245,6 @@ xcf_load_stream (Gimp          *gimp,
   XcfInfo      info  = { 0, };
   const gchar *filename;
   GimpImage   *image = NULL;
-  gchar        id[14];
   gboolean     success;
 
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
@@ -257,41 +258,10 @@ xcf_load_stream (Gimp          *gimp,
   else
     filename = _("Memory Stream");
 
-  info.gimp             = gimp;
-  info.input            = input;
-  info.seekable         = G_SEEKABLE (input);
-  info.bytes_per_offset = 4;
-  info.progress         = progress;
-  info.file             = input_file;
-  info.compression      = COMPRESS_NONE;
-
   if (progress)
     gimp_progress_start (progress, FALSE, _("Opening '%s'"), filename);
 
-  success = TRUE;
-
-  xcf_read_int8 (&info, (guint8 *) id, 14);
-
-  if (! g_str_has_prefix (id, "gimp xcf "))
-    {
-      success = FALSE;
-    }
-  else if (strcmp (id + 9, "file") == 0)
-    {
-      info.file_version = 0;
-    }
-  else if (id[9]  == 'v' &&
-           id[13] == '\0')
-    {
-      info.file_version = atoi (id + 10);
-    }
-  else
-    {
-      success = FALSE;
-    }
-
-  if (info.file_version >= 11)
-    info.bytes_per_offset = 8;
+  success = xcf_load_magic_version (gimp, input, input_file, progress, &info);
 
   if (success)
     {

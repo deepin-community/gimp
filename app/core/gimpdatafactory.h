@@ -18,8 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_DATA_FACTORY_H__
-#define __GIMP_DATA_FACTORY_H__
+#pragma once
 
 
 #include "gimpobject.h"
@@ -88,6 +87,11 @@ GimpAsyncSet  * gimp_data_factory_get_async_set     (GimpDataFactory  *factory);
 gboolean        gimp_data_factory_data_wait         (GimpDataFactory  *factory);
 void            gimp_data_factory_data_cancel       (GimpDataFactory  *factory);
 
+GimpData      * gimp_data_factory_get_data          (GimpDataFactory  *factory,
+                                                     const gchar      *name,
+                                                     const gchar      *collection,
+                                                     gboolean          is_internal);
+
 gboolean        gimp_data_factory_has_data_new_func (GimpDataFactory  *factory);
 GimpData      * gimp_data_factory_data_new          (GimpDataFactory  *factory,
                                                      GimpContext      *context,
@@ -120,7 +124,3 @@ GList         * gimp_data_factory_get_data_path     (GimpDataFactory  *factory);
 GList         * gimp_data_factory_get_data_path_writable
                                                     (GimpDataFactory  *factory);
 const GList   * gimp_data_factory_get_data_path_ext (GimpDataFactory  *factory);
-
-
-
-#endif  /*  __GIMP_DATA_FACTORY_H__  */

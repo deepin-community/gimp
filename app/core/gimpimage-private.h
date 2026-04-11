@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_IMAGE_PRIVATE_H__
-#define __GIMP_IMAGE_PRIVATE_H__
+#pragma once
 
 
 typedef struct _GimpImageFlushAccumulator GimpImageFlushAccumulator;
@@ -112,14 +111,14 @@ struct _GimpImagePrivate
   /*  Layer/Channel attributes  */
   GimpItemTree      *layers;                /*  the tree of layers           */
   GimpItemTree      *channels;              /*  the tree of masks            */
-  GimpItemTree      *vectors;               /*  the tree of vectors          */
+  GimpItemTree      *paths;                 /*  the tree of paths            */
   GSList            *layer_stack;           /*  the layers in MRU order      */
 
   GList             *hidden_items;          /*  internal process-only items  */
 
   GList             *stored_layer_sets;
   GList             *stored_channel_sets;
-  GList             *stored_vectors_sets;
+  GList             *stored_path_sets;
 
   GQuark             layer_offset_x_handler;
   GQuark             layer_offset_y_handler;
@@ -139,6 +138,7 @@ struct _GimpImagePrivate
   gboolean           quick_mask_state;      /*  TRUE if quick mask is on       */
   gboolean           quick_mask_inverted;   /*  TRUE if quick mask is inverted */
   GeglColor         *quick_mask_color;      /*  rgba triplet of the color      */
+  GList             *quick_mask_selected;   /*  Drawables selected to revert   */
 
   /*  Undo apparatus  */
   GimpUndoStack     *undo_stack;            /*  stack for undo operations    */
@@ -154,6 +154,3 @@ struct _GimpImagePrivate
 
 void   gimp_image_take_mask (GimpImage   *image,
                              GimpChannel *mask);
-
-
-#endif  /* __GIMP_IMAGE_PRIVATE_H__ */

@@ -581,6 +581,26 @@ package Gimp::CodeGen::enums;
 		       GIMP_TEXT_JUSTIFY_CENTER => '2',
 		       GIMP_TEXT_JUSTIFY_FILL => '3' }
 	},
+    GimpTextOutline =>
+	{ contig => 1,
+	  header => 'libgimpbase/gimpbaseenums.h',
+	  symbols => [ qw(GIMP_TEXT_OUTLINE_NONE
+			  GIMP_TEXT_OUTLINE_STROKE_ONLY
+			  GIMP_TEXT_OUTLINE_STROKE_FILL) ],
+	  mapping => { GIMP_TEXT_OUTLINE_NONE => '0',
+		       GIMP_TEXT_OUTLINE_STROKE_ONLY => '1',
+		       GIMP_TEXT_OUTLINE_STROKE_FILL => '2' }
+	},
+    GimpTextOutlineDirection =>
+	{ contig => 1,
+	  header => 'libgimpbase/gimpbaseenums.h',
+	  symbols => [ qw(GIMP_TEXT_OUTLINE_DIRECTION_OUTER
+			  GIMP_TEXT_OUTLINE_DIRECTION_INNER
+			  GIMP_TEXT_OUTLINE_DIRECTION_CENTERED) ],
+	  mapping => { GIMP_TEXT_OUTLINE_DIRECTION_OUTER => '0',
+		       GIMP_TEXT_OUTLINE_DIRECTION_INNER => '1',
+		       GIMP_TEXT_OUTLINE_DIRECTION_CENTERED => '2' }
+	},
     GimpTransferMode =>
 	{ contig => 1,
 	  header => 'libgimpbase/gimpbaseenums.h',
@@ -772,7 +792,7 @@ package Gimp::CodeGen::enums;
 			  GIMP_LAYER_MODE_COLOR_ERASE GIMP_LAYER_MODE_ERASE
 			  GIMP_LAYER_MODE_MERGE GIMP_LAYER_MODE_SPLIT
 			  GIMP_LAYER_MODE_PASS_THROUGH
-			  GIMP_LAYER_MODE_REPLACE) ],
+			  GIMP_LAYER_MODE_REPLACE GIMP_LAYER_MODE_OVERWRITE) ],
 	  mapping => { GIMP_LAYER_MODE_NORMAL_LEGACY => '0',
 		       GIMP_LAYER_MODE_DISSOLVE => '1',
 		       GIMP_LAYER_MODE_BEHIND_LEGACY => '2',
@@ -835,7 +855,8 @@ package Gimp::CodeGen::enums;
 		       GIMP_LAYER_MODE_MERGE => '59',
 		       GIMP_LAYER_MODE_SPLIT => '60',
 		       GIMP_LAYER_MODE_PASS_THROUGH => '61',
-		       GIMP_LAYER_MODE_REPLACE => '62' }
+		       GIMP_LAYER_MODE_REPLACE => '62',
+		       GIMP_LAYER_MODE_OVERWRITE => '63' }
 	},
     GimpConvertDitherType =>
 	{ contig => 1,
@@ -847,6 +868,20 @@ package Gimp::CodeGen::enums;
 		       GIMP_CONVERT_DITHER_FS => '1',
 		       GIMP_CONVERT_DITHER_FS_LOWBLEED => '2',
 		       GIMP_CONVERT_DITHER_FIXED => '3' }
+	},
+    GimpCurvePointType =>
+	{ contig => 1,
+	  header => 'core/core-enums.h',
+	  symbols => [ qw(GIMP_CURVE_POINT_SMOOTH GIMP_CURVE_POINT_CORNER) ],
+	  mapping => { GIMP_CURVE_POINT_SMOOTH => '0',
+		       GIMP_CURVE_POINT_CORNER => '1' }
+	},
+    GimpCurveType =>
+	{ contig => 1,
+	  header => 'core/core-enums.h',
+	  symbols => [ qw(GIMP_CURVE_SMOOTH GIMP_CURVE_FREE) ],
+	  mapping => { GIMP_CURVE_SMOOTH => '0',
+		       GIMP_CURVE_FREE => '1' }
 	},
     GimpHistogramChannel =>
 	{ contig => 1,
@@ -860,6 +895,15 @@ package Gimp::CodeGen::enums;
 		       GIMP_HISTOGRAM_BLUE => '3',
 		       GIMP_HISTOGRAM_ALPHA => '4',
 		       GIMP_HISTOGRAM_LUMINANCE => '5' }
+	},
+    GimpTRCType =>
+	{ contig => 1,
+	  header => 'core/core-enums.h',
+	  symbols => [ qw(GIMP_TRC_LINEAR GIMP_TRC_NON_LINEAR
+			  GIMP_TRC_PERCEPTUAL) ],
+	  mapping => { GIMP_TRC_LINEAR => '0',
+		       GIMP_TRC_NON_LINEAR => '1',
+		       GIMP_TRC_PERCEPTUAL => '2' }
 	},
     GimpBrushApplicationMode =>
 	{ contig => 1,

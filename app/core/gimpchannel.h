@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_CHANNEL_H__
-#define __GIMP_CHANNEL_H__
+#pragma once
 
 #include "gimpdrawable.h"
 
@@ -50,6 +49,7 @@ struct _GimpChannel
   gint          num_segs_in;       /*  number of lines in boundary    */
   gint          num_segs_out;      /*  number of lines in boundary    */
   gboolean      empty;             /*  is the region empty?           */
+  gboolean      full;              /*  is the region completely full? */
   gboolean      bounds_known;      /*  recalculate the bounds?        */
   gint          x1, y1;            /*  coordinates for bounding box   */
   gint          x2, y2;            /*  lower right hand coordinate    */
@@ -213,6 +213,3 @@ void          gimp_channel_shrink             (GimpChannel            *mask,
                                                gboolean                push_undo);
 void          gimp_channel_flood              (GimpChannel            *mask,
                                                gboolean                push_undo);
-
-
-#endif /* __GIMP_CHANNEL_H__ */

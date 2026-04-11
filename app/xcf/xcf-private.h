@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __XCF_PRIVATE_H__
-#define __XCF_PRIVATE_H__
+#pragma once
 
 
 #define XCF_TILE_WIDTH                  64
@@ -72,7 +71,10 @@ typedef enum
   PROP_SELECTED_PATH      = 43,
   PROP_FILTER_REGION      = 44,
   PROP_FILTER_ARGUMENT    = 45,
-  PROP_FILTER_CLIP        = 46
+  PROP_FILTER_CLIP        = 46,
+  PROP_VECTOR_LAYER       = 47,
+  PROP_LINK_LAYER         = 48,
+  PROP_TRANSFORM          = 49,
 } PropType;
 
 typedef enum
@@ -128,7 +130,7 @@ struct _XcfInfo
   GimpTattoo          tattoo_state;
   GList              *selected_layers;
   GList              *selected_channels;
-  GList              *selected_vectors;
+  GList              *selected_paths;
 
   /* Old deprecated "linked" concept which we keep in the XcfInfo
    * probably forever to transform these tags into named stored item
@@ -147,6 +149,3 @@ struct _XcfInfo
   XcfCompressionType  compression;
   gint                file_version;
 };
-
-
-#endif /* __XCF_PRIVATE_H__ */

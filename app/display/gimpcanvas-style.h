@@ -18,8 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_CANVAS_STYLE_H__
-#define __GIMP_CANVAS_STYLE_H__
+#pragma once
 
 
 void   gimp_canvas_styles_init             (void);
@@ -61,10 +60,10 @@ void   gimp_canvas_set_selection_in_style  (GtkWidget     *canvas,
                                             gint           index,
                                             gdouble        offset_x,
                                             gdouble        offset_y);
-void   gimp_canvas_set_vectors_bg_style    (GtkWidget     *canvas,
+void   gimp_canvas_set_path_bg_style       (GtkWidget     *canvas,
                                             cairo_t       *cr,
                                             gboolean       active);
-void   gimp_canvas_set_vectors_fg_style    (GtkWidget     *canvas,
+void   gimp_canvas_set_path_fg_style       (GtkWidget     *canvas,
                                             cairo_t       *cr,
                                             gboolean       active);
 void   gimp_canvas_set_outline_bg_style    (GtkWidget     *canvas,
@@ -79,6 +78,3 @@ void   gimp_canvas_set_tool_bg_style       (GtkWidget     *canvas,
 void   gimp_canvas_set_tool_fg_style       (GtkWidget     *canvas,
                                             cairo_t       *cr,
                                             gboolean       highlight);
-
-
-#endif /* __GIMP_CANVAS_STYLE_H__ */

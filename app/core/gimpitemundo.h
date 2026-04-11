@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_ITEM_UNDO_H__
-#define __GIMP_ITEM_UNDO_H__
-
+#pragma once
 
 #include "gimpundo.h"
 
@@ -48,5 +46,4 @@ struct _GimpItemUndoClass
 
 GType   gimp_item_undo_get_type (void) G_GNUC_CONST;
 
-
-#endif /* __GIMP_ITEM_UNDO_H__ */
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GimpItemUndo, g_object_unref);

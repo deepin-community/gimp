@@ -36,6 +36,10 @@
 #include <gio/gio.h>
 #include <glib/gstdio.h>
 
+#ifdef G_OS_WIN32
+#include "libgimpbase/gimpwin32-io.h"
+#endif
+
 #include "gimpbasetypes.h"
 
 #define __GIMP_ENV_C__
@@ -48,6 +52,10 @@
 #define STRICT
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include "appmodel.h"
+#ifndef PACKAGE_FULL_NAME_MAX_LENGTH
+#define PACKAGE_FULL_NAME_MAX_LENGTH 127
+#endif
 #include <io.h>
 #ifndef S_IWUSR
 # define S_IWUSR _S_IWRITE
@@ -314,19 +322,72 @@ gimp_directory (void)
 
 #elif defined G_OS_WIN32
 
+      WCHAR   w_msix_name[PACKAGE_FULL_NAME_MAX_LENGTH + 1];
+      guint32 length = PACKAGE_FULL_NAME_MAX_LENGTH + 1;
+      gchar  *msix_name;
+
       char *conf_dir = get_known_folder (&FOLDERID_RoamingAppData);
 
       gimp_dir = g_build_filename (conf_dir,
                                    GIMPDIR, GIMP_USER_VERSION, NULL);
+
+      /*See: https://learn.microsoft.com/en-us/windows/msix/desktop/desktop-to-uwp-behind-the-scenes#common-file-system-operations */
+      if (GetCurrentPackageFullName (&length, w_msix_name) == ERROR_SUCCESS && ! g_file_test (gimp_dir, G_FILE_TEST_IS_DIR))
+        {
+          conf_dir = get_known_folder (&FOLDERID_LocalAppData);
+
+          msix_name = g_utf16_to_utf8 (w_msix_name, -1, NULL, NULL, NULL);
+          gimp_dir = g_build_filename (conf_dir, "Packages", msix_name, "LocalCache",
+                                       "Roaming", GIMPDIR, GIMP_USER_VERSION, NULL);
+          g_free (msix_name);
+        }
+
       g_free(conf_dir);
 
 #else /* UNIX */
 
-      /* g_get_user_config_dir () always returns a path as a non-null
-       * and non-empty string
-       */
-      gimp_dir = g_build_filename (g_get_user_config_dir (),
-                                   GIMPDIR, GIMP_USER_VERSION, NULL);
+      const gchar *snap_path;
+
+      if (g_file_test ("/.flatpak-info", G_FILE_TEST_EXISTS))
+        {                       /* Linux flatpak version */
+          const gchar *host_xdg_config_home = g_getenv ("HOST_XDG_CONFIG_HOME");
+
+          if (host_xdg_config_home == NULL)
+            gimp_dir =  g_build_filename (g_get_home_dir (),
+                                          ".config",
+                                          GIMPDIR, GIMP_USER_VERSION,
+                                          NULL);
+          else
+            gimp_dir =  g_build_filename (host_xdg_config_home,
+                                          GIMPDIR, GIMP_USER_VERSION,
+                                          NULL);
+        }
+
+      snap_path = g_getenv ("SNAP");
+      if (snap_path && g_file_test (snap_path, G_FILE_TEST_IS_DIR))
+        {
+          const gchar *snap_real_home = g_getenv ("SNAP_REAL_HOME");
+
+          if (snap_real_home == NULL)
+            gimp_dir =  g_build_filename (g_get_home_dir (),
+                                          ".config",
+                                          GIMPDIR, GIMP_USER_VERSION,
+                                          NULL);
+          else
+            gimp_dir =  g_build_filename (snap_real_home,
+                                          ".config",
+                                          GIMPDIR, GIMP_USER_VERSION,
+                                          NULL);
+        }
+
+      if (gimp_dir == NULL)
+        {
+          /* g_get_user_config_dir () always returns a path as a non-null
+           * and non-empty string
+           */
+          gimp_dir = g_build_filename (g_get_user_config_dir (),
+                                       GIMPDIR, GIMP_USER_VERSION, NULL);
+        }
 
 #endif /* PLATFORM_OSX */
     }
@@ -374,6 +435,8 @@ gimp_installation_directory (void)
   {
     NSAutoreleasePool *pool;
     NSString          *resource_path;
+    gchar             *resource_path_test;
+    NSString          *app_path;
     gchar             *basename;
     gchar             *basepath;
     gchar             *dirname;
@@ -381,9 +444,22 @@ gimp_installation_directory (void)
     pool = [[NSAutoreleasePool alloc] init];
 
     resource_path = [[NSBundle mainBundle] resourcePath];
+    app_path = [[NSBundle mainBundle] bundlePath];
 
-    basename = g_path_get_basename ([resource_path UTF8String]);
-    basepath = g_path_get_dirname ([resource_path UTF8String]);
+    resource_path_test = g_build_filename([resource_path UTF8String], "share",
+                                          GIMP_PACKAGE, GIMP_DATA_VERSION, NULL);
+    if (g_file_test (resource_path_test, G_FILE_TEST_IS_DIR))
+      {
+        /* Legacy CircleCI era relocatable code */
+        basename = g_path_get_basename ([resource_path UTF8String]);
+        basepath = g_path_get_dirname ([resource_path UTF8String]);
+      }
+    else
+      {
+         /* Modern GitLab CI era relocatable code */
+        basename = g_path_get_basename ([app_path UTF8String]);
+        basepath = g_path_get_dirname ([app_path UTF8String]);
+      }
     dirname  = g_path_get_basename (basepath);
 
     if (! strcmp (basename, ".libs"))
@@ -446,12 +522,22 @@ gimp_installation_directory (void)
       {
         /*  if none of the above match, we assume that we are really in a bundle  */
 
-        toplevel = g_strdup ([resource_path UTF8String]);
+        if (g_file_test (resource_path_test, G_FILE_TEST_IS_DIR))
+          {
+            /* Legacy CircleCI era relocatable prefix */
+            toplevel = g_strdup ([resource_path UTF8String]);
+          }
+        else
+          {
+            /* Modern GitLab CI era relocatable prefix */
+            toplevel = g_strconcat ([app_path UTF8String], "/Contents", NULL);
+          }
       }
 
     g_free (basename);
     g_free (basepath);
     g_free (dirname);
+    g_free (resource_path_test);
 
     [pool drain];
   }

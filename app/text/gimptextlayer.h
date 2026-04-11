@@ -18,9 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_TEXT_LAYER_H__
-#define __GIMP_TEXT_LAYER_H__
-
+#pragma once
 
 #include "core/gimplayer.h"
 
@@ -47,7 +45,6 @@ struct _GimpTextLayer
                                        */
   gboolean      text_parasite_is_old; /* Format before XCF 19. */
   gboolean      auto_rename;
-  gboolean      modified;
 
   const Babl   *convert_format;
 
@@ -67,7 +64,6 @@ GimpLayer * gimp_text_layer_new         (GimpImage     *image,
 GimpText  * gimp_text_layer_get_text    (GimpTextLayer *layer);
 void        gimp_text_layer_set_text    (GimpTextLayer *layer,
                                          GimpText      *text);
-void        gimp_text_layer_discard     (GimpTextLayer *layer);
 void        gimp_text_layer_set         (GimpTextLayer *layer,
                                          const gchar   *undo_desc,
                                          const gchar   *first_property_name,
@@ -75,5 +71,22 @@ void        gimp_text_layer_set         (GimpTextLayer *layer,
 
 gboolean    gimp_item_is_text_layer     (GimpItem      *item);
 
-
-#endif /* __GIMP_TEXT_LAYER_H__ */
+void        gimp_text_layer_set_style_overlay_position
+                                        (GimpTextLayer *layer,
+                                         gboolean       positioned,
+                                         gdouble        x,
+                                         gdouble        y);
+gboolean    gimp_text_layer_get_style_overlay_position
+                                        (GimpTextLayer *layer,
+                                         gdouble       *x,
+                                         gdouble       *y);
+gboolean    gimp_text_layer_is_style_overlay_positioned
+                                        (GimpTextLayer *layer);
+void        gimp_text_layer_set_style_overlay_offset
+                                        (GimpTextLayer *layer,
+                                         gdouble        offset_x,
+                                         gdouble        offset_y);
+void        gimp_text_layer_get_style_overlay_offset
+                                        (GimpTextLayer *layer,
+                                         gdouble       *offset_x,
+                                         gdouble       *offset_y);

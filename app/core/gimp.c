@@ -55,6 +55,7 @@
 #include "gimp-units.h"
 #include "gimp-utils.h"
 #include "gimpbrush.h"
+#include "gimpbrushgenerated.h"
 #include "gimpbuffer.h"
 #include "gimpcontext.h"
 #include "gimpdynamics.h"
@@ -73,7 +74,10 @@
 #include "gimppattern.h"
 #include "gimptemplate.h"
 #include "gimptoolinfo.h"
+#include "gimptoolpreset.h"
 #include "gimptreeproxy.h"
+
+#include "text/gimpfont.h"
 
 #include "gimp-intl.h"
 
@@ -94,6 +98,7 @@ enum
   CLIPBOARD_CHANGED,
   FILTER_HISTORY_CHANGED,
   IMAGE_OPENED,
+  FOCUSED_ONCE,
   LAST_SIGNAL
 };
 
@@ -202,6 +207,13 @@ gimp_class_init (GimpClass *klass)
                   NULL, NULL, NULL,
                   G_TYPE_NONE, 1, G_TYPE_FILE);
 
+  gimp_signals[FOCUSED_ONCE] =
+    g_signal_new ("focused-once",
+                  G_TYPE_FROM_CLASS (klass),
+                  G_SIGNAL_RUN_LAST, 0,
+                  NULL, NULL, NULL,
+                  G_TYPE_NONE, 0);
+
   object_class->constructed      = gimp_constructed;
   object_class->set_property     = gimp_set_property;
   object_class->get_property     = gimp_get_property;
@@ -254,9 +266,9 @@ gimp_init (Gimp *gimp)
   gimp->drawable_filter_table = gimp_id_table_new ();
 
   gimp->displays = g_object_new (GIMP_TYPE_LIST,
-                                 "children-type", GIMP_TYPE_OBJECT,
-                                 "policy",        GIMP_CONTAINER_POLICY_WEAK,
-                                 "append",        TRUE,
+                                 "child-type", GIMP_TYPE_OBJECT,
+                                 "policy",     GIMP_CONTAINER_POLICY_WEAK,
+                                 "append",     TRUE,
                                  NULL);
   gimp_object_set_static_name (GIMP_OBJECT (gimp->displays), "displays");
   gimp->next_display_id = 1;
@@ -268,15 +280,15 @@ gimp_init (Gimp *gimp)
   gimp_data_factories_init (gimp);
 
   gimp->tool_info_list = g_object_new (GIMP_TYPE_LIST,
-                                       "children-type", GIMP_TYPE_TOOL_INFO,
-                                       "append",        TRUE,
+                                       "child-type", GIMP_TYPE_TOOL_INFO,
+                                       "append",     TRUE,
                                        NULL);
   gimp_object_set_static_name (GIMP_OBJECT (gimp->tool_info_list),
                                "tool infos");
 
   gimp->tool_item_list = g_object_new (GIMP_TYPE_LIST,
-                                       "children-type", GIMP_TYPE_TOOL_ITEM,
-                                       "append",        TRUE,
+                                       "child-type", GIMP_TYPE_TOOL_ITEM,
+                                       "append",     TRUE,
                                        NULL);
   gimp_object_set_static_name (GIMP_OBJECT (gimp->tool_item_list),
                                "tool items");
@@ -290,6 +302,8 @@ gimp_init (Gimp *gimp)
 
   gimp->templates = gimp_list_new (GIMP_TYPE_TEMPLATE, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (gimp->templates), "templates");
+
+  gimp->focused_once = FALSE;
 }
 
 static void
@@ -540,10 +554,6 @@ gimp_real_initialize (Gimp               *gimp,
 
   status_callback (_("Initialization"), NULL, 0.0);
 
-  /*  set the last values used to default values  */
-  gimp->image_new_last_template =
-    gimp_config_duplicate (GIMP_CONFIG (gimp->config->default_image));
-
   /*  add data objects that need the user context  */
   gimp_data_factories_add_builtin (gimp);
 
@@ -786,9 +796,11 @@ gimp_load_config (Gimp  *gimp,
 
   if (! gimp->show_playground)
     {
-      gboolean    use_opencl;
-      gboolean    use_npd_tool;
-      gboolean    use_seamless_clone_tool;
+      gboolean use_opencl;
+      gboolean use_npd_tool;
+      gboolean use_seamless_clone_tool;
+      gboolean use_paint_select_tool;
+      gboolean use_list_box;
 
       /* Playground preferences is shown by default for unstable
        * versions and if the associated CLI option was set. Additionally
@@ -807,8 +819,11 @@ gimp_load_config (Gimp  *gimp,
                     "use-opencl",                     &use_opencl,
                     "playground-npd-tool",            &use_npd_tool,
                     "playground-seamless-clone-tool", &use_seamless_clone_tool,
+                    "playground-paint-select-tool",   &use_paint_select_tool,
+                    "playground-use-list-box",        &use_list_box,
                     NULL);
-      if (use_opencl || use_npd_tool || use_seamless_clone_tool)
+      if (use_opencl || use_npd_tool || use_seamless_clone_tool ||
+          use_paint_select_tool || use_list_box)
         gimp->show_playground = TRUE;
     }
 }
@@ -882,7 +897,7 @@ gimp_is_restored (Gimp *gimp)
 {
   g_return_val_if_fail (GIMP_IS_GIMP (gimp), FALSE);
 
-  return gimp->initialized && gimp->restored;
+  return gimp->initialized && gimp->restored && gimp_data_factories_wait (gimp);
 }
 
 /**
@@ -916,6 +931,26 @@ gimp_exit (Gimp     *gimp,
   g_idle_add_full (G_PRIORITY_LOW,
                    (GSourceFunc) gimp_exit_idle_cleanup_stray_images,
                    gimp, NULL);
+}
+
+void
+gimp_set_focused_once (Gimp *gimp)
+{
+  g_return_if_fail (GIMP_IS_GIMP (gimp));
+
+  if (! gimp->focused_once)
+    {
+      gimp->focused_once = TRUE;
+      g_signal_emit (gimp, gimp_signals[FOCUSED_ONCE], 0);
+    }
+}
+
+gboolean
+gimp_has_focused_once (Gimp *gimp)
+{
+  g_return_val_if_fail (GIMP_IS_GIMP (gimp), FALSE);
+
+  return gimp->focused_once;
 }
 
 GList *
@@ -1118,6 +1153,37 @@ gimp_get_tool_info (Gimp        *gimp,
   return (GimpToolInfo *) info;
 }
 
+void
+gimp_set_last_template (Gimp         *gimp,
+                        GimpTemplate *template)
+{
+  GimpTemplate *last_template;
+
+  g_return_if_fail (GIMP_IS_GIMP (gimp));
+  g_return_if_fail (GIMP_IS_TEMPLATE (template));
+
+  last_template = gimp_get_last_template (gimp);
+
+  gimp_config_sync (G_OBJECT (template),
+                    G_OBJECT (last_template), 0);
+}
+
+GimpTemplate *
+gimp_get_last_template (Gimp *gimp)
+{
+  g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
+
+  if (! gimp->image_new_last_template)
+    {
+      /*  set the last values used to default values  */
+      gimp->image_new_last_template =
+        gimp_config_duplicate (GIMP_CONFIG (gimp->config->default_image));
+    }
+
+  return gimp->image_new_last_template;
+}
+
+
 /**
  * gimp_message:
  * @gimp:     a pointer to the %Gimp object
@@ -1240,6 +1306,36 @@ gimp_get_temp_file (Gimp        *gimp,
   g_object_unref (dir);
 
   return file;
+}
+
+GimpDataFactory *
+gimp_get_data_factory (Gimp  *gimp,
+                       GType  data_type)
+{
+  g_return_val_if_fail (GIMP_IS_GIMP (gimp), NULL);
+  g_return_val_if_fail (g_type_is_a (data_type, GIMP_TYPE_DATA), NULL);
+
+  if (g_type_is_a (data_type, GIMP_TYPE_BRUSH_GENERATED))
+    return gimp->brush_factory;
+  else if (g_type_is_a (data_type, GIMP_TYPE_BRUSH))
+    return gimp->brush_factory;
+  else if (g_type_is_a (data_type, GIMP_TYPE_PATTERN))
+    return gimp->pattern_factory;
+  else if (g_type_is_a (data_type, GIMP_TYPE_GRADIENT))
+    return gimp->gradient_factory;
+  else if (g_type_is_a (data_type, GIMP_TYPE_PALETTE))
+    return gimp->palette_factory;
+  else if (g_type_is_a (data_type, GIMP_TYPE_FONT))
+    return gimp->font_factory;
+  else if (g_type_is_a (data_type, GIMP_TYPE_DYNAMICS))
+    return gimp->dynamics_factory;
+  else if (g_type_is_a (data_type, GIMP_TYPE_MYBRUSH))
+    return gimp->mybrush_factory;
+  else if (g_type_is_a (data_type, GIMP_TYPE_TOOL_PRESET))
+    return gimp->tool_preset_factory;
+
+  /* If we reach this, it means we forgot a data factory in our list! */
+  g_return_val_if_reached (NULL);
 }
 
 static gboolean
