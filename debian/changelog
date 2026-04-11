@@ -1,3 +1,9 @@
+gimp (3.2.2-1deepin1) unstable; urgency=medium
+
+  * Revert gir1.2 depends.
+
+ -- lhdjply <lhdjply@126.com>  Sat, 11 Apr 2026 08:56:56 +0800
+
 gimp (3.2.2-1) unstable; urgency=medium
 
   * New upstream bugfix release
