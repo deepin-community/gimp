@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_DRAWABLE_FILTER_UNDO_H__
-#define __GIMP_DRAWABLE_FILTER_UNDO_H__
-
+#pragma once
 
 #include "gimpundo.h"
 
@@ -38,7 +36,7 @@ struct _GimpDrawableFilterUndo
   GimpUndo               parent_instance;
 
   GimpDrawableFilter    *filter;
-  guint32                row_index;
+  gint                   row_index;
 
   GeglNode              *node;
   gdouble                opacity;
@@ -56,6 +54,3 @@ struct _GimpDrawableFilterUndoClass
 
 
 GType   gimp_drawable_filter_undo_get_type (void) G_GNUC_CONST;
-
-
-#endif /* __GIMP_DRAWABLE_FILTER_UNDO_H__ */

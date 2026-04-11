@@ -17,6 +17,8 @@
 
 #include "config.h"
 
+#include <json-glib/json-glib.h>
+
 #include <stdlib.h>
 
 #include <archive.h>
@@ -38,11 +40,12 @@
 
 #include "gimp-intl.h"
 
+/* Used by SwatchBooker and Procreate color profiles */
 typedef struct
 {
   GimpColorProfile *profile;
   gchar            *id;
-} SwatchBookerColorProfile;
+} PaletteColorProfile;
 
 typedef struct
 {
@@ -872,7 +875,7 @@ gimp_palette_load_acb (GimpContext   *context,
         {
           g_free (palette_entry);
           g_free (full_palette_name);
-          g_object_unref (color);
+          g_clear_object (&color);
 
           g_printerr ("Invalid ACB palette color code");
           break;
@@ -880,63 +883,65 @@ gimp_palette_load_acb (GimpContext   *context,
 
       if (color_space == 0)
         {
-          gchar rgb[3];
+          guchar rgb[3];
 
           if (! g_input_stream_read_all (input, rgb, sizeof (rgb),
                                          &bytes_read, NULL, error))
             {
               g_free (palette_entry);
               g_free (full_palette_name);
-              g_object_unref (color);
+              g_clear_object (&color);
 
               g_printerr ("Invalid ACB palette colors");
               break;
             }
 
-          gegl_color_set_pixel (color, babl_format ("R'G'B u8"), rgb);
+          gegl_color_set_pixel (color, babl_format ("R'G'B' u8"), rgb);
           color_ok = TRUE;
         }
       else if (color_space == 2)
         {
-          gchar cmyk[4];
+          guchar cmyk[4];
+          gfloat cmyk_f[4];
 
           if (! g_input_stream_read_all (input, cmyk, sizeof (cmyk),
                                          &bytes_read, NULL, error))
             {
               g_free (palette_entry);
               g_free (full_palette_name);
-              g_object_unref (color);
+              g_clear_object (&color);
 
               g_printerr ("Invalid ACB palette colors");
               break;
             }
 
           for (gint j = 0; j < 4; j++)
-            cmyk[j] = ((255 - cmyk[j]) / 2.55f) + 0.5f;
+            cmyk_f[j] = (((255 - cmyk[j]) / 2.55f) + 0.5f) / 100.0f;
 
-          gegl_color_set_pixel (color, babl_format ("cmyk u8"), cmyk);
+          gegl_color_set_pixel (color, babl_format ("CMYK float"), cmyk_f);
           color_ok = TRUE;
         }
       else if (color_space == 7)
         {
-          gchar lab[3];
+          guchar lab[3];
+          gfloat lab_f[3];
 
           if (! g_input_stream_read_all (input, lab, sizeof (lab),
                                          &bytes_read, NULL, error))
             {
               g_free (palette_entry);
               g_free (full_palette_name);
-              g_object_unref (color);
+              g_clear_object (&color);
 
               g_printerr ("Invalid ACB palette colors");
               break;
             }
 
-          lab[0] = (lab[0] / 2.55f) + 0.5f;
-          lab[1] = lab[1] - 128;
-          lab[2] = lab[2] - 128;
+          lab_f[0] = (lab[0] / 2.55f) + 0.5f;
+          lab_f[1] = ((gfloat) lab[1]) - 128;
+          lab_f[2] = ((gfloat) lab[2]) - 128;
 
-          gegl_color_set_pixel (color, babl_format ("CIE Lab u8"), lab);
+          gegl_color_set_pixel (color, babl_format ("CIE Lab float"), lab_f);
           color_ok = TRUE;
         }
 
@@ -945,7 +950,7 @@ gimp_palette_load_acb (GimpContext   *context,
 
       g_free (palette_entry);
       g_free (full_palette_name);
-      g_object_unref (color);
+      g_clear_object (&color);
 
       if (! color_ok)
         {
@@ -1380,33 +1385,57 @@ gimp_palette_load_sbz (GimpContext   *context,
   sbz_data.in_book_tag       = FALSE;
   sbz_data.copy_name         = FALSE;
   sbz_data.copy_values       = FALSE;
+  sbz_data.palette_name      = NULL;
   sbz_data.embedded_profiles = NULL;
 
   if ((a = archive_read_new ()))
     {
       const gchar *name = gimp_file_get_utf8_name (file);
+      int          archive_ret;
 
       archive_read_support_format_all (a);
       r = archive_read_open_filename (a, name, 10240);
       if (r != ARCHIVE_OK)
         {
+          g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                       _("Unable to read SBZ file: %s"),
+                       archive_error_string (a));
+
           archive_read_free (a);
 
-          g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
-                       _("Unable to read SBZ file"));
           return NULL;
         }
 
-      while (archive_read_next_header (a, &entry) == ARCHIVE_OK)
+      while ((archive_ret = archive_read_next_header (a, &entry)) != ARCHIVE_EOF)
         {
-          const gchar *lower = g_ascii_strdown (archive_entry_pathname (entry), -1);
+          const char *pathname;
+          gchar      *lower;
 
+          if (archive_ret == ARCHIVE_RETRY)
+            continue;
+          else if (archive_ret == ARCHIVE_FATAL)
+            break;
+
+          pathname = archive_entry_pathname (entry);
+          lower    = g_ascii_strdown (pathname, -1);
           if (g_str_has_suffix (lower, ".xml"))
             {
-              entry_size = archive_entry_size (entry);
-              xml_data   = (gchar *) g_malloc (entry_size);
+              if (xml_data == NULL)
+                {
+                  entry_size = archive_entry_size (entry);
+                  xml_data   = (gchar *) g_malloc (entry_size);
 
-              r = archive_read_data (a, xml_data, entry_size);
+                  r = archive_read_data (a, xml_data, entry_size);
+                }
+              else
+                {
+                  /* This format only seems to allow for 1 XML in the
+                   * zip, so if there are several, let's ignore it, yet
+                   * not completely silently.
+                   */
+                  g_printerr ("Ignoring second XML file '%s' in SBZ palette: %s",
+                              pathname, gimp_file_get_utf8_name (file));
+                }
             }
           else if (g_str_has_suffix (lower, ".icc") || g_str_has_suffix (lower, ".icm"))
             {
@@ -1422,15 +1451,28 @@ gimp_palette_load_sbz (GimpContext   *context,
 
               if (profile)
                 {
-                  SwatchBookerColorProfile sbz_profile;
+                  PaletteColorProfile *sbz_profile;
 
-                  sbz_profile.profile = profile;
-                  sbz_profile.id = g_strdup (archive_entry_pathname (entry));
+                  sbz_profile          = g_new0 (PaletteColorProfile, 1);
+                  sbz_profile->profile = profile;
+                  sbz_profile->id      = g_strdup (archive_entry_pathname (entry));
 
                   sbz_data.embedded_profiles =
-                    g_list_append (sbz_data.embedded_profiles, &sbz_profile);
+                    g_list_append (sbz_data.embedded_profiles, sbz_profile);
                 }
             }
+
+          g_free (lower);
+        }
+
+      if (archive_ret == ARCHIVE_FATAL)
+        {
+          g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                       _("Unable to read SBZ file: %s"),
+                       archive_error_string (a));
+
+          archive_read_free (a);
+          return NULL;
         }
 
       if (xml_data)
@@ -1451,6 +1493,15 @@ gimp_palette_load_sbz (GimpContext   *context,
 
           g_free (xml_data);
         }
+      else
+        {
+          g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                       _("Unable to open SBZ file"));
+
+          archive_read_free (a);
+          return NULL;
+        }
+
 
       r = archive_read_free (a);
     }
@@ -1464,6 +1515,293 @@ gimp_palette_load_sbz (GimpContext   *context,
   return g_list_prepend (NULL, sbz_data.palette);
 }
 
+GList *
+gimp_palette_load_procreate (GimpContext   *context,
+                             GFile         *file,
+                             GInputStream  *input,
+                             GError       **error)
+{
+  GimpPalette          *palette   = NULL;
+  gchar                *json_data = NULL;
+  struct archive       *a;
+  struct archive_entry *entry;
+  size_t                entry_size;
+  int                   r;
+
+  g_return_val_if_fail (G_IS_FILE (file), NULL);
+  g_return_val_if_fail (G_IS_INPUT_STREAM (input), NULL);
+  g_return_val_if_fail (error == NULL || *error == NULL, NULL);
+
+  if ((a = archive_read_new ()))
+    {
+      const gchar *name = gimp_file_get_utf8_name (file);
+      int          archive_ret;
+
+      archive_read_support_format_all (a);
+      r = archive_read_open_filename (a, name, 10240);
+      if (r != ARCHIVE_OK)
+        {
+          g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                       _("Unable to read Procreate swatches file: %s"),
+                       archive_error_string (a));
+
+          archive_read_free (a);
+          return NULL;
+        }
+
+      while ((archive_ret = archive_read_next_header (a, &entry)) != ARCHIVE_EOF)
+        {
+          gchar *lower;
+
+          if (archive_ret == ARCHIVE_RETRY)
+            continue;
+          else if (archive_ret == ARCHIVE_FATAL)
+            break;
+
+          /* Here we returned either with ARCHIVE_OK or ARCHIVE_WARN
+           * which are both successes (we ignore the non-critical error
+           * in the WARN case).
+           */
+
+          lower = g_ascii_strdown (archive_entry_pathname (entry), -1);
+          if (g_str_has_suffix (lower, ".json"))
+            {
+              entry_size = archive_entry_size (entry);
+              json_data  = (gchar *) g_malloc (entry_size);
+
+              r = archive_read_data (a, json_data, entry_size);
+              g_free (lower);
+              break;
+            }
+          g_free (lower);
+        }
+
+      if (archive_ret == ARCHIVE_FATAL)
+        {
+          g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                       _("Unable to read Procreate swatches file: %s"),
+                       archive_error_string (a));
+
+          archive_read_free (a);
+          return NULL;
+        }
+
+      if (json_data)
+        {
+          JsonParser *parser;
+          JsonReader *reader;
+          GList      *profiles = NULL;
+
+          parser = json_parser_new ();
+          if (! json_parser_load_from_data (parser, json_data, entry_size,
+                                            error))
+            {
+              g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                           _("Could not read header from palette file '%s': "),
+                           gimp_file_get_utf8_name (file));
+
+              g_free (json_data);
+              g_clear_object (&parser);
+              return NULL;
+            }
+
+          reader = json_reader_new (json_parser_get_root (parser));
+
+          if (json_reader_read_member (reader, "name") &&
+              json_reader_is_value (reader))
+            {
+              const gchar *name = json_reader_get_string_value (reader);
+
+              palette = GIMP_PALETTE (gimp_palette_new (context, name));
+              json_reader_end_member (reader);
+            }
+          else
+            {
+              g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                           _("Could not read header from palette file '%s': "),
+                           gimp_file_get_utf8_name (file));
+
+              g_free (json_data);
+              g_clear_object (&reader);
+              g_clear_object (&parser);
+              return NULL;
+            }
+
+          /* Procreate shows columns in rows of 10 */
+          gimp_palette_set_columns (palette, 10);
+
+          if (json_reader_read_member (reader, "colorProfiles") &&
+              json_reader_is_array (reader))
+            {
+              guint array_length = json_reader_count_elements (reader);
+
+              for (gint i = 0; i < array_length; i++)
+                {
+                  PaletteColorProfile *data;
+                  GError              *test = NULL;
+
+                  data          = g_malloc0 (sizeof (PaletteColorProfile));
+                  data->id      = NULL;
+                  data->profile = NULL;
+
+                  json_reader_read_element (reader, i);
+                  if (json_reader_read_member (reader, "hash") &&
+                      json_reader_is_value (reader))
+                    {
+                      const gchar *hash =
+                        json_reader_get_string_value (reader);
+
+                      data->id = g_strdup (hash);
+                    }
+                  json_reader_end_member (reader);
+
+                  if (json_reader_read_member (reader, "iccData") &&
+                      json_reader_is_value (reader))
+                    {
+                      GimpColorProfile *profile  = NULL;
+                      const gchar      *icc_data = NULL;
+                      guchar           *decoded  = NULL;
+                      gsize             icc_size;
+
+                      icc_data = json_reader_get_string_value (reader);
+                      decoded = g_base64_decode (icc_data, &icc_size);
+
+                      if (decoded)
+                        {
+                          profile =
+                            gimp_color_profile_new_from_icc_profile ((const guint8 *) decoded,
+                                                                     icc_size,
+                                                                     &test);
+
+                          g_free (decoded);
+                        }
+
+                      if (profile)
+                        data->profile = profile;
+                    }
+                  json_reader_end_member (reader);
+
+                  if (data->id && data->profile)
+                    profiles = g_list_append (profiles, data);
+
+                  json_reader_end_element (reader);
+                }
+
+            }
+          json_reader_end_member (reader);
+
+          if (json_reader_read_member (reader, "swatches") &&
+              json_reader_is_array (reader))
+            {
+              guint        array_length = json_reader_count_elements (reader);
+              const gchar *labels[3]    = {"hue", "saturation", "brightness"};
+              guint        position     = 0;
+
+              for (gint i = 0; i < array_length; i++)
+                {
+                  gfloat hsva[4] = { 0, 0, 0, 1 };
+                  gint   valid   = 0;
+
+                  json_reader_read_element (reader, i);
+                  for (gint j = 0; j < 3; j++)
+                    {
+                      if (json_reader_read_member (reader, labels[j]) &&
+                          json_reader_is_value (reader))
+                        {
+                          hsva[j] =
+                            (gfloat) json_reader_get_double_value (reader);
+
+                          valid++;
+                        }
+                      json_reader_end_member (reader);
+                    }
+                  if (json_reader_read_member (reader, "alpha") &&
+                      json_reader_is_value (reader))
+                    hsva[3] = (gfloat) json_reader_get_double_value (reader);
+                  json_reader_end_member (reader);
+
+                  if (valid >= 3)
+                    {
+                      GeglColor  *color = gegl_color_new (NULL);
+                      const Babl *space = NULL;
+
+                      if (json_reader_read_member (reader, "colorProfile") &&
+                          profiles                                         &&
+                          json_reader_is_value (reader))
+                        {
+                          GList       *profile_list;
+                          const gchar *hash =
+                            json_reader_get_string_value (reader);
+
+                          for (profile_list = profiles; profile_list;
+                               profile_list = g_list_next (profile_list))
+                            {
+                              PaletteColorProfile *icc = profile_list->data;
+
+                              if (! strcmp (icc->id, hash))
+                                {
+                                  space = gimp_color_profile_get_space (icc->profile,
+                                                                        GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
+                                                                        NULL);
+                                  break;
+                                }
+                            }
+                        }
+                      json_reader_end_member (reader);
+
+                      gegl_color_set_pixel (color,
+                                            babl_format_with_space ("HSV float", space),
+                                            hsva);
+
+                      if (! gimp_palette_find_entry (palette, color, NULL))
+                        gimp_palette_add_entry (palette, position, NULL, color);
+
+                      if (json_reader_read_member (reader, "name") &&
+                          json_reader_is_value (reader))
+                        {
+                          const gchar *name =
+                            json_reader_get_string_value (reader);
+
+                          gimp_palette_set_entry_name (palette, position, name);
+                        }
+                      json_reader_end_member (reader);
+                      position++;
+
+                      g_object_unref (color);
+                    }
+                  json_reader_end_element (reader);
+                }
+            }
+          json_reader_end_member (reader);
+
+          if (profiles)
+            g_list_free (profiles);
+
+          g_free (json_data);
+          g_clear_object (&reader);
+          g_clear_object (&parser);
+        }
+      else
+        {
+          g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                       _("Unable to read Procreate swatches file"));
+
+          archive_read_free (a);
+          return NULL;
+        }
+
+      r = archive_read_free (a);
+    }
+  else
+    {
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("Unable to read Procreate swatches file"));
+      return NULL;
+    }
+
+  return g_list_prepend (NULL, palette);
+}
+
 static void
 swatchbooker_load_start_element (GMarkupParseContext *context,
                                  const gchar         *element_name,
@@ -1473,66 +1811,74 @@ swatchbooker_load_start_element (GMarkupParseContext *context,
                                  GError             **error)
 {
   SwatchBookerData *sbz_data = user_data;
+  gchar            *lower_elt_name;
 
   sbz_data->copy_values = FALSE;
   sbz_data->color_model = NULL;
   sbz_data->color_space = NULL;
 
-  if (! strcmp (g_ascii_strdown (element_name, -1), "color"))
+  lower_elt_name = g_ascii_strdown (element_name, -1);
+  if (! strcmp (lower_elt_name, "color"))
     {
       sbz_data->in_color_tag = TRUE;
     }
-  else if (! strcmp (g_ascii_strdown (element_name, -1), "dc:identifier"))
+  else if (! strcmp (lower_elt_name, "dc:identifier"))
     {
       if (sbz_data->in_color_tag)
         sbz_data->copy_name = TRUE;
     }
-  else if (! strcmp (g_ascii_strdown (element_name, -1), "values"))
+  else if (! strcmp (lower_elt_name, "values"))
     {
       while (*attribute_names)
         {
-          if (! strcmp (g_ascii_strdown (*attribute_names, -1), "model"))
-            {
-              sbz_data->color_model =
-                g_strdup (g_ascii_strdown (*attribute_values, -1));
-            }
-          else if (! strcmp (g_ascii_strdown (*attribute_names, -1), "space"))
-            {
-              sbz_data->color_space = g_strdup (*attribute_values);
-            }
+          gchar *lower_att_name = g_ascii_strdown (*attribute_names, -1);
+
+          if (! strcmp (lower_att_name, "model"))
+            sbz_data->color_model = g_ascii_strdown (*attribute_values, -1);
+          else if (! strcmp (lower_att_name, "space"))
+            sbz_data->color_space = g_strdup (*attribute_values);
 
           attribute_names++;
           attribute_values++;
+
+          g_free (lower_att_name);
         }
 
       sbz_data->copy_values = TRUE;
     }
-  else if (! strcmp (g_ascii_strdown (element_name, -1), "book"))
+  else if (! strcmp (lower_elt_name, "book"))
     {
       sbz_data->in_book_tag = TRUE;
 
       while (*attribute_names)
         {
-          if (! strcmp (g_ascii_strdown (*attribute_names, -1), "columns"))
+          gchar *lower_att_name = g_ascii_strdown (*attribute_names, -1);
+
+          if (! strcmp (lower_att_name, "columns"))
             {
               gint columns = atoi (*attribute_values);
 
               if (columns > 0)
                 gimp_palette_set_columns (sbz_data->palette, columns);
 
+              g_free (lower_att_name);
               break;
             }
 
           attribute_names++;
           attribute_values++;
+
+          g_free (lower_att_name);
         }
     }
-  else if (! strcmp (g_ascii_strdown (element_name, -1), "swatch") &&
+  else if (! strcmp (lower_elt_name, "swatch") &&
            sbz_data->in_book_tag)
     {
       while (*attribute_names)
         {
-          if (! strcmp (g_ascii_strdown (*attribute_names, -1), "material"))
+          gchar *lower_att_name = g_ascii_strdown (*attribute_names, -1);
+
+          if (! strcmp (lower_att_name, "material"))
             {
               GList *cols;
               gint   original_id = 0;
@@ -1553,13 +1899,19 @@ swatchbooker_load_start_element (GMarkupParseContext *context,
                     }
                   original_id++;
                 }
+
+              g_free (lower_att_name);
               break;
             }
 
           attribute_names++;
           attribute_values++;
+
+          g_free (lower_att_name);
         }
     }
+
+  g_free (lower_elt_name);
 }
 
 static void
@@ -1569,11 +1921,15 @@ swatchbooker_load_end_element (GMarkupParseContext *context,
                                GError             **error)
 {
   SwatchBookerData *sbz_data = user_data;
+  gchar            *lower_elt_name;
 
-  if (! strcmp (g_ascii_strdown (element_name, -1), "color"))
+  lower_elt_name = g_ascii_strdown (element_name, -1);
+  if (! strcmp (lower_elt_name, "color"))
     sbz_data->in_color_tag = FALSE;
-  else if (! strcmp (g_ascii_strdown (element_name, -1), "book"))
+  else if (! strcmp (lower_elt_name, "book"))
     sbz_data->in_book_tag = FALSE;
+
+  g_free (lower_elt_name);
 }
 
 static void
@@ -1622,9 +1978,9 @@ swatchbooker_load_text (GMarkupParseContext *context,
                    profile_list;
                    profile_list = g_list_next (profile_list))
                 {
-                  SwatchBookerColorProfile *icc = profile_list->data;
+                  PaletteColorProfile *icc = profile_list->data;
 
-                  if (! strcmp (sbz_data->color_space, icc->id))
+                  if (g_str_has_suffix (icc->id, sbz_data->color_space))
                     {
                       space = gimp_color_profile_get_space (icc->profile,
                                                             GIMP_COLOR_RENDERING_INTENT_RELATIVE_COLORIMETRIC,
@@ -1639,37 +1995,21 @@ swatchbooker_load_text (GMarkupParseContext *context,
 
           /* No need for babl conversion for sRGB colors */
           if (! strcmp (sbz_data->color_model, "srgb"))
-            {
-              src_format = babl_format_with_space ("R'G'B' float", NULL);
-            }
+            src_format = babl_format_with_space ("R'G'B' float", NULL);
           else if (! strcmp (sbz_data->color_model, "rgb"))
-            {
-              src_format = babl_format_with_space ("R'G'B' float", space);
-            }
+            src_format = babl_format_with_space ("R'G'B' float", space);
           else if (! strcmp (sbz_data->color_model, "gray"))
-            {
-              src_format = babl_format_with_space ("Y' float", space);
-            }
+            src_format = babl_format_with_space ("Y' float", space);
           else if (! strcmp (sbz_data->color_model, "cmyk"))
-            {
-              src_format = babl_format_with_space ("CMYK float", space);
-            }
+            src_format = babl_format_with_space ("CMYK float", space);
           else if (! strcmp (sbz_data->color_model, "hsl"))
-            {
-              src_format = babl_format_with_space ("HSL float", space);
-            }
+            src_format = babl_format_with_space ("HSL float", space);
           else if (! strcmp (sbz_data->color_model, "hsv"))
-            {
-              src_format = babl_format_with_space ("HSV float", space);
-            }
+            src_format = babl_format_with_space ("HSV float", space);
           else if (! strcmp (sbz_data->color_model, "lab"))
-            {
-              src_format = babl_format_with_space ("CIE Lab float", space);
-            }
+            src_format = babl_format_with_space ("CIE Lab float", space);
           else if (! strcmp (sbz_data->color_model, "xyz"))
-            {
-              src_format = babl_format_with_space ("CIE XYZ float", space);
-            }
+            src_format = babl_format_with_space ("CIE XYZ float", space);
 
           if (src_format != NULL)
             {
@@ -1750,6 +2090,10 @@ gimp_palette_load_detect_format (GFile        *file,
       else if (g_str_has_suffix (lower, ".sbz"))
         {
           format = GIMP_PALETTE_FILE_FORMAT_SBZ;
+        }
+      else if (g_str_has_suffix (lower, ".swatches"))
+        {
+          format = GIMP_PALETTE_FILE_FORMAT_PROCREATE;
         }
 
       g_free (lower);

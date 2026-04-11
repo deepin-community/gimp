@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __DIALOGS_CONSTRUCTORS_H__
-#define __DIALOGS_CONSTRUCTORS_H__
+#pragma once
 
 
 /*  toplevel dialogs  */
@@ -248,10 +247,6 @@ GtkWidget * dialogs_channel_list_view_new       (GimpDialogFactory *factory,
                                                  GimpContext       *context,
                                                  GimpUIManager     *ui_manager,
                                                  gint               view_size);
-GtkWidget * dialogs_vectors_list_view_new       (GimpDialogFactory *factory,
-                                                 GimpContext       *context,
-                                                 GimpUIManager     *ui_manager,
-                                                 gint               view_size);
 GtkWidget * dialogs_path_list_view_new          (GimpDialogFactory *factory,
                                                  GimpContext       *context,
                                                  GimpUIManager     *ui_manager,
@@ -311,6 +306,3 @@ GtkWidget * dialogs_tool_preset_editor_get      (GimpDialogFactory *factory,
                                                  GimpContext       *context,
                                                  GimpUIManager     *ui_manager,
                                                  gint               view_size);
-
-
-#endif /* __DIALOGS_CONSTRUCTORS_H__ */

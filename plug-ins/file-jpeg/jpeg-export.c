@@ -136,14 +136,14 @@ background_jpeg_save (PreviewPersistent *pp)
               gchar   *size_text;
 
               size_text = g_format_size (size);
-              text = g_strdup_printf (_("File size: %s"), size_text);
+              text = g_strdup_printf (_("File size without metadata: %s"), size_text);
               g_free (size_text);
 
               g_object_unref (info);
             }
           else
             {
-              text = g_strdup_printf (_("File size: %s"), error->message);
+              text = g_strdup_printf (_("File size without metadata: %s"), error->message);
               g_clear_error (&error);
             }
 
@@ -431,19 +431,16 @@ export_image (GFile                *file,
 
   if (cmyk)
     {
-      if (save_profile)
-        {
-          GError *err = NULL;
+      GError *err = NULL;
 
-          cmyk_profile = gimp_image_get_simulation_profile (image);
-          if (! cmyk_profile && err)
-            g_printerr ("%s: no soft-proof profile: %s\n", G_STRFUNC, err->message);
+      cmyk_profile = gimp_image_get_simulation_profile (image);
+      if (! cmyk_profile && err)
+        g_printerr ("%s: no soft-proof profile: %s\n", G_STRFUNC, err->message);
 
-          if (cmyk_profile && ! gimp_color_profile_is_cmyk (cmyk_profile))
-            g_clear_object (&cmyk_profile);
+      if (cmyk_profile && ! gimp_color_profile_is_cmyk (cmyk_profile))
+        g_clear_object (&cmyk_profile);
 
-          g_clear_error (&err);
-        }
+      g_clear_error (&err);
 
       /* As far as I know, without access to JPEG specifications, we
        * should encode as proper "CMYK" encoding scheme. But every other
@@ -650,14 +647,8 @@ export_image (GFile                *file,
     }
 
   /* Step 4.2: store the color profile */
-  if (save_profile &&
-      /* XXX Only case when we don't save a profile even though the
-       * option was requested is if we store as CMYK without setting a
-       * profile. It would actually be better to generate a profile
-       * corresponding to the "naive" CMYK space we use in such case.
-       * But it doesn't look like babl can do this yet.
-       */
-      (! cmyk || cmyk_profile != NULL))
+  if (save_profile ||
+      (cmyk && cmyk_profile != NULL))
     {
       const guint8 *icc_data;
       gsize         icc_length;
@@ -714,7 +705,7 @@ export_image (GFile                *file,
       pp->jerr.error_exit = background_error_exit;
 
       gtk_label_set_text (GTK_LABEL (preview_size),
-                          _("Calculating file size..."));
+                          _("Calculating approximate file size..."));
 
       pp->source_id = g_idle_add ((GSourceFunc) background_jpeg_save, pp);
 
@@ -804,7 +795,7 @@ make_preview (GimpProcedureConfig *config)
     }
   else
     {
-      gtk_label_set_text (GTK_LABEL (preview_size), _("File size: unknown"));
+      gtk_label_set_text (GTK_LABEL (preview_size), _("File size without metadata: unknown"));
 
       gimp_displays_flush ();
     }
@@ -880,7 +871,7 @@ save_dialog (GimpProcedure       *procedure,
 
   /* File size label. */
   preview_size = gimp_procedure_dialog_get_label (GIMP_PROCEDURE_DIALOG (dialog),
-                                                  "preview-size", _("File size: unknown"),
+                                                  "preview-size", _("File size without metadata: unknown"),
                                                   FALSE, FALSE);
   gtk_label_set_xalign (GTK_LABEL (preview_size), 0.0);
   gtk_label_set_ellipsize (GTK_LABEL (preview_size), PANGO_ELLIPSIZE_END);
@@ -888,7 +879,7 @@ save_dialog (GimpProcedure       *procedure,
                              PANGO_ATTR_STYLE, PANGO_STYLE_ITALIC,
                              -1);
   gimp_help_set_help_data (preview_size,
-                           _("Enable preview to obtain the file size."), NULL);
+                           _("Enable preview to obtain the approximate file size."), NULL);
 
 
   /* Profile label. */
@@ -985,6 +976,10 @@ save_dialog (GimpProcedure       *procedure,
   gimp_procedure_dialog_fill_frame (GIMP_PROCEDURE_DIALOG (dialog),
                                     "option-frame", "option-title", FALSE,
                                     "options");
+
+  /* Enforce setting DCT as a combobox */
+  gimp_procedure_dialog_get_widget (GIMP_PROCEDURE_DIALOG (dialog),
+                                    "dct", GTK_TYPE_COMBO_BOX);
 
   gimp_procedure_dialog_fill_box (GIMP_PROCEDURE_DIALOG (dialog),
                                   "advanced-options",

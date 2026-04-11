@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __ACTIONS_H__
-#define __ACTIONS_H__
+#pragma once
 
 
 extern GimpActionFactory *global_action_factory;
@@ -24,6 +23,9 @@ extern GimpActionFactory *global_action_factory;
 
 void               actions_init            (Gimp                 *gimp);
 void               actions_exit            (Gimp                 *gimp);
+
+void               actions_filter_set_aux  (const gchar          *action_name);
+gboolean           actions_filter_get_aux  (const gchar          *action_name);
 
 Gimp             * action_data_get_gimp    (gpointer              data);
 GimpContext      * action_data_get_context (gpointer              data);
@@ -114,6 +116,3 @@ void               action_message          (GimpDisplay          *display,
   paths = gimp_image_get_selected_paths (image); \
   if (! paths) \
     return
-
-
-#endif /* __ACTIONS_H__ */

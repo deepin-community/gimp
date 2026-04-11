@@ -24,6 +24,8 @@
 
 #include "core-types.h"
 
+#include "path/gimpvectorlayer.h"
+
 #include "gimp.h"
 #include "gimpchannel.h"
 #include "gimpcontainer.h"
@@ -230,10 +232,14 @@ gimp_image_flip_full (GimpImage           *image,
 
   gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_IMAGE_FLIP, NULL);
 
-  /*  Flip all layers, channels (including selection mask), and vectors  */
+  /*  Flip all layers, channels (including selection mask), and paths  */
   while ((item = gimp_object_queue_pop (queue)))
     {
       gboolean clip = FALSE;
+      
+      /* Non-rasterized vector layers will be transformed when their path is */
+      if (gimp_item_is_vector_layer (item))
+        continue;
 
       if (GIMP_IS_CHANNEL (item))
         clip = clip_result;

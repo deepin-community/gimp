@@ -18,9 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_PATH_TREE_VIEW_H__
-#define __GIMP_PATH_TREE_VIEW_H__
-
+#pragma once
 
 #include "gimpitemtreeview.h"
 
@@ -39,8 +37,8 @@ struct _GimpPathTreeView
 {
   GimpItemTreeView  parent_instance;
 
-  GtkWidget        *toselection_button;
-  GtkWidget        *tovectors_button;
+  GtkWidget        *to_selection_button;
+  GtkWidget        *to_path_button;
   GtkWidget        *stroke_button;
 };
 
@@ -51,6 +49,3 @@ struct _GimpPathTreeViewClass
 
 
 GType   gimp_path_tree_view_get_type (void) G_GNUC_CONST;
-
-
-#endif  /*  __GIMP_PATH_TREE_VIEW_H__  */

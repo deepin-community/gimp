@@ -34,8 +34,6 @@
 #include "core/gimpbuffer.h"
 #include "core/gimpcontainer.h"
 #include "core/gimpdrawable-edit.h"
-#include "core/gimpdrawable-filters.h"
-#include "core/gimpdrawablefilter.h"
 #include "core/gimpfilloptions.h"
 #include "core/gimpimage.h"
 #include "core/gimpimage-new.h"
@@ -43,17 +41,21 @@
 #include "core/gimplayer.h"
 #include "core/gimplayer-new.h"
 #include "core/gimplayermask.h"
+#include "core/gimplinklayer.h"
 #include "core/gimplist.h"
 #include "core/gimppattern.h"
 #include "core/gimpprogress.h"
 
 #include "file/file-open.h"
 
+#include "path/gimppath.h"
+#include "path/gimppath-import.h"
+#include "path/gimpvectorlayer.h"
+
 #include "text/gimptext.h"
 #include "text/gimptextlayer.h"
 
-#include "vectors/gimppath.h"
-#include "vectors/gimppath-import.h"
+#include "tools/gimptools-utils.h"
 
 #include "widgets/gimpdnd.h"
 
@@ -249,8 +251,6 @@ gimp_display_shell_drop_drawable (GtkWidget    *widget,
 
   if (new_item)
     {
-      GimpContainer *filters;
-
       GimpLayer *new_layer = GIMP_LAYER (new_item);
 
       gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_EDIT_PASTE,
@@ -258,41 +258,10 @@ gimp_display_shell_drop_drawable (GtkWidget    *widget,
 
       gimp_display_shell_dnd_position_item (shell, image, new_item);
 
-      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (viewable));
-      if (gimp_container_get_n_children (filters) > 0)
-        {
-          GList *filter_list;
-
-          for (filter_list = GIMP_LIST (filters)->queue->tail;
-               filter_list;
-               filter_list = g_list_previous (filter_list))
-            {
-              if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
-                {
-                  GimpDrawableFilter *old_filter = filter_list->data;
-                  GimpDrawableFilter *filter;
-
-                  filter =
-                    gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_layer),
-                                                    old_filter);
-
-                  if (filter != NULL)
-                    {
-                      gimp_drawable_filter_apply (filter, NULL);
-                      gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
-
-                      gimp_drawable_filter_layer_mask_freeze (filter);
-                      g_object_unref (filter);
-                    }
-                }
-            }
-        }
-
       gimp_item_set_visible (new_item, TRUE, FALSE);
 
       gimp_image_add_layer (image, new_layer,
                             GIMP_IMAGE_ACTIVE_PARENT, -1, TRUE);
-      gimp_drawable_enable_resize_undo (GIMP_DRAWABLE (new_layer));
 
       gimp_image_undo_group_end (image);
 
@@ -425,6 +394,37 @@ gimp_display_shell_dnd_fill (GimpDisplayShell *shell,
           g_list_free (drawables);
           return;
         }
+
+      /* We can drop colors on text layers, and colors and patterns on
+       * vector layers to change their fill. Otherwise, we want to prevent
+       * destructive fills on non-rasterized layers */
+      if (gimp_item_is_rasterizable (GIMP_ITEM (iter->data)) &&
+          ! gimp_item_is_rasterized (GIMP_ITEM (iter->data)))
+        {
+          gchar *menu_path = _("Layer > Rasterize");
+          gchar *message   = NULL;
+
+          if (gimp_item_is_link_layer (GIMP_ITEM (iter->data)))
+            message = g_strdup_printf (_("Link layers must be rasterized (%s)."),
+                                       menu_path);
+          else if (gimp_item_is_text_layer (GIMP_ITEM (iter->data)) &&
+                   gimp_fill_options_get_style (options) == GIMP_FILL_STYLE_PATTERN)
+            message = g_strdup_printf (_("Text layers must be rasterized (%s)."),
+                                       menu_path);
+
+          if (message)
+            {
+              gimp_message_literal (shell->display->gimp,
+                                    G_OBJECT (shell->display),
+                                    GIMP_MESSAGE_ERROR,
+                                    message);
+              g_free (message);
+              gimp_tools_blink_item (shell->display->gimp,
+                                     GIMP_ITEM (iter->data));
+              g_list_free (drawables);
+              return;
+            }
+        }
     }
 
   gimp_image_undo_group_start (image, GIMP_UNDO_GROUP_PAINT, undo_desc);
@@ -434,20 +434,44 @@ gimp_display_shell_dnd_fill (GimpDisplayShell *shell,
       /* FIXME: there should be a virtual method for this that the
        *        GimpTextLayer can override.
        */
-      if (gimp_item_is_text_layer (iter->data) &&
-          (gimp_fill_options_get_style (options) == GIMP_FILL_STYLE_FG_COLOR ||
-           gimp_fill_options_get_style (options) == GIMP_FILL_STYLE_BG_COLOR))
+      if (gimp_item_is_text_layer (iter->data) ||
+          gimp_item_is_vector_layer (iter->data))
         {
-          GeglColor *color;
+          GimpPattern *pattern = NULL;
+          GeglColor   *color   = NULL;
 
           if (gimp_fill_options_get_style (options) == GIMP_FILL_STYLE_FG_COLOR)
             color = gimp_context_get_foreground (GIMP_CONTEXT (options));
-          else
+          else if (gimp_fill_options_get_style (options) == GIMP_FILL_STYLE_BG_COLOR)
             color = gimp_context_get_background (GIMP_CONTEXT (options));
+          else
+            pattern = gimp_context_get_pattern (GIMP_CONTEXT (options));
 
-          gimp_text_layer_set (iter->data, NULL,
-                               "color", color,
-                               NULL);
+          if (color)
+            {
+              if (gimp_item_is_vector_layer (iter->data))
+                {
+                  gimp_vector_layer_set (GIMP_VECTOR_LAYER (iter->data), NULL,
+                                         "fill-style",
+                                         GIMP_CUSTOM_STYLE_SOLID_COLOR,
+                                         "fill-color",
+                                         color, NULL);
+                  gimp_vector_layer_refresh (iter->data);
+                }
+              else
+                {
+                  gimp_text_layer_set (iter->data, NULL, "color", color, NULL);
+                }
+            }
+          else if (pattern &&
+                   gimp_item_is_vector_layer (iter->data))
+            {
+              gimp_vector_layer_set (GIMP_VECTOR_LAYER (iter->data), NULL,
+                                     "fill-style",   GIMP_CUSTOM_STYLE_PATTERN,
+                                     "fill-pattern", pattern,
+                                     NULL);
+              gimp_vector_layer_refresh (iter->data);
+            }
         }
       else
         {
@@ -605,7 +629,7 @@ gimp_display_shell_drop_uri_list (GtkWidget *widget,
 
           new_layers = file_open_layers (shell->display->gimp, context,
                                          GIMP_PROGRESS (shell->display),
-                                         image, FALSE,
+                                         image, FALSE, FALSE,
                                          file, GIMP_RUN_INTERACTIVE, NULL,
                                          &status, &error);
 

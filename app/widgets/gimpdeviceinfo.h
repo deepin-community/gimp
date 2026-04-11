@@ -15,14 +15,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_DEVICE_INFO_H__
-#define __GIMP_DEVICE_INFO_H__
-
+#pragma once
 
 #include "core/gimptoolpreset.h"
-
-
-G_BEGIN_DECLS
 
 
 typedef struct _GimpDeviceKey GimpDeviceKey;
@@ -91,8 +86,6 @@ guint64           gimp_device_info_get_tool_serial      (GimpDeviceInfo  *info);
 guint64           gimp_device_info_get_tool_hardware_id (GimpDeviceInfo  *info);
 
 gint             gimp_device_info_get_n_axes            (GimpDeviceInfo  *info);
-gboolean         gimp_device_info_ignore_axis           (GimpDeviceInfo  *info,
-                                                         gint             axis);
 const gchar    * gimp_device_info_get_axis_name         (GimpDeviceInfo  *info,
                                                          gint             axis);
 GdkAxisUse       gimp_device_info_get_axis_use          (GimpDeviceInfo  *info,
@@ -128,8 +121,3 @@ GimpPadActions * gimp_device_info_get_pad_actions       (GimpDeviceInfo  *info);
 
 GtkPadController * gimp_device_info_create_pad_controller (GimpDeviceInfo *info,
                                                            GimpWindow     *window);
-
-
-G_END_DECLS
-
-#endif /* __GIMP_DEVICE_INFO_H__ */

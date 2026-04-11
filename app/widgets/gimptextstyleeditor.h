@@ -18,8 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_TEXT_STYLE_EDITOR_H__
-#define __GIMP_TEXT_STYLE_EDITOR_H__
+#pragma once
 
 
 #define GIMP_TYPE_TEXT_STYLE_EDITOR            (gimp_text_style_editor_get_type ())
@@ -46,8 +45,11 @@ struct _GimpTextStyleEditor
   gdouble         resolution_x;
   gdouble         resolution_y;
 
+  GtkWidget      *dnd_handle;
+
   GtkWidget      *upper_hbox;
   GtkWidget      *lower_hbox;
+  GtkWidget      *restore_position_button;
 
   GtkWidget      *font_entry;
   GtkWidget      *size_entry;
@@ -85,5 +87,6 @@ GtkWidget * gimp_text_style_editor_new       (Gimp                 *gimp,
 GList     * gimp_text_style_editor_list_tags (GimpTextStyleEditor  *editor,
                                               GList               **remove_tags);
 
-
-#endif /*  __GIMP_TEXT_STYLE_EDITOR_H__  */
+void        gimp_text_style_show_restore_position_button
+                                             (GimpTextStyleEditor  *editor,
+                                              gboolean              show);

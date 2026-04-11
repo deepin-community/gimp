@@ -17,13 +17,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_DRAWABLE_FILTERS_H__
-#define __GIMP_DRAWABLE_FILTERS_H__
+#pragma once
 
+
+/*  internal functions  */
+
+void            _gimp_drawable_filters_init         (GimpDrawable *drawable);
+void            _gimp_drawable_filters_finalize     (GimpDrawable *drawable);
+
+
+/*  public functions  */
 
 GimpContainer * gimp_drawable_get_filters           (GimpDrawable *drawable);
 
 gboolean        gimp_drawable_has_visible_filters   (GimpDrawable *drawable);
+
+gboolean        gimp_drawable_n_editable_filters    (GimpDrawable *drawable,
+                                                     gint         *n_editable,
+                                                     gint         *first,
+                                                     gint         *last);
 
 void            gimp_drawable_add_filter            (GimpDrawable *drawable,
                                                      GimpFilter   *filter);
@@ -31,11 +43,15 @@ void            gimp_drawable_remove_filter         (GimpDrawable *drawable,
                                                      GimpFilter   *filter);
 void            gimp_drawable_clear_filters         (GimpDrawable *drawable);
 
-void            gimp_drawable_merge_filters         (GimpDrawable *drawable);
-
 gboolean        gimp_drawable_has_filter            (GimpDrawable *drawable,
                                                      GimpFilter   *filter);
 
+gboolean        gimp_drawable_raise_filter          (GimpDrawable *drawable,
+                                                     GimpFilter   *filter);
+gboolean        gimp_drawable_lower_filter          (GimpDrawable *drawable,
+                                                     GimpFilter   *filter);
+
+void            gimp_drawable_merge_filters         (GimpDrawable *drawable);
 gboolean        gimp_drawable_merge_filter          (GimpDrawable *drawable,
                                                      GimpFilter   *filter,
                                                      GimpProgress *progress,
@@ -44,6 +60,3 @@ gboolean        gimp_drawable_merge_filter          (GimpDrawable *drawable,
                                                      gboolean      clip,
                                                      gboolean      cancellable,
                                                      gboolean      update);
-
-
-#endif /* __GIMP_DRAWABLE_FILTERS_H__ */

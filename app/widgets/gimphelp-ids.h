@@ -18,8 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_HELP_IDS_H__
-#define __GIMP_HELP_IDS_H__
+#pragma once
 
 
 #define GIMP_HELP_MAIN                            "gimp-main"
@@ -27,6 +26,7 @@
 #define GIMP_HELP_FILE_NEW                        "gimp-file-new"
 #define GIMP_HELP_FILE_OPEN                       "gimp-file-open"
 #define GIMP_HELP_FILE_OPEN_AS_LAYER              "gimp-file-open-as-layer"
+#define GIMP_HELP_FILE_OPEN_AS_LINK_LAYER         "gimp-file-open-as-link-layer"
 #define GIMP_HELP_FILE_OPEN_LOCATION              "gimp-file-open-location"
 #define GIMP_HELP_FILE_OPEN_BY_EXTENSION          "gimp-file-open-by-extension"
 #define GIMP_HELP_FILE_OPEN_RECENT                "gimp-file-open-recent"
@@ -121,7 +121,7 @@
 #define GIMP_HELP_VIEW_SNAP_TO_GUIDES             "gimp-view-snap-to-guides"
 #define GIMP_HELP_VIEW_SNAP_TO_GRID               "gimp-view-snap-to-grid"
 #define GIMP_HELP_VIEW_SNAP_TO_CANVAS             "gimp-view-snap-to-canvas"
-#define GIMP_HELP_VIEW_SNAP_TO_VECTORS            "gimp-view-snap-to-vectors"
+#define GIMP_HELP_VIEW_SNAP_TO_PATH               "gimp-view-snap-to-path"
 #define GIMP_HELP_VIEW_SNAP_TO_BBOX               "gimp-view-snap-to-bbox"
 #define GIMP_HELP_VIEW_SNAP_TO_EQUIDISTANCE       "gimp-view-snap-to-equidistance"
 #define GIMP_HELP_VIEW_SHOW_MENUBAR               "gimp-view-show-menubar"
@@ -197,6 +197,8 @@
 #define GIMP_HELP_LAYER_TEXT_DISCARD              "gimp-layer-text-discard"
 #define GIMP_HELP_LAYER_TEXT_TO_PATH              "gimp-layer-text-to-path"
 #define GIMP_HELP_LAYER_TEXT_ALONG_PATH           "gimp-layer-text-along-path"
+#define GIMP_HELP_LAYER_VECTOR_DISCARD            "gimp-layer-vector-discard"
+#define GIMP_HELP_LAYER_VECTOR_FILL_STROKE        "gimp-layer-vector-fill-stroke"
 #define GIMP_HELP_LAYER_PREVIOUS                  "gimp-layer-previous"
 #define GIMP_HELP_LAYER_NEXT                      "gimp-layer-next"
 #define GIMP_HELP_LAYER_TOP                       "gimp-layer-top"
@@ -304,6 +306,7 @@
 #define GIMP_HELP_PATH_IMPORT                     "gimp-path-import"
 #define GIMP_HELP_PATH_EXPORT                     "gimp-path-export"
 #define GIMP_HELP_PATH_EDIT                       "gimp-path-edit"
+#define GIMP_HELP_PATH_TO_VECTOR_LAYER            "gimp-path-to-vector-layer"
 
 #define GIMP_HELP_PATH_TOOL_DELETE_ANCHOR         "gimp-path-path-tool-delete-anchor"
 #define GIMP_HELP_PATH_TOOL_DELETE_SEGMENT        "gimp-path-path-tool-delete-segment"
@@ -374,7 +377,6 @@
 #define GIMP_HELP_TOOL_THRESHOLD                  "gimp-tool-threshold"
 #define GIMP_HELP_TOOL_TRANSFORM_3D               "gimp-tool-transform-3d"
 #define GIMP_HELP_TOOL_UNIFIED_TRANSFORM          "gimp-tool-unified-transform"
-#define GIMP_HELP_TOOL_VECTORS                    "gimp-tool-vectors"
 #define GIMP_HELP_TOOL_WARP                       "gimp-tool-warp"
 #define GIMP_HELP_TOOL_ZOOM                       "gimp-tool-zoom"
 
@@ -509,6 +511,7 @@
 #define GIMP_HELP_TOOLBOX_INDICATOR_AREA          "gimp-toolbox-indicator-area"
 #define GIMP_HELP_TOOLBOX_DEFAULT_COLORS          "gimp-toolbox-default-colors"
 #define GIMP_HELP_TOOLBOX_SWAP_COLORS             "gimp-toolbox-swap-colors"
+#define GIMP_HELP_TOOLBOX_SWAP_TOOLS              "gimp-toolbox-swap-tools"
 
 #define GIMP_HELP_BRUSH_DIALOG                    "gimp-brush-dialog"
 #define GIMP_HELP_BRUSH_EDIT                      "gimp-brush-edit"
@@ -805,5 +808,3 @@
 #define GIMP_HELP_EXTENSIONS_INSTALLED            "gimp-extensions-installed"
 #define GIMP_HELP_EXTENSIONS_SYSTEM               "gimp-extensions-system"
 #define GIMP_HELP_EXTENSIONS_INSTALL              "gimp-extensions-install"
-
-#endif /* __GIMP_HELP_IDS_H__ */

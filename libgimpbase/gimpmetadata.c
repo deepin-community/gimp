@@ -28,9 +28,11 @@
 #include <gegl.h>
 #include <gio/gio.h>
 
+#include "libgimpbase/gimpversion-private.h"
 #include "libgimpmath/gimpmath.h"
 
 #include "gimpbasetypes.h"
+#include "gimpversion.h"
 
 #include "gimplimits.h"
 #include "gimpmetadata.h"
@@ -38,6 +40,9 @@
 #include "gimpunit.h"
 
 #include "libgimp/libgimp-intl.h"
+
+
+GIMP_WARNING_API_BREAK("libgimpbase/gimpmetadata.h: rename GIMP_METADATA_SAVE_UPDATE as GIMP_METADATA_UPDATE?")
 
 /**
  * SECTION: gimpmetadata
@@ -1755,7 +1760,7 @@ gimp_metadata_set_creation_date (GimpMetadata *metadata,
 
   /* XMP: Xmp.photoshop.DateCreated = date when the original image was
    *   taken, this can be before Xmp.xmp.CreateDate. */
-  datetime_buf = g_date_time_format (datetime, "%Y:%m:%dT%T\%:z");
+  datetime_buf = g_date_time_format (datetime, "%Y-%m-%dT%T\%:z");
 
   gexiv2_metadata_try_set_tag_string (g2metadata,
                                       "Xmp.xmp.CreateDate",

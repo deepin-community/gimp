@@ -130,6 +130,59 @@ GParamSpec * gimp_param_spec_text_layer     (const gchar  *name,
 
 
 /*
+ * GIMP_TYPE_PARAM_VECTOR_LAYER
+ */
+
+#define GIMP_VALUE_HOLDS_VECTOR_LAYER(value)   (G_TYPE_CHECK_VALUE_TYPE ((value),\
+                                                GIMP_TYPE_VECTOR_LAYER))
+
+#define GIMP_TYPE_PARAM_VECTOR_LAYER           (gimp_param_vector_layer_get_type ())
+#define GIMP_IS_PARAM_SPEC_VECTOR_LAYER(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_VECTOR_LAYER))
+
+GType        gimp_param_vector_layer_get_type (void) G_GNUC_CONST;
+
+GParamSpec * gimp_param_spec_vector_layer     (const gchar  *name,
+                                               const gchar  *nick,
+                                               const gchar  *blurb,
+                                               gboolean      none_ok,
+                                               GParamFlags   flags);
+
+
+/*
+ * GIMP_TYPE_PARAM_LINK_LAYER
+ */
+
+#define GIMP_VALUE_HOLDS_LINK_LAYER(value)   (G_TYPE_CHECK_VALUE_TYPE ((value), GIMP_TYPE_LINK_LAYER))
+#define GIMP_TYPE_PARAM_LINK_LAYER           (gimp_param_link_layer_get_type ())
+#define GIMP_IS_PARAM_SPEC_LINK_LAYER(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_LINK_LAYER))
+
+GType        gimp_param_link_layer_get_type   (void) G_GNUC_CONST;
+
+GParamSpec * gimp_param_spec_link_layer       (const gchar  *name,
+                                               const gchar  *nick,
+                                               const gchar  *blurb,
+                                               gboolean      none_ok,
+                                               GParamFlags   flags);
+
+
+/*
+ * GIMP_TYPE_PARAM_RASTERIZABLE
+ */
+
+#define GIMP_VALUE_HOLDS_RASTERIZABLE(value)   (G_TYPE_CHECK_VALUE_TYPE ((value), GIMP_TYPE_RASTERIZABLE))
+#define GIMP_TYPE_PARAM_RASTERIZABLE           (gimp_param_rasterizable_get_type ())
+#define GIMP_IS_PARAM_SPEC_RASTERIZABLE(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_RASTERIZABLE))
+
+GType        gimp_param_rasterizable_get_type   (void) G_GNUC_CONST;
+
+GParamSpec * gimp_param_spec_rasterizable       (const gchar  *name,
+                                                 const gchar  *nick,
+                                                 const gchar  *blurb,
+                                                 gboolean      none_ok,
+                                                 GParamFlags   flags);
+
+
+/*
  * GIMP_TYPE_PARAM_GROUP_LAYER
  */
 
@@ -393,6 +446,25 @@ GParamSpec * gimp_param_spec_font (const gchar  *name,
                                    GimpFont     *default_value,
                                    gboolean      default_to_context,
                                    GParamFlags   flags);
+
+
+/*
+ * GIMP_TYPE_PARAM_CURVE
+ */
+
+#define GIMP_VALUE_HOLDS_CURVE(value)   (G_TYPE_CHECK_VALUE_TYPE ((value), \
+                                         GIMP_TYPE_CURVE))
+
+#define GIMP_TYPE_PARAM_CURVE           (gimp_param_curve_get_type ())
+#define GIMP_IS_PARAM_SPEC_CURVE(pspec) (G_TYPE_CHECK_INSTANCE_TYPE ((pspec), GIMP_TYPE_PARAM_CURVE))
+
+GType        gimp_param_curve_get_type (void) G_GNUC_CONST;
+
+GParamSpec * gimp_param_spec_curve (const gchar  *name,
+                                    const gchar  *nick,
+                                    const gchar  *blurb,
+                                    gboolean      none_ok,
+                                    GParamFlags   flags);
 
 
 G_END_DECLS

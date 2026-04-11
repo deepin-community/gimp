@@ -73,7 +73,8 @@ static void        file_open_dialog_show        (Gimp         *gimp,
                                                  const gchar  *title,
                                                  GimpImage    *image,
                                                  GFile        *file,
-                                                 gboolean      open_as_layers);
+                                                 gboolean      open_as_layers,
+                                                 gboolean      open_as_link);
 static GtkWidget * file_save_dialog_show        (Gimp         *gimp,
                                                  GimpImage    *image,
                                                  GtkWidget    *parent,
@@ -118,7 +119,7 @@ file_open_cmd_callback (GimpAction *action,
 
   file_open_dialog_show (gimp, widget,
                          _("Open Image"),
-                         image, NULL, FALSE);
+                         image, NULL, FALSE, FALSE);
 }
 
 void
@@ -140,7 +141,29 @@ file_open_as_layers_cmd_callback (GimpAction *action,
 
   file_open_dialog_show (gimp, widget,
                          _("Open Image as Layers"),
-                         image, NULL, TRUE);
+                         image, NULL, TRUE, FALSE);
+}
+
+void
+file_open_as_link_layer_cmd_callback (GimpAction *action,
+                                      GVariant   *value,
+                                      gpointer    data)
+{
+  Gimp        *gimp;
+  GtkWidget   *widget;
+  GimpDisplay *display;
+  GimpImage   *image = NULL;
+  return_if_no_gimp (gimp, data);
+  return_if_no_widget (widget, data);
+
+  display = action_data_get_display (data);
+
+  if (display)
+    image = gimp_display_get_image (display);
+
+  file_open_dialog_show (gimp, widget,
+                         _("Open Image as Link Layer"),
+                         image, NULL, TRUE, TRUE);
 }
 
 void
@@ -226,7 +249,6 @@ file_save_cmd_callback (GimpAction *action,
   Gimp         *gimp;
   GimpDisplay  *display;
   GimpImage    *image;
-  GList        *drawables;
   GtkWidget    *widget;
   GimpSaveMode  save_mode;
   GFile        *file  = NULL;
@@ -238,14 +260,6 @@ file_save_cmd_callback (GimpAction *action,
   image = gimp_display_get_image (display);
 
   save_mode = (GimpSaveMode) g_variant_get_int32 (value);
-
-  drawables = gimp_image_get_selected_drawables (image);
-  if (! drawables)
-    {
-      g_list_free (drawables);
-      return;
-    }
-  g_list_free (drawables);
 
   file = gimp_image_get_file (image);
 
@@ -577,7 +591,7 @@ file_file_open_dialog (Gimp      *gimp,
 {
   file_open_dialog_show (gimp, parent,
                          _("Open Image"),
-                         NULL, file, FALSE);
+                         NULL, file, FALSE, FALSE);
 }
 
 
@@ -589,7 +603,8 @@ file_open_dialog_show (Gimp        *gimp,
                        const gchar *title,
                        GimpImage   *image,
                        GFile       *file,
-                       gboolean     open_as_layers)
+                       gboolean     open_as_layers,
+                       gboolean     open_as_link)
 {
   GtkWidget *dialog;
 
@@ -621,7 +636,7 @@ file_open_dialog_show (Gimp        *gimp,
       gtk_window_set_title (GTK_WINDOW (dialog), title);
 
       gimp_open_dialog_set_image (GIMP_OPEN_DIALOG (dialog),
-                                  image, open_as_layers);
+                                  image, open_as_layers, open_as_link);
 
       gtk_window_set_transient_for (GTK_WINDOW (dialog),
                                     GTK_WINDOW (gtk_widget_get_toplevel (parent)));
@@ -841,9 +856,9 @@ file_revert_confirm_response (GtkWidget   *dialog,
 
       new_image = file_open_image (gimp, gimp_get_user_context (gimp),
                                    GIMP_PROGRESS (display),
-                                   file, 0, 0, FALSE, NULL,
+                                   file, 0, 0, TRUE, FALSE, NULL,
                                    GIMP_RUN_INTERACTIVE,
-                                   &status, NULL, &error);
+                                   NULL, &status, NULL, &error);
 
       if (new_image)
         {

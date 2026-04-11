@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __PATHS_COMMANDS_H__
-#define __PATHS_COMMANDS_H__
+#pragma once
 
 
 void   paths_edit_cmd_callback                 (GimpAction *action,
@@ -51,15 +50,18 @@ void   paths_duplicate_cmd_callback            (GimpAction *action,
 void   paths_delete_cmd_callback               (GimpAction *action,
                                                 GVariant   *value,
                                                 gpointer    data);
+void   path_to_vector_layer_cmd_callback       (GimpAction *action,
+                                                GVariant   *value,
+                                                gpointer    data);
 void   paths_merge_visible_cmd_callback        (GimpAction *action,
                                                 GVariant   *value,
                                                 gpointer    data);
 void   paths_to_selection_cmd_callback         (GimpAction *action,
                                                 GVariant   *value,
                                                 gpointer    data);
-void   paths_selection_to_paths_cmd_callback (GimpAction *action,
-                                              GVariant   *value,
-                                              gpointer    data);
+void   paths_selection_to_paths_cmd_callback   (GimpAction *action,
+                                                GVariant   *value,
+                                                gpointer    data);
 
 void   paths_fill_cmd_callback                 (GimpAction *action,
                                                 GVariant   *value,
@@ -104,6 +106,3 @@ void   paths_color_tag_cmd_callback            (GimpAction *action,
 void   paths_select_cmd_callback               (GimpAction *action,
                                                 GVariant   *value,
                                                 gpointer    data);
-
-
-#endif /* __PATHS_COMMANDS_H__ */

@@ -67,6 +67,7 @@
 #include <libgimp/gimpitem_pdb.h>
 #include <libgimp/gimpitemtransform_pdb.h>
 #include <libgimp/gimplayer_pdb.h>
+#include <libgimp/gimplinklayer_pdb.h>
 #include <libgimp/gimpmessage_pdb.h>
 #include <libgimp/gimppainttools_pdb.h>
 #include <libgimp/gimppalette_pdb.h>
@@ -77,10 +78,12 @@
 #include <libgimp/gimppatterns_pdb.h>
 #include <libgimp/gimppatternselect_pdb.h>
 #include <libgimp/gimpprogress_pdb.h>
+#include <libgimp/gimprasterizable_pdb.h>
 #include <libgimp/gimpresource_pdb.h>
 #include <libgimp/gimpselection_pdb.h>
 #include <libgimp/gimptextlayer_pdb.h>
 #include <libgimp/gimptexttool_pdb.h>
 #include <libgimp/gimpunit_pdb.h>
+#include <libgimp/gimpvectorlayer_pdb.h>
 
 #endif /* __GIMP_PDB_HEADERS_H__ */

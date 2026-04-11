@@ -18,8 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_OVERLAY_CHILD_H__
-#define __GIMP_OVERLAY_CHILD_H__
+#pragma once
 
 
 typedef struct _GimpOverlayChild GimpOverlayChild;
@@ -29,6 +28,7 @@ struct _GimpOverlayChild
   GtkWidget      *widget;
   GdkWindow      *window;
 
+  gboolean        relative_to_shell;
   gboolean        has_position;
   gdouble         xalign;
   gdouble         yalign;
@@ -82,6 +82,5 @@ gboolean           gimp_overlay_child_pick                 (GimpOverlayBox   *bo
                                                             GimpOverlayChild *child,
                                                             gdouble           box_x,
                                                             gdouble           box_y);
-
-
-#endif /* __GIMP_OVERLAY_CHILD_H__ */
+void              gimp_overlay_child_set_relative_to_shell (GimpOverlayChild *child,
+                                                            gboolean          relative_to_shell);

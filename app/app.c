@@ -242,7 +242,14 @@ app_run (const gchar         *full_prog_name,
   g_clear_object (&default_folder);
 
 #ifndef GIMP_CONSOLE_COMPILATION
-  app = gimp_app_new (gimp, no_splash, quit, as_new, filenames, batch_interpreter, batch_commands);
+  if (no_interface)
+    {
+      app = gimp_console_app_new (gimp, quit, as_new, filenames, batch_interpreter, batch_commands);
+    }
+  else
+    {
+      app = gimp_app_new (gimp, no_splash, quit, as_new, filenames, batch_interpreter, batch_commands);
+    }
 #else
   app = gimp_console_app_new (gimp, quit, as_new, filenames, batch_interpreter, batch_commands);
 #endif
@@ -454,10 +461,15 @@ app_activate_callback (GimpCoreApp *app,
     }
 #endif
 
+  /* Get possible files first, so that we can check if the
+   * welcome dialog should be displayed
+   */
+  filenames = gimp_core_app_get_filenames (app);
+
   /*  check for updates *after* enabling config autosave, so that the timestamp
    *  is saved
    */
-  gimp_update_auto_check (gimp->edit_config, gimp);
+  gimp_update_auto_check (gimp->edit_config, gimp, (filenames != NULL));
 
   /* Setting properties to be used for the next run.  */
   g_object_set (gimp->edit_config,
@@ -468,7 +480,6 @@ app_activate_callback (GimpCoreApp *app,
                 NULL);
 
   /*  Load the images given on the command-line. */
-  filenames = gimp_core_app_get_filenames (app);
   if (filenames != NULL)
     {
       gint i;
@@ -530,11 +541,13 @@ app_activate_callback (GimpCoreApp *app,
       gimp_signal_private (SIGINT, app_quit_on_ctrl_c, 0);
 #endif
       g_printf ("\n== %s ==\n%s\n\n%s\n",
-                /* TODO: localize when string freeze is over. */
-                "INFO",
-                "GIMP is now running as a background process. "
-                "You can quit anytime with Ctrl-C (SIGINT).",
-                "If you wanted to quit immediately instead, call GIMP with --quit.");
+                /* TRANSLATORS: title for info message in terminal window */
+                _("INFO"),
+                /* TRANSLATORS: info message displayed in terminal window. */
+                _("GIMP is now running as a background process. "
+                  "You can quit anytime with Ctrl-C (SIGINT)."),
+                /* TRANSLATORS: info message displayed in terminal window. */
+                _("If you wanted to quit immediately instead, call GIMP with --quit."));
       g_application_hold (G_APPLICATION (app));
     }
 }

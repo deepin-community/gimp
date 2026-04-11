@@ -25,10 +25,28 @@
 
 #include "gimp.h"
 
+#include "libgimpbase/gimpversion-private.h"
+
 #include "gimpprocedure-params.h"
 
 #include "libgimp-intl.h"
 
+
+/* It looks like for some generated widgets, we consider the nick or
+ * blurb as Pangom markup, and in others, not. We should be consistent
+ * and properly document our choice in function docs. The question is
+ * basically: do we want to allow text styling for generated widgets?
+ *
+ * - If yes, it is up to plug-in developers to make sure they don't
+ *   break markup, and for us to filter out any markup when needed.
+ * - If no, we will have to use markup variants for setting labels and
+ *   tooltips, and run g_markup_escape_text() when we need to integrate
+ *   the text into larger markup contents.
+ *
+ * For GIMP 3, let's stick to the statement that nick and blurb is
+ * normal (non-markup) text and review in GIMP 4.
+ */
+GIMP_WARNING_API_BREAK("Should nick and/or blurb be in Pango markup?")
 
 /**
  * gimp_procedure_add_boolean_argument:
@@ -1881,6 +1899,162 @@ gimp_procedure_add_text_layer_return_value (GimpProcedure *procedure,
 {
   _gimp_procedure_add_return_value (procedure,
                                     gimp_param_spec_text_layer (name, nick, blurb,
+                                                                none_ok, flags));
+}
+
+/**
+ * gimp_procedure_add_vector_layer_argument:
+ * @procedure:   the #GimpProcedure.
+ * @name:        the name of the argument to be created.
+ * @nick:        the label used in #GimpProcedureDialog.
+ * @blurb: (nullable): a more detailed help description.
+ * @none_ok:     Whether no is a valid value.
+ * @flags:       argument flags.
+ *
+ * Add a new #GimpVectorLayer argument to @procedure.
+ *
+ * Since: 3.2
+ **/
+void
+gimp_procedure_add_vector_layer_argument (GimpProcedure *procedure,
+                                          const gchar   *name,
+                                          const gchar   *nick,
+                                          const gchar   *blurb,
+                                          gboolean       none_ok,
+                                          GParamFlags    flags)
+{
+  _gimp_procedure_add_argument (procedure,
+                                gimp_param_spec_vector_layer (name, nick, blurb,
+                                                              none_ok, flags));
+}
+
+/**
+ * gimp_procedure_add_vector_layer_aux_argument:
+ * @procedure:   the #GimpProcedure.
+ * @name:        the name of the argument to be created.
+ * @nick:        the label used in #GimpProcedureDialog.
+ * @blurb: (nullable): a more detailed help description.
+ * @none_ok:     Whether no is a valid value.
+ * @flags:       argument flags.
+ *
+ * Add a new #GimpVectorLayer auxiliary argument to @procedure.
+ *
+ * Since: 3.2
+ **/
+void
+gimp_procedure_add_vector_layer_aux_argument (GimpProcedure *procedure,
+                                              const gchar   *name,
+                                              const gchar   *nick,
+                                              const gchar   *blurb,
+                                              gboolean       none_ok,
+                                              GParamFlags    flags)
+{
+  _gimp_procedure_add_aux_argument (procedure,
+                                    gimp_param_spec_vector_layer (name, nick, blurb,
+                                                                  none_ok, flags));
+}
+
+/**
+ * gimp_procedure_add_vector_layer_return_value:
+ * @procedure:   the #GimpProcedure.
+ * @name:        the name of the argument to be created.
+ * @nick:        the label used in #GimpProcedureDialog.
+ * @blurb: (nullable): a more detailed help description.
+ * @none_ok:     Whether no is a valid value.
+ * @flags:       argument flags.
+ *
+ * Add a new #GimpVectorLayer return value to @procedure.
+ *
+ * Since: 3.2
+ **/
+void
+gimp_procedure_add_vector_layer_return_value (GimpProcedure *procedure,
+                                              const gchar   *name,
+                                              const gchar   *nick,
+                                              const gchar   *blurb,
+                                              gboolean       none_ok,
+                                              GParamFlags    flags)
+{
+  _gimp_procedure_add_return_value (procedure,
+                                    gimp_param_spec_vector_layer (name, nick, blurb,
+                                                                  none_ok, flags));
+}
+
+/**
+ * gimp_procedure_add_link_layer_argument:
+ * @procedure:   the #GimpProcedure.
+ * @name:        the name of the argument to be created.
+ * @nick:        the label used in #GimpProcedureDialog.
+ * @blurb: (nullable): a more detailed help description.
+ * @none_ok:     Whether no is a valid value.
+ * @flags:       argument flags.
+ *
+ * Add a new #GimpLinkLayer argument to @procedure.
+ *
+ * Since: 3.2
+ **/
+void
+gimp_procedure_add_link_layer_argument (GimpProcedure *procedure,
+                                        const gchar   *name,
+                                        const gchar   *nick,
+                                        const gchar   *blurb,
+                                        gboolean       none_ok,
+                                        GParamFlags    flags)
+{
+  _gimp_procedure_add_argument (procedure,
+                                gimp_param_spec_link_layer (name, nick, blurb,
+                                                            none_ok, flags));
+}
+
+/**
+ * gimp_procedure_add_link_layer_aux_argument:
+ * @procedure:   the #GimpProcedure.
+ * @name:        the name of the argument to be created.
+ * @nick:        the label used in #GimpProcedureDialog.
+ * @blurb: (nullable): a more detailed help description.
+ * @none_ok:     Whether no is a valid value.
+ * @flags:       argument flags.
+ *
+ * Add a new #GimpLinkLayer auxiliary argument to @procedure.
+ *
+ * Since: 3.2
+ **/
+void
+    gimp_procedure_add_link_layer_aux_argument (GimpProcedure *procedure,
+                                                const gchar   *name,
+                                                const gchar   *nick,
+                                                const gchar   *blurb,
+                                                gboolean       none_ok,
+                                                GParamFlags    flags)
+{
+  _gimp_procedure_add_aux_argument (procedure,
+                                    gimp_param_spec_link_layer (name, nick, blurb,
+                                                                none_ok, flags));
+}
+
+/**
+ * gimp_procedure_add_link_layer_return_value:
+ * @procedure:   the #GimpProcedure.
+ * @name:        the name of the argument to be created.
+ * @nick:        the label used in #GimpProcedureDialog.
+ * @blurb: (nullable): a more detailed help description.
+ * @none_ok:     Whether no is a valid value.
+ * @flags:       argument flags.
+ *
+ * Add a new #GimpLinkLayer return value to @procedure.
+ *
+ * Since: 3.2
+ **/
+void
+gimp_procedure_add_link_layer_return_value (GimpProcedure *procedure,
+                                            const gchar   *name,
+                                            const gchar   *nick,
+                                            const gchar   *blurb,
+                                            gboolean       none_ok,
+                                            GParamFlags    flags)
+{
+  _gimp_procedure_add_return_value (procedure,
+                                    gimp_param_spec_link_layer (name, nick, blurb,
                                                                 none_ok, flags));
 }
 

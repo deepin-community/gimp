@@ -116,6 +116,13 @@ static const gchar * const selection_modes[] = { "incremental",
                                                  "xtilt",
                                                  "ytilt" };
 
+static const gchar * const mode_labels[] = { N_("Incremental"),
+                                             N_("Angular"),
+                                             N_("Random"),
+                                             N_("Velocity"),
+                                             N_("Pressure"),
+                                             N_("X tilt"),
+                                             N_("Y tilt") };
 
 static void
 gih_class_init (GihClass *klass)
@@ -284,7 +291,9 @@ gih_export (GimpProcedure        *procedure,
       gint        cell_width;
       gint        cell_height;
 
+      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
       gimp_pixpipe_params_init (&gihparams);
+      G_GNUC_END_IGNORE_DEPRECATIONS
 
       /*  Possibly retrieve data  */
       parasite = gimp_image_get_parasite (orig_image,
@@ -324,7 +333,9 @@ gih_export (GimpProcedure        *procedure,
                                                             &parasite_size);
           parasite_data = g_strndup (parasite_data, parasite_size);
 
+          G_GNUC_BEGIN_IGNORE_DEPRECATIONS
           gimp_pixpipe_params_parse (parasite_data, &gihparams);
+          G_GNUC_END_IGNORE_DEPRECATIONS
 
           g_object_set (config,
                         "num-cells", gihparams.ncells,
@@ -430,7 +441,9 @@ gih_export (GimpProcedure        *procedure,
       GimpValueArray *save_retvals;
       gchar          *paramstring;
 
+      G_GNUC_BEGIN_IGNORE_DEPRECATIONS
       paramstring = gimp_pixpipe_params_build (&gihparams);
+      G_GNUC_END_IGNORE_DEPRECATIONS
 
       procedure = gimp_pdb_lookup_procedure (gimp_get_pdb (),
                                              "file-gih-export-internal");
@@ -467,7 +480,9 @@ gih_export (GimpProcedure        *procedure,
       g_free (paramstring);
     }
 
+  G_GNUC_BEGIN_IGNORE_DEPRECATIONS
   gimp_pixpipe_params_free (&gihparams);
+  G_GNUC_END_IGNORE_DEPRECATIONS
   g_free (description);
 
  out:
@@ -776,7 +791,7 @@ gih_save_dialog (GimpImage           *image,
 
       for (j = 0; j < G_N_ELEMENTS (selection_modes); j++)
         gtk_combo_box_text_append_text (GTK_COMBO_BOX_TEXT (cb),
-                                        selection_modes[j]);
+                                        _(mode_labels[j]));
       gtk_combo_box_set_active (GTK_COMBO_BOX (cb), 2);  /* random */
 
       for (j = 0; j < G_N_ELEMENTS (selection_modes); j++)

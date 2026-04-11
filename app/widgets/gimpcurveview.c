@@ -902,7 +902,7 @@ gimp_curve_view_button_press (GtkWidget      *widget,
       view->last_x = x;
       view->last_y = y;
 
-      gimp_curve_set_curve (curve, x, 1.0 - y);
+      gimp_curve_set_sample (curve, x, 1.0 - y);
       break;
     }
 
@@ -1070,14 +1070,14 @@ gimp_curve_view_motion_notify (GtkWidget      *widget,
                   xpos = CLAMP (xpos, 0.0, 1.0);
                   ypos = CLAMP (ypos, 0.0, 1.0);
 
-                  gimp_curve_set_curve (curve, xpos, 1.0 - ypos);
+                  gimp_curve_set_sample (curve, xpos, 1.0 - ypos);
                 }
 
               gimp_data_thaw (GIMP_DATA (curve));
             }
           else
             {
-              gimp_curve_set_curve (curve, x, 1.0 - y);
+              gimp_curve_set_sample (curve, x, 1.0 - y);
             }
 
           view->last_x = x;

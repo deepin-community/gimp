@@ -866,36 +866,36 @@ gimp_get_monitor_resolution (GdkMonitor *monitor,
   *yres = ROUND (y);
 }
 
-gboolean
+GeglColor *
 gimp_get_style_color (GtkWidget   *widget,
-                      const gchar *property_name,
-                      GdkRGBA     *color)
+                      const gchar *color_name)
 {
-  GdkRGBA *c = NULL;
+  GtkStyleContext *style;
+  GdkRGBA         *gdk_rgba = NULL;
+  GeglColor       *color    = NULL;
 
-  g_return_val_if_fail (GTK_IS_WIDGET (widget), FALSE);
-  g_return_val_if_fail (property_name != NULL, FALSE);
-  g_return_val_if_fail (color != NULL, FALSE);
+  g_return_val_if_fail (GTK_IS_WIDGET (widget), NULL);
+  g_return_val_if_fail (color_name != NULL, NULL);
 
-  gtk_widget_style_get (widget,
-                        property_name, &c,
-                        NULL);
+  style = gtk_widget_get_style_context (widget);
+  gtk_style_context_get (style, gtk_style_context_get_state (style),
+                         color_name, &gdk_rgba,
+                         NULL);
 
-  if (c)
+  if (gdk_rgba)
     {
-      *color = *c;
-      gdk_rgba_free (c);
+      color = gegl_color_new (NULL);
+      gegl_color_set_rgba_with_space (color,
+                                      gdk_rgba->red,
+                                      gdk_rgba->green,
+                                      gdk_rgba->blue,
+                                      1.0,
+                                      NULL);
 
-      return TRUE;
+      gdk_rgba_free (gdk_rgba);
     }
 
-  /* return ugly magenta to indicate that something is wrong */
-  color->red   = 1.0;
-  color->green = 1.0;
-  color->blue  = 0.0;
-  color->alpha = 1.0;
-
-  return FALSE;
+  return color;
 }
 
 void
@@ -915,12 +915,15 @@ gimp_window_set_hint (GtkWindow      *window,
       break;
 
     case GIMP_WINDOW_HINT_KEEP_ABOVE:
+      gtk_window_set_type_hint (window, GDK_WINDOW_TYPE_HINT_UTILITY);
       gtk_window_set_keep_above (window, TRUE);
       break;
     }
 }
 
 /* similar to what we have in libgimp/gimpui.c */
+/* TODO: Restore when we use it on Windows */
+#ifndef G_OS_WIN32
 static GdkWindow *
 gimp_get_foreign_window (gpointer window)
 {
@@ -937,6 +940,7 @@ gimp_get_foreign_window (gpointer window)
 
   return NULL;
 }
+#endif
 
 void
 gimp_window_set_transient_for (GtkWindow    *window,
@@ -1507,6 +1511,14 @@ gimp_widget_blink_timeout (GtkWidget *widget)
                                   param_spec->name,
                                   g_type_name (param_spec->owner_type));
                     }
+                }
+              else if (GTK_IS_BUTTON (widget) && step->settings_value)
+                {
+                  /* For any "value" set for a button, we assume it
+                   * means that we want it clicked as part of the demo
+                   * script.
+                   */
+                  gtk_button_clicked (GTK_BUTTON (widget));
                 }
             }
           else if (GIMP_IS_TOOL_BUTTON (widget))
@@ -2583,7 +2595,9 @@ gimp_window_set_transient_cb (GtkWidget   *window,
                               GdkEventAny *event G_GNUC_UNUSED,
                               GBytes      *handle)
 {
+#ifndef G_OS_WIN32
   gboolean transient_set = FALSE;
+#endif
 
   g_return_if_fail (handle != NULL);
 
@@ -2668,7 +2682,10 @@ gimp_window_set_title_bar_theme (Gimp      *gimp,
           GimpGuiConfig *config;
 
           config = GIMP_GUI_CONFIG (gimp->config);
-          use_dark_mode = (config->theme_scheme != GIMP_THEME_LIGHT);
+          if (config->theme_scheme == GIMP_THEME_SYSTEM)
+            use_dark_mode = gimp_is_win32_system_theme_dark ();
+          else
+            use_dark_mode = (config->theme_scheme != GIMP_THEME_LIGHT);
         }
       else
         {
@@ -2696,5 +2713,23 @@ gimp_window_set_title_bar_theme (Gimp      *gimp,
         DwmSetWindowAttribute (hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE,
                                &use_dark_mode, sizeof (use_dark_mode));
     }
+}
+
+gboolean
+gimp_is_win32_system_theme_dark (void)
+{
+  DWORD   val      = 0;
+  DWORD   val_size = sizeof (val);
+  LSTATUS status;
+
+  status = RegGetValueA(HKEY_CURRENT_USER,
+                        "Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+                        "AppsUseLightTheme",
+                        RRF_RT_REG_DWORD,
+                        NULL,
+                        &val,
+                        &val_size);
+
+  return status == ERROR_SUCCESS && val == 0;
 }
 #endif

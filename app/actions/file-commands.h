@@ -15,14 +15,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __FILE_COMMANDS_H__
-#define __FILE_COMMANDS_H__
+#pragma once
 
 
 void   file_open_cmd_callback                 (GimpAction *action,
                                                GVariant   *value,
                                                gpointer    data);
 void   file_open_as_layers_cmd_callback       (GimpAction *action,
+                                               GVariant   *value,
+                                               gpointer    data);
+void   file_open_as_link_layer_cmd_callback   (GimpAction *action,
                                                GVariant   *value,
                                                gpointer    data);
 void   file_open_location_cmd_callback        (GimpAction *action,
@@ -58,6 +60,3 @@ void   file_quit_cmd_callback                 (GimpAction *action,
 void   file_file_open_dialog                  (Gimp       *gimp,
                                                GFile      *file,
                                                GtkWidget  *parent);
-
-
-#endif /* __FILE_COMMANDS_H__ */

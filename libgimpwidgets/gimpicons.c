@@ -24,11 +24,13 @@
 #include <gtk/gtk.h>
 
 #include "libgimpbase/gimpbase.h"
+#include "libgimpbase/gimpversion-private.h"
 
 #include "gimpicons.h"
 
 #include "libgimp/libgimp-intl.h"
 
+GIMP_WARNING_API_BREAK("Remove GIMP_ICON_TEXTURE icon (not used anywhere anymore)")
 
 /**
  * SECTION: gimpicons
@@ -115,39 +117,6 @@ gimp_icons_change_icon_theme (GFile *new_search_path)
     }
 
   g_object_unref (old_search_path);
-}
-
-static void
-gimp_icons_notify_system_icon_theme (GObject    *settings,
-                                     GParamSpec *param,
-                                     gpointer    unused)
-{
-  GdkScreen *screen = gdk_screen_get_default ();
-  GValue     value  = G_VALUE_INIT;
-
-  g_value_init (&value, G_TYPE_STRING);
-
-  if (gdk_screen_get_setting (screen, "gtk-icon-theme-name", &value))
-    {
-      const gchar *new_system_icon_theme = g_value_get_string (&value);
-      gchar *cur_system_icon_theme = NULL;
-
-      g_object_get (settings,
-                    "gtk-fallback-icon-theme", &cur_system_icon_theme,
-                    NULL);
-      if (g_strcmp0 (cur_system_icon_theme, new_system_icon_theme))
-        {
-          g_object_set (settings,
-                        "gtk-fallback-icon-theme", new_system_icon_theme,
-                        NULL);
-
-          g_object_notify (settings, "gtk-icon-theme-name");
-        }
-
-      g_free (cur_system_icon_theme);
-    }
-
-  g_value_unset (&value);
 }
 
 static gboolean
@@ -246,7 +215,6 @@ gimp_icons_init (void)
   GdkPixbuf   *pixbuf;
   GError      *error = NULL;
   gchar       *icons_dir;
-  gchar       *system_icon_theme;
   gchar       *gimp_icon_theme;
 
   if (initialized)
@@ -289,18 +257,12 @@ gimp_icons_init (void)
 
   settings = gtk_settings_get_for_screen (gdk_screen_get_default ());
 
-  g_object_get (settings, "gtk-icon-theme-name", &system_icon_theme, NULL);
-
   g_object_set (settings,
-                "gtk-fallback-icon-theme", system_icon_theme,
                 "gtk-icon-theme-name", gimp_icon_theme,
                 NULL);
 
   g_free (gimp_icon_theme);
-  g_free (system_icon_theme);
 
-  g_signal_connect (settings, "notify::gtk-icon-theme-name",
-                    G_CALLBACK (gimp_icons_notify_system_icon_theme), NULL);
   pixbuf = gdk_pixbuf_new_from_resource ("/org/gimp/icons/64/gimp-wilber-eek.png",
                                          &error);
 

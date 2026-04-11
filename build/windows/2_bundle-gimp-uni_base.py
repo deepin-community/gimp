@@ -7,14 +7,30 @@ import sys
 from pathlib import Path
 from glob import glob
 
+# This script is used to create a GIMP bundle dir on Windows. A bundle
+# is used as source of files for making both .exe installer and .msix package
 if not os.getenv("MESON_BUILD_ROOT"):
   # Let's prevent contributors from creating broken bundles
   print("\033[31m(ERROR)\033[0m: Script called standalone. Please build GIMP targeting installer or msix creation.")
   sys.exit(1)
+# Get variables from MESON_BUILD_ROOT/config.h that can be used on this script
+with open("config.h") as file:
+  for line in file:
+    match = re.match(r'^#\s*define\s+(\S+)(?:\s+(.*))?$', line)
+    if match:
+      key, value = match.groups()
+      if value is None or not value.strip():
+        value = "1" #needed when there is no explicit value
+      else:
+        value = value.strip().strip('"').strip("'")
+      os.environ[key] = value
+if not os.getenv("ENABLE_RELOCATABLE_RESOURCES"):
+  print("\n\033[31m(ERROR)\033[0m: No relocatable GIMP build found. You can build GIMP with '-Drelocatable-bundle=yes' to make a build suitable for bundle creation.")
+  sys.exit(1)
 
 
 # Bundle deps and GIMP files
-GIMP_SOURCE = Path(os.getenv("MESON_SOURCE_ROOT")).as_posix()  
+GIMP_SOURCE = Path(os.getenv("MESON_SOURCE_ROOT")).as_posix()
 
 ## System prefix: it is MSYSTEM_PREFIX
 with open("meson-logs/meson-log.txt") as f:
@@ -32,9 +48,11 @@ GIMP_DISTRIB = Path(GIMP_SOURCE) / f"gimp-{Path(MSYSTEM_PREFIX).name}"
 def bundle(src_root, pattern):
   ## Search for targets in search path
   src_root = Path(src_root)
-  for src_path in src_root.glob(pattern):
-    if not src_path.exists():
-      continue
+  paths_to_bundle = list(src_root.glob(pattern))
+  if not paths_to_bundle:
+    print(f"\033[31m(ERROR)\033[0m: not found {src_root}/{pattern}")
+    sys.exit(1)
+  for src_path in paths_to_bundle:
     ## Copy found targets to bundle path
     dest_path = GIMP_DISTRIB / src_path.relative_to(src_root)
     dest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -43,6 +61,22 @@ def bundle(src_root, pattern):
       shutil.copytree(src_path, dest_path, dirs_exist_ok=True)
     else:
       shutil.copy2(src_path, dest_path)
+      ## Process .typelib dependencies
+      if str(src_path).endswith(".typelib"):
+        def process_typelib(path, typelib_list=None):
+          if typelib_list is None:
+            typelib_list = set()
+          cmd = ['g-ir-inspect', '--print-typelibs', os.path.basename(path).split('-')[0]]
+          result = subprocess.run(cmd, capture_output=True, text=True)
+          for line in result.stdout.splitlines():
+            typelib = line.replace("typelib: ", "").strip()
+            if typelib and typelib not in typelib_list:
+              typelib_list.add(typelib)
+              typelib_path = Path(f"{MSYSTEM_PREFIX}/lib/girepository-1.0/{typelib}.typelib")
+              if typelib_path.exists():
+                shutil.copy2(typelib_path, dest_path.parent)
+                process_typelib(typelib, typelib_list)
+        process_typelib(src_path)
 
 def clean(base_path, pattern):
   base_path = Path(base_path)
@@ -59,27 +93,66 @@ def clean(base_path, pattern):
           path.unlink()
 
 
-## Prepare bundle
+## PREPARE BUNDLE
 GIMP_DISTRIB.mkdir(parents=True, exist_ok=True)
 ### Prevent Git going crazy
 (GIMP_DISTRIB / ".gitignore").write_text("*\n")
 ### Add a wrapper at tree root, less messy than having to look for the
 ### binary inside bin/, in the middle of all the DLLs.
-with open("config.h") as file:
-  for line in file:
-    match = re.match(r'^#define\s+(\S+)\s+(.*)', line)
-    if match:
-      key, value = match.groups()
-      os.environ[key] = value.strip().strip('"').strip("'")
-if os.getenv('GIMP_UNSTABLE'):
-  gimp_mutex_version = os.getenv('GIMP_APP_VERSION')
-else:
-  gimp_mutex_version = re.search(r'\d+', os.getenv('GIMP_APP_VERSION')).group()
-(GIMP_DISTRIB / "gimp.cmd").write_text(f"bin\\gimp-{gimp_mutex_version}.exe\n")
+(GIMP_DISTRIB / "gimp.cmd").write_text(f"powershell bin\\gimp-{os.getenv('GIMP_MUTEX_VERSION')}.exe\n")
 
 
-## Settings.
+## BUNDLE BASE (BARE MINIMUM TO RUN GTK APPS).
+### Needed to not pollute output. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/8877
+bundle(MSYSTEM_PREFIX, "bin/gdbus.exe")
+### Needed for hyperlink support etc... See: https://gitlab.gnome.org/GNOME/gimp/-/issues/12288
+####...when running from `gimp*.exe` on console
+bundle(MSYSTEM_PREFIX, "bin/gspawn*-console.exe")
+####...when running from `gimp*.exe` from shortcut
+bundle(MSYSTEM_PREFIX, "bin/gspawn*-helper.exe")
+### Needed for file dialogs (only .compiled file is needed on MS Windows)
+bundle(MSYSTEM_PREFIX, "share/glib-*/schemas/gschemas.compiled")
+### Needed to open remote files
+bundle(MSYSTEM_PREFIX, "lib/gio")
+### Needed to not crash UI. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/6165
+bundle(MSYSTEM_PREFIX, "share/icons/Adwaita")
+### Needed by GTK to use icon themes. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/5080
+bundle(GIMP_PREFIX, "share/icons/hicolor")
+### Needed to loading icons in GUI
+bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders/libpixbufloader-png.dll")
+bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders/pixbufloader_svg.dll")
+bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders.cache")
+
+
+## CORE FEATURES.
+bundle(GIMP_PREFIX, "bin/libbabl*.dll")
+bundle(GIMP_PREFIX, "lib/babl-*")
+bundle(GIMP_PREFIX, "bin/libgegl*.dll")
+bundle(GIMP_PREFIX, "lib/gegl-*")
+bundle(GIMP_PREFIX, "bin/libgimp*.dll")
+bundle(GIMP_PREFIX, "lib/gimp")
+bundle(GIMP_PREFIX, "share/gimp")
+lang_array = [Path(f).stem for f in glob(str(Path(GIMP_SOURCE)/"po/*.po"))]
+for lang in lang_array:
+  bundle(GIMP_PREFIX, f"share/locale/{lang}/LC_MESSAGES/*.mo")
+  # Needed for eventually used widgets, GTK inspector etc
+  if glob(f"{MSYSTEM_PREFIX}/share/locale/{lang}/LC_MESSAGES/gtk*.mo"):
+    bundle(MSYSTEM_PREFIX, f"share/locale/{lang}/LC_MESSAGES/gtk*.mo")
+  # For language list in text tool options
+  if glob(f"{MSYSTEM_PREFIX}/share/locale/{lang}/LC_MESSAGES/iso_639_3.mo"):
+    bundle(MSYSTEM_PREFIX, f"share/locale/{lang}/LC_MESSAGES/iso_639_3.mo")
 bundle(GIMP_PREFIX, "etc/gimp")
+
+
+## OTHER FEATURES AND PLUG-INS.
+### Support for legacy Win clipboard images: https://gitlab.gnome.org/GNOME/gimp/-/issues/4802
+bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders/libpixbufloader-bmp.dll")
+### Support for non .PAT patterns: https://gitlab.gnome.org/GNOME/gimp/-/issues/12351
+bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders/libpixbufloader-jpeg.dll")
+bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders/libpixbufloader-gif.dll")
+bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders/libpixbufloader-tiff.dll")
+### mypaint brushes
+bundle(MSYSTEM_PREFIX, "share/mypaint-data/2.0")
 ### Needed for fontconfig
 bundle(MSYSTEM_PREFIX, "etc/fonts")
 #### Avoid other programs breaking the cache. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/1366
@@ -90,113 +163,62 @@ new_text = text.replace(
   f"~/AppData/Local/GIMP/{os.getenv('GIMP_APP_VERSION')}/fontconfig/cache"
 )
 fonts_conf.write_text(new_text)
-
-
-## Library data.
-bundle(GIMP_PREFIX, "lib/gimp")
-bundle(GIMP_PREFIX, "lib/babl-*")
-bundle(GIMP_PREFIX, "lib/gegl-*")
-### Needed to open remote files
-bundle(MSYSTEM_PREFIX, "lib/gio")
-### Needed to loading icons in GUI
-bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders.cache")
-bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders/libpixbufloader-png.dll")
-bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders/pixbufloader_svg.dll")
-### Support for legacy Win clipboard images: https://gitlab.gnome.org/GNOME/gimp/-/issues/4802
-bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders/libpixbufloader-bmp.dll")
-### Support for non .PAT patterns: https://gitlab.gnome.org/GNOME/gimp/-/issues/12351
-bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders/libpixbufloader-jpeg.dll")
-bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders/libpixbufloader-gif.dll")
-bundle(MSYSTEM_PREFIX, "lib/gdk-pixbuf-*/*/loaders/libpixbufloader-tiff.dll")
-
-
-## Resources.
-bundle(GIMP_PREFIX, "share/gimp")
-### Needed for file dialogs
-bundle(MSYSTEM_PREFIX, "share/glib-*/schemas/gschemas.compiled")
-### Needed to not crash UI. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/6165
-bundle(MSYSTEM_PREFIX, "share/icons/Adwaita")
-### Needed by GTK to use icon themes. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/5080
-bundle(GIMP_PREFIX, "share/icons/hicolor")
 ### Needed for 'th' word breaking in Text tool etc
 bundle(MSYSTEM_PREFIX, "share/libthai")
-### Needed for file-wmf work
-bundle(MSYSTEM_PREFIX, "share/libwmf")
-### Only copy from langs supported in GIMP.
-lang_array = [Path(f).stem for f in glob(str(Path(GIMP_SOURCE)/"po/*.po"))]
-for lang in lang_array:
-  bundle(GIMP_PREFIX, f"share/locale/{lang}/LC_MESSAGES/*.mo")
-  if (Path(MSYSTEM_PREFIX)/f"share/locale/{lang}/LC_MESSAGES").exists():
-    # Needed for eventually used widgets, GTK inspector etc
-    bundle(MSYSTEM_PREFIX, f"share/locale/{lang}/LC_MESSAGES/gtk*.mo")
-    # For language list in text tool options
-    bundle(MSYSTEM_PREFIX, f"share/locale/{lang}/LC_MESSAGES/iso_639_3.mo")
-### Needed for welcome page
-bundle(GIMP_PREFIX, "share/metainfo/org.gimp*.xml")
-### mypaint brushes
-bundle(MSYSTEM_PREFIX, "share/mypaint-data")
 ### Needed for full CJK and Cyrillic support in file-pdf
 bundle(MSYSTEM_PREFIX, "share/poppler")
-
-
-## Executables and DLLs.
-### Minimal (and some additional) executables for the 'bin' folder
-bundle(GIMP_PREFIX, "bin/gimp*.exe")
-bundle(GIMP_PREFIX, "bin/libgimp*.dll")
-### Bundled just to promote GEGL. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/10580
-bundle(GIMP_PREFIX, "bin/gegl.exe")
-# Note: we want the same test as around the global variable
-# show_debug_menu in app/main.c
-if (os.getenv("GIMP_UNSTABLE") or not os.getenv("GIMP_RELEASE")) and "32" not in MSYSTEM_PREFIX:
-  ### Needed for 'Show image graph'.
-  #### See: https://gitlab.gnome.org/GNOME/gimp/-/issues/6045
-  bundle(MSYSTEM_PREFIX, "bin/dot.exe")
-  #### See: https://gitlab.gnome.org/GNOME/gimp/-/issues/12119
-  bundle(MSYSTEM_PREFIX, "bin/libgvplugin_dot*.dll")
-  bundle(MSYSTEM_PREFIX, "bin/libgvplugin_pango*.dll")
-  bundle(MSYSTEM_PREFIX, "bin/config6")  
-### Needed to not pollute output. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/8877
-bundle(MSYSTEM_PREFIX, "bin/gdbus.exe")
-### Needed for hyperlink support etc... See: https://gitlab.gnome.org/GNOME/gimp/-/issues/12288
-#...when running from `gimp*.exe --verbose`
-bundle(MSYSTEM_PREFIX, "bin/gspawn*-console.exe")
-if not os.getenv("GIMP_UNSTABLE") and os.getenv("GIMP_RELEASE"):
-  #...when running from `gimp*.exe`
-  bundle(MSYSTEM_PREFIX, "bin/gspawn*-helper.exe")
-  
-## Binaries for GObject Introspection support. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/13170
-bundle(GIMP_PREFIX, "lib/girepository-*")
-bundle(MSYSTEM_PREFIX, "lib/girepository-*")
+### Needed for file-wmf work
+bundle(MSYSTEM_PREFIX, "share/libwmf")
+### Needed for 'Show image graph'
+### if show_debug_menu is true in app/main.c or --show-debug-menu CLI option is set
+#### See: https://gitlab.gnome.org/GNOME/gimp/-/issues/6045
+bundle(MSYSTEM_PREFIX, "bin/dot.exe")
+#### See: https://gitlab.gnome.org/GNOME/gimp/-/issues/12119
+bundle(MSYSTEM_PREFIX, "bin/libgvplugin_dot*.dll")
+bundle(MSYSTEM_PREFIX, "bin/libgvplugin_pango*.dll")
+bundle(MSYSTEM_PREFIX, "bin/config8")
+### Binaries for GObject Introspection support. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/13170
+bundle(GIMP_PREFIX, "lib/girepository-*/*.typelib")
 bundle(MSYSTEM_PREFIX, "bin/libgirepository-*.dll")
-### FIXME: luajit crashes at startup: See: https://gitlab.gnome.org/GNOME/gimp/-/issues/11597
+#### Python support
+#####python.exe is needed for plug-ins error output if `gimp*.exe` is run from console
+bundle(MSYSTEM_PREFIX, "bin/python.exe")
+#####pythonw.exe is needed to run plug-ins silently if `gimp*.exe` is run from shortcut
+bundle(MSYSTEM_PREFIX, "bin/pythonw.exe")
+bundle(MSYSTEM_PREFIX, "lib/python*")
+clean(GIMP_DISTRIB, "lib/python*/*.pyc")
+#####avoid lib_bundle.py bundling build-time libLLVM*.dll which is giant
+clean(GIMP_DISTRIB, "lib/python*/site-packages/lldb*")
+#####Needed for internet connection on python. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/14722
+bundle(MSYSTEM_PREFIX, "etc/ssl/cert.pem")
+#### FIXME: luajit crashes at startup: See: https://gitlab.gnome.org/GNOME/gimp/-/issues/11597
 #bundle(MSYSTEM_PREFIX, "bin/luajit.exe")
 #bundle(MSYSTEM_PREFIX, "lib/lua")
 #bundle(MSYSTEM_PREFIX, "share/lua")
-### Python support
-#python.exe is needed for plug-ins output in `gimp-console*.exe`
-bundle(MSYSTEM_PREFIX, "bin/python.exe")
-if not os.getenv("GIMP_UNSTABLE") and os.getenv("GIMP_RELEASE"):
-  #pythonw.exe is needed to run plug-ins silently in `gimp*.exe`
-  bundle(MSYSTEM_PREFIX, "bin/pythonw.exe")
-bundle(MSYSTEM_PREFIX, "lib/python*")
-clean(GIMP_DISTRIB, "lib/python*/*.pyc")
 
+
+## MAIN EXECUTABLES AND DEPENDENCIES
+### Minimal (and some additional) executables for the 'bin' folder
+bundle(GIMP_PREFIX, "bin/gimp*.exe")
+### Bundled just to promote GEGL. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/10580
+bundle(GIMP_PREFIX, "bin/gegl.exe")
+### Deps (DLLs) of the binaries in 'bin' and 'lib' dirs
 ### We save the list of already copied DLLs to keep a state between 2_bundle-gimp-uni_dep runs.
 done_dll = Path(f"{os.getenv('MESON_BUILD_ROOT')}/done-dll.list")
 done_dll.unlink(missing_ok=True)
-### Deps (DLLs) of the binaries in 'bin' and 'lib' dirs
 for dir in ["bin", "lib"]:
   search_dir = GIMP_DISTRIB / dir
-  print(f"Searching for dependencies of {search_dir} in {MSYSTEM_PREFIX} and {GIMP_PREFIX}")
+  print(f"Searching for dependencies of {search_dir} in {GIMP_PREFIX} and {MSYSTEM_PREFIX}")
   for ext in ("*.dll", "*.exe"):
     for dep in search_dir.rglob(ext):
       subprocess.run([
-        sys.executable, f"{GIMP_SOURCE}/build/windows/2_bundle-gimp-uni_dep.py",
-        str(dep), f"{MSYSTEM_PREFIX}/", f"{GIMP_PREFIX}/",
+        sys.executable, f"{GIMP_SOURCE}/tools/lib_bundle.py",
+        str(dep), f"{GIMP_PREFIX}/", f"{MSYSTEM_PREFIX}/",
         str(GIMP_DISTRIB), "--output-dll-list", done_dll.as_posix()
       ], check=True)
 
-### .pdb (CodeView) debug symbols from babl, gegl and GIMP binaries
+
+## .PDB/CODEVIEW DEBUG SYMBOLS (from babl, gegl and GIMP binaries)
 bundle(GIMP_PREFIX, "bin/*.pdb")
 ### Remove .pdb without corresponding binaries (depends on what was choosen to be bundled above)
 files = os.listdir(GIMP_DISTRIB / "bin")
@@ -218,7 +240,7 @@ for bin_path in GIMP_DISTRIB.rglob("*"):
           continue
 
 
-## Development files (to build GEGL filters and GIMP plug-ins).
+## DEVELOPMENT FILES (to build GEGL filters and GIMP plug-ins).
 clean(GIMP_DISTRIB, "lib/*.a")
 bundle(GIMP_PREFIX, "include/gimp-*")
 bundle(GIMP_PREFIX, "include/babl-*")

@@ -32,6 +32,9 @@
 #include <gegl.h>
 
 #include "libgimpbase/gimpbase.h"
+#ifdef G_OS_WIN32
+#include "libgimpbase/gimpwin32-io.h"
+#endif
 
 #include "core/core-types.h"
 
@@ -321,7 +324,9 @@ gimp_eek (const gchar *reason,
           ! the_errors_gimp->no_interface         &&
           backtrace_file)
         {
+#ifndef G_OS_WIN32
           FILE     *fd;
+#endif
           gboolean  has_backtrace = TRUE;
 
           /* If GUI backtrace enabled (it is disabled by default), it

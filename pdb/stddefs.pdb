@@ -125,6 +125,10 @@ sub martin_pdb_misc {
     contrib_pdb_misc('Martin Nordholts', '', @_);
 }
 
+sub martymichal_pdb_misc {
+    contrib_pdb_misc('Ondřej Míchal', 'harrymichal@seznam.cz', @_);
+}
+
 sub mitch_pdb_misc {
     contrib_pdb_misc('Michael Natterer', 'mitch@gimp.org', @_);
 }
@@ -175,17 +179,6 @@ sub alxsa_pdb_misc {
 
 sub idriss_pdb_misc {
     contrib_pdb_misc('Idriss Fekir', '', @_);
-}
-
-sub std_pdb_deprecated {
-    if (@_) {
-        $blurb = $help = '';
-        $deprecated = "@_";
-    } else {
-        $blurb = $help = '';
-        $deprecated = "NONE";
-    }
-    $author = $copyright = $date = '';
 }
 
 sub std_pdb_compat {

@@ -150,11 +150,8 @@ Copyright:
 License: GPL-3+ and GPL-2+ and LGPL-3+ and MIT and Expat and BSD-2-clause
 
 Files:
- desktop/*/*.png
- icons/*/*/*.png
- icons/*/*/*.svg
+ gimp-data/*/*.png
  devel-docs/reference/gimp-ui/images/*.png
- devel-docs/performance-logs/*.png
 Copyright:
  Ell
  Jakub Steiner

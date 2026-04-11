@@ -832,6 +832,19 @@ static const GimpLayerModeInfo layer_mode_infos[] =
     .composite_space      = GIMP_LAYER_COLOR_SPACE_RGB_LINEAR
   },
 
+  { GIMP_LAYER_MODE_OVERWRITE,
+
+    .op_name              = "gimp:overwrite",
+    .flags                = GIMP_LAYER_MODE_FLAG_BLEND_SPACE_IMMUTABLE     |
+                            GIMP_LAYER_MODE_FLAG_COMPOSITE_MODE_IMMUTABLE  |
+                            GIMP_LAYER_MODE_FLAG_COMPOSITE_SPACE_IMMUTABLE |
+                            GIMP_LAYER_MODE_FLAG_TRIVIAL,
+    .context              = GIMP_LAYER_MODE_CONTEXT_PAINT,
+    .paint_composite_mode = GIMP_LAYER_COMPOSITE_UNION,
+    .composite_mode       = GIMP_LAYER_COMPOSITE_UNION,
+    .composite_space      = GIMP_LAYER_COLOR_SPACE_RGB_LINEAR
+  },
+
   { GIMP_LAYER_MODE_ANTI_ERASE,
 
     .op_name              = "gimp:anti-erase",
@@ -861,6 +874,7 @@ static const GimpLayerMode layer_mode_group_default[] =
   GIMP_LAYER_MODE_ANTI_ERASE,
   GIMP_LAYER_MODE_MERGE,
   GIMP_LAYER_MODE_SPLIT,
+  GIMP_LAYER_MODE_OVERWRITE,
 
   GIMP_LAYER_MODE_SEPARATOR,
 
@@ -1102,6 +1116,10 @@ static const GimpLayerMode layer_mode_groups[][2] =
   },
 
   { [GIMP_LAYER_MODE_GROUP_DEFAULT] = GIMP_LAYER_MODE_REPLACE,
+    [GIMP_LAYER_MODE_GROUP_LEGACY ] = -1
+  },
+
+  { [GIMP_LAYER_MODE_GROUP_DEFAULT] = GIMP_LAYER_MODE_OVERWRITE,
     [GIMP_LAYER_MODE_GROUP_LEGACY ] = -1
   },
 
@@ -1541,9 +1559,10 @@ gimp_layer_mode_get_format (GimpLayerMode           mode,
 
     case GIMP_LAYER_COLOR_SPACE_LAB:
       return babl_format_with_space ("CIE Lab alpha float", preferred_format);
-    }
 
-  g_return_val_if_reached (babl_format_with_space ("RGBA float", preferred_format));
+    default:
+      g_return_val_if_reached (babl_format_with_space ("RGBA float", preferred_format));
+    }
 }
 
 GimpLayerCompositeRegion

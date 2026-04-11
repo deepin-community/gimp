@@ -293,10 +293,10 @@ GType gimp_convert_palette_type_get_type (void) G_GNUC_CONST;
 
 typedef enum
 {
-  GIMP_CONVERT_PALETTE_GENERATE, /*< desc="Generate optimum palette"          >*/
-  GIMP_CONVERT_PALETTE_WEB,      /*< desc="Use web-optimized palette"         >*/
-  GIMP_CONVERT_PALETTE_MONO,     /*< desc="Use black and white (1-bit) palette" >*/
-  GIMP_CONVERT_PALETTE_CUSTOM    /*< desc="Use custom palette"                >*/
+  GIMP_CONVERT_PALETTE_GENERATE, /*< desc="_Generate optimum palette"          >*/
+  GIMP_CONVERT_PALETTE_WEB,      /*< desc="Use _web-optimized palette"         >*/
+  GIMP_CONVERT_PALETTE_MONO,     /*< desc="Use _black and white (1-bit) palette" >*/
+  GIMP_CONVERT_PALETTE_CUSTOM    /*< desc="Use custom _palette"                >*/
 } GimpConvertPaletteType;
 
 
@@ -382,7 +382,7 @@ typedef enum
   GIMP_FILL_CIELAB_MIDDLE_GRAY, /*< desc="Middle Gray (CIELAB)" >*/
   GIMP_FILL_WHITE,              /*< desc="White"            >*/
   GIMP_FILL_TRANSPARENT,        /*< desc="Transparency"     >*/
-  GIMP_FILL_PATTERN             /*< desc="Pattern"          >*/
+  GIMP_FILL_PATTERN,            /*< desc="Pattern"          >*/
 } GimpFillType;
 
 
@@ -1196,6 +1196,43 @@ typedef enum
   GIMP_TEXT_JUSTIFY_FILL     /*< desc="Filled"          >*/
 } GimpTextJustification;
 
+/**
+ * GimpTextOutline:
+ * @GIMP_TEXT_OUTLINE_NONE:        Filled
+ * @GIMP_TEXT_OUTLINE_STROKE_ONLY: Outlined
+ * @GIMP_TEXT_OUTLINE_STROKE_FILL: Outlined and filled
+ *
+ * Settings for text stroke and fill.
+ **/
+#define GIMP_TYPE_TEXT_OUTLINE (gimp_text_outline_get_type ())
+
+GType gimp_text_outline_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+  GIMP_TEXT_OUTLINE_NONE,        /*< desc="Filled"              >*/
+  GIMP_TEXT_OUTLINE_STROKE_ONLY, /*< desc="Outlined"            >*/
+  GIMP_TEXT_OUTLINE_STROKE_FILL  /*< desc="Outlined and filled" >*/
+} GimpTextOutline;
+
+/**
+ * GimpTextOutlineDirection:
+ * @GIMP_TEXT_OUTLINE_DIRECTION_OUTER:    Outer
+ * @GIMP_TEXT_OUTLINE_DIRECTION_INNER:    Inner
+ * @GIMP_TEXT_OUTLINE_DIRECTION_CENTERED: Centered
+ *
+ * Options for how the text outline's stroke is drawn.
+ **/
+#define GIMP_TYPE_TEXT_OUTLINE_DIRECTION (gimp_text_outline_direction_get_type ())
+
+GType gimp_text_outline_direction_get_type (void) G_GNUC_CONST;
+
+typedef enum
+{
+  GIMP_TEXT_OUTLINE_DIRECTION_OUTER,   /*< desc="Outer"    >*/
+  GIMP_TEXT_OUTLINE_DIRECTION_INNER,   /*< desc="Inner"    >*/
+  GIMP_TEXT_OUTLINE_DIRECTION_CENTERED /*< desc="Centered" >*/
+} GimpTextOutlineDirection;
 
 /**
  * GimpTransferMode:

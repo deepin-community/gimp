@@ -48,6 +48,8 @@
  *
  * Opens a dialog letting a user choose an drawable.
  *
+ * Deprecated: 3.2: Use gimp_items_popup() instead.
+ *
  * Returns: TRUE on success.
  **/
 gboolean
@@ -89,6 +91,8 @@ gimp_drawables_popup (const gchar  *callback,
  *
  * Closes an open drawable selection dialog.
  *
+ * Deprecated: 3.2: Use gimp_items_close_popup() instead.
+ *
  * Returns: TRUE on success.
  **/
 gboolean
@@ -122,6 +126,8 @@ gimp_drawables_close_popup (const gchar *callback)
  * Sets the selected drawable in a drawable selection dialog.
  *
  * Sets the selected drawable in a drawable selection dialog.
+ *
+ * Deprecated: 3.2: Use gimp_items_set_popup() instead.
  *
  * Returns: TRUE on success.
  **/

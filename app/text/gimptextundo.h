@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_TEXT_UNDO_H__
-#define __GIMP_TEXT_UNDO_H__
-
+#pragma once
 
 #include "core/gimpitemundo.h"
 
@@ -39,7 +37,6 @@ struct _GimpTextUndo
   GimpText         *text;
   const GParamSpec *pspec;
   GValue           *value;
-  gboolean          modified;
   const Babl       *format;
 };
 
@@ -50,6 +47,3 @@ struct _GimpTextUndoClass
 
 
 GType      gimp_text_undo_get_type (void) G_GNUC_CONST;
-
-
-#endif /* __GIMP_TEXT_UNDO_H__ */

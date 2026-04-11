@@ -17,6 +17,13 @@
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+#if defined(_WIN32) && !defined(HAVE_UNISTD_H)
+#include <io.h>
+#define popen  _popen
+#define pclose _pclose
+#define write _write
+#define close _close
+#endif
 
 #include <glib/gstdio.h>
 #ifndef _O_BINARY

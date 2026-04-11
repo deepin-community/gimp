@@ -1,8 +1,6 @@
 /*  gimprc-blurbs.h  --  descriptions for gimprc properties  */
 
-#ifndef __GIMP_RC_BLURBS_H__
-#define __GIMP_RC_BLURBS_H__
-
+#pragma once
 
 /*  Not all strings defined here are used in the user interface
  *  (the preferences dialog mainly) and only those that are should
@@ -21,6 +19,15 @@ _("When enabled, an image will become the active image when its image " \
 
 #define DYNAMICS_PATH_BLURB \
 _("Sets the dynamics search path.")
+
+#define PREV_LANGUAGE_BLURB \
+_("Specifies the language the user interface was previously displayed in.")
+
+#define LAST_RELEASE_COMMENT_BLURB \
+_("The comment for the last known release.")
+
+#define SHOW_WELCOME_DIALOG_BLURB \
+_("Show a welcome dialog when GIMP starts.")
 
 #define DYNAMICS_PATH_WRITABLE_BLURB ""
 
@@ -206,9 +213,6 @@ _("How many recent settings to keep around in filter tools.")
 #define FILTER_TOOL_USE_LAST_SETTINGS_BLURB \
 _("Default to the last used settings in filter tools.")
 
-#define FILTER_TOOL_SHOW_COLOR_OPTIONS_BLURB \
-_("Show advanced color options in filter tools.")
-
 #define IMAGE_STATUS_FORMAT_BLURB \
 _("Sets the text to appear in image window status bars.")
 
@@ -258,6 +262,15 @@ _("Export XMP metadata by default.")
  */
 #define EXPORT_METADATA_IPTC_BLURB \
 _("Export IPTC metadata by default.")
+
+/* Translators: tooltip for configuration option (checkbox).
+ * It determines what metadata is updated when exporting.
+ */
+#define EXPORT_UPDATE_METADATA_BLURB \
+_("When enabled, add and update metadata automatically. When disabled, " \
+  "only the minimum necessary metadata changes are made, without changing " \
+  "modification date, synchronizing tags, or updating the software and " \
+  "change history metadata.")
 
 #define GENERATE_BACKTRACE_BLURB \
 _("Try generating debug data for bug reporting when appropriate.")
@@ -482,9 +495,6 @@ _("When enabled, the grid is visible by default. This can also be toggled " \
 _("When enabled, the sample points are visible by default. This can also be " \
   "toggled with the \"View->Show Sample Points\" command.")
 
-#define SHOW_TOOLTIPS_BLURB \
-_("Show a tooltip when the pointer hovers over an item.")
-
 #define SINGLE_WINDOW_MODE_BLURB \
 _("Use GIMP in a single-window mode.")
 
@@ -497,20 +507,14 @@ _("Show the image tabs bar in single window mode.")
 #define PLAYGROUND_NPD_TOOL_BLURB \
 _("Enable the N-Point Deformation tool.")
 
-#define PLAYGROUND_HANDLE_TRANSFORM_TOOL_BLURB \
-_("Enable the Handle Transform tool.")
-
-#define PLAYGROUND_SYMMETRY_BLURB \
-_("Enable symmetry on painting.")
-
-#define PLAYGROUND_MYBRUSH_TOOL_BLURB \
-_("Enable the MyPaint Brush tool.")
-
 #define PLAYGROUND_SEAMLESS_CLONE_TOOL_BLURB \
 _("Enable the Seamless Clone tool.")
 
 #define PLAYGROUND_PAINT_SELECT_TOOL_BLURB \
 _("Enable the Paint Select tool.")
+
+#define PLAYGROUND_USE_LIST_BOX_BLURB \
+_("Use the new GtkListBox widget for simple lists.")
 
 #define SPACE_BAR_ACTION_BLURB \
 _("What to do when the space bar is pressed in the image window.")
@@ -557,6 +561,9 @@ _("The name of the icon theme to use.")
 
 #define OVERRIDE_THEME_ICON_SIZE_BLURB \
 _("Override theme-set icon sizes.")
+
+#define VIEWABLES_FOLLOW_THEME_BLURB \
+_("Use theme colors for preview")
 
 #define ICON_SIZE_BLURB \
 _("The size of the icons to use.")
@@ -646,6 +653,9 @@ _("Sets the default mask for the 'Add Layer Mask' dialog.")
 #define LAYER_ADD_MASK_INVERT_BLURB \
 _("Sets the default 'invert mask' state for the 'Add Layer Mask' dialog.")
 
+#define LAYER_ADD_MASK_EDIT_MASK \
+_("Sets the default 'edit mask' state for the 'Add Layer Mask' dialog.")
+
 #define LAYER_MERGE_TYPE_BLURB \
 _("Sets the default merge type for the 'Merge Visible Layers' dialog.")
 
@@ -661,22 +671,22 @@ _("Sets the default channel name for the 'New Channel' dialog.")
 #define CHANNEL_NEW_COLOR_BLURB \
 _("Sets the default color and opacity for the 'New Channel' dialog.")
 
-#define VECTORS_NEW_NAME_BLURB \
+#define PATH_NEW_NAME_BLURB \
 _("Sets the default path name for the 'New Path' dialog.")
 
-#define VECTORS_EXPORT_PATH_BLURB \
+#define PATH_EXPORT_PATH_BLURB \
 _("Sets the default folder path for the 'Export Path' dialog.")
 
-#define VECTORS_EXPORT_ACTIVE_ONLY_BLURB \
+#define PATH_EXPORT_ACTIVE_ONLY_BLURB \
 _("Sets the default 'Export the selected paths' state for the 'Export Path' dialog.")
 
-#define VECTORS_IMPORT_PATH_BLURB \
+#define PATH_IMPORT_PATH_BLURB \
 _("Sets the default folder path for the 'Import Path' dialog.")
 
-#define VECTORS_IMPORT_MERGE_BLURB \
+#define PATH_IMPORT_MERGE_BLURB \
 _("Sets the default 'Merge imported paths' state for the 'Import Path' dialog.")
 
-#define VECTORS_IMPORT_SCALE_BLURB \
+#define PATH_IMPORT_SCALE_BLURB \
 _("Sets the default 'Scale imported paths to fit size' state for the 'Import Path' dialog.")
 
 #define SELECTION_FEATHER_RADIUS_BLURB \
@@ -791,11 +801,5 @@ _("There's a tradeoff between speed and quality of the zoomed-out display.")
 "Bugs in event history buffer are frequent so in case of cursor " \
 "offset problems turning it off helps."
 
-#define SEARCH_SHOW_UNAVAILABLE_BLURB \
-_("When enabled, a search of actions will also return inactive actions.")
-
 #define ACTION_HISTORY_SIZE_BLURB \
 _("The maximum number of actions saved in history.")
-
-
-#endif  /* __GIMP_RC_BLURBS_H__ */

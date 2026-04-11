@@ -121,7 +121,11 @@ gimp_user_install_items[] =
 static gboolean  user_install_detect_old         (GimpUserInstall    *install,
                                                   const gchar        *gimp_dir);
 static gchar   * user_install_old_style_gimpdir  (void);
+
+#ifdef G_OS_UNIX
 static gchar   * user_install_flatpak_gimpdir    (gint                minor);
+static gchar   * user_install_snap_gimpdir       (gint                minor);
+#endif
 
 static void      user_install_log                (GimpUserInstall    *install,
                                                   const gchar        *format,
@@ -146,6 +150,7 @@ static gboolean  user_install_dir_copy           (GimpUserInstall    *install,
                                                   const gchar        *base,
                                                   const gchar        *update_pattern,
                                                   GRegexEvalCallback  update_callback,
+                                                  const gchar        *file_pattern,
                                                   GimpCopyPostProcess post_process_callback);
 
 static gboolean  user_install_create_files       (GimpUserInstall    *install);
@@ -221,18 +226,14 @@ gimp_user_install_run (GimpUserInstall *install,
 
   if (install->migrate)
     {
-      gchar *verstring;
-
-      /* TODO: these 2 strings should be merged into one, but it was not
-       * possible to do it at implementation time, in order not to break
-       * string freeze.
-       */
-      verstring = g_strdup_printf ("%d.%d", install->old_major, install->old_minor);
       user_install_log (install,
-                        _("It seems you have used GIMP %s before.  "
+                        /* TRANSLATORS: the %d.%d replacement strings
+                         * will be a series version (e.g. 2.10). The %s
+                         * replacement will be a directory.
+                         */
+                        _("It seems you have used GIMP %d.%d before.  "
                           "GIMP will now migrate your user settings to '%s'."),
-                        verstring, dirname);
-      g_free (verstring);
+                        install->old_major, install->old_minor, dirname);
     }
   else
     {
@@ -297,7 +298,7 @@ user_install_detect_old (GimpUserInstall *install,
       gint major;
       gint minor;
 
-      for (major = 3; major >= 2; major--)
+      for (major = GIMP_MAJOR_VERSION; major >= 2; major--)
         {
           gint max_minor;
 
@@ -324,14 +325,14 @@ user_install_detect_old (GimpUserInstall *install,
 
               if (migrate)
                 {
-                  install->old_major = 2;
+                  install->old_major = major;
                   install->old_minor = minor;
 
                   break;
                 }
 
 #ifdef G_OS_UNIX
-              if (minor == 10)
+              if (major == 2 && minor == 10)
                 {
                   /* This is special-casing for GIMP 2.10 as flatpak where
                    * we had this weird inconsistency: depending on whether a
@@ -379,8 +380,57 @@ user_install_detect_old (GimpUserInstall *install,
                       g_free (flatpak_dir);
                     }
                 }
+
+              if (major == 3 && minor == 0)
+                {
+                  /* This is special-casing for GIMP 3.0 as snap where
+                   * the config folder would be in $HOME/snap/<etc> (see #15547).
+                   * For GIMP 3.2, even the snap will always be in
+                   * $XDG_CONFIG_HOME. But then we want a migration to still
+                   * find the previous config folder.
+                   */
+                  gchar *snap_dir = user_install_snap_gimpdir (minor);
+
+                  if (snap_dir)
+                    /* This first test is for finding a 3.0 snap config
+                     * dir from a non-snap GIMP 3.2+.
+                     */
+                    migrate = g_file_test (snap_dir, G_FILE_TEST_IS_DIR);
+
+                  if (! migrate                                           &&
+                      g_getenv ("SNAP") != NULL                           &&
+                      g_file_test (g_getenv ("SNAP"), G_FILE_TEST_IS_DIR) &&
+                      g_getenv ("SNAP_USER_DATA") != NULL)
+                    {
+                      /* Now we check $SNAP_USER_DATA/.config/GIMP because this is where
+                       * local ~/snap/ is mounted inside the sandbox.
+                       * So this second test is for finding a 3.0 snap
+                       * config dir from a snap GIMP 3.2+.
+                       */
+                      g_free (snap_dir);
+                      snap_dir = g_build_filename (g_getenv ("SNAP_USER_DATA"), ".config/GIMP/", version, NULL);
+
+                      migrate = g_file_test (snap_dir, G_FILE_TEST_IS_DIR);
+                    }
+
+                  if (migrate)
+                    {
+                      install->old_major = 3;
+                      install->old_minor = minor;
+
+                      g_free (dir);
+                      dir = snap_dir;
+                      break;
+                    }
+                  else
+                    {
+                      g_free (snap_dir);
+                    }
+                }
 #endif
             }
+          if (migrate)
+            break;
         }
     }
 
@@ -446,6 +496,7 @@ user_install_old_style_gimpdir (void)
   return gimp_dir;
 }
 
+#ifdef G_OS_UNIX
 static gchar *
 user_install_flatpak_gimpdir (gint minor)
 {
@@ -466,6 +517,24 @@ user_install_flatpak_gimpdir (gint minor)
 
   return gimp_dir;
 }
+
+static gchar *
+user_install_snap_gimpdir (gint minor)
+{
+  const gchar *home_dir = g_get_home_dir ();
+  gchar       *version  = g_strdup_printf ("3.%d", minor);
+  gchar       *gimp_dir = NULL;
+
+  if (home_dir)
+    gimp_dir = g_build_filename (home_dir,
+                                 "snap/gimp/current/.config/GIMP/",
+                                 version, NULL);
+
+  g_free (version);
+
+  return gimp_dir;
+}
+#endif
 
 static void
 user_install_log (GimpUserInstall *install,
@@ -723,6 +792,20 @@ user_update_menurc_over20 (const GMatchInfo *matched_value,
                g_strcmp0 (action_match, "view-zoom-2-1")  == 0 ||
                g_strcmp0 (action_match, "view-zoom-1-1")  == 0)
         accel_variant = TRUE;
+      /* Various "vectors" actions renamed to "path" in 3.2. */
+      else if (g_strcmp0 (action_match, "tools-vector") == 0)
+        new_action_name = g_strdup ("tools-path");
+      else if (g_strcmp0 (action_match, "dialogs-vector") == 0)
+        new_action_name = g_strdup ("dialogs-path");
+      else if (g_strcmp0 (action_match, "layers-text-along-vectors") == 0)
+        new_action_name = g_strdup ("layers-text-along-path");
+      else if (g_strcmp0 (action_match, "layers-text-to-vectors") == 0)
+        new_action_name = g_strdup ("layers-text-to-path");
+      else if (g_strcmp0 (action_match, "view-snap-to-vectors") == 0)
+        new_action_name = g_strdup ("view-snap-to-path");
+      /* Generalized in GIMP 3.2 (works on text, link and vector layers). */
+      else if (g_strcmp0 (action_match, "layers-text-discard") == 0)
+        new_action_name = g_strdup ("layers-rasterize");
 
       if (new_action_name == NULL)
         new_action_name = g_strdup (action_match);
@@ -758,7 +841,7 @@ user_update_menurc_over20 (const GMatchInfo *matched_value,
   return FALSE;
 }
 
-gchar *
+static gchar *
 user_update_post_process_menurc_over20 (gpointer user_data)
 {
   GString         *string  = g_string_new (NULL);
@@ -829,6 +912,58 @@ user_update_post_process_menurc_over20 (gpointer user_data)
   return g_string_free (string, FALSE);
 }
 
+#define SHORTCUTSRC_UPDATE_PATTERN \
+  "\"("                       "|" \
+  "tools-vector"              "|" \
+  "dialogs-vectors"           "|" \
+  "layers-text-.*-vectors"    "|" \
+  "view-snap-to-vectors"      "|" \
+  "layers-text-discard"           \
+  ")\""
+
+static gboolean
+user_update_shortcutsrc (const GMatchInfo *matched_value,
+                         GString          *new_value,
+                         gpointer          data)
+{
+  gchar *match = g_match_info_fetch (matched_value, 0);
+
+  if (g_strcmp0 (match, "\"tools-vector\"") == 0)
+    {
+      /* Renamed in GIMP 3.2. */
+      g_string_append (new_value, "\"tools-path\"");
+    }
+  else if (g_strcmp0 (match, "\"dialogs-vectors\"") == 0)
+    {
+      /* Renamed in GIMP 3.2. */
+      g_string_append (new_value, "\"dialogs-path\"");
+    }
+  else if (g_strcmp0 (match, "\"layers-text-along-vectors\"") == 0)
+    {
+      /* Renamed in GIMP 3.2. */
+      g_string_append (new_value, "\"layers-text-along-path\"");
+    }
+  else if (g_strcmp0 (match, "\"layers-text-to-vectors\"") == 0)
+    {
+      /* Renamed in GIMP 3.2. */
+      g_string_append (new_value, "\"layers-text-to-path\"");
+    }
+  else if (g_strcmp0 (match, "\"view-snap-to-vectors\"") == 0)
+    {
+      /* Renamed in GIMP 3.2. */
+      g_string_append (new_value, "\"view-snap-to-path\"");
+    }
+  else if (g_strcmp0 (match, "\"layers-text-discard\"") == 0)
+    {
+      /* Generalized in GIMP 3.2 (works on text, link and vector layers). */
+      g_string_append (new_value, "\"layers-rasterize\"");
+    }
+
+  g_free (match);
+
+  return FALSE;
+}
+
 #define TEMPLATERC_UPDATE_PATTERN \
   "\\(precision (.*)-gamma\\)"
 
@@ -850,51 +985,73 @@ user_update_templaterc (const GMatchInfo *matched_value,
 }
 
 #define CONTROLLERRC_UPDATE_PATTERN \
-  "\\(map \"(scroll|cursor)-[^\"]*\\bcontrol\\b[^\"]*\""
+  "\\(map \"(scroll|cursor)-[^\"]*\\bcontrol\\b[^\"]*\""    "|" \
+  "\\(controller \"GimpControllerMouse\"\\)"
 
 static gboolean
 user_update_controllerrc (const GMatchInfo *matched_value,
                           GString          *new_value,
                           gpointer          data)
 {
-  gchar  *original;
-  gchar  *replacement;
-  GRegex *regexp = NULL;
+  gchar *original;
 
-  /* No need of a complicated pattern here.
-   * CONTROLLERRC_UPDATE_PATTERN took care of it first.
-   */
-  regexp   = g_regex_new ("\\bcontrol\\b", 0, 0, NULL);
   original = g_match_info_fetch (matched_value, 0);
 
-  replacement = g_regex_replace (regexp, original, -1, 0,
-                                 "primary", 0, NULL);
-  g_string_append (new_value, replacement);
+  if (g_str_has_prefix (original, "(controller"))
+    {
+      /* GimpControllerMouse was removed in commit 76ddf4421c (for GIMP
+       * 3.0). Just removing this line would technically create an
+       * invalid GimpControllerInfo, but this goes together with a
+       * sanitization to remove invalid controllers with
+       * gimp_controller_search_invalid().
+       */
+    }
+  else
+    {
+      gchar  *replacement;
+      GRegex *regexp = NULL;
+
+      /* No need of a complicated pattern here.
+       * CONTROLLERRC_UPDATE_PATTERN took care of it first.
+       */
+      regexp = g_regex_new ("\\bcontrol\\b", 0, 0, NULL);
+
+      replacement = g_regex_replace (regexp, original, -1, 0,
+                                     "primary", 0, NULL);
+      g_string_append (new_value, replacement);
+
+      g_free (replacement);
+      g_regex_unref (regexp);
+    }
 
   g_free (original);
-  g_free (replacement);
-  g_regex_unref (regexp);
 
   return FALSE;
 }
 
-#define SESSIONRC_UPDATE_PATTERN \
-  "\\(position [0-9]* [0-9]*\\)"        "|"  \
-  "\\(size [0-9]* [0-9]*\\)"            "|" \
-  "\\(left-docks-width \"?[0-9]*\"?\\)" "|" \
-  "\\(right-docks-width \"?[0-9]*\"?\\)"
+#define SESSIONRC_UPDATE_PATTERN_2TO3 \
+  "\\(position [0-9]* [0-9]*\\)"         "|" \
+  "\\(size [0-9]* [0-9]*\\)"             "|" \
+  "\\(left-docks-width \"?[0-9]*\"?\\)"  "|" \
+  "\\(right-docks-width \"?[0-9]*\"?\\)" "|" \
+  "\"gimp-vectors-list\""
 
 static gboolean
-user_update_sessionrc (const GMatchInfo *matched_value,
-                       GString          *new_value,
-                       gpointer          data)
+user_update_sessionrc_2to3 (const GMatchInfo *matched_value,
+                            GString          *new_value,
+                            gpointer          data)
 {
   GimpUserInstall *install = (GimpUserInstall *) data;
   gchar           *original;
 
   original = g_match_info_fetch (matched_value, 0);
 
-  if (install->scale_factor != 1 && install->scale_factor > 0)
+  if (g_strcmp0 (original, "\"gimp-vectors-list\"") == 0)
+    {
+      /* Renamed in GIMP 3.2. */
+      g_string_append (new_value, "\"gimp-path-list\"");
+    }
+  else if (install->scale_factor != 1 && install->scale_factor > 0)
     {
       /* GTK < 3.0 didn't have scale factor support. It means that any
        * size and position back then would be in real pixel size. Now
@@ -953,6 +1110,52 @@ user_update_sessionrc (const GMatchInfo *matched_value,
     {
       /* Just copy as-is. */
       g_string_append (new_value, original);
+    }
+
+  g_free (original);
+
+  return FALSE;
+}
+
+#define TOOLRC_UPDATE_PATTERN \
+  "\"gimp-vector-tool\""
+
+static gboolean
+user_update_toolrc (const GMatchInfo *matched_value,
+                    GString          *new_value,
+                    gpointer          data)
+{
+  gchar *original;
+
+  original = g_match_info_fetch (matched_value, 0);
+
+  if (g_strcmp0 (original, "\"gimp-vector-tool\"") == 0)
+    {
+      /* Renamed in GIMP 3.2. */
+      g_string_append (new_value, "\"gimp-path-tool\"");
+    }
+
+  g_free (original);
+
+  return FALSE;
+}
+
+#define SESSIONRC_UPDATE_PATTERN \
+  "\"gimp-vectors-list\""
+
+static gboolean
+user_update_sessionrc (const GMatchInfo *matched_value,
+                       GString          *new_value,
+                       gpointer          data)
+{
+  gchar *original;
+
+  original = g_match_info_fetch (matched_value, 0);
+
+  if (g_strcmp0 (original, "\"gimp-vectors-list\"") == 0)
+    {
+      /* Renamed in GIMP 3.2. */
+      g_string_append (new_value, "\"gimp-path-list\"");
     }
 
   g_free (original);
@@ -1080,6 +1283,37 @@ user_update_tool_presets (const GMatchInfo *matched_value,
   return FALSE;
 }
 
+#define FILTERS_UPDATE_PATTERN \
+  "\\(linear yes\\)" "|" \
+  "\\(linear no\\)"
+
+static gboolean
+user_update_filters (const GMatchInfo *matched_value,
+                     GString          *new_value,
+                     gpointer          data)
+{
+  gchar *match = g_match_info_fetch (matched_value, 0);
+
+  /* The (linear) option was replaced by (trc) since GIMP 3.0. The
+   * property still exists but is now bogus.
+   */
+  if (g_strcmp0 (match, "(linear yes)") == 0)
+    {
+      g_string_append (new_value, "(trc linear)");
+    }
+  else if (g_strcmp0 (match, "(linear no)") == 0)
+    {
+      g_string_append (new_value, "(trc non-linear)");
+    }
+  else
+    {
+      g_string_append (new_value, match);
+    }
+
+  g_free (match);
+  return FALSE;
+}
+
 /* Actually not only for contextrc, but all other files where
  * gimp-blend-tool may appear. Apparently that is also "devicerc", as
  * well as "toolrc" (but this one is skipped anyway).
@@ -1130,6 +1364,7 @@ user_install_dir_copy (GimpUserInstall    *install,
                        const gchar        *base,
                        const gchar        *update_pattern,
                        GRegexEvalCallback  update_callback,
+                       const gchar        *file_pattern,
                        GimpCopyPostProcess post_process_callback)
 {
   GDir        *source_dir = NULL;
@@ -1179,10 +1414,16 @@ user_install_dir_copy (GimpUserInstall    *install,
           g_snprintf (dest, sizeof (dest), "%s%c%s",
                       dirname, G_DIR_SEPARATOR, basename);
 
-          success = user_install_file_copy (install, name, dest,
-                                            update_pattern,
-                                            update_callback,
-                                            post_process_callback);
+          if (file_pattern == NULL ||
+              g_regex_match_simple (file_pattern, basename, 0, 0))
+            success = user_install_file_copy (install, name, dest,
+                                              update_pattern,
+                                              update_callback,
+                                              post_process_callback);
+          else
+            success = user_install_file_copy (install, name, dest,
+                                              NULL, NULL, NULL);
+
           if (! success)
             {
               g_free (name);
@@ -1192,7 +1433,7 @@ user_install_dir_copy (GimpUserInstall    *install,
       else
         {
           user_install_dir_copy (install, level + 1, name, dirname,
-                                 update_pattern, update_callback,
+                                 update_pattern, update_callback, file_pattern,
                                  post_process_callback);
         }
 
@@ -1298,10 +1539,23 @@ user_install_migrate_files (GimpUserInstall *install)
               g_str_has_prefix (basename, "gimpswap.") ||
               strcmp (basename, "pluginrc") == 0       ||
               strcmp (basename, "themerc") == 0        ||
-              strcmp (basename, "toolrc") == 0         ||
               strcmp (basename, "gtkrc") == 0)
             {
               goto next_file;
+            }
+          else if (strcmp (basename, "toolrc") == 0)
+            {
+              if (install->old_major < 2 ||
+                  (install->old_major == 2 && install->old_minor < 10))
+                {
+                  /* No new tool since GIMP 2.10. */
+                  goto next_file;
+                }
+              else
+                {
+                  update_pattern  = TOOLRC_UPDATE_PATTERN;
+                  update_callback = user_update_toolrc;
+                }
             }
           else if (install->old_major < 3 &&
                    strcmp (basename, "sessionrc") == 0)
@@ -1309,25 +1563,36 @@ user_install_migrate_files (GimpUserInstall *install)
               /* We need to update size and positions because of scale
                * factor support.
                */
+              update_pattern  = SESSIONRC_UPDATE_PATTERN_2TO3;
+              update_callback = user_update_sessionrc_2to3;
+            }
+          else if (strcmp (basename, "sessionrc") == 0)
+            {
+              /* sessionrc updates since 3.0. */
               update_pattern  = SESSIONRC_UPDATE_PATTERN;
               update_callback = user_update_sessionrc;
             }
           else if (strcmp (basename, "menurc") == 0)
             {
-              switch (install->old_minor)
+              if (install->old_major < 2 ||
+                  (install->old_major == 2 && install->old_minor == 0))
                 {
-                case 0:
                   /*  skip menurc for gimp 2.0 as the format has changed  */
                   goto next_file;
-                  break;
-                default:
+                }
+              else
+                {
                   update_pattern        = MENURC_OVER20_UPDATE_PATTERN;
                   update_callback       = user_update_menurc_over20;
                   post_process_callback = user_update_post_process_menurc_over20;
                   /* menurc becomes shortcutsrc in 3.0. */
                   new_dest              = "shortcutsrc";
-                  break;
                 }
+            }
+          else if (strcmp (basename, "shortcutsrc") == 0)
+            {
+              update_pattern  = SHORTCUTSRC_UPDATE_PATTERN;
+              update_callback = user_update_shortcutsrc;
             }
           else if (strcmp (basename, "templaterc") == 0)
             {
@@ -1361,7 +1626,8 @@ user_install_migrate_files (GimpUserInstall *install)
         }
       else if (g_file_test (source, G_FILE_TEST_IS_DIR))
         {
-          const gchar        *update_pattern = NULL;
+          const gchar        *update_pattern  = NULL;
+          const gchar        *file_pattern    = NULL;
           GRegexEvalCallback  update_callback = NULL;
 
           /*  skip these directories for all old versions  */
@@ -1389,8 +1655,15 @@ user_install_migrate_files (GimpUserInstall *install)
               update_pattern  = TOOL_PRESETS_UPDATE_PATTERN;
               update_callback = user_update_tool_presets;
             }
+          else if (strcmp (basename, "filters") == 0)
+            {
+              file_pattern    = "GimpLevelsConfig.settings|GimpCurvesConfig.settings";
+              update_pattern  = FILTERS_UPDATE_PATTERN;
+              update_callback = user_update_filters;
+            }
           user_install_dir_copy (install, 0, source, gimp_directory (),
-                                 update_pattern, update_callback, NULL);
+                                 update_pattern, update_callback, file_pattern,
+                                 NULL);
         }
 
     next_file:

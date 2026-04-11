@@ -18,8 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_DIALOG_CONFIG_H__
-#define __GIMP_DIALOG_CONFIG_H__
+#pragma once
 
 #include "config/gimpguiconfig.h"
 
@@ -79,6 +78,7 @@ struct _GimpDialogConfig
 
   GimpAddMaskType           layer_add_mask_type;
   gboolean                  layer_add_mask_invert;
+  gboolean                  layer_add_mask_edit_mask;
 
   GimpMergeType             layer_merge_type;
   gboolean                  layer_merge_active_group_only;
@@ -119,6 +119,3 @@ struct _GimpDialogConfigClass
 
 
 GType  gimp_dialog_config_get_type (void) G_GNUC_CONST;
-
-
-#endif /* GIMP_DIALOG_CONFIG_H__ */

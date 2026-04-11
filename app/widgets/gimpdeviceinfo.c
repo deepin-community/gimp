@@ -674,8 +674,10 @@ static void
 gimp_device_info_updated (GimpDeviceInfo *info)
 {
   g_return_if_fail (GIMP_IS_DEVICE_INFO (info));
-  g_return_if_fail ((info->priv->device == NULL && info->priv->display == NULL) ||
-                    (GDK_IS_DEVICE (info->priv->device) && GDK_IS_DISPLAY (info->priv->display)));
+  g_return_if_fail ((info->priv->device == NULL &&
+                     info->priv->display == NULL) ||
+                    (GDK_IS_DEVICE (info->priv->device) &&
+                     GDK_IS_DISPLAY (info->priv->display)));
 
   g_object_freeze_notify (G_OBJECT (info));
 
@@ -1255,16 +1257,6 @@ gimp_device_info_get_n_axes (GimpDeviceInfo *info)
     return gdk_device_get_n_axes (info->priv->device);
   else
     return info->priv->n_axes;
-}
-
-gboolean
-gimp_device_info_ignore_axis (GimpDeviceInfo *info,
-                              gint            axis)
-{
-  g_return_val_if_fail (GIMP_IS_DEVICE_INFO (info), TRUE);
-  g_return_val_if_fail (axis >= 0 && axis < info->priv->n_axes, TRUE);
-
-  return (info->priv->axes_names[axis] == NULL);
 }
 
 const gchar *

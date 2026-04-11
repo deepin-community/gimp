@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __APP_GIMP_UTILS_H__
-#define __APP_GIMP_UTILS_H__
+#pragma once
 
 
 #ifdef GIMP_RELEASE
@@ -98,6 +97,24 @@ gchar      * gimp_data_input_stream_read_line_always
                                                     GCancellable      *cancellable,
                                                     GError           **error);
 
+gboolean     gimp_data_input_stream_read_char      (GDataInputStream  *input,
+                                                    gchar             *value,
+                                                    GError           **error);
+gboolean     gimp_data_input_stream_read_short     (GDataInputStream  *input,
+                                                    gint16            *value,
+                                                    GError           **error);
+gboolean     gimp_data_input_stream_read_long      (GDataInputStream  *input,
+                                                    gint32            *value,
+                                                    GError           **error);
+gboolean     gimp_data_input_stream_read_ucs2_text (GDataInputStream  *input,
+                                                    gchar            **value,
+                                                    GError           **error);
+gboolean     gimp_data_input_stream_rle_decode     (GDataInputStream  *input,
+                                                    gchar             *buffer,
+                                                    gsize              buffer_size,
+                                                    gint32             height,
+                                                    GError           **error);
+
 gboolean     gimp_ascii_strtoi                     (const gchar       *nptr,
                                                     gchar            **endptr,
                                                     gint               base,
@@ -128,14 +145,17 @@ GimpImage  * gimp_create_image_from_buffer         (Gimp              *gimp,
                                                     GeglBuffer        *buffer,
                                                     const gchar       *image_name);
 
-gint         gimp_view_size_get_larger             (gint view_size);
-gint         gimp_view_size_get_smaller            (gint view_size);
+gint         gimp_view_size_get_larger             (gint               view_size);
+gint         gimp_view_size_get_smaller            (gint               view_size);
 
 #ifdef G_OS_WIN32
-
 gboolean     gimp_win32_have_wintab                (void);
 gboolean     gimp_win32_have_windows_ink           (void);
-
 #endif
 
-#endif /* __APP_GIMP_UTILS_H__ */
+gint         gimp_version_cmp                      (const gchar       *v1,
+                                                    const gchar       *v2);
+
+GList      * gimp_get_type_children                (GType              type,
+                                                    GList             *types,
+                                                    GList             *excluded);

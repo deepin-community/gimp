@@ -638,7 +638,7 @@ gimp_procedure_dialog_set_ok_label (GimpProcedureDialog *dialog,
  * - %G_TYPE_PARAM_BOOLEAN:
  *     * %GTK_TYPE_CHECK_BUTTON (default)
  *     * %GTK_TYPE_SWITCH
- * - %G_TYPE_PARAM_INT or %G_TYPE_PARAM_DOUBLE:
+ * - %G_TYPE_PARAM_INT, %G_TYPE_PARAM_UINT, or %G_TYPE_PARAM_DOUBLE:
  *     * %GIMP_TYPE_LABEL_SPIN (default): a spin button with a label.
  *     * %GIMP_TYPE_SCALE_ENTRY: a scale entry with label.
  *     * %GIMP_TYPE_SPIN_SCALE: a spin scale with label embedded.
@@ -647,8 +647,8 @@ gimp_procedure_dialog_set_ok_label (GimpProcedureDialog *dialog,
  *     * %GIMP_TYPE_LABEL_ENTRY (default): an entry with a label.
  *     * %GTK_TYPE_ENTRY: an entry with no label.
  *     * %GTK_TYPE_TEXT_VIEW: a text view with no label.
- * - %GIMP_TYPE_CHOICE:
- *     * %GTK_TYPE_COMBO_BOX (default): a combo box displaying every
+ * - %GIMP_TYPE_CHOICE (default will depend on the number of choices):
+ *     * %GTK_TYPE_COMBO_BOX: a combo box displaying every
  *       choice.
  *     * %GIMP_TYPE_INT_RADIO_FRAME: a frame with radio buttons.
  * - %GEGL_TYPE_COLOR:
@@ -666,10 +666,26 @@ gimp_procedure_dialog_set_ok_label (GimpProcedureDialog *dialog,
  *       See [method@Gimp.Procedure.add_file_argument].
  * - %G_TYPE_PARAM_UNIT:
  *     * %GIMP_TYPE_UNIT_COMBO_BOX
+ * - %GIMP_TYPE_PARAM_ITEM (any subtype, such as layer, channel or path):
+ *     * %GIMP_TYPE_ITEM_CHOOSER (default): a widget allowing to choose
+ *       among items of the specific subtype, within all images opened in
+ *       GIMP.
+ *     * %GIMP_TYPE_DRAWABLE_CHOOSER (deprecated): this type of widget
+ *       is now deprecated. You should update your code to request a
+ *       %GimpItemChooser instead.
+ * - %GIMP_TYPE_PARAM_IMAGE:
+ *     * %GIMP_TYPE_IMAGE_CHOOSER: a widget allowing to choose among
+ *       images opened in GIMP.
  *
  * If the @widget_type is not supported for the actual type of
  * @property, the function will fail. To keep the default, set to
  * %G_TYPE_NONE.
+ *
+ * Note that this function will not ensure that its default returned
+ * widget type will always be the same. If you want to make sure that no
+ * breakage will ensure in your code, in particular if you are further
+ * tweaking the widget with `GTK` or `libgimpui` API, you should always
+ * call with the specific @widget_type.
  *
  * If a widget has already been created for this procedure, it will be
  * returned instead (even if with a different @widget_type).
@@ -720,7 +736,8 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
                                        g_param_spec_get_nick (pspec),
                                        &label, NULL);
     }
-  else if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT ||
+  else if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT  ||
+           G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT ||
            G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_DOUBLE)
     {
       gdouble minimum;
@@ -735,6 +752,13 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
 
           minimum = (gdouble) pspecint->minimum;
           maximum = (gdouble) pspecint->maximum;
+        }
+      else if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT)
+        {
+          GParamSpecUInt *pspecuint = (GParamSpecUInt *) pspec;
+
+          minimum = (gdouble) pspecuint->minimum;
+          maximum = (gdouble) pspecuint->maximum;
         }
       else /* G_TYPE_PARAM_DOUBLE */
         {
@@ -849,14 +873,28 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
     }
   else if (G_PARAM_SPEC_TYPE (pspec) == GIMP_TYPE_PARAM_CHOICE)
     {
-      if (widget_type == G_TYPE_NONE || widget_type == GTK_TYPE_COMBO_BOX)
+      GType real_widget_type = widget_type;
+
+      if (real_widget_type == G_TYPE_NONE)
+        {
+          GimpChoice *choice = gimp_param_spec_choice_get_choice (pspec);
+          gint        n_choices;
+
+          n_choices = g_list_length (gimp_choice_list_nicks (choice));
+          if (n_choices > 3)
+            real_widget_type = GTK_TYPE_COMBO_BOX;
+          else
+            real_widget_type = GIMP_TYPE_INT_RADIO_FRAME;
+        }
+
+      if (real_widget_type == GTK_TYPE_COMBO_BOX)
         {
           widget = gimp_prop_choice_combo_box_new (G_OBJECT (priv->config), property);
           gtk_widget_set_vexpand (widget, FALSE);
           gtk_widget_set_hexpand (widget, TRUE);
           widget = gimp_label_string_widget_new (g_param_spec_get_nick (pspec), widget);
         }
-      else if (widget_type == GIMP_TYPE_INT_RADIO_FRAME)
+      else if (real_widget_type == GIMP_TYPE_INT_RADIO_FRAME)
         {
           widget = gimp_prop_choice_radio_frame_new (G_OBJECT (priv->config), property);
           gtk_widget_set_vexpand (widget, FALSE);
@@ -885,11 +923,22 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
     {
       widget = gimp_prop_pattern_chooser_new (G_OBJECT (priv->config), property, _("Pattern Chooser"));
     }
-  else if (G_IS_PARAM_SPEC_OBJECT (pspec) && (pspec->value_type == GIMP_TYPE_DRAWABLE ||
-                                              pspec->value_type == GIMP_TYPE_LAYER    ||
-                                              pspec->value_type == GIMP_TYPE_CHANNEL))
+  else if (G_IS_PARAM_SPEC_OBJECT (pspec)                      &&
+           g_type_is_a (pspec->value_type, GIMP_TYPE_DRAWABLE) &&
+           widget_type == GIMP_TYPE_DRAWABLE_CHOOSER)
     {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
       widget = gimp_prop_drawable_chooser_new (G_OBJECT (priv->config), property, NULL);
+#pragma GCC diagnostic pop
+    }
+  else if (G_IS_PARAM_SPEC_OBJECT (pspec) && g_type_is_a (pspec->value_type, GIMP_TYPE_ITEM))
+    {
+      widget = gimp_prop_item_chooser_new (G_OBJECT (priv->config), property, NULL);
+    }
+  else if (G_IS_PARAM_SPEC_OBJECT (pspec) && pspec->value_type == GIMP_TYPE_IMAGE)
+    {
+      widget = gimp_prop_image_chooser_new (G_OBJECT (priv->config), property, NULL);
     }
   else if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_ENUM)
     {
@@ -935,11 +984,28 @@ gimp_procedure_dialog_get_widget (GimpProcedureDialog *dialog,
       if (label == NULL)
         {
           if (GIMP_IS_LABELED (widget))
-            label = gimp_labeled_get_label (GIMP_LABELED (widget));
+            {
+              label = gimp_labeled_get_label (GIMP_LABELED (widget));
+            }
           else if (GIMP_IS_RESOURCE_CHOOSER (widget))
-            label = gimp_resource_chooser_get_label (GIMP_RESOURCE_CHOOSER (widget));
+            {
+              label = gimp_resource_chooser_get_label (GIMP_RESOURCE_CHOOSER (widget));
+            }
           else if (GIMP_IS_DRAWABLE_CHOOSER (widget))
-            label = gimp_drawable_chooser_get_label (GIMP_DRAWABLE_CHOOSER (widget));
+            {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+              label = gimp_drawable_chooser_get_label (GIMP_DRAWABLE_CHOOSER (widget));
+#pragma GCC diagnostic pop
+            }
+          else if (GIMP_IS_ITEM_CHOOSER (widget))
+            {
+              label = gimp_item_chooser_get_label (GIMP_ITEM_CHOOSER (widget));
+            }
+          else if (GIMP_IS_IMAGE_CHOOSER (widget))
+            {
+              label = gimp_image_chooser_get_label (GIMP_IMAGE_CHOOSER (widget));
+            }
         }
 
       if (label != NULL)
@@ -1075,6 +1141,115 @@ gimp_procedure_dialog_get_color_widget (GimpProcedureDialog *dialog,
 
   gimp_procedure_dialog_check_mnemonic (dialog, widget, property, NULL);
   g_hash_table_insert (priv->widgets, g_strdup (property), widget);
+  if (g_object_is_floating (widget))
+    g_object_ref_sink (widget);
+
+  return widget;
+}
+
+/**
+ * gimp_procedure_dialog_get_coordinates:
+ * @dialog:            the associated #GimpProcedureDialog.
+ * @coordinates_id:    Identifier for #GimpCoordinates widget.
+ * @x_property:        Name of int or double property for X coordinate.
+ * @y_property:        Name of int or double property for Y coordinate.
+ * @unit_property:     Name of unit property.
+ * @unit_format:       A printf-like unit-format string as is used with
+ *                     gimp_unit_menu_new().
+ * @update_policy:     How the automatic pixel <-> real-world-unit
+ *                     calculations should be done.
+ * @x_resolution:      The resolution (in dpi) for the X coordinate.
+ * @y_resolution:      The resolution (in dpi) for the Y coordinate.
+ *
+ * Creates a new #GimpCoordinates for @x_property and @y_property which
+ * must necessarily be an integer or double property.
+ * The associated @unit_property must be a GimpUnit property.
+ *
+ * If a widget has already been created for this procedure, it will be
+ * returned instead (whatever its actual widget type).
+ *
+ * Returns: (transfer none): the #GtkWidget representing @coordinates_id.
+ *                           The object belongs to @dialog and must not be
+ *                           freed.
+ */
+GtkWidget *
+gimp_procedure_dialog_get_coordinates (GimpProcedureDialog       *dialog,
+                                       const gchar               *coordinates_id,
+                                       const gchar               *x_property,
+                                       const gchar               *y_property,
+                                       const gchar               *unit_property,
+                                       const gchar               *unit_format,
+                                       GimpSizeEntryUpdatePolicy  update_policy,
+                                       gdouble                    x_resolution,
+                                       gdouble                    y_resolution)
+{
+  GimpProcedureDialogPrivate *priv;
+  GtkWidget                  *widget = NULL;
+  GtkWidget                  *label  = NULL;
+  GParamSpec                 *pspec_x;
+  GParamSpec                 *pspec_y;
+  GParamSpec                 *pspec_unit;
+
+  g_return_val_if_fail (GIMP_IS_PROCEDURE_DIALOG (dialog), NULL);
+  g_return_val_if_fail (coordinates_id != NULL, NULL);
+  g_return_val_if_fail (x_property != NULL, NULL);
+  g_return_val_if_fail (y_property != NULL, NULL);
+  g_return_val_if_fail (unit_property != NULL, NULL);
+
+  priv       = gimp_procedure_dialog_get_instance_private (dialog);
+  pspec_x    = g_object_class_find_property (G_OBJECT_GET_CLASS (priv->config),
+                                             x_property);
+  pspec_y    = g_object_class_find_property (G_OBJECT_GET_CLASS (priv->config),
+                                             y_property);
+  pspec_unit = g_object_class_find_property (G_OBJECT_GET_CLASS (priv->config),
+                                             unit_property);
+
+  if (! pspec_x)
+    {
+      g_warning ("%s: parameter %s does not exist.",
+                 G_STRFUNC, x_property);
+      return NULL;
+    }
+  if (! pspec_y)
+    {
+      g_warning ("%s: parameter %s does not exist.",
+                 G_STRFUNC, y_property);
+      return NULL;
+    }
+  if (! pspec_unit)
+    {
+      g_warning ("%s: unit parameter %s does not exist.",
+                 G_STRFUNC, unit_property);
+      return NULL;
+    }
+
+  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec_x) == G_TYPE_PARAM_INT  ||
+                        G_PARAM_SPEC_TYPE (pspec_x) == G_TYPE_PARAM_UINT ||
+                        G_PARAM_SPEC_TYPE (pspec_x) == G_TYPE_PARAM_DOUBLE, NULL);
+  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec_y) == G_TYPE_PARAM_INT  ||
+                        G_PARAM_SPEC_TYPE (pspec_y) == G_TYPE_PARAM_UINT ||
+                        G_PARAM_SPEC_TYPE (pspec_y) == G_TYPE_PARAM_DOUBLE, NULL);
+  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec_unit) == GIMP_TYPE_PARAM_UNIT, NULL);
+
+  /* First check if it already exists. */
+  widget = g_hash_table_lookup (priv->widgets, coordinates_id);
+
+  if (widget)
+    return widget;
+
+  widget = gimp_prop_coordinates_new (G_OBJECT (priv->config), x_property,
+                                      y_property, unit_property, unit_format,
+                                      update_policy, x_resolution,
+                                      y_resolution, TRUE);
+  /* Add labels */
+  label = gimp_size_entry_attach_label (GIMP_SIZE_ENTRY (widget),
+                                        g_param_spec_get_nick (pspec_x), 0, 1, 0.0);
+  gtk_widget_set_margin_end (label, 6);
+  label = gimp_size_entry_attach_label (GIMP_SIZE_ENTRY (widget),
+                                        g_param_spec_get_nick (pspec_y), 0, 2, 0.0);
+  gtk_widget_set_margin_end (label, 6);
+
+  g_hash_table_insert (priv->widgets, g_strdup (coordinates_id), widget);
   if (g_object_is_floating (widget))
     g_object_ref_sink (widget);
 
@@ -1302,8 +1477,9 @@ gimp_procedure_dialog_get_spin_scale (GimpProcedureDialog *dialog,
       return NULL;
     }
 
-  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_DOUBLE ||
-                        (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT   &&
+  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_DOUBLE  ||
+                        ((G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT  ||
+                          G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT)  &&
                          factor == 1.0), NULL);
 
   /* First check if it already exists. */
@@ -1319,6 +1495,13 @@ gimp_procedure_dialog_get_spin_scale (GimpProcedureDialog *dialog,
       minimum = (gdouble) pspecint->minimum;
       maximum = (gdouble) pspecint->maximum;
     }
+  else if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT)
+    {
+      GParamSpecUInt *pspecuint = (GParamSpecUInt *) pspec;
+
+      minimum = (gdouble) pspecuint->minimum;
+      maximum = (gdouble) pspecuint->maximum;
+    }
   else /* G_TYPE_PARAM_DOUBLE */
     {
       GParamSpecDouble *pspecdouble = (GParamSpecDouble *) pspec;
@@ -1327,6 +1510,14 @@ gimp_procedure_dialog_get_spin_scale (GimpProcedureDialog *dialog,
       maximum = pspecdouble->maximum;
     }
   gimp_range_estimate_settings (minimum * factor, maximum * factor, &step, &page, &digits);
+
+  if (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT ||
+      G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT)
+    {
+      digits = 0;
+      step   = MAX (step, 1.f);
+      page   = MAX (page, step);
+    }
 
   widget = gimp_prop_spin_scale_new (G_OBJECT (priv->config),
                                      property, step, page, digits);
@@ -1385,7 +1576,8 @@ gimp_procedure_dialog_get_scale_entry (GimpProcedureDialog *dialog,
       return NULL;
     }
 
-  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT ||
+  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT  ||
+                        G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT ||
                         G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_DOUBLE, NULL);
 
   /* First check if it already exists. */
@@ -1475,7 +1667,8 @@ gimp_procedure_dialog_get_size_entry (GimpProcedureDialog       *dialog,
       return NULL;
     }
 
-  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT ||
+  g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_INT  ||
+                        G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_UINT ||
                         G_PARAM_SPEC_TYPE (pspec) == G_TYPE_PARAM_DOUBLE, NULL);
   g_return_val_if_fail (G_PARAM_SPEC_TYPE (pspec_unit) == GIMP_TYPE_PARAM_UNIT, NULL);
 
@@ -2773,7 +2966,18 @@ gimp_procedure_dialog_check_mnemonic (GimpProcedureDialog *dialog,
     }
   else if (GIMP_IS_DRAWABLE_CHOOSER (widget))
     {
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
       label = gimp_drawable_chooser_get_label (GIMP_DRAWABLE_CHOOSER (widget));
+#pragma GCC diagnostic pop
+    }
+  else if (GIMP_IS_ITEM_CHOOSER (widget))
+    {
+      label = gimp_item_chooser_get_label (GIMP_ITEM_CHOOSER (widget));
+    }
+  else if (GIMP_IS_IMAGE_CHOOSER (widget))
+    {
+      label = gimp_image_chooser_get_label (GIMP_IMAGE_CHOOSER (widget));
     }
   else if (GIMP_IS_FILE_CHOOSER (widget))
     {

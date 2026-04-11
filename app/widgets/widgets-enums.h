@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __WIDGETS_ENUMS_H__
-#define __WIDGETS_ENUMS_H__
+#pragma once
 
 
 /*
@@ -128,7 +127,8 @@ typedef enum
 typedef enum  /*< skip >*/
 {
   GIMP_VIEW_BG_CHECKS,
-  GIMP_VIEW_BG_WHITE
+  GIMP_VIEW_BG_WHITE,
+  GIMP_VIEW_BG_STYLE
 } GimpViewBG;
 
 typedef enum  /*< skip >*/
@@ -136,7 +136,9 @@ typedef enum  /*< skip >*/
   GIMP_VIEW_BORDER_BLACK,
   GIMP_VIEW_BORDER_WHITE,
   GIMP_VIEW_BORDER_RED,
-  GIMP_VIEW_BORDER_GREEN
+  GIMP_VIEW_BORDER_GREEN,
+  GIMP_VIEW_BORDER_STYLE_FG,
+  GIMP_VIEW_BORDER_STYLE_BG
 } GimpViewBorderType;
 
 typedef enum  /*< skip >*/
@@ -155,7 +157,7 @@ typedef enum  /*< skip >*/
   GIMP_DND_TYPE_LAYER        = 11,
   GIMP_DND_TYPE_CHANNEL      = 12,
   GIMP_DND_TYPE_LAYER_MASK   = 13,
-  GIMP_DND_TYPE_VECTORS      = 14,
+  GIMP_DND_TYPE_PATH         = 14,
   GIMP_DND_TYPE_BRUSH        = 15,
   GIMP_DND_TYPE_PATTERN      = 16,
   GIMP_DND_TYPE_GRADIENT     = 17,
@@ -169,9 +171,9 @@ typedef enum  /*< skip >*/
 
   GIMP_DND_TYPE_LAYER_LIST   = 25,
   GIMP_DND_TYPE_CHANNEL_LIST = 26,
-  GIMP_DND_TYPE_VECTORS_LIST = 27,
+  GIMP_DND_TYPE_PATH_LIST    = 27,
 
-  GIMP_DND_TYPE_LAST         = GIMP_DND_TYPE_VECTORS_LIST
+  GIMP_DND_TYPE_LAST         = GIMP_DND_TYPE_PATH_LIST
 } GimpDndType;
 
 typedef enum  /*< skip >*/
@@ -313,6 +315,3 @@ typedef enum  /*< skip >*/
   GIMP_DASHBOARD_HISTORY_DURATION_120_SEC = 120000,
   GIMP_DASHBOARD_HISTORY_DURATION_240_SEC = 240000
 } GimpDashboardHistoryDuration;
-
-
-#endif /* __WIDGETS_ENUMS_H__ */

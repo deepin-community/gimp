@@ -10,11 +10,6 @@
 
 @import url("common.css");
 
-/* Highlight icons in Grid View when hovered over */
-iconview:hover {
-  background-color: @strong-border-color;
-}
-
 /*
  * Paned separator handles
  */
@@ -28,5 +23,9 @@ paned.vertical > separator {
 
 /* Top highlight for buttons */
 button:not(.flat) {
+  box-shadow: 0 1px @extreme-bg-color inset;
+}
+
+buttonbox button.radio:not(:checked) {
   box-shadow: 0 1px @extreme-bg-color inset;
 }

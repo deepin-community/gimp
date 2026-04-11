@@ -22,6 +22,8 @@
 
 #include "core-types.h"
 
+#include "path/gimpvectorlayer.h"
+
 #include "gimp.h"
 #include "gimpcontainer.h"
 #include "gimpguide.h"
@@ -103,9 +105,13 @@ gimp_image_scale (GimpImage             *image,
                 "height", new_height,
                 NULL);
 
-  /*  Scale all layers, channels (including selection mask), and vectors  */
+  /*  Scale all layers, channels (including selection mask), and paths  */
   while ((item = gimp_object_queue_pop (queue)))
     {
+      /* Non-rasterized vector layers will be transformed when their path is */
+      if (gimp_item_is_vector_layer (item))
+        continue;
+        
       if (! gimp_item_scale_by_factors (item,
                                         img_scale_w, img_scale_h,
                                         interpolation_type, progress))

@@ -8,14 +8,14 @@
 # Quim Perez i Noguer <noguer@gmail.com>, 2005-2009.
 # Joaquim Perez Noguer <noguer@gmail.com>, 2009
 # Pau Iranzo <pau.iranzo@softcatala.org>, 2011.
-# Jordi Mas i Hernàndez, <jmas@softcatala.org>, 2018-2024
+# Jordi Mas i Hernàndez, <jmas@softcatala.org>, 2018-2026
 #
 msgid ""
 msgstr ""
 "Project-Id-Version: ca\n"
 "Report-Msgid-Bugs-To: https://gitlab.gnome.org/GNOME/gimp/issues\n"
 "POT-Creation-Date: 2024-10-10 03:43+0000\n"
-"PO-Revision-Date: 2024-10-11 15:42+0200\n"
+"PO-Revision-Date: 2026-03-13 15:42+0200\n"
 "Last-Translator: Jordi Mas i Hernàndez, <jmas@softcatala.org>\n"
 "Language-Team: Catalan <tradgnome@softcatala.org>\n"
 "Language: ca\n"
@@ -513,7 +513,7 @@ msgstr "%d fps"
 
 #: plug-ins/common/animation-play.c:874
 msgid "Default framerate"
-msgstr "Fotogrames per defecte"
+msgstr "Velocitat dels fotogrames per defecte"
 
 #: plug-ins/common/animation-play.c:894
 msgid "Playback speed"
@@ -783,7 +783,7 @@ msgstr "k{x(1-x)}^p"
 
 #: plug-ins/common/cml-explorer.c:134
 msgid "k{x(1-x)}^p stepped"
-msgstr "k{x(1-x)}^p desplaçada"
+msgstr "k{x(1-x)}^p pas a pas"
 
 #: plug-ins/common/cml-explorer.c:135
 msgid "kx^p"
@@ -1194,11 +1194,11 @@ msgstr "Paràmetre k:"
 
 #: plug-ins/common/cml-explorer.c:1837
 msgid "Range low:"
-msgstr "Rang curt:"
+msgstr "Rang inferior:"
 
 #: plug-ins/common/cml-explorer.c:1844
 msgid "Range high:"
-msgstr "Rang llarg:"
+msgstr "Rang superior:"
 
 #: plug-ins/common/cml-explorer.c:1855
 msgid "Plot a Graph of the Settings"
@@ -1294,11 +1294,11 @@ msgstr "S'ha produït un error: no es poden carregar els paràmetres"
 
 #: plug-ins/common/colormap-remap.c:181
 msgid "R_earrange Colormap..."
-msgstr "Ajusta _els colors..."
+msgstr "Reord_ena el mapa de colors..."
 
 #: plug-ins/common/colormap-remap.c:187
 msgid "Rearrange the colormap"
-msgstr "Torna a ajustar el mapa de colors"
+msgstr "Reordena el mapa de colors"
 
 #: plug-ins/common/colormap-remap.c:188
 msgid ""
@@ -1383,7 +1383,7 @@ msgid ""
 "Drag and drop colors to rearrange the colormap.\n"
 "The numbers shown are the original indices."
 msgstr ""
-"Arrossegueu colors per a ajustar el mapa de colors.\n"
+"Arrossegueu colors per a reordenar el mapa de colors.\n"
 "Els nombres que es mostren són els índexs originals."
 
 #: plug-ins/common/colormap-remap.c:728
@@ -1628,7 +1628,7 @@ msgstr "Imatge de sortida"
 
 #: plug-ins/common/compose.c:470
 msgid "Compose an image from multiple drawables of gray images"
-msgstr "Redacta una imatge a partir de múltiples dibuixables d'imatges grises"
+msgstr "Compon una imatge a partir de múltiples dibuixables d'imatges grises"
 
 #: plug-ins/common/compose.c:472
 msgid ""
@@ -1954,7 +1954,7 @@ msgstr "Punt X superior"
 #: plug-ins/common/curve-bend.c:477 plug-ins/common/curve-bend.c:501
 msgid "Array of 17 x point coords { 0.0 <= x <= 1.0 or -1 for unused point }"
 msgstr ""
-"Matriu de 17 coordenades x de punt  { 0.0<= x<= 1.0 o -1 per a un punt no "
+"Matriu de 17 coordenades x de punt { 0.0<= x<= 1.0 o -1 per a un punt no "
 "utilitzat }"
 
 #: plug-ins/common/curve-bend.c:482 plug-ins/common/curve-bend.c:483
@@ -1968,7 +1968,7 @@ msgstr "Punt Y superior"
 #: plug-ins/common/curve-bend.c:489 plug-ins/common/curve-bend.c:513
 msgid "Array of 17 y point coords { 0.0 <= y <= 1.0 or -1 for unused point }"
 msgstr ""
-"Matriu de 17 coordenades y de punt  { 0.0<= y<= 1.0 o -1 per a un punt no "
+"Matriu de 17 coordenades y de punt { 0.0<= y<= 1.0 o -1 per a un punt no "
 "utilitzat }"
 
 #: plug-ins/common/curve-bend.c:494 plug-ins/common/curve-bend.c:495
@@ -2324,7 +2324,7 @@ msgstr "Crea canals com a capes en una sola imatge"
 
 #: plug-ins/common/decompose.c:323
 msgid "_Foreground as registration color"
-msgstr "_Realça el color del primer pla"
+msgstr "_Color de primer pla com a color de registre"
 
 #: plug-ins/common/decompose.c:324
 msgid ""
@@ -2973,7 +2973,7 @@ msgstr "Radiance RGBE"
 
 #: plug-ins/common/file-gegl.c:132 plug-ins/file-exr/file-exr.c:111
 msgid "OpenEXR image"
-msgstr "Obre la imatge EXR"
+msgstr "Imatge OpenEXR"
 
 #: plug-ins/common/file-gegl.c:356
 #, c-format
@@ -3003,7 +3003,7 @@ msgid ""
 msgstr ""
 "Exporta un fitxer en format GIF, amb una possible animació, transparència i "
 "comentari. Per a exportar una animació, opera en un fitxer multicapa i dona "
-"el paràmetre «com a animació» coem a CERT. El connector interpretarà un alfa "
+"el paràmetre «com a animació» com a CERT. El connector interpretarà un alfa "
 "menor del 50% com a transparent. Quan s'executa de forma no interactiva, el "
 "valor del comentari es pren del paràsit «gimp-comment»."
 
@@ -3429,7 +3429,7 @@ msgstr "L'alçada no coincideix!"
 #: plug-ins/common/file-gih.c:577
 #, c-format
 msgid "Displays as a %d × %d grid on each layer"
-msgstr "Mostra com una graella %d s %d a cada capa"
+msgstr "Mostra com una graella %d × %d a cada capa"
 
 #: plug-ins/common/file-gih.c:763
 msgid "Ranks:"
@@ -3802,7 +3802,7 @@ msgstr "Carrega fitxers en el format de fitxer IFF"
 
 #: plug-ins/common/file-iff.c:254
 msgid "Invalid or missing ILBM image"
-msgstr "Imatge ILBM no és vàlida o falta"
+msgstr "Imatge ILBM és invàlida o inexistent"
 
 #: plug-ins/common/file-iff.c:268
 msgid "ILBM contains no image data - likely a palette file"
@@ -4017,7 +4017,7 @@ msgstr "Exporta com a _CMYK"
 #: plug-ins/common/file-jpegxl.c:234
 msgid "Create a CMYK JPEG XL image using the soft-proofing color profile"
 msgstr ""
-"Crea una imatge JPEG gran amb model CMYK utilitzant el perfil de color de "
+"Crea una imatge JPEG XL amb model CMYK utilitzant el perfil de color de "
 "provatura suau"
 
 #: plug-ins/common/file-jpegxl.c:2039
@@ -4170,7 +4170,7 @@ msgstr "_Desa la resolució"
 
 #: plug-ins/common/file-mng.c:356
 msgid "Write pHYs (image resolution) chunk"
-msgstr "Escriu el fragment pHY» (resolució d'imatge)"
+msgstr "Escriu el fragment pHYs (resolució d'imatge)"
 
 #: plug-ins/common/file-mng.c:361 plug-ins/common/file-png.c:276
 msgid "Save creation _time"
@@ -4239,7 +4239,7 @@ msgstr "Imatge PCX de ZSoft"
 
 #: plug-ins/common/file-pcx.c:214
 msgid "Loads files in Zsoft PCX file format"
-msgstr "Carrega fitxers en el format de fitxer DCX de ZSoft"
+msgstr "Carrega fitxers en el format de fitxer PCX de Zsoft"
 
 #: plug-ins/common/file-pcx.c:223 plug-ins/common/file-pcx.c:257
 msgid "_Palette Options"
@@ -4352,12 +4352,12 @@ msgstr "No es poden exportar imatges amb canal alfa."
 #: plug-ins/common/file-pcx.c:1172
 #, c-format
 msgid "Invalid X offset: %d"
-msgstr "La coordenada X no és vàlida: %d"
+msgstr "Desplaçament X no vàlid: %d"
 
 #: plug-ins/common/file-pcx.c:1178
 #, c-format
 msgid "Invalid Y offset: %d"
-msgstr "La coordenada Y no és vàlida: %d"
+msgstr "Desplaçament Y no vàlid: %d"
 
 #: plug-ins/common/file-pcx.c:1184
 #, c-format
@@ -4539,7 +4539,7 @@ msgstr "Suprimeix les pàgines seleccionades"
 
 #: plug-ins/common/file-pdf-export.c:1123
 msgid "Add this image"
-msgstr "Afegeix aquesta Imatge"
+msgstr "Afegeix aquesta imatge"
 
 #: plug-ins/common/file-pdf-export.c:1219
 #: plug-ins/common/file-pdf-export.c:1292
@@ -4736,7 +4736,7 @@ msgid ""
 "When checked, save as 1, 2, 4, or 8-bit depending on number of colors used. "
 "When unchecked, always save as 8-bit"
 msgstr ""
-"Quan està marcada, es desarà com a 1, 2, 4 o 8 bits depenent del nombre de "
+"Quan està marcat, es desarà com a 1, 2, 4 o 8 bits depenent del nombre de "
 "colors utilitzats. Quan no estigui marcat, sempre es desarà com a 8 bits"
 
 #: plug-ins/common/file-png.c:297
@@ -4895,7 +4895,7 @@ msgstr "L'exportació PNM gestiona tots els tipus d'imatge sense transparència.
 #: plug-ins/common/file-pnm.c:378 plug-ins/common/file-pnm.c:421
 #: plug-ins/common/file-pnm.c:464 plug-ins/common/file-pnm.c:508
 msgid "_Data formatting"
-msgstr "Formació de _dades"
+msgstr "Formatació de les _dades"
 
 #: plug-ins/common/file-pnm.c:379 plug-ins/common/file-pnm.c:422
 #: plug-ins/common/file-pnm.c:465 plug-ins/common/file-pnm.c:509
@@ -5103,7 +5103,7 @@ msgstr "_Acoloriment"
 
 #: plug-ins/common/file-ps.c:420
 msgid "Import color format"
-msgstr "Exporta el format de color"
+msgstr "Importa el format de color"
 
 #: plug-ins/common/file-ps.c:421
 msgid "B/W"
@@ -5389,7 +5389,7 @@ msgstr "La capçalera del bloc no és vàlida a %ld"
 #: plug-ins/common/file-psp.c:930
 #, c-format
 msgid "Invalid block header"
-msgstr "La capçalera del bloc no és vàlid"
+msgstr "La capçalera del bloc no és vàlida"
 
 #: plug-ins/common/file-psp.c:962
 #, c-format
@@ -5404,7 +5404,7 @@ msgstr "La mida del bloc d'atributs de la imatge general no és vàlida."
 #: plug-ins/common/file-psp.c:1007
 #, c-format
 msgid "Error reading general image attribute block."
-msgstr "S'ha perdut el bloc d'atributs de la imatge general."
+msgstr "S'ha produït un error en llegir el bloc d'atributs de la imatge general."
 
 #: plug-ins/common/file-psp.c:1022
 #, c-format
@@ -6177,7 +6177,7 @@ msgstr "_Origen"
 
 #: plug-ins/common/file-tga.c:321
 msgid "Image origin"
-msgstr "Imatge original"
+msgstr "Origen de la imatge"
 
 #: plug-ins/common/file-tga.c:322
 msgid "Bottom left"
@@ -6271,7 +6271,7 @@ msgstr "XBM"
 
 #: plug-ins/common/file-xbm.c:219
 msgid "_Write comment"
-msgstr "_Escriu un Comentari"
+msgstr "_Escriu un comentari"
 
 #: plug-ins/common/file-xbm.c:220
 msgid "Write a comment at the beginning of the file."
@@ -6397,7 +6397,7 @@ msgstr "Cursor de ratolí X11"
 
 #: plug-ins/common/file-xmc.c:303
 msgid "Loads files of X11 Mouse Cursor file format"
-msgstr "Carrega fitxers en el format de fitxer BMP"
+msgstr "Carrega els fitxers del format de fitxer del cursor del ratolí X11"
 
 #: plug-ins/common/file-xmc.c:305
 msgid "This plug-in loads X11 Mouse Cursor (XMC) files."
@@ -6516,12 +6516,12 @@ msgstr "«%s» no és un cursor X vàlid."
 #: plug-ins/common/file-xmc.c:676
 #, c-format
 msgid "Frame %d of '%s' is too wide for an X cursor."
-msgstr "L'amplada del marc %d de «%s» és massa gran pel cursor X."
+msgstr "L'amplada del marc %d de «%s» és massa gran per al cursor X."
 
 #: plug-ins/common/file-xmc.c:684
 #, c-format
 msgid "Frame %d of '%s' is too high for an X cursor."
-msgstr "L'alçada del marc %d de «%s» és massa gran pel cursor X."
+msgstr "L'alçada del marc %d de «%s» és massa gran per al cursor X."
 
 #: plug-ins/common/file-xmc.c:955
 #, c-format
@@ -6531,12 +6531,12 @@ msgstr "manca un fragment de la imatge a «%s»."
 #: plug-ins/common/file-xmc.c:996
 #, c-format
 msgid "'%s' is too wide for an X cursor."
-msgstr "L'amplada de «%s» és massa gran pel cursor X."
+msgstr "L'amplada de «%s» és massa gran per al cursor X."
 
 #: plug-ins/common/file-xmc.c:1005
 #, c-format
 msgid "'%s' is too high for an X cursor."
-msgstr "L'alçada de «%s» és massa gran pel cursor X."
+msgstr "L'alçada de «%s» és massa gran per al cursor X."
 
 #: plug-ins/common/file-xmc.c:1069
 #, c-format
@@ -7480,7 +7480,7 @@ msgid ""
 "10/95, page 326). It generates modern art pictures from a random genetic "
 "formula."
 msgstr ""
-"Aquest connector es basa en un article de J.rn Loviscach (aparegut a c't "
+"Aquest connector es basa en un article de Jörn Loviscach (aparegut a c't "
 "10/95, pàgina 326). Genera imatges d'art modern a partir d'una fórmula "
 "genètica aleatòria."
 
@@ -8996,7 +8996,7 @@ msgstr "YCoCg (DXT5)"
 
 #: plug-ins/file-dds/dds.c:208
 msgid "YCoCg scaled (DXT5)"
-msgstr "YCoCg escalat(DXT5)"
+msgstr "YCoCg escalat (DXT5)"
 
 #: plug-ins/file-dds/dds.c:214
 msgid "Use percept_ual error metric"
@@ -9577,7 +9577,7 @@ msgstr "Capçalera no vàlida: el número màgic és incorrecte!"
 
 #: plug-ins/file-fli/fli.c:513
 msgid "Error writing frame header. "
-msgstr "S'ha produït un error en llegir la capçalera del fitxer. "
+msgstr "S'ha produït un error en escriure la capçalera del fitxer. "
 
 #: plug-ins/file-fli/fli.c:537 plug-ins/file-fli/fli.c:547
 #: plug-ins/file-fli/fli.c:556 plug-ins/file-fli/fli.c:575
@@ -10007,7 +10007,7 @@ msgstr "4:4:4 (la millor qualitat)"
 
 #: plug-ins/file-jpeg/jpeg.c:243
 msgid "4:2:2 (chroma halved horizontally)"
-msgstr "4:2:2 vertical (croma reduït a la meitat)"
+msgstr "4:2:2 vertical (croma reduït a la meitat horitzontalment)"
 
 #: plug-ins/file-jpeg/jpeg.c:244
 msgid "4:4:0 (chroma halved vertically)"
@@ -10465,7 +10465,7 @@ msgstr "Sinar en brut"
 
 #: plug-ins/file-raw/file-raw-formats.h:125
 msgid "Raw Kodak"
-msgstr "Kodaken brut"
+msgstr "Kodak en brut"
 
 #: plug-ins/file-raw/file-raw-formats.h:136
 msgid "Raw Adobe DNG Digital Negative"
@@ -10597,7 +10597,7 @@ msgstr "RLE agressiu (no funciona amb SGI)"
 #: plug-ins/file-sgi/sgi.c:322
 #, c-format
 msgid "Could not open '%s' for reading."
-msgstr "No s'ha pogut obrir «%s» per a escriure-hi."
+msgstr "No s'ha pogut obrir «%s» per a llegir-hi."
 
 #: plug-ins/file-sgi/sgi.c:338
 #, c-format
@@ -10625,7 +10625,7 @@ msgstr "Imatge TIFF o BigTIFF"
 
 #: plug-ins/file-tiff/file-tiff.c:167
 msgid "Loads files of the TIFF and BigTIFF file formats"
-msgstr "Carrega fitxers en els formats de fitxer FITS i BigTIFF"
+msgstr "Carrega fitxers en els formats de fitxer TIFF i BigTIFF"
 
 #: plug-ins/file-tiff/file-tiff.c:168
 msgid ""
@@ -11016,7 +11016,7 @@ msgstr "Importa des d'un TIFF"
 
 #: plug-ins/file-tiff/file-tiff-load.c:2784
 msgid "_Show reduced images"
-msgstr "_Mostra la imatge reduïda"
+msgstr "_Mostra les imatges reduïdes"
 
 #: plug-ins/file-tiff/file-tiff-load.c:2829
 msgid "Process extra channel as:"
@@ -12248,7 +12248,7 @@ msgstr "Ep, on ha anat l'objecte?"
 
 #: plug-ins/gfig/gfig-dobject.c:926
 msgid "Error reading file"
-msgstr "S'ha produït un error en llegir el fitxer"
+msgstr "S'ha produït un error en escriure el fitxer"
 
 #: plug-ins/gfig/gfig-dobject.c:1024
 msgid "Editing read-only object - you will not be able to save it"

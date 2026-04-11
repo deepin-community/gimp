@@ -12,10 +12,11 @@ libappfiledata = static_library('appfiledata',
   include_directories: [ rootInclude, rootAppInclude, ],
   c_args: '-DG_LOG_DOMAIN="Gimp-File-Data"',
   dependencies: [
-    appstream_glib,
+    appstream,
     cairo,
     gdk_pixbuf,
     gegl,
+    gexiv2,
     libarchive,
   ],
 )

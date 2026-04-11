@@ -18,9 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_DRAWABLE_TREE_VIEW_H__
-#define __GIMP_DRAWABLE_TREE_VIEW_H__
-
+#pragma once
 
 #include "gimpitemtreeview.h"
 
@@ -33,11 +31,16 @@
 #define GIMP_DRAWABLE_TREE_VIEW_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_DRAWABLE_TREE_VIEW, GimpDrawableTreeViewClass))
 
 
-typedef struct _GimpDrawableTreeViewClass  GimpDrawableTreeViewClass;
+typedef struct _GimpDrawableTreeViewClass         GimpDrawableTreeViewClass;
+typedef struct _GimpDrawableTreeViewPrivate       GimpDrawableTreeViewPrivate;
+typedef struct _GimpDrawableTreeViewFiltersEditor GimpDrawableTreeViewFiltersEditor;
 
 struct _GimpDrawableTreeView
 {
-  GimpItemTreeView  parent_instance;
+  GimpItemTreeView                   parent_instance;
+
+  GimpDrawableTreeViewPrivate       *priv;
+  GimpDrawableTreeViewFiltersEditor *editor;
 };
 
 struct _GimpDrawableTreeViewClass
@@ -47,6 +50,3 @@ struct _GimpDrawableTreeViewClass
 
 
 GType   gimp_drawable_tree_view_get_type (void) G_GNUC_CONST;
-
-
-#endif  /*  __GIMP_DRAWABLE_TREE_VIEW_H__  */

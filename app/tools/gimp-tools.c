@@ -68,6 +68,7 @@
 #include "gimpiscissorstool.h"
 #include "gimplevelstool.h"
 #include "gimpoperationtool.h"
+#include "gimppathtool.h"
 #include "gimpmagnifytool.h"
 #include "gimpmeasuretool.h"
 #include "gimpmovetool.h"
@@ -89,7 +90,6 @@
 #include "gimptexttool.h"
 #include "gimptransform3dtool.h"
 #include "gimpunifiedtransformtool.h"
-#include "gimpvectortool.h"
 #include "gimpwarptool.h"
 
 #include "gimp-intl.h"
@@ -145,7 +145,7 @@ gimp_tools_init (Gimp *gimp)
 
     /*  path tool */
 
-    gimp_vector_tool_register,
+    gimp_path_tool_register,
 
     /*  non-modifying tools  */
 
@@ -521,8 +521,8 @@ gimp_tools_deserialize (Gimp          *gimp,
   gimp_container_clear (container);
 
   src_container = g_object_new (GIMP_TYPE_LIST,
-                                "children-type", GIMP_TYPE_TOOL_ITEM,
-                                "append",        TRUE,
+                                "child-type", GIMP_TYPE_TOOL_ITEM,
+                                "append",     TRUE,
                                 NULL);
 
   if (gimp_config_deserialize (GIMP_CONFIG (src_container),

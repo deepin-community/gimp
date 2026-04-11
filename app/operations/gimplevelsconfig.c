@@ -106,19 +106,29 @@ gimp_levels_config_class_init (GimpLevelsConfigClass *klass)
 
   viewable_class->default_icon_name = "gimp-tool-levels";
 
+  /* "trc" should default to GIMP_TRC_PERCEPTUAL (cf. #15962).
+   * We cannot change it until we implement GEGL op versioning.
+   * In GIMP 3.0, calling this op from the public API was always run in
+   * linear (#15681).
+   */
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_TRC,
                          "trc",
-                         _("Linear/Perceptual"),
-                         _("Work on linear or perceptual RGB"),
+                         _("Tone Reproduction Curve"),
+                         _("Work on linear or perceptual RGB, or following the image's TRC"),
                          GIMP_TYPE_TRC_TYPE,
-                         GIMP_TRC_NON_LINEAR, 0);
+                         GIMP_TRC_LINEAR, 0);
 
-  /* compat */
+  /* "linear" is a compat property initially kept for compatibility
+   * reason, in particular for config parsing. It's not needed anymore
+   * since we have config migration rules now and was rendered bogus to
+   * avoid property mixups when setting from API.
+   * TODO: remove "linear" when we can version GEGL operations.
+   */
   GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_LINEAR,
                             "linear",
                             _("Linear"),
-                            _("Work on linear RGB"),
-                            FALSE, 0);
+                            _("Work on linear RGB (this property is ignored; use \"trc\" instead)"),
+                            TRUE, 0);
 
   GIMP_CONFIG_PROP_ENUM (object_class, PROP_CHANNEL,
                          "channel",
@@ -257,9 +267,7 @@ gimp_levels_config_set_property (GObject      *object,
       break;
 
     case PROP_LINEAR:
-      self->trc = g_value_get_boolean (value) ?
-                  GIMP_TRC_LINEAR : GIMP_TRC_NON_LINEAR;
-      g_object_notify (object, "trc");
+      /* Ignored */
       break;
 
     case PROP_CHANNEL:
@@ -991,4 +999,99 @@ gimp_levels_config_save_cruft (GimpLevelsConfig  *config,
   g_string_free (string, TRUE);
 
   return TRUE;
+}
+
+gboolean
+gimp_levels_config_load_alv (GimpLevelsConfig  *config,
+                             GInputStream      *input,
+                             GError           **error)
+{
+  GDataInputStream *data_input;
+  guint16           version = 0;
+  gint              low_input[4];
+  gint              high_input[4];
+  gint              low_output[4];
+  gint              high_output[4];
+  gdouble           gamma[4];
+
+  g_return_val_if_fail (GIMP_IS_LEVELS_CONFIG (config), FALSE);
+  g_return_val_if_fail (G_IS_INPUT_STREAM (input), FALSE);
+  g_return_val_if_fail (error == NULL || *error == NULL, FALSE);
+
+  data_input = g_data_input_stream_new (input);
+
+  g_data_input_stream_set_byte_order (data_input,
+                                      G_DATA_STREAM_BYTE_ORDER_BIG_ENDIAN);
+
+  version = g_data_input_stream_read_uint16 (data_input, NULL, error);
+  if (! version)
+    goto error;
+
+  /* TODO: Photoshop Level presets store 29 levels, for channels beyond
+   * RGB. When we can support those, we should update the read limit */
+  for (gint i = 0; i < 4; i++)
+    {
+      low_input[i] = g_data_input_stream_read_uint16 (data_input, NULL, error);
+      if (error && *error)
+        goto error;
+
+      high_input[i] = g_data_input_stream_read_uint16 (data_input, NULL,
+                                                       error);
+      if (error && *error)
+        goto error;
+
+      low_output[i] = g_data_input_stream_read_uint16 (data_input, NULL,
+                                                       error);
+      if (error && *error)
+        goto error;
+
+      high_output[i] = g_data_input_stream_read_uint16 (data_input, NULL,
+                                                        error);
+      if (error && *error)
+        goto error;
+
+      gamma[i] = g_data_input_stream_read_int16 (data_input, NULL, error);
+      if (error && *error)
+        goto error;
+    }
+
+  g_object_unref (data_input);
+
+  g_object_freeze_notify (G_OBJECT (config));
+
+  for (gint i = 0; i < 4; i++)
+    {
+      config->low_input[i]   = low_input[i]   / 253.0;
+      config->high_input[i]  = high_input[i]  / 255.0;
+      config->gamma[i]       = gamma[i]       / 100.0;
+      config->low_output[i]  = low_output[i]  / 255.0;
+      config->high_output[i] = high_output[i] / 255.0;
+    }
+
+  config->trc          = GIMP_TRC_NON_LINEAR;
+  config->clamp_input  = TRUE;
+  config->clamp_output = TRUE;
+
+  g_object_notify (G_OBJECT (config), "trc");
+  g_object_notify (G_OBJECT (config), "low-input");
+  g_object_notify (G_OBJECT (config), "high-input");
+  g_object_notify (G_OBJECT (config), "clamp-input");
+  g_object_notify (G_OBJECT (config), "gamma");
+  g_object_notify (G_OBJECT (config), "low-output");
+  g_object_notify (G_OBJECT (config), "high-output");
+  g_object_notify (G_OBJECT (config), "clamp-output");
+
+  g_object_thaw_notify (G_OBJECT (config));
+
+  return TRUE;
+
+  error:
+    g_object_unref (data_input);
+
+    if (error && *error)
+      g_prefix_error (error, _("parse error"));
+    else
+      g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                   _("parse error"));
+  return FALSE;
 }

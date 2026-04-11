@@ -92,7 +92,7 @@ static gint             add_layers                 (GimpImage      *image,
 
 static void             add_legacy_layer_effects   (GimpLayer      *layer,
                                                     PSDlayer       *lyr_a,
-                                                    gboolean        ibm_pc_format);
+                                                    PSDimage       *img_a);
 
 static gint             add_merged_image           (GimpImage      *image,
                                                     PSDimage       *img_a,
@@ -350,6 +350,7 @@ load_image_metadata (GFile        *file,
   img_a.image_res_len       = data_length;
   img_a.image_res_start     = 0;
   img_a.version             = 1;
+  img_a.layer_state         = 0;
   img_a.layer_selection     = NULL;
   img_a.columns             = gimp_image_get_width (image);
   img_a.rows                = gimp_image_get_height (image);
@@ -394,106 +395,145 @@ load_image_metadata (GFile        *file,
       PSDlayer  **lyr_a = NULL;
       gchar       sig[4];
       gchar       key[4];
+      guint32     raw_len32;
+      guint32     payload_len;
+      guint32     skip_len;
 
-      if (psd_read (input, &sig, 4, error) < 4)
+      while (data_length >= 12)
         {
-          g_object_unref (input);
-          return image;
-        }
-      if (psd_read (input, &key, 4, error) < 4)
-        {
-          g_object_unref (input);
-          return image;
-        }
-      if (data_length > 8)
-        data_length -= 8;
-      else
-        data_length  = 0;
+          if (psd_read (input, &sig, 4, error) < 4)
+            break;
+          if (psd_read (input, &key, 4, error) < 4)
+            break;
+          if (psd_read (input, &raw_len32, 4, error) < 4)
+            break;
 
-      /* Treat labels/ints as Little Endian */
-      if (memcmp (sig, "MIB8", 4) == 0)
-        img_a.ibm_pc_format = TRUE;
+          data_length -= 12;
 
-      /* Setting up PSDImage structure */
-      if (memcmp (key, "Layr", 4) == 0 ||
-          memcmp (key, "ryaL", 4) == 0)
-        {
-          img_a.bps = 8;
-        }
-      else if (memcmp (key, "Lr16", 4) == 0 ||
-               memcmp (key, "61rL", 4) == 0)
-        {
-          img_a.bps = 16;
-        }
-      else if (memcmp (key, "Lr32", 4) == 0 ||
-               memcmp (key, "23rL", 4) == 0)
-        {
-          img_a.bps = 32;
-        }
-      else
-        {
-          /* Get BPC from existing image */
-          switch (gimp_image_get_precision (image))
+          /* Treat labels/ints as Little Endian (IBM PC format) */
+          if (memcmp (sig, "MIB8", 4) == 0)
             {
-            case GIMP_PRECISION_U8_LINEAR:
-            case GIMP_PRECISION_U8_NON_LINEAR:
-            case GIMP_PRECISION_U8_PERCEPTUAL:
+              img_a.ibm_pc_format = TRUE;
+              payload_len         = GUINT32_FROM_LE (raw_len32);
+            }
+          else
+            {
+              img_a.ibm_pc_format = FALSE;
+              payload_len         = GUINT32_FROM_BE (raw_len32);
+            }
+
+          /* Actual block size is a multiple of 4 */
+          skip_len = (payload_len + 3) & ~3U;
+
+          if (! (memcmp (key, "Layr", 4) == 0 || memcmp (key, "ryaL", 4) == 0 ||
+                 memcmp (key, "Lr16", 4) == 0 || memcmp (key, "61rL", 4) == 0 ||
+                 memcmp (key, "Lr32", 4) == 0 || memcmp (key, "23rL", 4) == 0))
+            {
+              if (skip_len > (guint32) data_length)
+                break;
+
+              if (! psd_seek (input, skip_len, G_SEEK_CUR, error))
+                {
+                  g_object_unref (input);
+                  return image;
+                }
+
+              data_length -= skip_len;
+              continue;
+            }
+
+          /* Setting up PSDImage structure */
+          if (memcmp (key, "Layr", 4) == 0 ||
+              memcmp (key, "ryaL", 4) == 0)
+            {
               img_a.bps = 8;
-              break;
-
-            case GIMP_PRECISION_U16_LINEAR:
-            case GIMP_PRECISION_U16_NON_LINEAR:
-            case GIMP_PRECISION_U16_PERCEPTUAL:
-            case GIMP_PRECISION_HALF_LINEAR:
-            case GIMP_PRECISION_HALF_NON_LINEAR:
-            case GIMP_PRECISION_HALF_PERCEPTUAL:
+            }
+          else if (memcmp (key, "Lr16", 4) == 0 ||
+                   memcmp (key, "61rL", 4) == 0)
+            {
               img_a.bps = 16;
-              break;
-
-            case GIMP_PRECISION_U32_LINEAR:
-            case GIMP_PRECISION_U32_NON_LINEAR:
-            case GIMP_PRECISION_U32_PERCEPTUAL:
-            case GIMP_PRECISION_FLOAT_LINEAR:
-            case GIMP_PRECISION_FLOAT_NON_LINEAR:
-            case GIMP_PRECISION_FLOAT_PERCEPTUAL:
+            }
+          else if (memcmp (key, "Lr32", 4) == 0 ||
+                   memcmp (key, "23rL", 4) == 0)
+            {
               img_a.bps = 32;
-              break;
+            }
+          else
+            {
+              /* Get BPC from existing image */
+              switch (gimp_image_get_precision (image))
+                {
+                case GIMP_PRECISION_U8_LINEAR:
+                case GIMP_PRECISION_U8_NON_LINEAR:
+                case GIMP_PRECISION_U8_PERCEPTUAL:
+                  img_a.bps = 8;
+                  break;
+                case GIMP_PRECISION_U16_LINEAR:
+                case GIMP_PRECISION_U16_NON_LINEAR:
+                case GIMP_PRECISION_U16_PERCEPTUAL:
+                case GIMP_PRECISION_HALF_LINEAR:
+                case GIMP_PRECISION_HALF_NON_LINEAR:
+                case GIMP_PRECISION_HALF_PERCEPTUAL:
+                  img_a.bps = 16;
+                  break;
+                case GIMP_PRECISION_U32_LINEAR:
+                case GIMP_PRECISION_U32_NON_LINEAR:
+                case GIMP_PRECISION_U32_PERCEPTUAL:
+                case GIMP_PRECISION_FLOAT_LINEAR:
+                case GIMP_PRECISION_FLOAT_NON_LINEAR:
+                case GIMP_PRECISION_FLOAT_PERCEPTUAL:
+                  img_a.bps = 32;
+                  break;
+                default:
+                  g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                               _("Invalid PSD metadata layer format"));
+                  g_object_unref (input);
+                  return image;
+                }
+            }
 
-            default:
-              g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
-                           _("Invalid PSD metadata layer format"));
+          switch (gimp_image_get_base_type (image))
+            {
+            case GIMP_RGB:
+              img_a.color_mode = PSD_RGB;
+              break;
+            case GIMP_GRAY:
+              img_a.color_mode = PSD_GRAYSCALE;
+              break;
+            case GIMP_INDEXED:
+              img_a.color_mode = PSD_INDEXED;
+              break;
+            }
+
+          if (is_cmyk)
+            img_a.color_mode = PSD_CMYK;
+
+          if (! psd_seek (input, -4, G_SEEK_CUR, error))
+            {
+              g_object_unref (input);
               return image;
             }
+
+          /* Set layer block size from metadata */
+          img_a.mask_layer_len = 4 + skip_len;
+
+          lyr_a = read_layer_block (&img_a, input, error);
+
+          if (! lyr_a)
+            {
+              g_object_unref (input);
+              return image;
+            }
+
+          add_layers (image, &img_a, lyr_a, input, error);
+          break;
         }
-
-      switch (gimp_image_get_base_type (image))
-        {
-          case GIMP_RGB:
-            img_a.color_mode = PSD_RGB;
-            break;
-
-          case GIMP_GRAY:
-            img_a.color_mode = PSD_GRAYSCALE;
-            break;
-
-          case GIMP_INDEXED:
-            img_a.color_mode = PSD_INDEXED;
-            break;
-        }
-      if (is_cmyk)
-        img_a.color_mode = PSD_CMYK;
-
-      /* Set layer block size from metadata */
-      img_a.mask_layer_len = data_length;
-      lyr_a = read_layer_block (&img_a, input, error);
 
       if (! lyr_a)
         {
           g_object_unref (input);
           return image;
         }
-
-      add_layers (image, &img_a, lyr_a, input, error);
     }
 
   g_object_unref (input);
@@ -796,7 +836,19 @@ read_layer_info (PSDimage      *img_a,
   if (img_a->num_layers < 0)
     {
       img_a->transparency = TRUE;
-      img_a->num_layers = -img_a->num_layers;
+      if (img_a->num_layers == G_MININT16)
+        {
+          /* FIXME After string freeze should be set translatable */
+          g_set_error (error, G_FILE_ERROR, G_FILE_ERROR_FAILED,
+                       "Invalid value for number of layers: %d.",
+                       img_a->num_layers);
+          img_a->num_layers = -1;
+          return NULL;
+        }
+      else
+        {
+          img_a->num_layers = abs (img_a->num_layers);
+        }
     }
 
   if (! img_a->merged_image_only && img_a->num_layers)
@@ -1691,6 +1743,7 @@ add_image_resources (GimpImage     *image,
   img_a->alpha_id = NULL;
   img_a->alpha_id_count = 0;
   img_a->quick_mask_id = 0;
+  img_a->global_light_angle = 30;
 
   while (PSD_TELL(input) < img_a->image_res_start + img_a->image_res_len)
     {
@@ -2735,8 +2788,7 @@ add_layers (GimpImage     *image,
              * TODO: When we can load modern layer styles, only load these if
              * the file doesn't have modern layer style data. */
             if (lyr_a[lidx]->layer_styles->count > 0)
-              add_legacy_layer_effects (layer, lyr_a[lidx],
-                                        img_a->ibm_pc_format);
+              add_legacy_layer_effects (layer, lyr_a[lidx], img_a);
 
             /* Insert the layer */
             if (lyr_a[lidx]->group_type == 0 || /* normal layer */
@@ -2766,7 +2818,7 @@ add_layers (GimpImage     *image,
 static void
 add_legacy_layer_effects (GimpLayer *layer,
                           PSDlayer  *lyr_a,
-                          gboolean   ibm_pc_format)
+                          PSDimage  *img_a)
 {
   const Babl *format = gimp_drawable_get_format (GIMP_DRAWABLE (layer));
   const Babl *space  = babl_format_get_space (format);
@@ -2781,7 +2833,7 @@ add_legacy_layer_effects (GimpLayer *layer,
 
       sofi = lyr_a->layer_styles->sofi;
 
-      convert_legacy_psd_color (color, sofi.natcolor, space, ibm_pc_format);
+      convert_legacy_psd_color (color, sofi.natcolor, space, img_a->ibm_pc_format);
       convert_psd_mode (sofi.blend, &mode);
 
       filter = gimp_drawable_append_new_filter (GIMP_DRAWABLE (layer),
@@ -2790,6 +2842,163 @@ add_legacy_layer_effects (GimpLayer *layer,
                                                 mode,
                                                 sofi.opacity / 255.0,
                                                 "value", color,
+                                                NULL);
+
+      g_object_unref (filter);
+      g_object_unref (color);
+    }
+
+  if (lyr_a->layer_styles->oglw.effecton == 1)
+    {
+      PSDLayerStyleGlow   oglw;
+      GimpLayerMode       mode;
+      GimpDrawableFilter *filter;
+      GeglColor          *color = gegl_color_new ("none");
+      gdouble             blur;
+
+      oglw = lyr_a->layer_styles->oglw;
+
+      blur = (oglw.blur / 250.0) * 100.0;
+
+      if (oglw.ver == 0)
+        convert_legacy_psd_color (color, oglw.color, space, img_a->ibm_pc_format);
+      else if (oglw.ver == 2)
+        convert_legacy_psd_color (color, oglw.natcolor, space, img_a->ibm_pc_format);
+
+      convert_psd_mode (oglw.blendsig, &mode);
+
+      filter = gimp_drawable_append_new_filter (GIMP_DRAWABLE (layer),
+                                                "gegl:dropshadow",
+                                                /* TODO: Translate after string freeze */
+                                                "Outer Glow (imported)",
+                                                GIMP_LAYER_MODE_REPLACE,
+                                                1.0,
+                                                "x",           0,
+                                                "y",           0,
+                                                "radius",      blur,
+                                                "grow-radius", blur,
+                                                "color",       color,
+                                                "opacity",     oglw.opacity / 255.0,
+                                                NULL);
+
+      g_object_unref (filter);
+      g_object_unref (color);
+    }
+
+  if (lyr_a->layer_styles->isdw.effecton == 1)
+    {
+      PSDLayerStyleShadow  isdw;
+      GimpLayerMode        mode;
+      GimpDrawableFilter  *filter;
+      GeglColor           *color = gegl_color_new ("none");
+      gchar               *filter_name;
+      gdouble              x;
+      gdouble              y;
+      gdouble              blur;
+      gdouble              radians;
+
+      isdw = lyr_a->layer_styles->isdw;
+
+      filter_name = g_strdup_printf ("%s (%s)", _("Inner Shadow"),
+                                     _("imported"));
+
+      radians = (M_PI / 180) * isdw.angle;
+      x       = isdw.distance * cos (radians);
+      y       = isdw.distance * sin (radians);
+
+      if (isdw.anglefx)
+        isdw.angle = (gfloat) img_a->global_light_angle;
+
+      if (isdw.angle < 0.0)
+        y = fabs (y) * -1.0;
+      else
+        y = fabs (y);
+      if ((isdw.angle > 90.0 && isdw.angle < 180.0) ||
+          (isdw.angle > -90.0 && isdw.angle < 0.0))
+        x = fabs (x) * -1.0;
+      else
+        x = fabs (x);
+
+      blur = (isdw.blur / 250.0) * 50.0;
+
+      if (isdw.ver == 0)
+        convert_legacy_psd_color (color, isdw.color, space, img_a->ibm_pc_format);
+      else if (isdw.ver == 2)
+        convert_legacy_psd_color (color, isdw.natcolor, space, img_a->ibm_pc_format);
+
+      convert_psd_mode (isdw.blendsig, &mode);
+
+      filter = gimp_drawable_append_new_filter (GIMP_DRAWABLE (layer),
+                                                "gegl:inner-glow",
+                                                filter_name,
+                                                mode,
+                                                1.0,
+                                                "x",           x,
+                                                "y",           y,
+                                                "grow-radius", 1.0,
+                                                "radius",      blur,
+                                                "value",       color,
+                                                "opacity",     isdw.opacity / 255.0,
+                                                NULL);
+
+      g_free (filter_name);
+      g_object_unref (filter);
+      g_object_unref (color);
+    }
+
+  if (lyr_a->layer_styles->dsdw.effecton == 1)
+    {
+      PSDLayerStyleShadow  dsdw;
+      GimpLayerMode        mode;
+      GimpDrawableFilter  *filter;
+      GeglColor           *color = gegl_color_new ("none");
+      gdouble              x;
+      gdouble              y;
+      gdouble              blur;
+      gdouble              radians;
+
+      dsdw = lyr_a->layer_styles->dsdw;
+
+      /* Photoshop uses an angle slider that goes from 0 to 180,
+       * then -179 to 0. Since GEGL uses X/Y coordinates for distance,
+       * we convert the Photoshop angle and distance and then flip the
+       * sign based on the quadrant of the angle */
+      radians = (M_PI / 180) * dsdw.angle;
+      x       = dsdw.distance * cos (radians);
+      y       = dsdw.distance * sin (radians);
+
+      if (dsdw.anglefx)
+        dsdw.angle = img_a->global_light_angle;
+
+      if (dsdw.angle < 0.0)
+        y = fabs (y) * -1.0;
+      else
+        y = fabs (y);
+      if ((dsdw.angle > 90.0 && dsdw.angle < 180.0) ||
+          (dsdw.angle > -90.0 && dsdw.angle < 0.0))
+        x = fabs (x) * -1.0;
+      else
+        x = fabs (x);
+
+      blur = (dsdw.blur / 250.0) * 100.0;
+
+      if (dsdw.ver == 0)
+        convert_legacy_psd_color (color, dsdw.color, space, img_a->ibm_pc_format);
+      else if (dsdw.ver == 2)
+        convert_legacy_psd_color (color, dsdw.natcolor, space, img_a->ibm_pc_format);
+
+      convert_psd_mode (dsdw.blendsig, &mode);
+
+      filter = gimp_drawable_append_new_filter (GIMP_DRAWABLE (layer),
+                                                "gegl:dropshadow",
+                                                NULL,
+                                                GIMP_LAYER_MODE_REPLACE,
+                                                1.0,
+                                                "x",       x,
+                                                "y",       y,
+                                                "radius",  blur,
+                                                "color",   color,
+                                                "opacity", dsdw.opacity / 255.0,
                                                 NULL);
 
       g_object_unref (filter);
@@ -2813,14 +3022,13 @@ add_merged_image (GimpImage     *image,
   guint16               bps;
   guint32              *rle_pack_len[MAX_CHANNELS];
   guint32               alpha_id;
-  gint32                layer_size;
+  gsize                 layer_size;
   GimpLayer            *layer   = NULL;
   GimpChannel          *channel = NULL;
   gint16                alpha_opacity;
   gint                  cidx;                  /* Channel index */
   gint                  rowi;                  /* Row index */
   gint                  offset;
-  gint                  i;
   gboolean              alpha_visible;
   gboolean              alpha_channel = FALSE;
   GeglBuffer           *buffer;
@@ -2975,16 +3183,20 @@ add_merged_image (GimpImage     *image,
       image_type = get_gimp_image_type (img_a->base_type,
                                         img_a->transparency || alpha_channel);
 
-      layer_size = img_a->columns * img_a->rows;
+      layer_size = (gsize) img_a->columns * img_a->rows;
       pixels = g_malloc (layer_size * base_channels * bps);
       for (cidx = 0; cidx < base_channels; ++cidx)
         {
-          for (i = 0; i < layer_size; ++i)
+          for (gint64 i = 0; i < layer_size; ++i)
             {
               memcpy (&pixels[((i * base_channels) + cidx) * bps],
                       &chn_a[cidx].data[i * bps], bps);
             }
-          g_free (chn_a[cidx].data);
+
+          /* For multichannel images, the first layer is also
+           * the first channel, so we don't want to free it yet */
+          if (img_a->color_mode != PSD_MULTICHANNEL)
+            g_free (chn_a[cidx].data);
         }
 
       /* Add background layer */
@@ -3051,7 +3263,7 @@ add_merged_image (GimpImage     *image,
             {
               gfloat *data = iter->items[0].data;
 
-              for (i = 0; i < iter->length; i++)
+              for (gint i = 0; i < iter->length; i++)
                 {
                   gint c;
 
@@ -3072,9 +3284,12 @@ add_merged_image (GimpImage     *image,
   else
     {
       /* Free merged image data for layered image */
-      if (extra_channels)
-        for (cidx = 0; cidx < base_channels; ++cidx)
-          g_free (chn_a[cidx].data);
+      if (extra_channels &&
+          img_a->color_mode != PSD_MULTICHANNEL)
+        {
+          for (cidx = 0; cidx < base_channels; ++cidx)
+            g_free (chn_a[cidx].data);
+        }
     }
 
   if (img_a->transparency)
@@ -3086,6 +3301,14 @@ add_merged_image (GimpImage     *image,
           if (alpha_name)
             g_free (alpha_name);
         }
+    }
+
+  /* Multichannel mode uses the first channel as the grayscale layer,
+   * so we need to reset the index to grab it again */
+  if (img_a->color_mode == PSD_MULTICHANNEL)
+    {
+      base_channels  = 0;
+      extra_channels = img_a->alpha_id_count;
     }
 
   /* ----- Draw extra alpha channels ----- */
@@ -3103,7 +3326,7 @@ add_merged_image (GimpImage     *image,
 
       /* Draw channels */
       IFDBG(2) g_debug ("Number of channels: %d", extra_channels);
-      for (i = 0; i < extra_channels; ++i)
+      for (gint i = 0; i < extra_channels; ++i)
         {
           /* Alpha channel name */
           alpha_name = NULL;
@@ -3144,8 +3367,8 @@ add_merged_image (GimpImage     *image,
             }
 
           cidx = base_channels + i;
-          pixels = g_realloc (pixels, chn_a[cidx].columns * chn_a[cidx].rows * bps);
-          memcpy (pixels, chn_a[cidx].data, chn_a[cidx].columns * chn_a[cidx].rows * bps);
+          pixels = g_realloc (pixels, (gsize) chn_a[cidx].columns * chn_a[cidx].rows * bps);
+          memcpy (pixels, chn_a[cidx].data, (gsize) chn_a[cidx].columns * chn_a[cidx].rows * bps);
           channel = gimp_channel_new (image, alpha_name,
                                       chn_a[cidx].columns, chn_a[cidx].rows,
                                       alpha_opacity, alpha_rgb);
@@ -3332,7 +3555,6 @@ read_channel_data (PSDchannel     *channel,
   gchar    *raw_data = NULL;
   gchar    *src;
   guint32   readline_len;
-  gint      i, j;
 
   if (bps == 1)
     readline_len = ((channel->columns + 7) / 8);
@@ -3364,7 +3586,7 @@ read_channel_data (PSDchannel     *channel,
         break;
 
       case PSD_COMP_RLE:
-        for (i = 0; i < channel->rows; ++i)
+        for (gint i = 0; i < channel->rows; ++i)
           {
             src = gegl_scratch_alloc (rle_pack_len[i]);
 /*      FIXME check for over-run
@@ -3433,12 +3655,11 @@ read_channel_data (PSDchannel     *channel,
     case 32:
       {
         guint32 *data;
-        guint64  pos;
 
         if (compression == PSD_COMP_ZIP_PRED)
           {
             IFDBG(3) g_debug ("Converting 32 bit predictor data");
-            channel->data = (gchar *) g_malloc0 (channel->rows * channel->columns * 4);
+            channel->data = (gchar *) g_malloc0 ((gsize) channel->rows * channel->columns * 4);
             decode_32_bit_predictor (raw_data, channel->data,
                                      channel->rows, channel->columns);
           }
@@ -3450,7 +3671,7 @@ read_channel_data (PSDchannel     *channel,
           }
 
         data = (guint32*) channel->data;
-        for (pos = 0; pos < channel->rows * channel->columns; ++pos)
+        for (gsize pos = 0; pos < (gsize) channel->rows * channel->columns; ++pos)
           data[pos] = GUINT32_FROM_BE (data[pos]);
 
         break;
@@ -3463,14 +3684,14 @@ read_channel_data (PSDchannel     *channel,
         channel->data = raw_data;
         raw_data      = NULL;
 
-        for (i = 0; i < channel->rows * channel->columns; ++i)
+        for (gsize i = 0; i < (gsize) channel->rows * channel->columns; ++i)
           data[i] = GUINT16_FROM_BE (data[i]);
 
         if (compression == PSD_COMP_ZIP_PRED)
           {
             IFDBG(3) g_debug ("Converting 16 bit predictor data");
-            for (i = 0; i < channel->rows; ++i)
-              for (j = 1; j < channel->columns; ++j)
+            for (gsize i = 0; i < channel->rows; ++i)
+              for (gsize j = 1; j < channel->columns; ++j)
                 data[i * channel->columns + j] += data[i * channel->columns + j - 1];
           }
         break;
@@ -3483,14 +3704,14 @@ read_channel_data (PSDchannel     *channel,
         if (compression == PSD_COMP_ZIP_PRED)
           {
             IFDBG(3) g_debug ("Converting 8 bit predictor data");
-            for (i = 0; i < channel->rows; ++i)
-              for (j = 1; j < channel->columns; ++j)
+            for (gsize i = 0; i < channel->rows; ++i)
+              for (gsize j = 1; j < channel->columns; ++j)
                 channel->data[i * channel->columns + j] += channel->data[i * channel->columns + j - 1];
           }
         break;
 
       case 1:
-        channel->data = (gchar *) g_malloc (channel->rows * channel->columns);
+        channel->data = (gchar *) g_malloc ((gsize) channel->rows * channel->columns);
         convert_1_bit (raw_data, channel->data, channel->rows, channel->columns);
         break;
 
@@ -3540,7 +3761,7 @@ decode_32_bit_predictor (gchar   *src,
 
   /* restore byte order */
   dstpos = 0;
-  for (row = 0; row < rows * rowsize; row += rowsize)
+  for (row = 0; row < (gsize) rows * rowsize; row += rowsize)
     {
       guint64 offset;
 
@@ -3567,18 +3788,17 @@ convert_1_bit (const gchar *src,
    Rows are padded out to a byte boundary.
 */
   guint32 row_pos = 0;
-  gint    i, j;
 
   IFDBG(3)  g_debug ("Start 1 bit conversion");
 
-  for (i = 0; i < rows * ((columns + 7) / 8); ++i)
+  for (gsize i = 0; i < (gsize) rows * ((columns + 7) / 8); ++i)
     {
       guchar    mask = 0x80;
-      for (j = 0; j < 8 && row_pos < columns; ++j)
+      for (gint j = 0; j < 8 && row_pos < columns; ++j)
         {
           *dst = (*src & mask) ? 0 : 1;
           IFDBG(4) g_debug ("byte %d, bit %d, offset %d, src %d, dst %d",
-            i , j, row_pos, *src, *dst);
+            (gint) i , j, row_pos, *src, *dst);
           dst++;
           mask >>= 1;
           row_pos++;

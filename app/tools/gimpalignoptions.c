@@ -32,7 +32,7 @@
 #include "core/gimplayer.h"
 #include "core/gimpchannel.h"
 
-#include "vectors/gimppath.h"
+#include "path/gimppath.h"
 
 #include "widgets/gimppivotselector.h"
 #include "widgets/gimppropwidgets.h"
@@ -61,7 +61,7 @@ enum
   PROP_0,
   PROP_ALIGN_REFERENCE,
   PROP_ALIGN_LAYERS,
-  PROP_ALIGN_VECTORS,
+  PROP_ALIGN_PATHS,
   PROP_ALIGN_CONTENTS,
   PROP_PIVOT_X,
   PROP_PIVOT_Y,
@@ -159,8 +159,8 @@ gimp_align_options_class_init (GimpAlignOptionsClass *klass)
                             _("Selected layers will be aligned or distributed by the tool"),
                             TRUE,
                             GIMP_PARAM_STATIC_STRINGS);
-  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_ALIGN_VECTORS,
-                            "align-vectors",
+  GIMP_CONFIG_PROP_BOOLEAN (object_class, PROP_ALIGN_PATHS,
+                            "align-paths",
                             _("Selected paths"),
                             _("Selected paths will be aligned or distributed by the tool"),
                             FALSE,
@@ -226,7 +226,7 @@ gimp_align_options_set_property (GObject      *object,
       options->priv->align_layers = g_value_get_boolean (value);
       gimp_align_options_update_area (options);
       break;
-    case PROP_ALIGN_VECTORS:
+    case PROP_ALIGN_PATHS:
       options->priv->align_paths = g_value_get_boolean (value);
       gimp_align_options_update_area (options);
       break;
@@ -265,7 +265,7 @@ gimp_align_options_get_property (GObject    *object,
     case PROP_ALIGN_LAYERS:
       g_value_set_boolean (value, options->priv->align_layers);
       break;
-    case PROP_ALIGN_VECTORS:
+    case PROP_ALIGN_PATHS:
       g_value_set_boolean (value, options->priv->align_paths);
       break;
 
@@ -401,7 +401,7 @@ gimp_align_options_gui (GimpToolOptions *tool_options)
                                           NULL, widget, NULL);
   gtk_grid_attach (GTK_GRID (items_grid), widget, 0, 0, 1, 1);
 
-  widget = gimp_prop_check_button_new (config, "align-vectors", NULL);
+  widget = gimp_prop_check_button_new (config, "align-paths", NULL);
   gtk_grid_attach (GTK_GRID (items_grid), widget, 0, 1, 1, 1);
 
   options->priv->pivot_selector = gimp_pivot_selector_new (0.0, 0.0, 1.0, 1.0);
@@ -575,11 +575,11 @@ gimp_align_options_get_objects (GimpAlignOptions *options)
         }
       if (options->priv->align_paths)
         {
-          GList *vectors;
+          GList *paths;
 
-          vectors = gimp_image_get_selected_paths (image);
-          vectors = g_list_copy (vectors);
-          objects = g_list_concat (objects, vectors);
+          paths = gimp_image_get_selected_paths (image);
+          paths = g_list_copy (paths);
+          objects = g_list_concat (objects, paths);
         }
 
       if (options->priv->selected_guides)

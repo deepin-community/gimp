@@ -60,6 +60,7 @@ gimp_operation_levels_class_init (GimpOperationLevelsClass *klass)
 
   gegl_operation_class_set_keys (operation_class,
                                  "name",        "gimp:levels",
+                                 "title",       _("Levels"),
                                  "categories",  "color",
                                  "description", _("Adjust color levels"),
                                  NULL);
@@ -69,11 +70,12 @@ gimp_operation_levels_class_init (GimpOperationLevelsClass *klass)
   g_object_class_install_property (object_class,
                                    GIMP_OPERATION_POINT_FILTER_PROP_TRC,
                                    g_param_spec_enum ("trc",
-                                                      "Linear/Percptual",
+                                                      "Linear/Perceptual",
                                                       "What TRC to operate on",
                                                       GIMP_TYPE_TRC_TYPE,
                                                       GIMP_TRC_NON_LINEAR,
-                                                      G_PARAM_READWRITE));
+                                                      G_PARAM_READWRITE |
+                                                      G_PARAM_CONSTRUCT));
 
   g_object_class_install_property (object_class,
                                    GIMP_OPERATION_POINT_FILTER_PROP_CONFIG,

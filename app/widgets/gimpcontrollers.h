@@ -18,21 +18,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_CONTROLLERS_H__
-#define __GIMP_CONTROLLERS_H__
+#pragma once
 
 
-void             gimp_controllers_init           (Gimp          *gimp);
-void             gimp_controllers_exit           (Gimp          *gimp);
+void                    gimp_controllers_init       (Gimp *gimp);
+void                    gimp_controllers_exit       (Gimp *gimp);
 
-void             gimp_controllers_restore        (Gimp          *gimp,
-                                                  GimpUIManager *ui_manager);
-void             gimp_controllers_save           (Gimp          *gimp);
-
-GimpContainer  * gimp_controllers_get_list       (Gimp          *gimp);
-GimpUIManager  * gimp_controllers_get_ui_manager (Gimp          *gimp);
-GimpController * gimp_controllers_get_wheel      (Gimp          *gimp);
-GimpController * gimp_controllers_get_keyboard   (Gimp          *gimp);
-
-
-#endif /* __GIMP_CONTROLLERS_H__ */
+GimpControllerManager * gimp_get_controller_manager (Gimp *gimp);

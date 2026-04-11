@@ -38,37 +38,6 @@ gimp_text_box_mode_get_type (void)
   return type;
 }
 
-GType
-gimp_text_outline_get_type (void)
-{
-  static const GEnumValue values[] =
-  {
-    { GIMP_TEXT_OUTLINE_NONE, "GIMP_TEXT_OUTLINE_NONE", "none" },
-    { GIMP_TEXT_OUTLINE_STROKE_ONLY, "GIMP_TEXT_OUTLINE_STROKE_ONLY", "stroke-only" },
-    { GIMP_TEXT_OUTLINE_STROKE_FILL, "GIMP_TEXT_OUTLINE_STROKE_FILL", "stroke-fill" },
-    { 0, NULL, NULL }
-  };
-
-  static const GimpEnumDesc descs[] =
-  {
-    { GIMP_TEXT_OUTLINE_NONE, NC_("text-outline", "Filled"), NULL },
-    { GIMP_TEXT_OUTLINE_STROKE_ONLY, NC_("text-outline", "Outlined"), NULL },
-    { GIMP_TEXT_OUTLINE_STROKE_FILL, NC_("text-outline", "Outlined and filled"), NULL },
-    { 0, NULL, NULL }
-  };
-
-  static GType type = 0;
-
-  if (G_UNLIKELY (! type))
-    {
-      type = g_enum_register_static ("GimpTextOutline", values);
-      gimp_type_set_translation_context (type, "text-outline");
-      gimp_enum_set_value_descriptions (type, descs);
-    }
-
-  return type;
-}
-
 
 /* Generated data ends here */
 

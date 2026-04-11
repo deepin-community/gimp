@@ -30,8 +30,11 @@
 #include "core/gimpimage.h"
 #include "core/gimplayer.h"
 #include "core/gimplayer-floating-selection.h"
+#include "core/gimplinklayer.h"
 
 #include "text/gimptextlayer.h"
+
+#include "path/gimpvectorlayer.h"
 
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimpactiongroup.h"
@@ -55,10 +58,16 @@ static const GimpActionEntry layers_actions[] =
     GIMP_HELP_LAYER_EDIT },
 
   { "layers-edit-text", GIMP_ICON_EDIT,
-    NC_("layers-action", "Edit Te_xt on canvas"), NULL, { NULL },
+    NC_("layers-action", "Edit Te_xt on Canvas"), NULL, { NULL },
     NC_("layers-action", "Edit this text layer content on canvas"),
     layers_edit_text_cmd_callback,
     GIMP_HELP_LAYER_EDIT },
+
+  { "layers-edit-vector", GIMP_ICON_TOOL_PATH,
+    NC_("layers-action", "Edit Vector on Canvas"), NULL, { NULL },
+    NC_("layers-action", "Activate the path tool on this vector layer"),
+    layers_edit_vector_cmd_callback,
+    GIMP_HELP_TOOL_PATH },
 
   { "layers-edit-attributes", GIMP_ICON_EDIT,
     NC_("layers-action", "_Edit Layer Attributes..."), NULL, { NULL },
@@ -173,22 +182,28 @@ static const GimpActionEntry layers_actions[] =
     image_flatten_image_cmd_callback,
     GIMP_HELP_IMAGE_FLATTEN },
 
-  { "layers-text-discard", GIMP_ICON_TOOL_TEXT,
-    NC_("layers-action", "_Discard Text Information"), NULL, { NULL },
-    NC_("layers-action", "Turn these text layers into normal layers"),
-    layers_text_discard_cmd_callback,
+  { "layers-rasterize", GIMP_ICON_TOOL_TEXT,
+    NC_("layers-action", "_Rasterize"), NULL, { NULL },
+    NC_("layers-action", "Turn selected text, link or vector layers into raster layers"),
+    layers_rasterize_cmd_callback,
     GIMP_HELP_LAYER_TEXT_DISCARD },
 
-  { "layers-text-to-vectors", GIMP_ICON_TOOL_TEXT,
+  { "layers-revert-rasterize", GIMP_ICON_TOOL_TEXT,
+    NC_("layers-action", "_Revert Rasterize"), NULL, { NULL },
+    NC_("layers-action", "Turn rasterized layers back into text, link or vector layers"),
+    layers_revert_rasterize_cmd_callback,
+    GIMP_HELP_LAYER_TEXT_DISCARD },
+
+  { "layers-text-to-path", GIMP_ICON_TOOL_TEXT,
     NC_("layers-action", "Text to _Path"), NULL, { NULL },
     NC_("layers-action", "Create paths from text layers"),
-    layers_text_to_vectors_cmd_callback,
+    layers_text_to_path_cmd_callback,
     GIMP_HELP_LAYER_TEXT_TO_PATH },
 
-  { "layers-text-along-vectors", GIMP_ICON_TOOL_TEXT,
+  { "layers-text-along-path", GIMP_ICON_TOOL_TEXT,
     NC_("layers-action", "Text alon_g Path"), NULL, { NULL },
     NC_("layers-action", "Warp this layer's text along the current path"),
-    layers_text_along_vectors_cmd_callback,
+    layers_text_along_path_cmd_callback,
     GIMP_HELP_LAYER_TEXT_ALONG_PATH },
 
   { "layers-resize", GIMP_ICON_OBJECT_RESIZE,
@@ -746,42 +761,46 @@ void
 layers_actions_update (GimpActionGroup *group,
                        gpointer         data)
 {
-  GimpImage     *image          = action_data_get_image (data);
-  GList         *layers         = NULL;
-  GList         *iter           = NULL;
-  GimpLayer     *layer          = NULL;
-  gboolean       fs             = FALSE;    /*  floating sel           */
-  gboolean       ac             = FALSE;    /*  Has selected channels  */
-  gboolean       sel            = FALSE;
-  gboolean       indexed        = FALSE;    /*  is indexed             */
-  gboolean       lock_alpha     = TRUE;
-  gboolean       can_lock_alpha = FALSE;
-  gboolean       text_layer     = FALSE;
-  gboolean       bs_mutable     = FALSE; /* At least 1 selected layers' blend space is mutable.     */
-  gboolean       cs_mutable     = FALSE; /* At least 1 selected layers' composite space is mutable. */
-  gboolean       cm_mutable     = FALSE; /* At least 1 selected layers' composite mode is mutable.  */
-  gboolean       next_mode      = TRUE;
-  gboolean       prev_mode      = TRUE;
-  gboolean       last_mode      = FALSE;
-  gboolean       first_mode     = FALSE;
+  GimpImage     *image              = action_data_get_image (data);
+  GList         *layers             = NULL;
+  GList         *iter               = NULL;
+  GimpLayer     *layer              = NULL;
+  gboolean       fs                 = FALSE;    /*  floating sel           */
+  gboolean       ac                 = FALSE;    /*  Has selected channels  */
+  gboolean       sel                = FALSE;
+  gboolean       indexed            = FALSE;    /*  is indexed             */
+  gboolean       lock_alpha         = TRUE;
+  gboolean       can_lock_alpha     = FALSE;
+  gboolean       has_rasterizable   = FALSE;
+  gboolean       has_rasterized     = FALSE;
+  gboolean       has_raster         = FALSE;
+  gboolean       text_layer         = FALSE;
+  gboolean       vector_layer       = FALSE;
+  gboolean       bs_mutable         = FALSE; /* At least 1 selected layers' blend space is mutable.     */
+  gboolean       cs_mutable         = FALSE; /* At least 1 selected layers' composite space is mutable. */
+  gboolean       cm_mutable         = FALSE; /* At least 1 selected layers' composite mode is mutable.  */
+  gboolean       next_mode          = TRUE;
+  gboolean       prev_mode          = TRUE;
+  gboolean       last_mode          = FALSE;
+  gboolean       first_mode         = FALSE;
 
-  gboolean       first_selected = FALSE; /* First layer is selected  */
-  gboolean       last_selected  = FALSE; /* Last layer is selected   */
+  gboolean       first_selected     = FALSE; /* First layer is selected  */
+  gboolean       last_selected      = FALSE; /* Last layer is selected   */
 
-  gboolean       have_masks     = FALSE; /* At least 1 selected layer has a mask.             */
-  gboolean       have_no_masks  = FALSE; /* At least 1 selected layer has no mask.            */
-  gboolean       have_groups    = FALSE; /* At least 1 selected layer is a group.             */
-  gboolean       have_no_groups = FALSE; /* At least 1 selected layer is not a group.         */
-  gboolean       have_writable  = FALSE; /* At least 1 selected layer has no contents lock.   */
-  gboolean       have_prev      = FALSE; /* At least 1 selected layer has a previous sibling. */
-  gboolean       have_next      = FALSE; /* At least 1 selected layer has a next sibling.     */
-  gboolean       have_alpha     = FALSE; /* At least 1 selected layer has an alpha channel.   */
-  gboolean       have_no_alpha  = FALSE; /* At least 1 selected layer has no alpha channel.   */
+  gboolean       have_masks         = FALSE; /* At least 1 selected layer has a mask.             */
+  gboolean       have_no_masks      = FALSE; /* At least 1 selected layer has no mask.            */
+  gboolean       have_groups        = FALSE; /* At least 1 selected layer is a group.             */
+  gboolean       have_no_groups     = FALSE; /* At least 1 selected layer is not a group.         */
+  gboolean       have_writable      = FALSE; /* At least 1 selected layer has no contents lock.   */
+  gboolean       have_prev          = FALSE; /* At least 1 selected layer has a previous sibling. */
+  gboolean       have_next          = FALSE; /* At least 1 selected layer has a next sibling.     */
+  gboolean       have_alpha         = FALSE; /* At least 1 selected layer has an alpha channel.   */
+  gboolean       have_no_alpha      = FALSE; /* At least 1 selected layer has no alpha channel.   */
 
   gboolean       all_visible        = TRUE;
   gboolean       all_next_visible   = TRUE;
-  gboolean       all_masks_shown    = TRUE;
-  gboolean       all_masks_disabled = TRUE;
+  gboolean       any_mask_shown     = FALSE;
+  gboolean       any_mask_disabled  = FALSE;
   gboolean       all_writable       = TRUE;
   gboolean       all_movable        = TRUE;
 
@@ -816,10 +835,11 @@ layers_actions_update (GimpActionGroup *group,
           if (gimp_layer_get_mask (iter->data))
             {
               have_masks = TRUE;
-              if (! gimp_layer_get_show_mask (iter->data))
-                all_masks_shown = FALSE;
-              if (gimp_layer_get_apply_mask (iter->data))
-                all_masks_disabled = FALSE;
+
+              if (gimp_layer_get_show_mask (iter->data))
+                any_mask_shown = TRUE;
+              if (! gimp_layer_get_apply_mask (iter->data))
+                any_mask_disabled = TRUE;
             }
           else
             {
@@ -918,6 +938,11 @@ layers_actions_update (GimpActionGroup *group,
 
           if (GIMP_IS_TEXT_LAYER (iter->data))
             n_text_layers++;
+
+          has_rasterizable = has_rasterizable || gimp_item_is_rasterizable (iter->data);
+          has_rasterized   = has_rasterized || gimp_item_is_rasterized (iter->data);
+          has_raster       = (gimp_item_is_rasterized (iter->data) ||
+                              ! gimp_item_is_rasterizable (iter->data));
         }
 
       if (n_selected_layers == 1)
@@ -976,7 +1001,8 @@ layers_actions_update (GimpActionGroup *group,
 
           gimp_action_group_set_action_active (group, action, TRUE);
 
-          text_layer = gimp_item_is_text_layer (GIMP_ITEM (layer));
+          text_layer   = gimp_item_is_text_layer (GIMP_ITEM (layer));
+          vector_layer = gimp_item_is_vector_layer (GIMP_ITEM (layer));
         }
     }
 
@@ -992,6 +1018,7 @@ layers_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("layers-edit",             !ac && ((layer && !fs) || text_layer));
   SET_VISIBLE   ("layers-edit-text",        text_layer && !ac);
   SET_SENSITIVE ("layers-edit-text",        text_layer && !ac);
+  SET_VISIBLE   ("layers-edit-vector",      vector_layer && !ac);
   SET_SENSITIVE ("layers-edit-attributes",  layer && !fs && !ac);
 
   if (layer && gimp_layer_is_floating_sel (layer))
@@ -1037,9 +1064,11 @@ layers_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("layers-merge-layers",      n_selected_layers > 0 && !fs && !ac);
   SET_SENSITIVE ("layers-flatten-image",     !fs && !ac);
 
-  SET_VISIBLE   ("layers-text-discard",       n_text_layers > 0 && !ac);
-  SET_VISIBLE   ("layers-text-to-vectors",    n_text_layers > 0 && !ac);
-  SET_VISIBLE   ("layers-text-along-vectors", text_layer && !ac);
+  SET_VISIBLE   ("layers-rasterize",         has_rasterizable);
+  SET_VISIBLE   ("layers-revert-rasterize",  has_rasterized);
+
+  SET_VISIBLE   ("layers-text-to-path",      n_text_layers > 0 && !ac);
+  SET_VISIBLE   ("layers-text-along-path",   text_layer && !ac);
 
   SET_SENSITIVE ("layers-resize",          n_selected_layers == 1 && all_writable && all_movable && !ac);
   SET_SENSITIVE ("layers-resize-to-image", all_writable && all_movable && !ac);
@@ -1074,7 +1103,7 @@ layers_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("layers-mask-add-button",      n_selected_layers > 0 && !fs && !ac);
   SET_SENSITIVE ("layers-mask-add-last-values", n_selected_layers > 0 && !fs && !ac && have_no_masks);
 
-  SET_SENSITIVE ("layers-mask-apply",  have_writable && !fs && !ac && have_masks && have_no_groups);
+  SET_SENSITIVE ("layers-mask-apply",  have_writable && !fs && !ac && have_masks && have_no_groups && has_raster);
   SET_SENSITIVE ("layers-mask-delete", n_selected_layers > 0 && !fs && !ac && have_masks);
 
   SET_SENSITIVE ("layers-mask-edit",    n_selected_layers == 1 && !fs && !ac && have_masks);
@@ -1082,8 +1111,8 @@ layers_actions_update (GimpActionGroup *group,
   SET_SENSITIVE ("layers-mask-disable", n_selected_layers > 0 && !fs && !ac && have_masks);
 
   SET_ACTIVE ("layers-mask-edit",    n_selected_layers == 1 && have_masks && gimp_layer_get_edit_mask (layers->data));
-  SET_ACTIVE ("layers-mask-show",    all_masks_shown);
-  SET_ACTIVE ("layers-mask-disable", all_masks_disabled);
+  SET_ACTIVE ("layers-mask-show",    any_mask_shown);
+  SET_ACTIVE ("layers-mask-disable", any_mask_disabled);
 
   SET_SENSITIVE ("layers-mask-selection-replace",   n_selected_layers && !fs && !ac && have_masks);
   SET_SENSITIVE ("layers-mask-selection-add",       n_selected_layers && !fs && !ac && have_masks);

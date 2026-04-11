@@ -18,9 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_FILL_OPTIONS_H__
-#define __GIMP_FILL_OPTIONS_H__
-
+#pragma once
 
 #include "gimpcontext.h"
 
@@ -56,8 +54,7 @@ GimpFillStyle     gimp_fill_options_get_style        (GimpFillOptions     *optio
 void              gimp_fill_options_set_style        (GimpFillOptions     *options,
                                                       GimpFillStyle        style);
 
-GimpCustomStyle     gimp_fill_options_get_custom_style
-                                                     (GimpFillOptions     *options);
+GimpCustomStyle   gimp_fill_options_get_custom_style (GimpFillOptions     *options);
 void              gimp_fill_options_set_custom_style (GimpFillOptions     *options,
                                                       GimpCustomStyle      custom_style);
 
@@ -96,5 +93,6 @@ void              gimp_fill_options_fill_buffer      (GimpFillOptions     *optio
                                                       gint                 pattern_offset_x,
                                                       gint                 pattern_offset_y);
 
-
-#endif /* __GIMP_FILL_OPTIONS_H__ */
+void              gimp_fill_options_enable_color_history
+                                                     (GimpFillOptions     *options,
+                                                      gboolean             enable);

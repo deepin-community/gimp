@@ -605,12 +605,12 @@ drawable_mask_intersect_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-drawable_append_filter_private_invoker (GimpProcedure         *procedure,
-                                        Gimp                  *gimp,
-                                        GimpContext           *context,
-                                        GimpProgress          *progress,
-                                        const GimpValueArray  *args,
-                                        GError               **error)
+drawable_append_filter_invoker (GimpProcedure         *procedure,
+                                Gimp                  *gimp,
+                                GimpContext           *context,
+                                GimpProgress          *progress,
+                                const GimpValueArray  *args,
+                                GError               **error)
 {
   gboolean success = TRUE;
   GimpDrawable *drawable;
@@ -666,12 +666,12 @@ drawable_append_filter_private_invoker (GimpProcedure         *procedure,
 }
 
 static GimpValueArray *
-drawable_merge_filter_private_invoker (GimpProcedure         *procedure,
-                                       Gimp                  *gimp,
-                                       GimpContext           *context,
-                                       GimpProgress          *progress,
-                                       const GimpValueArray  *args,
-                                       GError               **error)
+drawable_merge_filter_invoker (GimpProcedure         *procedure,
+                               Gimp                  *gimp,
+                               GimpContext           *context,
+                               GimpProgress          *progress,
+                               const GimpValueArray  *args,
+                               GError               **error)
 {
   gboolean success = TRUE;
   GimpDrawable *drawable;
@@ -980,7 +980,7 @@ drawable_thumbnail_invoker (GimpProcedure         *procedure,
 
       if (image->gimp->config->layer_previews)
         buf = gimp_viewable_get_new_preview (GIMP_VIEWABLE (drawable), context,
-                                             width, height);
+                                             width, height, NULL);
       else
         buf = gimp_viewable_get_dummy_preview (GIMP_VIEWABLE (drawable),
                                                width, height,
@@ -988,11 +988,41 @@ drawable_thumbnail_invoker (GimpProcedure         *procedure,
 
       if (buf)
         {
-          actual_width         = gimp_temp_buf_get_width  (buf);
-          actual_height        = gimp_temp_buf_get_height (buf);
-          bpp                  = babl_format_get_bytes_per_pixel (gimp_temp_buf_get_format (buf));
-          thumbnail_data       = g_bytes_new (gimp_temp_buf_get_data (buf),
-                                              gimp_temp_buf_get_data_size (buf));
+          const Babl *format      = gimp_temp_buf_get_format (buf);
+          const Babl *rgb_format  = babl_format ("R'G'B' u8");
+          const Babl *rgba_format = babl_format ("R'G'B'A u8");
+          const Babl *fish        = NULL;
+
+          if (babl_format_has_alpha (format) && format != rgba_format)
+            {
+              fish   = babl_fish (format, rgba_format);
+              format = rgba_format;
+            }
+          else if (! babl_format_has_alpha (format) && format != rgb_format)
+            {
+              fish   = babl_fish (format, rgb_format);
+              format = rgb_format;
+            }
+
+          actual_width  = gimp_temp_buf_get_width  (buf);
+          actual_height = gimp_temp_buf_get_height (buf);
+          bpp           = babl_format_get_bytes_per_pixel (format);
+          if (fish)
+            {
+              guchar *data;
+              gint    data_size = bpp * actual_width * actual_height;
+
+              data = g_malloc (data_size);
+              babl_process (fish, gimp_temp_buf_get_data (buf), data, actual_width * actual_height);
+
+              thumbnail_data = g_bytes_new (data, data_size);
+              g_free (data);
+            }
+          else
+            {
+              thumbnail_data = g_bytes_new (gimp_temp_buf_get_data (buf),
+                                            gimp_temp_buf_get_data_size (buf));
+            }
 
           gimp_temp_buf_unref (buf);
         }
@@ -1064,11 +1094,42 @@ drawable_sub_thumbnail_invoker (GimpProcedure         *procedure,
 
           if (buf)
             {
-              width                = gimp_temp_buf_get_width  (buf);
-              height               = gimp_temp_buf_get_height (buf);
-              bpp                  = babl_format_get_bytes_per_pixel (gimp_temp_buf_get_format (buf));
-              thumbnail_data       = g_bytes_new (gimp_temp_buf_get_data (buf),
-                                                  gimp_temp_buf_get_data_size (buf));
+              const Babl *format      = gimp_temp_buf_get_format (buf);
+              const Babl *rgb_format  = babl_format ("R'G'B' u8");
+              const Babl *rgba_format = babl_format ("R'G'B'A u8");
+              const Babl *fish        = NULL;
+
+              if (babl_format_has_alpha (format) && format != rgba_format)
+                {
+                  fish   = babl_fish (format, rgba_format);
+                  format = rgba_format;
+                }
+              else if (! babl_format_has_alpha (format) && format != rgb_format)
+                {
+                  fish   = babl_fish (format, rgb_format);
+                  format = rgb_format;
+                }
+
+              width  = gimp_temp_buf_get_width  (buf);
+              height = gimp_temp_buf_get_height (buf);
+              bpp    = babl_format_get_bytes_per_pixel (format);
+              if (fish)
+                {
+                  guchar *data;
+                  gint    data_size = bpp * width * height;
+
+                  data = g_malloc (data_size);
+                  babl_process (fish, gimp_temp_buf_get_data (buf), data,
+                                width * height);
+
+                  thumbnail_data = g_bytes_new (data, data_size);
+                  g_free (data);
+                }
+              else
+                {
+                  thumbnail_data = g_bytes_new (gimp_temp_buf_get_data (buf),
+                                                gimp_temp_buf_get_data_size (buf));
+                }
 
               gimp_temp_buf_unref (buf);
             }
@@ -1711,11 +1772,11 @@ register_drawable_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-drawable-append-filter-private
+   * gimp-drawable-append-filter
    */
-  procedure = gimp_procedure_new (drawable_append_filter_private_invoker, TRUE);
+  procedure = gimp_procedure_new (drawable_append_filter_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-drawable-append-filter-private");
+                               "gimp-drawable-append-filter");
   gimp_procedure_set_static_help (procedure,
                                   "Append the specified effect to the top of the list of drawable effects.",
                                   "This procedure adds the specified drawable effect at the top of the effect list of @drawable.\n"
@@ -1743,11 +1804,11 @@ register_drawable_procs (GimpPDB *pdb)
   g_object_unref (procedure);
 
   /*
-   * gimp-drawable-merge-filter-private
+   * gimp-drawable-merge-filter
    */
-  procedure = gimp_procedure_new (drawable_merge_filter_private_invoker, TRUE);
+  procedure = gimp_procedure_new (drawable_merge_filter_invoker, TRUE);
   gimp_object_set_static_name (GIMP_OBJECT (procedure),
-                               "gimp-drawable-merge-filter-private");
+                               "gimp-drawable-merge-filter");
   gimp_procedure_set_static_help (procedure,
                                   "Apply the specified effect directly to the drawable.",
                                   "This procedure applies the specified drawable effect on @drawable and merge it (therefore before non-destructive effects are computed).\n"
@@ -2161,7 +2222,7 @@ register_drawable_procs (GimpPDB *pdb)
                                "gimp-drawable-foreground-extract");
   gimp_procedure_set_static_help (procedure,
                                   "Extract the foreground of a drawable using a given trimap.",
-                                  "Image Segmentation by Uniform Color Clustering, see https://www.inf.fu-berlin.de/inst/pubs/tr-b-05-07.pdf",
+                                  "This procedure extracts the foreground from @drawable using @mask as a trimap. Set white as foreground, black as background and uncertain pixels as any other value, for the tri-map.",
                                   NULL);
   gimp_procedure_set_static_attribution (procedure,
                                          "Gerald Friedland <fland@inf.fu-berlin.de>, Kristian Jantz <jantz@inf.fu-berlin.de>, Sven Neumann <sven@gimp.org>",

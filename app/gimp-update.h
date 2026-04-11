@@ -18,15 +18,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __APP_GIMP_UPDATE_H__
-#define __APP_GIMP_UPDATE_H__
+#pragma once
 
 
 gboolean gimp_update_auto_check (GimpCoreConfig *config,
-                                 Gimp           *gimp);
+                                 Gimp           *gimp,
+                                 gboolean        files_loaded);
 
 void     gimp_update_check      (GimpCoreConfig *config);
 void     gimp_update_refresh    (GimpCoreConfig *config);
-
-
-#endif /* __APP_GIMP_UPDATE_H__ */

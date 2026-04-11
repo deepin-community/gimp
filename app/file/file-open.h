@@ -17,8 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __FILE_OPEN_H__
-#define __FILE_OPEN_H__
+#pragma once
 
 
 GimpImage * file_open_image                 (Gimp                *gimp,
@@ -27,9 +26,11 @@ GimpImage * file_open_image                 (Gimp                *gimp,
                                              GFile               *file,
                                              gint                 vector_width,
                                              gint                 vector_height,
+                                             gboolean             vector_keep_ratio,
                                              gboolean             as_new,
                                              GimpPlugInProcedure *file_proc,
                                              GimpRunMode          run_mode,
+                                             gboolean            *file_proc_handles_vector,
                                              GimpPDBStatusType   *status,
                                              const gchar        **mime_type,
                                              GError             **error);
@@ -59,6 +60,7 @@ GimpImage * file_open_with_proc_and_display (Gimp                *gimp,
                                              GimpProgress        *progress,
                                              GFile               *file,
                                              gboolean             as_new,
+                                             gboolean             as_link,
                                              GimpPlugInProcedure *file_proc,
                                              GObject             *monitor,
                                              GimpPDBStatusType   *status,
@@ -69,6 +71,7 @@ GList     * file_open_layers                (Gimp                *gimp,
                                              GimpProgress        *progress,
                                              GimpImage           *dest_image,
                                              gboolean             merge_visible,
+                                             gboolean             as_link,
                                              GFile               *file,
                                              GimpRunMode          run_mode,
                                              GimpPlugInProcedure *file_proc,
@@ -79,6 +82,3 @@ gboolean    file_open_from_command_line     (Gimp                *gimp,
                                              GFile               *file,
                                              gboolean             as_new,
                                              GObject             *monitor);
-
-
-#endif /* __FILE_OPEN_H__ */

@@ -1,28 +1,26 @@
-#!/usr/bin/env pwsh
+﻿#!/usr/bin/env pwsh
 
 # Parameters
 param ($revision = "$GIMP_CI_MS_STORE",
        $wack = 'Non-WACK',
        $build_dir,
-       $a64_bundle = 'gimp-clangarm64',
+       $arm64_bundle = 'gimp-clangarm64',
        $x64_bundle = 'gimp-clang64')
 
+# Ensure the script work properly
 $ErrorActionPreference = 'Stop'
-$PSNativeCommandUseErrorActionPreference = $true
-
+$PSNativeCommandUseErrorActionPreference = $false #to ensure error catching as in pre-7.4 PS
+if (-not (Test-Path build\windows\store) -and -not (Test-Path 3_dist-gimp-winsdk.ps1 -Type Leaf) -or $PSScriptRoot -notlike "*build\windows\store*")
+  {
+    Write-Host '(ERROR): Script called from wrong dir. Please, call the script from gimp source.' -ForegroundColor Red
+    exit 1
+  }
+elseif (Test-Path 3_dist-gimp-winsdk.ps1 -Type Leaf)
+  {
+    Set-Location ..\..\..
+  }
 if (-not $GITLAB_CI)
   {
-    # Make the script work locally
-    if (-not (Test-Path build\windows\store) -and -not (Test-Path 3_dist-gimp-winsdk.ps1 -Type Leaf) -or $PSScriptRoot -notlike "*build\windows\store*")
-      {
-        Write-Host '(ERROR): Script called from wrong dir. Please, call the script from gimp source.' -ForegroundColor Red
-        exit 1
-      }
-    elseif (Test-Path 3_dist-gimp-winsdk.ps1 -Type Leaf)
-      {
-        Set-Location ..\..\..
-      }
-
     $PARENT_DIR = '..\'
   }
 
@@ -37,34 +35,57 @@ else
   {
     $cpu_arch = 'x64'
   }
-# Windows SDK
-$win_sdk_version = Get-ItemProperty Registry::'HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Microsoft SDKs\Windows\v10.0' | Select-Object -ExpandProperty ProductVersion
+
+## Windows SDK
+$win_sdk_version = Get-ItemProperty Registry::'HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Microsoft SDKs\Windows\v10.0' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty ProductVersion
+if ("$win_sdk_version" -eq '')
+  {
+    $xmlObject = New-Object XML
+    $xmlObject.Load("$PWD\build\windows\store\AppxManifest.xml")
+    $nt_build_max = (($xmlObject.Package.Dependencies.TargetDeviceFamily.MaxVersionTested | Out-String).Trim()) -replace '..$',''
+    Write-Host "(ERROR): Windows SDK installation not found. Please, install it with: winget install Microsoft.WindowsSDK.${nt_build_max}" -ForegroundColor Red
+    exit 1
+  }
 $win_sdk_path = Get-ItemProperty Registry::'HKEY_LOCAL_MACHINE\SOFTWARE\WOW6432Node\Microsoft\Microsoft SDKs\Windows\v10.0' | Select-Object -ExpandProperty InstallationFolder
 $env:PATH = "${win_sdk_path}bin\${win_sdk_version}.0\$cpu_arch;${win_sdk_path}App Certification Kit;" + $env:PATH
-# msstore-cli (ONLY FOR RELEASES)
+
+## msstore-cli (ONLY FOR RELEASES)
 if ("$CI_COMMIT_TAG" -eq (git describe --all | Foreach-Object {$_ -replace 'tags/',''}))
   {
+    #.NET runtime required by msstore-cli (and its PowerShell counterpart)
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-
-    $msstore_tag = (Invoke-WebRequest https://api.github.com/repos/microsoft/msstore-cli/releases | ConvertFrom-Json)[0].tag_name
-    $xmlObject = New-Object XML
-    $xmlObject.Load("https://raw.githubusercontent.com/microsoft/msstore-cli/refs/heads/rel/$msstore_tag/MSStore.API/MSStore.API.csproj")
-    $dotnet_major = ($xmlObject.Project.PropertyGroup.TargetFramework | Out-String) -replace "`r`n",'' -replace 'net',''
-    $dotnet_tag = ((Invoke-WebRequest https://api.github.com/repos/dotnet/runtime/releases | ConvertFrom-Json).tag_name | Select-String "$dotnet_major" | Select-Object -First 1).ToString() -replace 'v',''
-
-    if (-not (Test-Path "$Env:ProgramFiles\dotnet\shared\Microsoft.NETCore.App\$dotnet_major*\"))
+    $msstore_tag = (Invoke-RestMethod 'https://api.github.com/repos/microsoft/msstore-cli/releases/latest').tag_name
+    $dotnet_msstore = (Invoke-RestMethod "https://raw.githubusercontent.com/microsoft/msstore-cli/refs/heads/rel/$msstore_tag/MSStore.API/MSStore.API.csproj").Project.PropertyGroup.TargetFramework
+    $powershell_tag = (Invoke-RestMethod 'https://api.github.com/repos/PowerShell/PowerShell/releases/latest').tag_name
+    $dotnet_powershell = (Invoke-RestMethod "https://raw.githubusercontent.com/PowerShell/PowerShell/refs/tags/$powershell_tag/PowerShell.Common.props").Project.PropertyGroup.TargetFramework
+    foreach ($dotnet in $dotnet_msstore, $dotnet_powershell)
       {
-        Write-Output "(INFO): downloading .NET v$dotnet_tag"
-        Invoke-WebRequest https://aka.ms/dotnet/$dotnet_major/dotnet-runtime-win-$cpu_arch.zip -OutFile ${PARENT_DIR}dotnet-runtime.zip
-        Expand-Archive ${PARENT_DIR}dotnet-runtime.zip ${PARENT_DIR}dotnet-runtime -Force
-        $env:PATH = "$(Resolve-Path $PWD\${PARENT_DIR}dotnet-runtime);" + $env:PATH
-        $env:DOTNET_ROOT = "$(Resolve-Path $PWD\${PARENT_DIR}dotnet-runtime)"
+        $dotnet_major = ($dotnet | Out-String) -replace "`r`n",'' -replace 'net',''
+        $dotnet_tag = ((Invoke-RestMethod "https://api.github.com/repos/dotnet/runtime/releases").tag_name | Select-String "$dotnet_major" | Select-Object -First 1).ToString() -replace 'v',''
+        if (-not (Test-Path "$Env:ProgramFiles\dotnet\shared\Microsoft.NETCore.App\$dotnet_major*\") -and -not (Test-Path "${PARENT_DIR}dotnet-runtime-${dotnet_major}"))
+          {
+            Write-Output "(INFO): downloading .NET v$dotnet_tag"
+            Invoke-WebRequest "https://aka.ms/dotnet/$dotnet_major/dotnet-runtime-win-$cpu_arch.zip" -UseBasicParsing -OutFile ${PARENT_DIR}dotnet-runtime-${dotnet_major}.zip
+            Expand-Archive ${PARENT_DIR}dotnet-runtime-${dotnet_major}.zip ${PARENT_DIR}dotnet-runtime-${dotnet_major} -Force
+            $env:PATH = "$(Resolve-Path $PWD\${PARENT_DIR}dotnet-runtime-${dotnet_major});" + $env:PATH
+            $env:DOTNET_ROOT = "$(Resolve-Path $PWD\${PARENT_DIR}dotnet-runtime-${dotnet_major})"
+          }
       }
 
+    #powershell required by msstore-cli. See: https://github.com/microsoft/msstore-cli/issues/70
+    if (-not (Test-Path Registry::'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\App Paths\pwsh.exe') -and $PSVersionTable.PSVersion.Major -lt 6)
+      {
+        Write-Output "(INFO): downloading PowerShell $powershell_tag"
+        Invoke-WebRequest "https://github.com/PowerShell/PowerShell/releases/download/$powershell_tag/PowerShell-$($powershell_tag -replace 'v','')-win-$cpu_arch.zip" -UseBasicParsing -OutFile ${PARENT_DIR}PowerShell.zip
+        Expand-Archive ${PARENT_DIR}PowerShell.zip ${PARENT_DIR}PowerShell -Force
+        $env:PATH = "$(Resolve-Path $PWD\${PARENT_DIR}PowerShell);" + $env:PATH
+      }
+
+    #msstore-cli itself
     if (-not (Test-Path Registry::'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\App Paths\MSStore.exe'))
       {
         Write-Output "(INFO): downloading MSStoreCLI $msstore_tag"
-        Invoke-WebRequest https://github.com/microsoft/msstore-cli/releases/download/$msstore_tag/MSStoreCLI-win-$cpu_arch.zip -OutFile ${PARENT_DIR}MSStoreCLI.zip
+        Invoke-WebRequest "https://github.com/microsoft/msstore-cli/releases/download/$msstore_tag/MSStoreCLI-win-$cpu_arch.zip" -UseBasicParsing -OutFile ${PARENT_DIR}MSStoreCLI.zip
         Expand-Archive ${PARENT_DIR}MSStoreCLI.zip ${PARENT_DIR}MSStoreCLI -Force
         $env:PATH = "$(Resolve-Path $PWD\${PARENT_DIR}MSStoreCLI);" + $env:PATH
       }
@@ -132,186 +153,183 @@ else
     $revision = "0"
   }
 $CUSTOM_GIMP_VERSION = "$GIMP_APP_VERSION.${micro_digit}${revision}.0"
-
 Write-Output "(INFO): Identity: $IDENTITY_NAME | Version: $CUSTOM_GIMP_VERSION (major: $major, minor: $minor, micro: ${micro}${revision_text})"
 
 ## Autodetects what arch bundles will be packaged
-if (-not (Test-Path "$a64_bundle") -and -not (Test-Path "$x64_bundle"))
+if (-not (Test-Path "$arm64_bundle") -and -not (Test-Path "$x64_bundle"))
   {
     Write-Host "(ERROR): No bundle found. You can tweak 'build/windows/2_build-gimp-msys2.ps1' or configure GIMP with '-Dms-store=true' to make one." -ForegroundColor red
     exit 1
   }
-elseif ((Test-Path "$a64_bundle") -and -not (Test-Path "$x64_bundle"))
+elseif ((Test-Path "$arm64_bundle") -and -not (Test-Path "$x64_bundle"))
   {
     Write-Output "(INFO): Arch: arm64"
+    $supported_archs = "$arm64_bundle"
   }
-elseif (-not (Test-Path "$a64_bundle") -and (Test-Path "$x64_bundle"))
+elseif (-not (Test-Path "$arm64_bundle") -and (Test-Path "$x64_bundle"))
   {
     Write-Output "(INFO): Arch: x64"
+    $supported_archs = "$x64_bundle"
   }
-elseif ((Test-Path "$a64_bundle") -and (Test-Path "$x64_bundle"))
+elseif ((Test-Path "$arm64_bundle") -and (Test-Path "$x64_bundle"))
   {
     Write-Output "(INFO): Arch: arm64 and x64"
+    $supported_archs = "$arm64_bundle","$x64_bundle"
+    $temp_text='temporary '
   }
 Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):msix_info$([char]13)$([char]27)[0K"
 
 
-$supported_archs = "$a64_bundle","$x64_bundle"
 foreach ($bundle in $supported_archs)
   {
-    if (Test-Path "$bundle")
+    if (("$bundle" -like '*a64*') -or ("$bundle" -like '*aarch64*') -or ("$bundle" -like '*arm64*'))
       {
-        if ((Test-Path $a64_bundle) -and (Test-Path $x64_bundle))
-          {
-            $temp_text='temporary '
-          }
-        if (("$bundle" -like '*a64*') -or ("$bundle" -like '*aarch64*') -or ("$bundle" -like '*arm64*'))
-          {
-            $msix_arch = 'arm64'
-          }
-        else
-          {
-            $msix_arch = 'x64'
-          }
-        Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):${msix_arch}_making[collapsed=true]$([char]13)$([char]27)[0KMaking ${temp_text}$msix_arch MSIX"
-
-        ## Prevent Git going crazy
-        $ig_content = "`n$msix_arch`n*.appxsym`n*.zip"
-        if (Test-Path .gitignore -Type Leaf)
-          {
-            if (-not (Test-Path .gitignore.bak -Type Leaf))
-              {
-                Copy-Item .gitignore .gitignore.bak
-              }
-            Add-Content .gitignore "$ig_content"
-          }
-        else
-          {
-            New-Item .gitignore | Out-Null
-            Set-Content .gitignore "$ig_content"
-          }
-
-        ## Create temporary dir
-        if (Test-Path $msix_arch)
-          {
-            Remove-Item $msix_arch/ -Recurse
-          }
-        New-Item $msix_arch -ItemType Directory | Out-Null
-
-
-        # 3. PREPARE MSIX "SOURCE"
-
-        ## 3.1. CONFIGURE MANIFEST
-        Write-Output "(INFO): configuring AppxManifest.xml for $msix_arch"
-        Copy-Item build\windows\store\AppxManifest.xml $msix_arch
-        ### Set msix_arch
-        (Get-Content $msix_arch\AppxManifest.xml) | Foreach-Object {$_ -replace "neutral","$msix_arch"} |
-        Set-Content $msix_arch\AppxManifest.xml
-        ### Set Identity Name
-        (Get-Content $msix_arch\AppxManifest.xml) | Foreach-Object {$_ -replace "@IDENTITY_NAME@","$IDENTITY_NAME"} |
-        Set-Content $msix_arch\AppxManifest.xml
-        ### Set Display Name (the name shown in MS Store)
-        if (-not $GIMP_RELEASE -or $GIMP_IS_RC_GIT)
-          {
-            $display_name='GIMP (Insider)'
-          }
-        elseif (($GIMP_RELEASE -and $GIMP_UNSTABLE) -or $GIMP_RC_VERSION)
-          {
-            $display_name='GIMP (Preview)'
-          }
-        else
-          {
-            $display_name='GIMP'
-          }
-        (Get-Content $msix_arch\AppxManifest.xml) | Foreach-Object {$_ -replace "@DISPLAY_NAME@","$display_name"} |
-        Set-Content $msix_arch\AppxManifest.xml
-        ### Set custom GIMP version (major.minor.micro+revision.0)
-        (Get-Content $msix_arch\AppxManifest.xml) | Foreach-Object {$_ -replace "@CUSTOM_GIMP_VERSION@","$CUSTOM_GIMP_VERSION"} |
-        Set-Content $msix_arch\AppxManifest.xml
-        ### Set GIMP mutex version (major.minor or major)
-        if ($GIMP_UNSTABLE)
-          {
-            $gimp_mutex_version="$GIMP_APP_VERSION"
-          }
-        else
-          {
-            $gimp_mutex_version="$major"
-          }
-        (Get-Content $msix_arch\AppxManifest.xml) | Foreach-Object {$_ -replace "@GIMP_MUTEX_VERSION@","$gimp_mutex_version"} |
-        Set-Content $msix_arch\AppxManifest.xml
-        ### Match supported filetypes
-        $file_types = Get-Content 'build\windows\installer\data_associations.list'       | Foreach-Object {"              <uap:FileType>." + $_} |
-                      Foreach-Object {$_ +  "</uap:FileType>"}                           | Where-Object {$_ -notmatch 'xcf'}
-        (Get-Content $msix_arch\AppxManifest.xml) | Foreach-Object {$_ -replace "@FILE_TYPES@","$file_types"}  |
-        Set-Content $msix_arch\AppxManifest.xml
-
-        ## 3.2. CREATE ICON ASSETS
-        $icons_path = "$build_dir\build\windows\store\Assets"
-        if (-not (Test-Path "$icons_path"))
-          {
-            Write-Host "(ERROR): MS Store icons not found. You can tweak 'build/windows/2_build-gimp-msys2.ps1' or configure GIMP with '-Dms-store=true' to build them." -ForegroundColor red
-            exit 1
-          }
-        Write-Output "(INFO): generating resources*.pri from $icons_path"
-        ### Copy pre-generated icons to each msix_arch
-        New-Item $msix_arch\Assets -ItemType Directory | Out-Null
-        Copy-Item "$icons_path\*.png" $msix_arch\Assets\ -Recurse
-        ### Generate resources*.pri
-        Set-Location $msix_arch
-        makepri createconfig /cf priconfig.xml /dq lang-en-US /pv 10.0.0 | Out-File ..\winsdk.log
-        Set-Location ..\
-        makepri new /pr $msix_arch /cf $msix_arch\priconfig.xml /of $msix_arch | Out-File winsdk.log -Append
-        Remove-Item $msix_arch\priconfig.xml
-
-
-        # 4. COPY GIMP FILES
-        Write-Output "(INFO): preparing GIMP files in $msix_arch VFS"
-        $vfs = "$msix_arch\VFS\ProgramFilesX64\GIMP"
-
-        ## Copy files into VFS folder (to support external 3P plug-ins)
-        Copy-Item "$bundle" "$vfs" -Recurse -Force
-
-        ## Set revision on about dialog (this does the same as '-Drevision' build option)
-        if (-not $GIMP_RC_VERSION)
-          {
-            (Get-Content "$vfs\share\gimp\*\gimp-release") | Foreach-Object {$_ -replace "revision=0","revision=$revision"} |
-            Set-Content "$vfs\share\gimp\*\gimp-release"
-          }
-
-        ## Disable Update check (ONLY FOR RELEASES)
-        if ($GIMP_RELEASE -and -not $GIMP_IS_RC_GIT)
-          {
-            Add-Content "$vfs\share\gimp\*\gimp-release" 'check-update=false'
-          }
-
-        ## Remove uneeded files (to match the Inno Windows Installer artifact)
-        Get-ChildItem "$vfs" -Recurse -Include (".gitignore", "gimp.cmd") | Remove-Item -Recurse
-
-
-        # 5.A. MAKE .MSIX AND CORRESPONDING .APPXSYM
-
-        ## Make .appxsym for each msix_arch (ONLY FOR RELEASES)
-        $APPXSYM = "${IDENTITY_NAME}_${CUSTOM_GIMP_VERSION}_$msix_arch.appxsym"
-        if ($CI_COMMIT_TAG -match 'GIMP_[0-9]*_[0-9]*_[0-9]*' -or $GIMP_CI_MS_STORE -like 'MSIXUPLOAD*')
-          {
-            Write-Output "(INFO): making $APPXSYM"
-            Get-ChildItem $msix_arch -Filter *.pdb -Recurse | Compress-Archive -DestinationPath "$APPXSYM.zip"
-            Get-ChildItem *.zip | Rename-Item -NewName $APPXSYM
-            Get-ChildItem $msix_arch -Include *.pdb -Recurse -Force | Remove-Item -Recurse -Force
-          }
-
-        ## Make .msix from each msix_arch
-        $MSIX_ARTIFACT = $APPXSYM -replace '.appxsym','.msix'
-        Write-Output "(INFO): packaging $MSIX_ARTIFACT"
-        makeappx pack /d $msix_arch /p $MSIX_ARTIFACT /o | Out-File winsdk.log -Append
+        $msix_arch = 'arm64'
+      }
+    else
+      {
+        $msix_arch = 'x64'
+      }
+    ## Create temporary dir
+    if (Test-Path $msix_arch)
+      {
         Remove-Item $msix_arch/ -Recurse
-        Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):${msix_arch}_making$([char]13)$([char]27)[0K"
-      } #END of 'if (Test-Path...'
-  } #END of 'foreach ($msix_arch...'
+      }
+    New-Item $msix_arch -ItemType Directory | Out-Null
+    ### Prevent Git going crazy
+    $ig_content = "`n$msix_arch"
+    if (Test-Path .gitignore -Type Leaf)
+      {
+        if (-not (Test-Path .gitignore.bak -Type Leaf))
+          {
+            Copy-Item .gitignore .gitignore.bak
+          }
+        Add-Content .gitignore "$ig_content"
+      }
+    else
+      {
+        New-Item .gitignore | Out-Null
+        Set-Content .gitignore "$ig_content"
+      }
+
+
+    # 3. PREPARE MSIX "SOURCE"
+    Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):${msix_arch}_source[collapsed=true]$([char]13)$([char]27)[0KMaking assets for $msix_arch MSIX"
+    # (We test the existence of the icons here (and not on section 3.2.) to avoid creating AppxManifest.xml for nothing)
+    $icons_path = "$build_dir\build\windows\store\Assets"
+    if (-not (Test-Path "$icons_path"))
+      {
+        Write-Host "(ERROR): MS Store icons not found. You can tweak 'build/windows/2_build-gimp-msys2.ps1' or configure GIMP with '-Dms-store=true' to build them." -ForegroundColor red
+        exit 1
+      }
+
+    ## 3.1. CONFIGURE MANIFEST
+    Write-Output "(INFO): configuring AppxManifest.xml for $msix_arch"
+    Copy-Item build\windows\store\AppxManifest.xml $msix_arch
+    function conf_manifest ([string]$search, [string]$replace)
+    {
+      (Get-Content $msix_arch\AppxManifest.xml) | Foreach-Object {$_ -replace "$search","$replace"} |
+      Set-Content $msix_arch\AppxManifest.xml
+    }
+    ### Set msix_arch
+    conf_manifest 'neutral' "$msix_arch"
+    ### Set Identity Name
+    conf_manifest '@IDENTITY_NAME@' "$IDENTITY_NAME"
+    ### Set Display Name (the name shown in MS Store, on Start Menu etc)
+    if (-not $GIMP_RELEASE -or $GIMP_IS_RC_GIT)
+      {
+        $display_name='GIMP (Insider)'
+      }
+    elseif (($GIMP_RELEASE -and $GIMP_UNSTABLE) -or $GIMP_RC_VERSION)
+      {
+        $display_name='GIMP (Preview)'
+      }
+    else
+      {
+        $display_name='GIMP'
+      }
+    conf_manifest '@DISPLAY_NAME@' "$display_name"
+    ### Set custom GIMP version (major.minor.micro+revision.0)
+    conf_manifest '@CUSTOM_GIMP_VERSION@' "$CUSTOM_GIMP_VERSION"
+    #### Needed to differentiate on PowerShell etc
+    if ($GIMP_RELEASE -and -not $GIMP_IS_RC_GIT)
+      {
+        $mutex_suffix="-$GIMP_MUTEX_VERSION"
+      }
+    conf_manifest '@MUTEX_SUFFIX@' "$mutex_suffix"
+    ### List supported filetypes
+    $file_types = Get-Content "$build_dir\plug-ins\file_associations.list" | Foreach-Object {"              <uap:FileType>." + $_} |
+                  Foreach-Object {$_ +  "</uap:FileType>"}                 | Where-Object {$_ -notmatch 'xcf'}
+    (Get-Content $msix_arch\AppxManifest.xml) | Foreach-Object {$_ -replace "@FILE_TYPES@","$file_types"}  |
+    Set-Content $msix_arch\AppxManifest.xml
+
+    ## 3.2. CREATE ICON ASSETS
+    Write-Output "(INFO): generating resources*.pri from $icons_path"
+    ### Copy pre-generated icons to msix_arch\Assets
+    New-Item $msix_arch\Assets -ItemType Directory | Out-Null
+    Copy-Item "$icons_path\*.png" $msix_arch\Assets\ -Recurse
+    ### Generate temp priconfig.xml then resources*.pri
+    Set-Location $msix_arch
+    makepri createconfig /cf priconfig.xml /dq lang-en-US /pv 10.0.0 | Out-File ..\winsdk.log; if ("$LASTEXITCODE" -gt '0') { exit 1 }
+    Set-Location ..\
+    makepri new /pr $msix_arch /cf $msix_arch\priconfig.xml /of $msix_arch | Out-File winsdk.log -Append; if ("$LASTEXITCODE" -gt '0') { exit 1 }
+    Remove-Item $msix_arch\priconfig.xml
+    Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):${msix_arch}_source$([char]13)$([char]27)[0K"
+
+
+    # 4. COPY GIMP FILES
+    Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):${msix_arch}_files[collapsed=true]$([char]13)$([char]27)[0KPreparing GIMP files in $msix_arch VFS"
+    $vfs = "$msix_arch\VFS\ProgramFilesX64\GIMP"
+    ## Copy files into VFS folder (to support external 3P plug-ins)
+    Copy-Item "$bundle" "$vfs" -Recurse -Force
+
+    ## MSIX-specific adjustments (needed because we use the same gimp-* bundle as base to both .exe and .msix)
+    ### Set revision on about dialog (this does the same as '-Drevision' build option)
+    if (-not $GIMP_RC_VERSION)
+      {
+        (Get-Content "$vfs\share\gimp\*\gimp-release") | Foreach-Object {$_ -replace "revision=0","revision=$revision"} |
+        Set-Content "$vfs\share\gimp\*\gimp-release"
+      }
+    ### Disable Update check (ONLY FOR RELEASES)
+    if ($GIMP_RELEASE -and -not $GIMP_IS_RC_GIT)
+      {
+        Add-Content "$vfs\share\gimp\*\gimp-release" 'check-update=false'
+      }
+
+    ## Parity adjustments (to make the .msix IDENTICAL TO THE .EXE INSTALLER, except for the adjustments above)
+    Get-ChildItem "$vfs" -Recurse -Include (".gitignore", "gimp.cmd") | Remove-Item -Recurse
+    Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):${msix_arch}_files$([char]13)$([char]27)[0K"
+
+
+    # 5.A. MAKE .MSIX AND CORRESPONDING .APPXSYM
+    Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):${msix_arch}_making[collapsed=true]$([char]13)$([char]27)[0KPackaging ${temp_text}$msix_arch MSIX"
+    ## Make .appxsym for each msix_arch (ONLY FOR RELEASES)
+    $APPXSYM = "${IDENTITY_NAME}_${CUSTOM_GIMP_VERSION}_$msix_arch.appxsym"
+    if ($CI_COMMIT_TAG -match 'GIMP_[0-9]*_[0-9]*_[0-9]*' -or $GIMP_CI_MS_STORE -like 'MSIXUPLOAD*')
+      {
+        Write-Output "(INFO): making $APPXSYM"
+        Get-ChildItem $msix_arch -Filter *.pdb -Recurse | Compress-Archive -DestinationPath "$APPXSYM.zip"
+        Rename-Item "$APPXSYM.zip" "$APPXSYM"
+        #(To not ship .pdb we need an online symbol server pointed on _NT_SYMBOL_PATH)
+        #Get-ChildItem $msix_arch -Include *.pdb -Recurse -Force | Remove-Item -Recurse -Force
+      }
+
+    ## Make .msix from each msix_arch
+    $MSIX_ARTIFACT = $APPXSYM -replace '.appxsym','.msix'
+    Write-Output "(INFO): packaging $MSIX_ARTIFACT"
+    makeappx pack /d $msix_arch /p $MSIX_ARTIFACT /o | Out-File winsdk.log -Append; if ("$LASTEXITCODE" -gt '0') { exit 1 }
+    Remove-Item $msix_arch/ -Recurse
+    Remove-Item .gitignore
+    if (Test-Path .gitignore.bak -Type Leaf)
+      {
+        Rename-Item .gitignore.bak .gitignore
+      }
+    Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):${msix_arch}_making$([char]13)$([char]27)[0K"
+  } #END of 'foreach ($bundle'
 
 
 # 5.B. MAKE .MSIXBUNDLE OR SUBSEQUENT .MSIXUPLOAD
-if (((Test-Path $a64_bundle) -and (Test-Path $x64_bundle)) -and (Get-ChildItem *.msix -Recurse).Count -gt 1)
+if (((Test-Path $arm64_bundle) -and (Test-Path $x64_bundle)) -and (Get-ChildItem *.msix -Recurse).Count -gt 1)
   {
     $MSIXBUNDLE = "${IDENTITY_NAME}_${CUSTOM_GIMP_VERSION}_neutral.msixbundle"
     $MSIX_ARTIFACT = "$MSIXBUNDLE"
@@ -327,7 +345,7 @@ if (((Test-Path $a64_bundle) -and (Test-Path $x64_bundle)) -and (Get-ChildItem *
     ##  also to make sure against Partner Center getting confused)
     New-Item _TempOutput -ItemType Directory | Out-Null
     Move-Item *.msix _TempOutput/
-    makeappx bundle /bv "${CUSTOM_GIMP_VERSION}" /d _TempOutput /p $MSIXBUNDLE /o
+    makeappx bundle /bv "${CUSTOM_GIMP_VERSION}" /d _TempOutput /p $MSIXBUNDLE /o; if ("$LASTEXITCODE" -gt '0') { exit 1 }
     Remove-Item _TempOutput/ -Recurse
 
     ## Make .msixupload (ONLY FOR RELEASES)
@@ -335,17 +353,11 @@ if (((Test-Path $a64_bundle) -and (Test-Path $x64_bundle)) -and (Get-ChildItem *
       {
         Write-Output "(INFO): creating $MSIXUPLOAD for submission"
         Compress-Archive -Path "*.appxsym","*.msixbundle" -DestinationPath "$MSIXUPLOAD.zip"
-        Get-ChildItem ${IDENTITY_NAME}*.zip | Rename-Item -NewName $MSIXUPLOAD
+        Rename-Item "$MSIXUPLOAD.zip" "$MSIXUPLOAD"
         Remove-Item *.appxsym -Force
         Remove-Item *.msixbundle -Force
       }
     Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):msix_making$([char]13)$([char]27)[0K"
-  }
-
-Remove-Item .gitignore
-if (Test-Path .gitignore.bak -Type Leaf)
-  {
-    Rename-Item .gitignore.bak .gitignore
   }
 
 
@@ -353,6 +365,7 @@ if (Test-Path .gitignore.bak -Type Leaf)
 # (Partner Center does the same thing before publishing)
 if (-not $GITLAB_CI -and $wack -eq 'WACK')
   {
+    Write-Output "(INFO): certifying $MSIX_ARTIFACT with WACK"
     ## Prepare file naming
     ## (appcert CLI does NOT allow relative paths)
     $fullpath = $PWD
@@ -378,7 +391,6 @@ if (-not $GITLAB_CI -and $wack -eq 'WACK')
         Write-Host "(ERROR): 'sudo' is not in normal/inline mode. Please change it in Settings." -ForegroundColor Red
         exit 1
       }
-    Write-Output "(INFO): certifying $MSIX_ARTIFACT with WACK"
     sudo appcert test -appxpackagepath $fullpath\$MSIX_ARTIFACT -reportoutputpath $fullpath\$xml_artifact
 
     ## Output overall result
@@ -409,33 +421,41 @@ if (-not $GITLAB_CI -and $wack -eq 'WACK')
 if (-not $GIMP_RELEASE -or $GIMP_IS_RC_GIT)
   {
     Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):msix_trust${msix_arch}[collapsed=true]$([char]13)$([char]27)[0KSelf-signing $MSIX_ARTIFACT (for testing purposes)"
-    signtool sign /debug /fd sha256 /a /f $(Resolve-Path build\windows\store\pseudo-gimp*.pfx) /p eek $MSIX_ARTIFACT
-    if ("$LASTEXITCODE" -gt '0' -or "$?" -eq 'False')
+    ## Check if certificate for nightly builds is fine
+    $sign_output = & signtool sign /debug /fd sha256 /a /f $(Resolve-Path build\windows\store\pseudo-gimp*.pfx) /p eek $MSIX_ARTIFACT
+    Write-Output $sign_output
+    if ($sign_output -like "*After expiry filter, 0 certs were left*")
       {
-        ## We need to manually check failures in pre-7.4 PS
         $pseudo_gimp = "pseudo-gimp_$(Get-Date -UFormat %s -Millisecond 0)"
         New-SelfSignedCertificate -Type Custom -Subject "$(([xml](Get-Content build\windows\store\AppxManifest.xml)).Package.Identity.Publisher)" -KeyUsage DigitalSignature -FriendlyName "$pseudo_gimp" -CertStoreLocation "Cert:\CurrentUser\My" -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}") | Out-Null
-        Export-PfxCertificate -Cert "Cert:\CurrentUser\My\$(Get-ChildItem Cert:\CurrentUser\My | Where-Object FriendlyName -EQ "$pseudo_gimp" | Select-Object -ExpandProperty Thumbprint)" -FilePath "build/windows/store/${pseudo_gimp}.pfx" -Password (ConvertTo-SecureString -String eek -Force -AsPlainText) | Out-Null
+        Export-PfxCertificate -Cert "Cert:\CurrentUser\My\$(Get-ChildItem Cert:\CurrentUser\My | Where-Object FriendlyName -EQ "$pseudo_gimp" | Select-Object -ExpandProperty Thumbprint)" -FilePath "${pseudo_gimp}.pfx" -Password (ConvertTo-SecureString -String eek -Force -AsPlainText) | Out-Null
         Remove-Item "Cert:\CurrentUser\My\$(Get-ChildItem Cert:\CurrentUser\My | Where-Object FriendlyName -EQ "$pseudo_gimp" | Select-Object -ExpandProperty Thumbprint)"
-        if ($GITLAB_CI)
-          {
-            $OUTPUT_DIR = 'build\windows\store\_Output\'
-            $OUTPUT_DIR_PARTIAL = '_Output\'
-            New-Item $OUTPUT_DIR -ItemType Directory -Force | Out-Null
-            Move-Item build\windows\store\$pseudo_gimp.pfx $OUTPUT_DIR
-          }
-        Write-Host "(ERROR): Self-signing certificate expired. Please commit the generated '${OUTPUT_DIR}${pseudo_gimp}.pfx' on 'build\windows\store\'." -ForegroundColor red
-        $sha256 = (Get-FileHash build\windows\store\${OUTPUT_DIR_PARTIAL}${pseudo_gimp}.pfx -Algorithm SHA256 | Select-Object -ExpandProperty Hash).ToLower()
-        Write-Output "(INFO): ${pseudo_gimp}.pfx SHA-256: $sha256"
-        exit 1
+        Write-Host "(ERROR): Self-signing certificate expired. Please commit the generated '${pseudo_gimp}.pfx' on 'build\windows\store\'." -ForegroundColor red
+        $sha256_pfx = (Get-FileHash "${pseudo_gimp}.pfx" -Algorithm SHA256 | Select-Object -ExpandProperty Hash).ToLower()
+        Write-Output "(INFO): ${pseudo_gimp}.pfx SHA-256: $sha256_pfx"
       }
-    Copy-Item build\windows\store\pseudo-gimp*.pfx pseudo-gimp.pfx -Recurse
+    else
+      {
+        Copy-Item build\windows\store\pseudo-gimp*.pfx pseudo-gimp.pfx -Recurse
 
-    ## Generate checksums
-    $sha256 = (Get-FileHash $MSIX_ARTIFACT -Algorithm SHA256 | Select-Object -ExpandProperty Hash).ToLower()
-    Write-Output "(INFO): $MSIX_ARTIFACT SHA-256: $sha256"
-    $sha512 = (Get-FileHash $MSIX_ARTIFACT -Algorithm SHA512 | Select-Object -ExpandProperty Hash).ToLower()
-    Write-Output "(INFO): $MSIX_ARTIFACT SHA-512: $sha512"
+        ## Generate checksums
+        $sha256 = (Get-FileHash $MSIX_ARTIFACT -Algorithm SHA256 | Select-Object -ExpandProperty Hash).ToLower()
+        Write-Output "(INFO): $MSIX_ARTIFACT SHA-256: $sha256"
+        $sha512 = (Get-FileHash $MSIX_ARTIFACT -Algorithm SHA512 | Select-Object -ExpandProperty Hash).ToLower()
+        Write-Output "(INFO): $MSIX_ARTIFACT SHA-512: $sha512"
+      }
+
+    ## Check in advance if the CLIENT_SECRET we will use in the future tagged pipeline is fine
+    if ($CI_COMMIT_TAG)
+      {
+        $latest_msix_secret = New-Object -TypeName System.DateTime -ArgumentList 2026, 9, 20
+        Write-Output "(INFO): CLIENT_SECRET expire date is: $latest_msix_secret"
+        if ((Get-Date) -ge $latest_msix_secret)
+          {
+            $expired_secret = "$latest_msix_secret"
+            Write-Host "(ERROR): Submission secret for releases expired. Please follow https://developer.gimp.org/core/maintainer/accounts/msstore/ then commit its expire date on 'build\windows\store\*.ps1'." -ForegroundColor red
+          }
+      }
     Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):msix_trust${msix_arch}$([char]13)$([char]27)[0K"
   }
 
@@ -445,11 +465,15 @@ if ($GITLAB_CI)
     # GitLab doesn't support wildcards when using "expose_as" so let's move to a dir
     $OUTPUT_DIR = "$PWD\build\windows\store\_Output"
     New-Item $OUTPUT_DIR -ItemType Directory -Force | Out-Null
-    Move-Item $MSIX_ARTIFACT $OUTPUT_DIR -Force
     if (-not $GIMP_RELEASE -or $GIMP_IS_RC_GIT)
       {
-        Copy-Item pseudo-gimp.pfx $OUTPUT_DIR
+        Move-Item pseudo-gimp*.pfx $OUTPUT_DIR
       }
+    if ($sha256_pfx -or $expired_secret)
+      {
+        exit 1
+      }
+    Move-Item $MSIX_ARTIFACT $OUTPUT_DIR -Force
   }
 
 
@@ -457,70 +481,46 @@ if ($GITLAB_CI)
 if ("$CI_COMMIT_TAG" -eq (git describe --all | Foreach-Object {$_ -replace 'tags/',''}))
   {
     Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):msix_submission[collapsed=true]$([char]13)$([char]27)[0KSubmitting $MSIX_ARTIFACT to Microsoft Store"
-    ## Connect with Microsoft Entra credentials (stored on GitLab)
-    ## (The last one can be revoked at any time in MS Entra Admin center)
-    msstore reconfigure --tenantId $TENANT_ID --sellerId $SELLER_ID --clientId $CLIENT_ID --clientSecret $CLIENT_SECRET
-
-    ## Set product_id (which is not confidential) needed by HTTP calls of some commands
+    ## Needed credentials for submission
+    ### Connect with our Microsoft Entra credentials (stored on GitLab)
+    ### (The last one can be revoked at any time in MS Entra Admin center)
+    msstore reconfigure --tenantId $TENANT_ID --sellerId $SELLER_ID --clientId $CLIENT_ID --clientSecret $CLIENT_SECRET; if ("$LASTEXITCODE" -gt '0') { exit 1 }
+    ### Set product_id (which is not confidential) needed by HTTP calls of some commands
     if ($GIMP_UNSTABLE -or $GIMP_RC_VERSION)
       {
-        $PRODUCT_ID="9NZVDVP54JMR"
+        $env:PRODUCT_ID="9NZVDVP54JMR"
       }
     else
       {
-        $PRODUCT_ID="9PNSJCLXDZ0V"
+        $env:PRODUCT_ID="9PNSJCLXDZ0V"
       }
 
     ## Create submission and upload .msixupload file to it
-    msstore publish $OUTPUT_DIR\$MSIX_ARTIFACT -id $PRODUCT_ID -nc
+    msstore publish $OUTPUT_DIR\$MSIX_ARTIFACT -id $env:PRODUCT_ID -nc; if ("$LASTEXITCODE" -gt '0') { exit 1 }
 
-    ## FIXME: Update submission info. See: https://github.com/microsoft/msstore-cli/issues/70
-    ###Get changelog from Linux appdata
-    #$xmlObject = New-Object XML
-    #$xmlObject.Load("desktop\org.gimp.GIMP.appdata.xml.in.in")
-    #if ($xmlObject.component.releases.release[0].version -ne ("$GIMP_VERSION".ToLower() -replace '-','~'))
-    #  {
-    #    Write-Host "(ERROR): appdata does not match main meson file. Submission can't be done." -ForegroundColor red
-    #    exit 1
-    #  }
-    #$store_changelog = ''
-    #foreach ($p in $xmlObject.component.releases.release[0].description.p){$store_changelog += "$p"}
-    #foreach ($li in $xmlObject.component.releases.release[0].description.ul.li){$store_changelog += "- $li`n"}
-    #$store_changelog = $store_changelog -replace "  ",'' -replace '(?m)^\s*?\n' -replace '"',"'"
-    ###Prepare submission info
-    #$jsonObject = msstore submission getListingAssets $PRODUCT_ID | Select-Object -Skip 5 | ConvertFrom-Json
-    #$jsonObject.'ReleaseNotes' = "$store_changelog"
-    #$full_jsonObject = msstore submission get $PRODUCT_ID | Select-Object -Skip 3 | ConvertFrom-Json
-    #$full_jsonObject."Listings"."en-us"."BaseListing" = ($jsonObject | ConvertTo-Json -Compress)
-    ###Fix submission info against JSON scaping hell
-    #$final_json = $full_jsonObject | ConvertTo-Json -Compress
-    #Fix excessive backslashes
-    #$final_json = $final_json -replace "\\\\",'\' -replace "\\\\",'\'
-    #Scape spaces and new lines
-    #$final_json = $final_json -replace ' ','\b' -replace '`n','\n'
-    #PowerShell converts 'BaseListing' wrongly
-    #$final_json = $final_json -replace '"{','{' -replace '}"','}'
-    #$final_json = $final_json -replace '\\"Title\\":\\"GIMP\\b\(Preview\)\\"','\"Title\":\"GIMP\b\r\n(Preview)\"'
-    #PowerShell converts 'PlatformOverrides' wrongly
-    #$final_json = $final_json -replace '""','{}'
-    #PowerShell destroys 'Genres' array
-    #$final_json = $final_json -replace '\"Genres\":\"MultimediaDesign_IllustrationAndGraphicDesign\"','"Genres":["MultimediaDesign_IllustrationAndGraphicDesign"]'
-    #PowerShell converts 'Warning' wrongly
-    #$final_json = $final_json -replace '\"@{','{"' -replace 'Code=','Code":"' -replace ';\\b','","'
-    #$final_json = $final_json -replace 'Details=','Details":"' -replace '\.}]','."}]'
-    #PowerShell destroys 'Languages' array
-    #$final_json = $final_json -replace '\"Languages\":{}','"Languages":[]'
-    #$final_json = $final_json -replace '\"Languages\":\"en-US\"','"Languages":["en-US"]'
-    #PowerShell destroys 'Capabilities' array
-    #$final_json = $final_json -replace '\"Capabilities\":{}','"Capabilities":[]'
-    #$final_json = $final_json -replace 'Capabilities\":\"','Capabilities":["' -replace '\\brunFullTrust\",','","runFullTrust"],'
-    ##Scape double quotes
-    #$final_json = $final_json -replace '"','\"'
-    #Fix excessive backslashes again
-    #$final_json = $final_json -replace "\\\\",'\' -replace "\\\\",'\'
-    #msstore submission update $PRODUCT_ID $final_json
+    ## Update submission info (if PS6 or up. Check the section 1 of this script)
+    $env:GIMP_VERSION="$GIMP_VERSION"
+    pwsh -Command `
+      {
+        $jsonObject = msstore submission get $env:PRODUCT_ID | ConvertFrom-Json -AsHashtable; if ("$LASTEXITCODE" -gt '0') { exit 1 }
+        ###Get changelog from Linux appdata
+        $xmlObject = New-Object XML
+        $xmlObject.Load("$PWD\desktop\org.gimp.GIMP.appdata.xml.in.in")
+        if ($xmlObject.component.releases.release[0].version -ne ("$env:GIMP_VERSION".ToLower() -replace '-','~'))
+          {
+            #This check is needed to ensure the right release notes etc when the submission is (rarely) done manually/locally
+            Write-Host "(WARNING): appdata does not match main meson file. Submission info can't be updated." -ForegroundColor yellow
+            exit 1
+          }
+        $jsonObject."Listings"."en-us"."BaseListing".'ShortDescription' = ($xmlObject.component.summary).Trim()
+        $jsonObject."Listings"."en-us"."BaseListing".'Description' = ($xmlObject.component.description.SelectNodes(".//p") | ForEach-Object { ($_.InnerText).Trim() -replace '\s*\r?\n\s*', ' ' } ) -join "`n`n"
+        #NOTE: Submission API does not allow more than 1500 chars on ReleaseNotes so we skip some <p> or <li> when needed
+        $jsonObject."Listings"."en-us"."BaseListing".'ReleaseNotes' = ($xmlObject.component.releases.release[0].description.SelectNodes(".//p | .//li") | ForEach-Object -Begin {$len=0} -Process { $text = ($_.InnerText).Trim() -replace '\s*\r?\n\s*', ' '; $formatted = if ($_.Name -eq 'li') { "- $text" } else { $text }; if (($len + $formatted.Length + 1) -lt 1490) { $len += $formatted.Length + 1; $formatted } }) -join "`n"
+        ###Send submission info
+        msstore submission updateMetadata $env:PRODUCT_ID ($jsonObject | ConvertTo-Json -Depth 100); if ("$LASTEXITCODE" -gt '0') { exit 1 }
+      }
 
     ## Start certification then publishing
-    msstore submission publish $PRODUCT_ID
+    msstore submission publish $env:PRODUCT_ID; if ("$LASTEXITCODE" -gt '0') { exit 1 }
     Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):msix_submission$([char]13)$([char]27)[0K"
   }

@@ -1,6 +1,6 @@
+# 1. First we use the XML file to be able to do gettext translation
+# (The 'its' subdir contains rules for XML translation extraction by 'i18n.merge_file')
 subdir('its')
-
-# First we use the XML file to be able to do gettext translation
 ms_installer_config_xml = i18n.merge_file(
   input : 'setup.isl.xml.in',
   output: '@BASENAME@',
@@ -9,6 +9,8 @@ ms_installer_config_xml = i18n.merge_file(
   install: false,
 )
 
+
+# 2. Then, we generate the .isl file for each language using some xsltproc magic
 languages = [
   { 'code': 'be',    },
   { 'code': 'bg',    },
@@ -33,6 +35,7 @@ languages = [
   { 'code': 'ja',    },
   { 'code': 'ka',    },
   { 'code': 'kab',   'langname': 'Taqbaylit' },
+  { 'code': 'kk',    },
   { 'code': 'ko',    },
   { 'code': 'lt',    },
   { 'code': 'lv',    },
@@ -47,6 +50,7 @@ languages = [
   { 'code': 'ru',    },
   { 'code': 'sk',    },
   { 'code': 'sl',    },
+  { 'code': 'sr',    },
   { 'code': 'sv',    },
   { 'code': 'tr',    },
   { 'code': 'uk',    },
@@ -55,17 +59,20 @@ languages = [
   { 'code': 'zh_TW', },
 ]
 
-# Then, we generate the .isl file for each language using some xsltproc magic
 foreach language : languages
   lang_code = language.get('code')
   # Since gettext 0.23, outputted xml:lang by msgfmt conforms to W3C
   # standard. Try both with underscore and hyphens.
   web_lang_code = lang_code.replace('_', '-')
-
   if 'default' in language
     lang_check = 'value[not(@xml:lang)]'
+  elif lang_code == web_lang_code
+    # Do not use lang() XPath function, because it would select too
+    # much. E.g. lang('pt') selects both pt and pt-BR localizations.
+    # See #13199.
+    lang_check = 'value[@xml:lang=\'@0@\']'.format(lang_code)
   else
-    lang_check = 'value[lang(\'@0@\')] | value[lang(\'@1@\')]'.format(lang_code, web_lang_code)
+    lang_check = 'value[@xml:lang=\'@0@\'] | value[@xml:lang=\'@1@\']'.format(lang_code, web_lang_code)
   endif
 
   gimp_ms_installer_lang_xsl = configure_file(
@@ -104,7 +111,8 @@ foreach language : languages
   endif
 endforeach
 
-# Generate lang lists for Inno
+
+# 3. Generate lang lists for Inno
 gen_list = find_program('list-installer-langs.py')
 
 custom_target('base_po-msg',

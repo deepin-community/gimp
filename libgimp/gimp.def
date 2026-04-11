@@ -99,6 +99,8 @@ EXPORTS
 	gimp_context_get_line_width_unit
 	gimp_context_get_mypaint_brush
 	gimp_context_get_opacity
+	gimp_context_get_paint_fade_length
+	gimp_context_get_paint_fade_repeat
 	gimp_context_get_paint_method
 	gimp_context_get_paint_mode
 	gimp_context_get_palette
@@ -162,6 +164,8 @@ EXPORTS
 	gimp_context_set_line_width_unit
 	gimp_context_set_mypaint_brush
 	gimp_context_set_opacity
+	gimp_context_set_paint_fade_length
+	gimp_context_set_paint_fade_repeat
 	gimp_context_set_paint_method
 	gimp_context_set_paint_mode
 	gimp_context_set_palette
@@ -178,6 +182,25 @@ EXPORTS
 	gimp_convert_dither_type_get_type
 	gimp_convolve
 	gimp_convolve_default
+	gimp_curve_add_point
+	gimp_curve_clear_points
+	gimp_curve_delete_point
+	gimp_curve_get_curve_type
+	gimp_curve_get_n_points
+	gimp_curve_get_n_samples
+	gimp_curve_get_point
+	gimp_curve_get_point_type
+	gimp_curve_get_sample
+	gimp_curve_get_type
+	gimp_curve_is_identity
+	gimp_curve_new
+	gimp_curve_point_type_get_type
+	gimp_curve_set_curve_type
+	gimp_curve_set_n_samples
+	gimp_curve_set_point
+	gimp_curve_set_point_type
+	gimp_curve_set_sample
+	gimp_curve_type_get_type
 	gimp_debug_timer_end
 	gimp_debug_timer_start
 	gimp_default_display
@@ -227,6 +250,9 @@ EXPORTS
 	gimp_drawable_filter_id_is_valid
 	gimp_drawable_filter_is_valid
 	gimp_drawable_filter_new
+	gimp_drawable_filter_operation_get_available
+	gimp_drawable_filter_operation_get_details
+	gimp_drawable_filter_operation_get_pspecs
 	gimp_drawable_filter_set_aux_input
 	gimp_drawable_filter_set_blend_mode
 	gimp_drawable_filter_set_opacity
@@ -322,6 +348,7 @@ EXPORTS
 	gimp_file_procedure_get_format_name
 	gimp_file_procedure_get_handles_remote
 	gimp_file_procedure_get_magics
+	gimp_file_procedure_get_meta
 	gimp_file_procedure_get_mime_types
 	gimp_file_procedure_get_prefixes
 	gimp_file_procedure_get_priority
@@ -330,6 +357,7 @@ EXPORTS
 	gimp_file_procedure_set_format_name
 	gimp_file_procedure_set_handles_remote
 	gimp_file_procedure_set_magics
+	gimp_file_procedure_set_meta
 	gimp_file_procedure_set_mime_types
 	gimp_file_procedure_set_prefixes
 	gimp_file_procedure_set_priority
@@ -570,6 +598,9 @@ EXPORTS
 	gimp_image_undo_is_enabled
 	gimp_image_undo_thaw
 	gimp_image_unset_active_channel
+	gimp_images_close_popup
+	gimp_images_popup
+	gimp_images_set_popup
 	gimp_item_attach_parasite
 	gimp_item_delete
 	gimp_item_detach_parasite
@@ -594,20 +625,24 @@ EXPORTS
 	gimp_item_id_is_group_layer
 	gimp_item_id_is_layer
 	gimp_item_id_is_layer_mask
+	gimp_item_id_is_link_layer
 	gimp_item_id_is_path
 	gimp_item_id_is_selection
 	gimp_item_id_is_text_layer
 	gimp_item_id_is_valid
+	gimp_item_id_is_vector_layer
 	gimp_item_is_channel
 	gimp_item_is_drawable
 	gimp_item_is_group
 	gimp_item_is_group_layer
 	gimp_item_is_layer
 	gimp_item_is_layer_mask
+	gimp_item_is_link_layer
 	gimp_item_is_path
 	gimp_item_is_selection
 	gimp_item_is_text_layer
 	gimp_item_is_valid
+	gimp_item_is_vector_layer
 	gimp_item_list_children
 	gimp_item_set_color_tag
 	gimp_item_set_expanded
@@ -627,6 +662,9 @@ EXPORTS
 	gimp_item_transform_scale
 	gimp_item_transform_shear
 	gimp_item_transform_translate
+	gimp_items_close_popup
+	gimp_items_popup
+	gimp_items_set_popup
 	gimp_layer_add_alpha
 	gimp_layer_add_mask
 	gimp_layer_color_space_get_type
@@ -670,6 +708,12 @@ EXPORTS
 	gimp_layer_set_offsets
 	gimp_layer_set_opacity
 	gimp_layer_set_show_mask
+	gimp_link_layer_get_by_id
+	gimp_link_layer_get_file
+	gimp_link_layer_get_mime_type
+	gimp_link_layer_get_type
+	gimp_link_layer_new
+	gimp_link_layer_set_file
 	gimp_list_images
 	gimp_load_procedure_get_handles_raw
 	gimp_load_procedure_get_thumbnail_loader
@@ -706,6 +750,7 @@ EXPORTS
 	gimp_palettes_set_popup
 	gimp_param_brush_get_type
 	gimp_param_channel_get_type
+	gimp_param_curve_get_type
 	gimp_param_display_get_type
 	gimp_param_drawable_filter_get_type
 	gimp_param_drawable_get_type
@@ -716,13 +761,16 @@ EXPORTS
 	gimp_param_item_get_type
 	gimp_param_layer_get_type
 	gimp_param_layer_mask_get_type
+	gimp_param_link_layer_get_type
 	gimp_param_palette_get_type
 	gimp_param_path_get_type
 	gimp_param_pattern_get_type
+	gimp_param_rasterizable_get_type
 	gimp_param_resource_get_type
 	gimp_param_selection_get_type
 	gimp_param_spec_brush
 	gimp_param_spec_channel
+	gimp_param_spec_curve
 	gimp_param_spec_display
 	gimp_param_spec_display_none_allowed
 	gimp_param_spec_drawable
@@ -738,15 +786,19 @@ EXPORTS
 	gimp_param_spec_item_none_allowed
 	gimp_param_spec_layer
 	gimp_param_spec_layer_mask
+	gimp_param_spec_link_layer
 	gimp_param_spec_palette
 	gimp_param_spec_path
 	gimp_param_spec_pattern
+	gimp_param_spec_rasterizable
 	gimp_param_spec_resource
 	gimp_param_spec_resource_defaults_to_context
 	gimp_param_spec_resource_none_allowed
 	gimp_param_spec_selection
 	gimp_param_spec_text_layer
+	gimp_param_spec_vector_layer
 	gimp_param_text_layer_get_type
+	gimp_param_vector_layer_get_type
 	gimp_path_bezier_stroke_conicto
 	gimp_path_bezier_stroke_cubicto
 	gimp_path_bezier_stroke_lineto
@@ -872,6 +924,9 @@ EXPORTS
 	gimp_procedure_add_layer_mask_aux_argument
 	gimp_procedure_add_layer_mask_return_value
 	gimp_procedure_add_layer_return_value
+	gimp_procedure_add_link_layer_argument
+	gimp_procedure_add_link_layer_aux_argument
+	gimp_procedure_add_link_layer_return_value
 	gimp_procedure_add_menu_path
 	gimp_procedure_add_palette_argument
 	gimp_procedure_add_palette_aux_argument
@@ -909,6 +964,9 @@ EXPORTS
 	gimp_procedure_add_unit_argument
 	gimp_procedure_add_unit_aux_argument
 	gimp_procedure_add_unit_return_value
+	gimp_procedure_add_vector_layer_argument
+	gimp_procedure_add_vector_layer_aux_argument
+	gimp_procedure_add_vector_layer_return_value
 	gimp_procedure_config_get_choice_id
 	gimp_procedure_config_get_color_array
 	gimp_procedure_config_get_core_object_array
@@ -974,6 +1032,10 @@ EXPORTS
 	gimp_progress_uninstall
 	gimp_progress_update
 	gimp_quit
+	gimp_rasterizable_get_type
+	gimp_rasterizable_is_rasterized
+	gimp_rasterizable_rasterize
+	gimp_rasterizable_restore
 	gimp_resource_delete
 	gimp_resource_duplicate
 	gimp_resource_get_by_id
@@ -1034,6 +1096,15 @@ EXPORTS
 	gimp_text_layer_get_letter_spacing
 	gimp_text_layer_get_line_spacing
 	gimp_text_layer_get_markup
+	gimp_text_layer_get_outline
+	gimp_text_layer_get_outline_antialias
+	gimp_text_layer_get_outline_cap_style
+	gimp_text_layer_get_outline_color
+	gimp_text_layer_get_outline_dash_offset
+	gimp_text_layer_get_outline_direction
+	gimp_text_layer_get_outline_join_style
+	gimp_text_layer_get_outline_miter_limit
+	gimp_text_layer_get_outline_width
 	gimp_text_layer_get_text
 	gimp_text_layer_get_type
 	gimp_text_layer_new
@@ -1051,13 +1122,53 @@ EXPORTS
 	gimp_text_layer_set_letter_spacing
 	gimp_text_layer_set_line_spacing
 	gimp_text_layer_set_markup
+	gimp_text_layer_set_outline
+	gimp_text_layer_set_outline_antialias
+	gimp_text_layer_set_outline_cap_style
+	gimp_text_layer_set_outline_color
+	gimp_text_layer_set_outline_dash_offset
+	gimp_text_layer_set_outline_direction
+	gimp_text_layer_set_outline_join_style
+	gimp_text_layer_set_outline_miter_limit
+	gimp_text_layer_set_outline_width
 	gimp_text_layer_set_text
 	gimp_thumbnail_procedure_get_type
 	gimp_thumbnail_procedure_new
 	gimp_tile_height
 	gimp_tile_width
+	gimp_trc_type_get_type
 	gimp_unit_new
+	gimp_update_metadata
 	gimp_user_time
+	gimp_vector_layer_get_by_id
+	gimp_vector_layer_get_enable_fill
+	gimp_vector_layer_get_enable_stroke
+	gimp_vector_layer_get_fill_color
+	gimp_vector_layer_get_fill_pattern
+	gimp_vector_layer_get_path
+	gimp_vector_layer_get_stroke_cap_style
+	gimp_vector_layer_get_stroke_color
+	gimp_vector_layer_get_stroke_dash_offset
+	gimp_vector_layer_get_stroke_dash_pattern
+	gimp_vector_layer_get_stroke_join_style
+	gimp_vector_layer_get_stroke_miter_limit
+	gimp_vector_layer_get_stroke_pattern
+	gimp_vector_layer_get_stroke_width
+	gimp_vector_layer_get_stroke_width_unit
+	gimp_vector_layer_get_type
+	gimp_vector_layer_new
+	gimp_vector_layer_refresh
+	gimp_vector_layer_set_enable_fill
+	gimp_vector_layer_set_enable_stroke
+	gimp_vector_layer_set_fill_color
+	gimp_vector_layer_set_stroke_cap_style
+	gimp_vector_layer_set_stroke_color
+	gimp_vector_layer_set_stroke_dash_offset
+	gimp_vector_layer_set_stroke_dash_pattern
+	gimp_vector_layer_set_stroke_join_style
+	gimp_vector_layer_set_stroke_miter_limit
+	gimp_vector_layer_set_stroke_width
+	gimp_vector_layer_set_stroke_width_unit
 	gimp_vector_load_procedure_extract_dimensions
 	gimp_vector_load_procedure_get_type
 	gimp_vector_load_procedure_new

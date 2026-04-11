@@ -25,6 +25,9 @@ from gi.repository import Gio
 import os, sys, tempfile, zipfile
 import xml.etree.ElementTree as ET
 
+def N_(message): return message
+def _(message): return GLib.dgettext(None, message)
+
 NESTED_STACK_END = object()
 
 layermodes_map = {
@@ -141,8 +144,10 @@ def get_layer_attributes(layer):
     visible = a.get('visibility', 'visible') != 'hidden'
     m = a.get('composite-op', 'svg:src-over')
     layer_mode = layermodes_map.get(m, Gimp.LayerMode.NORMAL)
+    selected = a.get('selected', 'false') == 'true'
+    locked = a.get('edit-locked', 'false') == 'true'
 
-    return path, name, x, y, opac, visible, layer_mode
+    return path, name, x, y, opac, visible, layer_mode, selected, locked
 
 def get_group_layer_attributes(layer):
     a = layer.attrib
@@ -151,8 +156,10 @@ def get_group_layer_attributes(layer):
     visible = a.get('visibility', 'visible') != 'hidden'
     m = a.get('composite-op', 'svg:src-over')
     layer_mode = layermodes_map.get(m, Gimp.LayerMode.NORMAL)
+    selected = a.get('selected', 'false') == 'true'
+    locked = a.get('edit-locked', 'false') == 'true'
 
-    return name, 0, 0, opac, visible, layer_mode
+    return name, 0, 0, opac, visible, layer_mode, selected, locked
 
 def thumbnail_ora(procedure, file, thumb_size, args, data):
     tempdir = tempfile.mkdtemp('gimp-plugin-file-openraster')
@@ -222,6 +229,7 @@ def export_ora(procedure, run_mode, image, file, options, metadata, config, data
             tmp_img.set_palette(image.get_palette())
 
         tmp_layer = Gimp.Layer.new_from_drawable (drawable, tmp_img)
+        tmp_layer.set_offsets (0, 0)
         tmp_img.insert_layer (tmp_layer, None, 0)
 
         pdb_proc   = Gimp.get_pdb().lookup_procedure('file-png-export')
@@ -260,6 +268,12 @@ def export_ora(procedure, run_mode, image, file, options, metadata, config, data
         a['opacity'] = str(opac)
         a['visibility'] = 'visible' if visible else 'hidden'
         a['composite-op'] = gimp_layermodes_map.get(gimp_layer.get_mode(), 'svg:src-over')
+
+        # ORA Specification extensions
+        if gimp_layer in image.get_selected_layers():
+            a['selected'] = "true"
+        if gimp_layer.get_lock_content():
+            a['edit-locked'] = "true"
         return layer
 
     def add_group_layer(parent, opac, gimp_layer, visible=True):
@@ -271,6 +285,12 @@ def export_ora(procedure, run_mode, image, file, options, metadata, config, data
         a['opacity'] = str(opac)
         a['visibility'] = 'visible' if visible else 'hidden'
         a['composite-op'] = gimp_layermodes_map.get(gimp_layer.get_mode(), 'svg:src-over')
+
+        # ORA Specification extensions
+        if gimp_layer in image.get_selected_layers():
+            a['selected'] = "true"
+        if gimp_layer.get_lock_content():
+            a['edit-locked'] = "true"
         return group_layer
 
 
@@ -383,6 +403,7 @@ def load_ora(procedure, run_mode, file, metadata, flags, config, data):
     lay_cnt = len(stack)
 
     layer_no = 0
+    selected_layers = []
     for item in get_layers(stack):
         prev_lay = layer_no
 
@@ -391,11 +412,11 @@ def load_ora(procedure, run_mode, file, metadata, flags, config, data):
             continue
 
         if item.tag == 'stack':
-            name, x, y, opac, visible, layer_mode = get_group_layer_attributes(item)
+            name, x, y, opac, visible, layer_mode, selected, locked = get_group_layer_attributes(item)
             gimp_layer = Gimp.GroupLayer.new(img, name)
 
         else:
-            path, name, x, y, opac, visible, layer_mode = get_layer_attributes(item)
+            path, name, x, y, opac, visible, layer_mode, selected, locked = get_layer_attributes(item)
 
             if not path.lower().endswith('.png'):
                 continue
@@ -433,6 +454,9 @@ def load_ora(procedure, run_mode, file, metadata, flags, config, data):
         gimp_layer.set_offsets(x, y)  # move to correct position
         gimp_layer.set_opacity(opac * 100)  # a float between 0 and 100
         gimp_layer.set_visible(visible)
+        gimp_layer.set_lock_content(locked)
+        if selected:
+            selected_layers.append(gimp_layer)
 
         img.insert_layer(gimp_layer,
                          parent_groups[-1][0] if parent_groups else None,
@@ -447,6 +471,9 @@ def load_ora(procedure, run_mode, file, metadata, flags, config, data):
 
         if (layer_no > prev_lay):
             Gimp.progress_update(layer_no/lay_cnt)
+
+    if len(selected_layers) > 0:
+        img.set_selected_layers(selected_layers)
 
     Gimp.progress_end()
 
@@ -474,18 +501,18 @@ class FileOpenRaster (Gimp.PlugIn):
                                                  Gimp.PDBProcType.PLUGIN,
                                                  False, export_ora, None)
             procedure.set_image_types("*");
-            procedure.set_documentation ('save an OpenRaster (.ora) file',
-                                         'save an OpenRaster (.ora) file',
+            procedure.set_documentation (_('export an OpenRaster (.ora) file'),
+                                         _('export an OpenRaster (.ora) file'),
                                          name)
-            procedure.set_menu_label('OpenRaster')
+            procedure.set_menu_label(_('OpenRaster'))
             procedure.set_extensions ("ora");
         elif name == 'file-openraster-load':
             procedure = Gimp.LoadProcedure.new (self, name,
                                                 Gimp.PDBProcType.PLUGIN,
                                                 load_ora, None)
-            procedure.set_menu_label('OpenRaster')
-            procedure.set_documentation ('load an OpenRaster (.ora) file',
-                                         'load an OpenRaster (.ora) file',
+            procedure.set_menu_label(_('OpenRaster'))
+            procedure.set_documentation (_('load an OpenRaster (.ora) file'),
+                                         _('load an OpenRaster (.ora) file'),
                                          name)
             procedure.set_mime_types ("image/openraster");
             procedure.set_extensions ("ora");
@@ -494,8 +521,8 @@ class FileOpenRaster (Gimp.PlugIn):
             procedure = Gimp.ThumbnailProcedure.new (self, name,
                                                      Gimp.PDBProcType.PLUGIN,
                                                      thumbnail_ora, None)
-            procedure.set_documentation ('loads a thumbnail from an OpenRaster (.ora) file',
-                                         'loads a thumbnail from an OpenRaster (.ora) file',
+            procedure.set_documentation (_('loads a thumbnail from an OpenRaster (.ora) file'),
+                                         _('loads a thumbnail from an OpenRaster (.ora) file'),
                                          name)
         procedure.set_attribution('Jon Nordby', #author
                                   'Jon Nordby', #copyright

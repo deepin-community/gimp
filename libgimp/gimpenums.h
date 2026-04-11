@@ -64,6 +64,42 @@ typedef enum
 } GimpConvertDitherType;
 
 
+#define GIMP_TYPE_CURVE_POINT_TYPE (gimp_curve_point_type_get_type ())
+
+GType gimp_curve_point_type_get_type (void) G_GNUC_CONST;
+
+/**
+ * GimpCurvePointType:
+ * @GIMP_CURVE_POINT_SMOOTH: GIMP_CURVE_POINT_SMOOTH
+ * @GIMP_CURVE_POINT_CORNER: GIMP_CURVE_POINT_CORNER
+ *
+ * Extracted from app/core/core-enums.h
+ **/
+typedef enum
+{
+  GIMP_CURVE_POINT_SMOOTH,
+  GIMP_CURVE_POINT_CORNER
+} GimpCurvePointType;
+
+
+#define GIMP_TYPE_CURVE_TYPE (gimp_curve_type_get_type ())
+
+GType gimp_curve_type_get_type (void) G_GNUC_CONST;
+
+/**
+ * GimpCurveType:
+ * @GIMP_CURVE_SMOOTH: GIMP_CURVE_SMOOTH
+ * @GIMP_CURVE_FREE: GIMP_CURVE_FREE
+ *
+ * Extracted from app/core/core-enums.h
+ **/
+typedef enum
+{
+  GIMP_CURVE_SMOOTH,
+  GIMP_CURVE_FREE
+} GimpCurveType;
+
+
 #define GIMP_TYPE_HISTOGRAM_CHANNEL (gimp_histogram_channel_get_type ())
 
 GType gimp_histogram_channel_get_type (void) G_GNUC_CONST;
@@ -207,6 +243,7 @@ GType gimp_layer_mode_get_type (void) G_GNUC_CONST;
  * @GIMP_LAYER_MODE_SPLIT: GIMP_LAYER_MODE_SPLIT
  * @GIMP_LAYER_MODE_PASS_THROUGH: GIMP_LAYER_MODE_PASS_THROUGH
  * @GIMP_LAYER_MODE_REPLACE: GIMP_LAYER_MODE_REPLACE
+ * @GIMP_LAYER_MODE_OVERWRITE: GIMP_LAYER_MODE_OVERWRITE
  *
  * Extracted from app/operations/operations-enums.h
  **/
@@ -274,8 +311,29 @@ typedef enum
   GIMP_LAYER_MODE_MERGE,
   GIMP_LAYER_MODE_SPLIT,
   GIMP_LAYER_MODE_PASS_THROUGH,
-  GIMP_LAYER_MODE_REPLACE
+  GIMP_LAYER_MODE_REPLACE,
+  GIMP_LAYER_MODE_OVERWRITE
 } GimpLayerMode;
+
+
+#define GIMP_TYPE_TRC_TYPE (gimp_trc_type_get_type ())
+
+GType gimp_trc_type_get_type (void) G_GNUC_CONST;
+
+/**
+ * GimpTRCType:
+ * @GIMP_TRC_LINEAR: GIMP_TRC_LINEAR
+ * @GIMP_TRC_NON_LINEAR: GIMP_TRC_NON_LINEAR
+ * @GIMP_TRC_PERCEPTUAL: GIMP_TRC_PERCEPTUAL
+ *
+ * Extracted from app/core/core-enums.h
+ **/
+typedef enum
+{
+  GIMP_TRC_LINEAR,
+  GIMP_TRC_NON_LINEAR,
+  GIMP_TRC_PERCEPTUAL
+} GimpTRCType;
 
 
 void           gimp_enums_init           (void);

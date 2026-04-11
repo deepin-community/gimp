@@ -37,6 +37,11 @@
 
 #ifdef G_OS_WIN32
 #include "libgimpbase/gimpwin32-io.h"
+#ifndef HAVE_UNISTD_H
+#include <io.h>
+#define popen  _popen
+#define pclose _pclose
+#endif
 #endif
 
 
@@ -117,7 +122,7 @@ win32_command (const gchar *command)
 }
 
 /* Windows shells break with auto-quote. See: https://gitlab.gnome.org/GNOME/gimp/-/issues/6378 */
-static const gchar *
+static gchar *
 hollow_g_shell_quote (const gchar *input)
 {
   return g_strdup (input);

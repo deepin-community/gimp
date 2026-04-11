@@ -25,13 +25,13 @@ Invoke in the top level of the gimp source tree after compiling GIMP.
 If srcdir != builddir, run it in the build directory and pass the name
 of the source directory on the command-line.
 
-Needs the tool "nm" to work
+Needs the tool "nm", "objdump" or "dumpbin" to work
 
 """
 
-import sys, subprocess
+import os, sys, subprocess, shutil, glob
 
-from os import path
+from os import getenv, path
 
 def_files = (
    "libgimpbase/gimpbase.def",
@@ -54,10 +54,29 @@ if len(sys.argv) > 1:
       print("Directory '%s' does not exist" % srcdir)
       sys.exit (-1)
 
+libextension   = ".so"
+command        = getenv("NM", default="nm") + " --defined-only --extern-only "
+libprefix      = "lib"
+platform_linux = True
+
+if sys.platform in ['win32', 'cygwin']:
+   libextension   = ".dll"
+   command        = "objdump -p "
+   if shutil.which("dumpbin"):
+     command      = "dumpbin /EXPORTS "
+     libprefix    = ""
+   platform_linux = False
+
 for df in def_files:
    directory, name = path.split (df)
    basename, extension = name.split (".")
-   libname = path.join(directory, "lib" + basename + "-*.so")
+
+   libname = path.join(os.getcwd(), directory, libprefix + basename + "-*" + libextension)
+   matches = glob.glob(libname)
+   if matches:
+     libname = matches[0]
+   #FIXME: This leaks to ninja stdout, which should not happen
+   #print ("platform: " + sys.platform + " - extracting symbols from " + libname)
 
    filename = df
    if srcdir:
@@ -75,26 +94,65 @@ for df in def_files:
       if defsymbols[i] in defsymbols[:i]:
          doublesymbols.append ((defsymbols[i], i+2))
 
-   unsortindex = -1
+   sorterrors = ""
+   sortok = True
    for i in range (len (defsymbols)-1):
-      if defsymbols[i] > defsymbols[i+1]:
-         unsortindex = i+1
-         break;
+      if defsymbols[i].lower() > defsymbols[i+1].lower():
+         sorterrors += f"{defsymbols[i]} > {defsymbols[i+1]}\n"
+         sortok = False
+   sorterrors = sorterrors.split(sep='\n')
 
-   status, nm = subprocess.getstatusoutput ("nm --defined-only --extern-only " +
-                                            libname)
+   status, nm = subprocess.getstatusoutput (command + libname)
    if status != 0:
       print("trouble reading {} - has it been compiled?".format(libname))
+      print(nm)
       have_errors = -1
       continue
 
-   nmsymbols = nm.split()[2::3]
+   nmsymbols = ""
+   if platform_linux:
+      nmsymbols = nm
+
+   elif not shutil.which("dumpbin"): # Windows MSYS2
+      # remove parts of objdump output we don't need: anything up to a few lines
+      # after Export Table: ' Ordinal      RVA  Name'
+
+      objnm = nm.split(sep='\n')
+
+      found = False
+      nmsymbols = ""
+      for s in objnm:
+         if "Ordinal   Hint Name" in s or " Ordinal      RVA  Name" in s:
+            found = True
+         elif found:
+            s = s.strip()
+            if not s:
+               break
+            nmsymbols += " 0 0 " + s.split()[-1] # Keep the [2::3] logic happy
+         # else: skip this line
+
+   else: # Windows MSVC
+
+      dbin = nm.split(sep='\n')
+
+      found = False
+      nmsymbols = ""
+      for s in dbin:
+         if "ordinal" in s and "hint" in s and "RVA" in s:
+            found = True
+         elif found and s.strip() and "Summary" not in s:
+            parts = s.split()
+            if len(parts) >= 4:
+               nmsymbols += " 0 0 " + parts[3] # Keep the [2::3] logic happy
+         # else: skip this line
+
+   nmsymbols = nmsymbols.split()[2::3]
    nmsymbols = [s for s in nmsymbols if s[0] != '_']
 
-   missing_defs = [s for s in nmsymbols  if s not in defsymbols]
-   missing_nms  = [s for s in defsymbols if s not in nmsymbols]
+   missing_defs = [s for s in nmsymbols  if s not in defsymbols and s not in exclude_symbols]
+   missing_nms  = [s for s in defsymbols if s not in nmsymbols  and s not in exclude_symbols]
 
-   if unsortindex >= 0 or missing_defs or missing_nms or doublesymbols:
+   if missing_defs or missing_nms or doublesymbols or not sortok:
       print()
       print("Problem found in", filename)
 
@@ -118,9 +176,11 @@ for df in def_files:
             print("     : %s (line %d)" % s)
          print()
 
-      if unsortindex >= 0:
-         print("  the .def-file is not properly sorted (line %d)" % (unsortindex + 2))
-         print()
+      if not sortok:
+         print("  the .def-file is not properly sorted in the following cases")
+         for s in sorterrors:
+            if s != "":
+               print("     * ", s)
 
       have_errors = -1
 

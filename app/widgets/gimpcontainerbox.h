@@ -18,9 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_CONTAINER_BOX_H__
-#define __GIMP_CONTAINER_BOX_H__
-
+#pragma once
 
 #include "gimpeditor.h"
 
@@ -55,4 +53,4 @@ void      gimp_container_box_set_size_request (GimpContainerBox *box,
                                                gint              height);
 
 
-#endif  /*  __GIMP_CONTAINER_BOX_H__  */
+G_DEFINE_AUTOPTR_CLEANUP_FUNC (GimpContainerBox, g_object_unref)

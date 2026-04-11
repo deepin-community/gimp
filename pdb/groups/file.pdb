@@ -23,7 +23,7 @@ sub file_load {
     $help = <<'HELP';
 This procedure invokes the correct file load handler using magic if
 possible, and falling back on the file's extension and/or prefix if
-not.
+not. Note that the loaded image will be marked as clean.
 HELP
 
     &josh_pdb_misc('1997');
@@ -76,8 +76,17 @@ HELP
 		     gimp_value_array_index (new_args, 1));
 
   for (i = 2; i < proc->num_args; i++)
-    if (G_IS_PARAM_SPEC_STRING (proc->args[i]))
-      g_value_set_static_string (gimp_value_array_index (new_args, i), "");
+    if (GIMP_IS_PARAM_SPEC_CHOICE (proc->args[i]))
+      {
+        GParamSpecString *string_spec = G_PARAM_SPEC_STRING (proc->args[i]);
+
+        g_value_set_static_string (gimp_value_array_index (new_args, i),
+                                   string_spec->default_value);
+      }
+    else if (G_IS_PARAM_SPEC_STRING (proc->args[i]))
+      {
+        g_value_set_static_string (gimp_value_array_index (new_args, i), "");
+      }
 
   return_vals =
     gimp_pdb_execute_procedure_by_name_args (gimp->pdb,
@@ -95,7 +104,20 @@ HELP
         {
           GimpImage *image =
             g_value_get_object (gimp_value_array_index (return_vals, 1));
-          gimp_image_set_load_proc (image, file_proc);
+
+          if (! gimp_image_get_load_proc (image))
+            /* Leave the initial load procedure if it already exists as
+             * it will give information about the source format. See
+             * similar code in file_open_image().
+             */
+            gimp_image_set_load_proc (image, file_proc);
+
+          if (! gimp_image_get_file (image))
+            gimp_image_set_imported_file (image, file);
+
+          gimp_image_clean_all (image);
+          gimp_image_undo_disable (image);
+          gimp_image_undo_enable (image);
         }
     }
 
@@ -138,7 +160,7 @@ HELP
   GimpPDBStatusType  status;
 
   layers = file_open_layers (gimp, context, progress,
-                             image, FALSE,
+                             image, FALSE, FALSE,
                              file, run_mode, NULL, &status, error);
 
   if (layers)
@@ -186,7 +208,7 @@ HELP
   GimpPDBStatusType  status;
 
   layer_list = file_open_layers (gimp, context, progress,
-                                 image, FALSE,
+                                 image, FALSE, FALSE,
                                  file, run_mode, NULL, &status, error);
 
   if (layer_list)
@@ -306,6 +328,28 @@ HELP
                                              gimp_object_get_name (proc),
                                              new_args);
 
+  if (g_value_get_enum (gimp_value_array_index (return_vals, 0)) ==
+      GIMP_PDB_SUCCESS)
+    {
+      GimpImage *image =
+        g_value_get_object (gimp_value_array_index (new_args, 1));
+
+      if (! strcmp (gimp_object_get_name (proc), "gimp-xcf-save"))
+        {
+          gimp_image_set_file (image, file);
+
+          gimp_image_set_imported_file (image, NULL);
+          gimp_image_clean_all (image);
+        }
+      else
+        {
+          gimp_image_set_exported_file (image, file);
+          gimp_image_set_export_proc (image, file_proc);
+
+          gimp_image_set_imported_file (image, NULL);
+          gimp_image_export_clean_all (image);
+        }
+    }
   gimp_value_array_unref (new_args);
 
   return return_vals;
@@ -401,6 +445,7 @@ CODE
 
 
 @headers = qw("core/gimp.h"
+              "core/gimpimage-undo.h"
               "plug-in/gimppluginmanager-file.h"
               "file/file-open.h"
               "file/file-save.h"

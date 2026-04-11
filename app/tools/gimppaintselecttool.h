@@ -15,9 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_PAINT_SELECT_TOOL_H__
-#define __GIMP_PAINT_SELECT_TOOL_H__
-
+#pragma once
 
 #include "gimpdrawtool.h"
 
@@ -39,8 +37,9 @@ struct _GimpPaintSelectTool
 {
   GimpDrawTool           parent_instance;
 
-  GimpPaintSelectMode    saved_mode;     /*  saved tool options state  */
+  GimpChannelOps         saved_op;       /*  selection mode before modifier press */
 
+  GimpChannelOps         painting_op;    /*  selection mode at start of painting. */
   GeglBuffer            *trimap;
   GeglBuffer            *image_mask;
   GeglBuffer            *drawable;
@@ -57,6 +56,8 @@ struct _GimpPaintSelectTool
   GeglNode              *render_node;
 
   GimpVector2            last_pos;
+
+  gboolean               process;
 };
 
 struct _GimpPaintSelectToolClass
@@ -69,6 +70,3 @@ void    gimp_paint_select_tool_register (GimpToolRegisterCallback  callback,
                                          gpointer                  data);
 
 GType   gimp_paint_select_tool_get_type (void) G_GNUC_CONST;
-
-
-#endif  /*  __GIMP_PAINT_SELECT_TOOL_H__  */

@@ -312,6 +312,8 @@ gimp_navigation_editor_popup (GimpDisplayShell *shell,
   /* Set poup screen */
   gtk_window_set_screen (GTK_WINDOW (shell->nav_popup),
                          gtk_widget_get_screen (widget));
+  gtk_window_set_transient_for (GTK_WINDOW (shell->nav_popup),
+                                GTK_WINDOW (gtk_widget_get_toplevel (widget)));
 
   gimp_navigation_view_get_local_marker (view,
                                          &view_marker_center_x,
@@ -484,9 +486,6 @@ gimp_navigation_editor_new_private (GimpMenuFactory  *menu_factory,
       gtk_box_pack_start (GTK_BOX (hbox), editor->zoom_label, FALSE, FALSE, 0);
       gtk_widget_show (editor->zoom_label);
     }
-
-  gimp_view_renderer_set_background (GIMP_VIEW (editor->view)->renderer,
-                                     GIMP_ICON_TEXTURE);
 
   return GTK_WIDGET (editor);
 }

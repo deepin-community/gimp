@@ -47,16 +47,19 @@ typedef struct _GimpGroupLayer           GimpGroupLayer;
 typedef struct _GimpLayer                GimpLayer;
 typedef struct _GimpChannel              GimpChannel;
 typedef struct _GimpLayerMask            GimpLayerMask;
+typedef struct _GimpLinkLayer            GimpLinkLayer;
 typedef struct _GimpSelection            GimpSelection;
 typedef struct _GimpTextLayer            GimpTextLayer;
 typedef struct _GimpPath                 GimpPath;
 typedef struct _GimpDrawableFilter       GimpDrawableFilter;
 typedef struct _GimpDrawableFilterConfig GimpDrawableFilterConfig;
+typedef struct _GimpVectorLayer          GimpVectorLayer;
 
 typedef struct _GimpDisplay              GimpDisplay;
 
 typedef struct _GimpResource             GimpResource;
 typedef struct _GimpBrush                GimpBrush;
+typedef struct _GimpCurve                GimpCurve;
 typedef struct _GimpFont                 GimpFont;
 typedef struct _GimpGradient             GimpGradient;
 typedef struct _GimpPattern              GimpPattern;

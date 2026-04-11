@@ -26,7 +26,7 @@ G_BEGIN_DECLS
 
 /* Increment every time the protocol changes
  */
-#define GIMP_PROTOCOL_VERSION  0x0115
+#define GIMP_PROTOCOL_VERSION  0x0117
 
 
 enum
@@ -61,7 +61,8 @@ typedef enum
   GP_PARAM_DEF_TYPE_ID_ARRAY,
   GP_PARAM_DEF_TYPE_EXPORT_OPTIONS,
   GP_PARAM_DEF_TYPE_RESOURCE,
-  GP_PARAM_DEF_TYPE_FILE
+  GP_PARAM_DEF_TYPE_FILE,
+  GP_PARAM_DEF_TYPE_CURVE
 } GPParamDefType;
 
 typedef enum
@@ -81,6 +82,7 @@ typedef enum
   GP_PARAM_TYPE_EXPORT_OPTIONS,
   GP_PARAM_TYPE_PARAM_DEF,
   GP_PARAM_TYPE_VALUE_ARRAY,
+  GP_PARAM_TYPE_CURVE
 } GPParamType;
 
 
@@ -102,6 +104,7 @@ typedef struct _GPParamDefID             GPParamDefID;
 typedef struct _GPParamDefIDArray        GPParamDefIDArray;
 typedef struct _GPParamDefResource       GPParamDefResource;
 typedef struct _GPParamDefFile           GPParamDefFile;
+typedef struct _GPParamDefCurve          GPParamDefCurve;
 typedef struct _GPParam                  GPParam;
 typedef struct _GPParamArray             GPParamArray;
 typedef struct _GPParamIDArray           GPParamIDArray;
@@ -110,6 +113,7 @@ typedef struct _GPParamColor             GPParamColor;
 typedef struct _GPParamColorArray        GPParamColorArray;
 typedef struct _GPParamExportOptions     GPParamExportOptions;
 typedef struct _GPParamValueArray        GPParamValueArray;
+typedef struct _GPParamCurve             GPParamCurve;
 typedef struct _GPProcRun                GPProcRun;
 typedef struct _GPProcReturn             GPProcReturn;
 typedef struct _GPProcInstall            GPProcInstall;
@@ -131,6 +135,7 @@ struct _GPConfig
   gint8    export_exif;
   gint8    export_xmp;
   gint8    export_iptc;
+  gint8    update_metadata;
   gint32   default_display_id;
   gchar   *app_name;
   gchar   *wm_class;
@@ -249,6 +254,11 @@ struct _GPParamDefFile
   gchar  *default_uri;
 };
 
+struct _GPParamDefCurve
+{
+  gint32 none_ok;
+};
+
 struct _GPParamDef
 {
   GPParamDefType  param_def_type;
@@ -273,6 +283,7 @@ struct _GPParamDef
     GPParamDefChoice           m_choice;
     GPParamDefResource         m_resource;
     GPParamDefFile             m_file;
+    GPParamDefCurve            m_curve;
   } meta;
 };
 
@@ -325,6 +336,18 @@ struct _GPParamValueArray
   GPParam *values;
 };
 
+struct _GPParamCurve
+{
+  guint32   curve_type;
+
+  guint32   n_points;
+  gdouble  *points;
+  guint32  *point_types;
+
+  guint32   n_samples;
+  gdouble  *samples;
+};
+
 struct _GPParam
 {
   GPParamType  param_type;
@@ -346,6 +369,7 @@ struct _GPParam
     GPParamExportOptions   d_export_options;
     GPParamDef             d_param_def;
     GPParamValueArray      d_value_array;
+    GPParamCurve           d_curve;
   } data;
 };
 

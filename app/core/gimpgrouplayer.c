@@ -33,9 +33,7 @@
 #include "gegl/gimp-babl.h"
 #include "gegl/gimp-gegl-loops.h"
 
-#include "gimpchannel.h"
 #include "gimpdrawable-filters.h"
-#include "gimpdrawablefilter.h"
 #include "gimpgrouplayer.h"
 #include "gimpgrouplayerundo.h"
 #include "gimpimage.h"
@@ -76,7 +74,8 @@ struct _GimpGroupLayerPrivate
   gboolean        reallocate_projection;
 };
 
-#define GET_PRIVATE(item) ((GimpGroupLayerPrivate *) gimp_group_layer_get_instance_private ((GimpGroupLayer *) (item)))
+#define GET_PRIVATE(item) \
+  ((GimpGroupLayerPrivate *) gimp_group_layer_get_instance_private ((GimpGroupLayer *) (item)))
 
 
 static void            gimp_projectable_iface_init   (GimpProjectableInterface  *iface);
@@ -160,7 +159,8 @@ static void            gimp_group_layer_transform    (GimpLayer       *layer,
                                                       GimpTransformDirection direction,
                                                       GimpInterpolationType  interpolation_type,
                                                       GimpTransformResize clip_result,
-                                                      GimpProgress      *progress);
+                                                      GimpProgress      *progress,
+                                                      gboolean           push_undo);
 static void            gimp_group_layer_convert_type (GimpLayer         *layer,
                                                       GimpImage         *dest_image,
                                                       const Babl        *new_format,
@@ -277,6 +277,7 @@ gimp_group_layer_class_init (GimpGroupLayerClass *klass)
   gimp_object_class->get_memsize         = gimp_group_layer_get_memsize;
 
   viewable_class->default_icon_name      = "gimp-group-layer";
+  viewable_class->default_name           = _("Layer Group");
   viewable_class->ancestry_changed       = gimp_group_layer_ancestry_changed;
   viewable_class->get_size               = gimp_group_layer_get_size;
   viewable_class->get_children           = gimp_group_layer_get_children;
@@ -291,7 +292,6 @@ gimp_group_layer_class_init (GimpGroupLayerClass *klass)
   item_class->resize                     = gimp_group_layer_resize;
   item_class->get_clip                   = gimp_group_layer_get_clip;
 
-  item_class->default_name               = _("Layer Group");
   item_class->rename_desc                = C_("undo-type", "Rename Layer Group");
   item_class->translate_desc             = C_("undo-type", "Move Layer Group");
   item_class->scale_desc                 = C_("undo-type", "Scale Layer Group");
@@ -594,7 +594,6 @@ gimp_group_layer_duplicate (GimpItem *item,
           GimpItem      *child = list->data;
           GimpItem      *new_child;
           GimpLayerMask *mask;
-          GimpContainer *filters;
 
           new_child = gimp_item_duplicate (child, G_TYPE_FROM_INSTANCE (child));
 
@@ -619,36 +618,6 @@ gimp_group_layer_duplicate (GimpItem *item,
           gimp_container_insert (new_private->children,
                                  GIMP_OBJECT (new_child),
                                  position++);
-
-          /* Copy any attached layer effects */
-          filters = gimp_drawable_get_filters (GIMP_DRAWABLE (child));
-          if (gimp_container_get_n_children (filters) > 0)
-            {
-              GList *filter_list;
-
-              for (filter_list = GIMP_LIST (filters)->queue->tail; filter_list;
-                   filter_list = g_list_previous (filter_list))
-                {
-                  if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
-                    {
-                      GimpDrawableFilter *old_filter = filter_list->data;
-                      GimpDrawableFilter *filter;
-
-                      filter =
-                        gimp_drawable_filter_duplicate (GIMP_DRAWABLE (new_child),
-                                                        old_filter);
-
-                      if (filter != NULL)
-                        {
-                          gimp_drawable_filter_apply (filter, NULL);
-                          gimp_drawable_filter_commit (filter, TRUE, NULL, FALSE);
-
-                          gimp_drawable_filter_layer_mask_freeze (filter);
-                          g_object_unref (filter);
-                        }
-                    }
-                }
-            }
         }
 
       /*  force the projection to reallocate itself  */
@@ -1048,7 +1017,8 @@ gimp_group_layer_transform (GimpLayer              *layer,
                             GimpTransformDirection  direction,
                             GimpInterpolationType   interpolation_type,
                             GimpTransformResize     clip_result,
-                            GimpProgress           *progress)
+                            GimpProgress           *progress,
+                            gboolean                push_undo)
 {
   GimpGroupLayer        *group   = GIMP_GROUP_LAYER (layer);
   GimpGroupLayerPrivate *private = GET_PRIVATE (layer);
@@ -1260,7 +1230,22 @@ gimp_group_layer_get_bounding_box (GimpLayer *layer)
 {
   GimpGroupLayerPrivate *private = GET_PRIVATE (layer);
 
-  /* for pass-through groups, use the group's calculated bounding box, instead
+  /* With #4634 were reported to us cases where the get_bounding_box()
+   * was smaller than the calculated bounding box. But we also had the
+   * opposite case, which is that the get_bounding_box() value was
+   * bigger than the computed bounding_box (e.g. when having a
+   * pass-through group layer with a single transparent layer, smaller
+   * than the canvas: applying an effect only affects this layer,
+   * whereas the actual render of the layer group contains the below
+   * layers). Cf. #15004.
+   *
+   * XXX It feels like the parent's get_bounding_box() implementation
+   * (which gets the source node bounding box) is bugged and should not
+   * return what it does. This should likely be looked closer into.
+   * For now, I get the union bounding box of both these results.
+   *
+   * Older explanation for #4634:
+   * for pass-through groups, use the group's calculated bounding box, instead
    * of the source-node's bounding box, since we don't update the bounding box
    * on all events that may affect the latter, and since it includes the
    * bounding box of the backdrop.  this means we can't attach filters that may
@@ -1269,9 +1254,17 @@ gimp_group_layer_get_bounding_box (GimpLayer *layer)
    * through groups makes little sense anyway.
    */
   if (private->pass_through)
-    return private->bounding_box;
+    {
+      GeglRectangle rect = GIMP_LAYER_CLASS (parent_class)->get_bounding_box (layer);
+
+      gegl_rectangle_bounding_box (&rect, &private->bounding_box, &rect);
+
+      return rect;
+    }
   else
-    return GIMP_LAYER_CLASS (parent_class)->get_bounding_box (layer);
+    {
+      return GIMP_LAYER_CLASS (parent_class)->get_bounding_box (layer);
+    }
 }
 
 static void
@@ -2002,7 +1995,6 @@ gimp_group_layer_update_size (GimpGroupLayer *group)
   gboolean               size_changed;
   gboolean               resize_mask;
   GList                 *list;
-  GimpContainer         *filters;
 
   old_bounds.x      = gimp_item_get_offset_x (item);
   old_bounds.y      = gimp_item_get_offset_y (item);
@@ -2136,29 +2128,6 @@ gimp_group_layer_update_size (GimpGroupLayer *group)
    */
   if (resize_mask && ! private->transforming)
     gimp_group_layer_update_mask_size (group);
-
-  /* Update the crop of any filters */
-  if (size_changed)
-    {
-      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (group));
-      for (list = GIMP_LIST (filters)->queue->tail;
-           list; list = g_list_previous (list))
-        {
-          if (GIMP_IS_DRAWABLE_FILTER (list->data))
-            {
-              GimpDrawableFilter *filter = list->data;
-              GimpChannel        *filter_mask;
-
-              filter_mask = GIMP_CHANNEL (gimp_drawable_filter_get_mask (filter));
-
-              /* Don't resize partial layer effects */
-              if (gimp_channel_is_empty (filter_mask))
-                gimp_drawable_filter_refresh_crop (filter, &bounding_box);
-            }
-        }
-      if (list)
-        g_list_free (list);
-    }
 
   /* if we show the mask, invalidate the new mask area */
   if (resize_mask && gimp_layer_get_show_mask (layer))

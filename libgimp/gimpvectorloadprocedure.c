@@ -24,6 +24,7 @@
 
 #include "gimp.h"
 
+#include "libgimpbase/gimpversion-private.h"
 #include "libgimpbase/gimpwire.h" /* FIXME kill this include */
 
 #include "gimpvectorloadprocedure.h"
@@ -131,6 +132,8 @@ gimp_vector_load_procedure_constructed (GObject *object)
                                        _("Load and use dimensions from source file"),
                                        FALSE,
                                        G_PARAM_READWRITE);
+
+  GIMP_WARNING_API_BREAK("Make per-coordinate x/y pixel density. Simplify plug-ins/common/file-svg.c code when not keeping ratio.")
 
   /* Note: the "pixel-density" is saved in pixels per inch. "physical-unit"
    * property is only there for display.
@@ -411,7 +414,7 @@ gimp_vector_load_procedure_run (GimpProcedure        *procedure,
                     "pixel-density", resolution,
                     NULL);
       /* In future, when we'll have vector layers, a vector load proc should be
-       * able to advertize when it can return a vector layer, and when so, we
+       * able to advertise when it can return a vector layer, and when so, we
        * can even bypass the dialog (by running non-interactively) and just use
        * the defaults, unless it's all bogus.
        */

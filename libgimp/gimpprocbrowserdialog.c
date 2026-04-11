@@ -45,9 +45,8 @@
  **/
 
 
-#define DBL_LIST_WIDTH 250
-#define DBL_WIDTH      (DBL_LIST_WIDTH + 400)
-#define DBL_HEIGHT     250
+#define DBL_WIDTH  800
+#define DBL_HEIGHT 500
 
 
 enum
@@ -97,6 +96,8 @@ static void       browser_search            (GimpBrowser           *browser,
                                              const gchar           *query_text,
                                              gint                   search_type,
                                              GimpProcBrowserDialog *dialog);
+static void       browser_stop_search       (GimpBrowser           *browser,
+                                             GimpProcBrowserDialog *dialog);
 
 
 G_DEFINE_TYPE (GimpProcBrowserDialog, gimp_proc_browser_dialog, GIMP_TYPE_DIALOG)
@@ -142,10 +143,9 @@ gimp_proc_browser_dialog_init (GimpProcBrowserDialog *dialog)
   GtkWidget        *scrolled_window;
   GtkCellRenderer  *renderer;
   GtkTreeSelection *selection;
-  GtkWidget        *parent;
 
-  gtk_window_set_default_size (GTK_WINDOW (dialog), DBL_WIDTH,
-                               DBL_WIDTH - DBL_LIST_WIDTH);
+  gtk_window_set_default_size (GTK_WINDOW (dialog),
+                               DBL_WIDTH, DBL_HEIGHT);
 
   dialog->browser = gimp_browser_new ();
   gimp_browser_add_search_types (GIMP_BROWSER (dialog->browser),
@@ -165,6 +165,9 @@ gimp_proc_browser_dialog_init (GimpProcBrowserDialog *dialog)
   g_signal_connect (dialog->browser, "search",
                     G_CALLBACK (browser_search),
                     dialog);
+  g_signal_connect (dialog->browser, "stop-search",
+                    G_CALLBACK (browser_stop_search),
+                    dialog);
 
   /* list : list in a scrolled_win */
 
@@ -183,6 +186,7 @@ gimp_proc_browser_dialog_init (GimpProcBrowserDialog *dialog)
   renderer = gtk_cell_renderer_text_new ();
   gtk_cell_renderer_text_set_fixed_height_from_font
     (GTK_CELL_RENDERER_TEXT (renderer), 1);
+  g_object_set (renderer, "ellipsize", PANGO_ELLIPSIZE_MIDDLE, NULL);
 
   gtk_tree_view_insert_column_with_attributes (GTK_TREE_VIEW (dialog->tree_view),
                                                -1, NULL,
@@ -195,7 +199,6 @@ gimp_proc_browser_dialog_init (GimpProcBrowserDialog *dialog)
                     G_CALLBACK (browser_row_activated),
                     dialog);
 
-  gtk_widget_set_size_request (dialog->tree_view, DBL_LIST_WIDTH, DBL_HEIGHT);
   gtk_container_add (GTK_CONTAINER (scrolled_window), dialog->tree_view);
   gtk_widget_show (dialog->tree_view);
 
@@ -204,11 +207,6 @@ gimp_proc_browser_dialog_init (GimpProcBrowserDialog *dialog)
   g_signal_connect (selection, "changed",
                     G_CALLBACK (browser_selection_changed),
                     dialog);
-
-  parent = gtk_widget_get_parent (gimp_browser_get_right_vbox (GIMP_BROWSER (dialog->browser)));
-  parent = gtk_widget_get_parent (parent);
-
-  gtk_widget_set_size_request (parent, DBL_WIDTH - DBL_LIST_WIDTH, -1);
 
   /* first search (all procedures) */
   browser_search (GIMP_BROWSER (dialog->browser),
@@ -515,4 +513,11 @@ browser_search (GimpBrowser           *browser,
 
       gimp_browser_show_message (browser, _("No matches"));
     }
+}
+
+static void
+browser_stop_search (GimpBrowser           *browser,
+                     GimpProcBrowserDialog *dialog)
+{
+  gtk_widget_destroy (GTK_WIDGET (dialog));
 }

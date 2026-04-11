@@ -42,6 +42,7 @@ pdb_names = [
   'item_transform',
   'item',
   'layer',
+  'link_layer',
   'message',
   'paint_tools',
   'palette_select',
@@ -54,11 +55,13 @@ pdb_names = [
   'pdb',
   'plug_in',
   'progress',
+  'rasterizable',
   'resource',
   'selection',
   'text_layer',
   'text_tool',
   'unit',
+  'vector_layer',
 ]
 
 pdb_sources = []

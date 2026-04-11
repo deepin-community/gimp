@@ -18,8 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_CORE_CONFIG_H__
-#define __GIMP_CORE_CONFIG_H__
+#pragma once
 
 #include "operations/operations-enums.h"
 #include "core/core-enums.h"
@@ -105,6 +104,7 @@ struct _GimpCoreConfig
   gboolean                export_metadata_exif;
   gboolean                export_metadata_xmp;
   gboolean                export_metadata_iptc;
+  gboolean                export_update_metadata;
   GimpDebugPolicy         debug_policy;
 #ifdef G_OS_WIN32
   GimpWin32PointerInputAPI win32_pointer_input_api;
@@ -128,6 +128,3 @@ struct _GimpCoreConfigClass
 
 
 GType  gimp_core_config_get_type (void) G_GNUC_CONST;
-
-
-#endif /* GIMP_CORE_CONFIG_H__ */

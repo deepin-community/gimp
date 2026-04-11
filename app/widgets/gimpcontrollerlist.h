@@ -18,8 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_CONTROLLER_LIST_H__
-#define __GIMP_CONTROLLER_LIST_H__
+#pragma once
 
 
 #define GIMP_TYPE_CONTROLLER_LIST            (gimp_controller_list_get_type ())
@@ -34,24 +33,20 @@ typedef struct _GimpControllerListClass GimpControllerListClass;
 
 struct _GimpControllerList
 {
-  GtkBox              parent_instance;
+  GtkBox                 parent_instance;
 
-  Gimp               *gimp;
+  GimpControllerManager *controller_manager;
 
-  GtkWidget          *hbox;
+  GtkWidget             *hbox;
 
-  GtkListStore       *src;
-  GtkTreeSelection   *src_sel;
-  GType               src_gtype;
+  GtkWidget             *available_controllers;
+  GtkWidget             *active_controllers;
 
-  GtkWidget          *dest;
-  GimpControllerInfo *dest_info;
-
-  GtkWidget          *add_button;
-  GtkWidget          *remove_button;
-  GtkWidget          *edit_button;
-  GtkWidget          *up_button;
-  GtkWidget          *down_button;
+  GtkWidget             *add_button;
+  GtkWidget             *remove_button;
+  GtkWidget             *edit_button;
+  GtkWidget             *up_button;
+  GtkWidget             *down_button;
 };
 
 struct _GimpControllerListClass
@@ -62,7 +57,4 @@ struct _GimpControllerListClass
 
 GType       gimp_controller_list_get_type (void) G_GNUC_CONST;
 
-GtkWidget * gimp_controller_list_new      (Gimp *gimp);
-
-
-#endif  /*  __GIMP_CONTROLLER_LIST_H__  */
+GtkWidget * gimp_controller_list_new      (GimpControllerManager *controller_manager);

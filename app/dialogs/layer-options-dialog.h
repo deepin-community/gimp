@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __LAYER_OPTIONS_DIALOG_H__
-#define __LAYER_OPTIONS_DIALOG_H__
+#pragma once
 
 
 typedef void (* GimpLayerOptionsCallback) (GtkWidget              *dialog,
@@ -30,6 +29,8 @@ typedef void (* GimpLayerOptionsCallback) (GtkWidget              *dialog,
                                            GimpLayerCompositeMode  layer_composite_mode,
                                            gdouble                 layer_opacity,
                                            GimpFillType            layer_fill_type,
+                                           GimpLink               *link,
+                                           GimpPath               *path,
                                            gint                    layer_width,
                                            gint                    layer_height,
                                            gint                    layer_offset_x,
@@ -68,6 +69,3 @@ GtkWidget * layer_options_dialog_new (GimpImage                *image,
                                       gboolean                  layer_lock_alpha,
                                       GimpLayerOptionsCallback  callback,
                                       gpointer                  user_data);
-
-
-#endif /* __LAYER_OPTIONS_DIALOG_H__ */

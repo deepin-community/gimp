@@ -17,9 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_MYBRUSH_H__
-#define __GIMP_MYBRUSH_H__
-
+#pragma once
 
 #include "gimpdata.h"
 
@@ -59,8 +57,9 @@ const gchar * gimp_mybrush_get_brush_json       (GimpMybrush *brush);
 gdouble       gimp_mybrush_get_radius           (GimpMybrush *brush);
 gdouble       gimp_mybrush_get_opaque           (GimpMybrush *brush);
 gdouble       gimp_mybrush_get_hardness         (GimpMybrush *brush);
+gdouble       gimp_mybrush_get_gain             (GimpMybrush *brush);
+gdouble       gimp_mybrush_get_pigment          (GimpMybrush *brush);
+gdouble       gimp_mybrush_get_posterize        (GimpMybrush *brush);
+gdouble       gimp_mybrush_get_posterize_num    (GimpMybrush *brush);
 gdouble       gimp_mybrush_get_offset_by_random (GimpMybrush *brush);
 gboolean      gimp_mybrush_get_is_eraser        (GimpMybrush *brush);
-
-
-#endif /* __GIMP_MYBRUSH_H__ */

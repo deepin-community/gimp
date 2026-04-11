@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_DRAWABLE_TRANSFORM_H__
-#define __GIMP_DRAWABLE_TRANSFORM_H__
+#pragma once
 
 
 GeglBuffer          * gimp_drawable_transform_buffer_affine      (GimpDrawable            *drawable,
@@ -88,7 +87,5 @@ GimpDrawable         * gimp_drawable_transform_paste             (GimpDrawable  
                                                                   GimpColorProfile        *buffer_profile,
                                                                   gint                     offset_x,
                                                                   gint                     offset_y,
-                                                                  gboolean                 new_layer);
-
-
-#endif  /*  __GIMP_DRAWABLE_TRANSFORM_H__  */
+                                                                  gboolean                 new_layer,
+                                                                  gboolean                 push_undo);

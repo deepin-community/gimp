@@ -3,54 +3,32 @@
 # Parameters
 param ($revision = "$GIMP_CI_WIN_INSTALLER",
        $BUILD_DIR,
-       $GIMP_BASE = "$PWD",
-       $GIMP32 = 'gimp-mingw32',
-       $GIMP64 = 'gimp-clang64',
-       $GIMPA64 = 'gimp-clangarm64')
+       $ARM64_BUNDLE = "$PWD\gimp-clangarm64",
+       $X64_BUNDLE = "$PWD\gimp-clang64")
 
+# Ensure the script work properly
 $ErrorActionPreference = 'Stop'
-$PSNativeCommandUseErrorActionPreference = $true
-
-if (-not $GITLAB_CI)
+$PSNativeCommandUseErrorActionPreference = $false #to ensure error catching as in pre-7.4 PS
+if (-not (Test-Path build\windows\installer) -and -not (Test-Path 3_dist-gimp-inno.ps1 -Type Leaf) -or $PSScriptRoot -notlike "*build\windows\installer*")
   {
-    # Make the script work locally
-    if (-not (Test-Path build\windows\installer) -and -not (Test-Path 3_dist-gimp-inno.ps1 -Type Leaf) -or $PSScriptRoot -notlike "*build\windows\installer*")
-      {
-        Write-Host '(ERROR): Script called from wrong dir. Please, call the script from gimp source.' -ForegroundColor Red
-        exit 1
-      }
-    elseif (Test-Path 3_dist-gimp-inno.ps1 -Type Leaf)
-      {
-        Set-Location ..\..\..
-      }
-
-    $PARENT_DIR = '..\'
+    Write-Host '(ERROR): Script called from wrong dir. Please, call the script from gimp source.' -ForegroundColor Red
+    exit 1
   }
-
-
-# This script needs a bit of Python to work
-#FIXME: Restore the condition when TWAIN 32-bit support is dropped
-#if (-not (Get-Command "python" -ErrorAction SilentlyContinue) -or "$(Get-Command "python" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)" -like '*WindowsApps*')
-#  {
-    Invoke-Expression ((Get-Content build\windows\1_build-deps-msys2.ps1 | Select-String 'MSYS_ROOT\)' -Context 0,12) -replace '> ','')
-    $env:PATH = "$MSYS_ROOT/usr/bin;" + $env:PATH
-    Invoke-Expression ((Get-Content .gitlab-ci.yml | Select-String 'win_environ\[' -Context 0,7) -replace '> ','' -replace '- ','')
-#  }
+elseif (Test-Path 3_dist-gimp-inno.ps1 -Type Leaf)
+  {
+    Set-Location ..\..\..
+  }
 
 
 # 1. GET INNO
 Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):installer_tlkt$([char]13)$([char]27)[0KChecking Inno installation"
-
-## Download Inno
+## Install or Update Inno (if needed)
 ## (We need to ensure that TLS 1.2 is enabled because of some runners)
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-#Post-6.4.2 Inno have awfully broken task dialogs: https://groups.google.com/g/innosetup/c/g0V_QE3Zf5Y/m/Daki-eb8EQAJ
-Invoke-WebRequest https://files.jrsoftware.org/is/6/innosetup-6.4.2.exe -OutFile ..\is.exe
+Invoke-WebRequest "https://jrsoftware.org/download.php/is.exe" -UseBasicParsing -OutFile ..\is.exe
 $inno_version_downloaded = (Get-Item ..\is.exe).VersionInfo.ProductVersion -replace ' ',''
-
-## Install or Update Inno
-$broken_inno = Get-ChildItem $Env:Tmp -Filter *.isl.bak -ErrorAction SilentlyContinue
-$inno_version = Get-ItemProperty Registry::'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup*' -ErrorAction SilentlyContinue | Select-Object -ExpandProperty DisplayVersion
+$broken_inno = Get-ChildItem $env:TMP -Filter *.isl.bak -ErrorAction SilentlyContinue
+$inno_version = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup*" -ErrorAction SilentlyContinue | Sort-Object { [version]($_.DisplayVersion -split '-')[0] } -Descending | Select-Object -First 1).DisplayVersion
 if ("$broken_inno" -or "$inno_version" -ne "$inno_version_downloaded")
   {
     if ("$broken_inno")
@@ -70,12 +48,17 @@ if ("$broken_inno" -or "$inno_version" -ne "$inno_version_downloaded")
     Wait-Process is
   }
 Remove-Item ..\is.exe
-Write-Output "(INFO): Installed Inno: $inno_version_downloaded"
-
-## Get Inno install path
-$INNO_PATH = Get-ItemProperty (Resolve-Path Registry::'HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup*') | Select-Object -ExpandProperty InstallLocation
+$INNO_PATH = (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Inno Setup*" | Sort-Object { [version]($_.DisplayVersion -split '-')[0] } -Descending | Select-Object -First 1).InstallLocation
 #$INNO_PATH = [regex]::Matches((Get-Content ..\innosetup.log | Select-String ISCC.exe), '(?<=filename: ).+?(?=\\ISCC.exe)').Value
 Set-Alias iscc "$INNO_PATH\iscc.exe"
+
+## This script needs a bit of Python to work
+if (-not (Get-Command "python" -ErrorAction SilentlyContinue) -or "$(Get-Command "python" -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source)" -like '*WindowsApps*')
+  {
+    Invoke-Expression ((Get-Content build\windows\1_build-deps-msys2.ps1 | Select-String '-not \$env:MSYS_ROOT' -Context 0,12) -replace '> ','')
+    $env:PATH = "$env:MSYS_ROOT/$env:MSYSTEM_PREFIX/bin;$env:PATH"
+  }
+Write-Output "(INFO): Installed Inno: $inno_version_downloaded | Installed Python: $((python --version) -replace '[^0-9.]', '')"
 Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):installer_tlkt$([char]13)$([char]27)[0K"
 
 
@@ -95,6 +78,13 @@ ForEach ($line in $(Select-String 'define' $CONFIG_PATH -AllMatches))
   {
     Invoke-Expression $($line -replace '^.*#' -replace 'define ','$' -replace ' ','=')
   }
+#FIXME: Meson don't support C++ style comments. See: https://github.com/mesonbuild/meson/issues/14260
+$CLEANCONFIG_PATH ="$(Split-Path -Parent $CONFIG_PATH)\config_clean.h"
+if (Test-Path $CLEANCONFIG_PATH)
+  {
+    Remove-Item $CLEANCONFIG_PATH -Force
+  }
+(Get-Content $CONFIG_PATH -Raw) -replace '/\*[\s\S]*?\*/', '' | Set-Content $CLEANCONFIG_PATH
 
 ## Get CUSTOM_GIMP_VERSION (GIMP version as we display for users in installer)
 $CUSTOM_GIMP_VERSION = $GIMP_VERSION
@@ -108,28 +98,35 @@ else
   }
 Write-Output "(INFO): GIMP version: $CUSTOM_GIMP_VERSION"
 
-## FIXME: Our Inno scripts can't construct an one-arch installer
-$supported_archs = "$GIMP32","$GIMP64","$GIMPA64"
-foreach ($bundle in $supported_archs)
+## Autodetects what arch bundles will be packaged
+# (The .iss script supports creating both an installer per arch or an universal installer with all arches)
+if (-not (Test-Path "$ARM64_BUNDLE") -and -not (Test-Path "$X64_BUNDLE"))
   {
-    if (-not (Test-Path "$bundle"))
-      {
-        Write-Host "(ERROR): $bundle bundle not found. You need all the three archs bundles to make the installer." -ForegroundColor red
-      }
-  }
-if ((-not (Test-Path "$GIMP32")) -or (-not (Test-Path "$GIMP64")) -or (-not (Test-Path "$GIMPA64")))
-  {
+    Write-Host "(ERROR): No bundle found. You can tweak 'build/windows/2_build-gimp-msys2.ps1' or configure GIMP with '-Dwindows-installer=true' to make one." -ForegroundColor red
     exit 1
   }
-Write-Output "(INFO): Arch: universal (x86, x64 and arm64)"
+elseif ((Test-Path "$ARM64_BUNDLE") -and -not (Test-Path "$X64_BUNDLE"))
+  {
+    Write-Output "(INFO): Arch: arm64"
+    $supported_archs=@("-DARM64_BUNDLE=$ARM64_BUNDLE")
+  }
+elseif (-not (Test-Path "$ARM64_BUNDLE") -and (Test-Path "$X64_BUNDLE"))
+  {
+    Write-Output "(INFO): Arch: x64"
+    $supported_archs=@("-DX64_BUNDLE=$X64_BUNDLE")
+  }
+elseif ((Test-Path "$ARM64_BUNDLE") -and (Test-Path "$X64_BUNDLE"))
+  {
+    Write-Output "(INFO): Arch: arm64 and x64"
+    $supported_archs=@("-DARM64_BUNDLE=$ARM64_BUNDLE", "-DX64_BUNDLE=$X64_BUNDLE")
+  }
 Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):installer_info$([char]13)$([char]27)[0K"
 
 
 # 3. PREPARE INSTALLER "SOURCE"
 Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):installer_source[collapsed=true]$([char]13)$([char]27)[0KMaking installer assets"
-
 ## Custom installer strings translations and other assets
-## (They are loaded with '-DBUILD_DIR')
+## (They are loaded with 'iscc -DBUILD_DIR' on section 5.)
 if (-not (Test-Path "$BUILD_DIR\build\windows\installer"))
   {
     Write-Host "(ERROR): Installer assets not found. You can tweak 'build\windows\2_build-gimp-msys2.ps1' or configure GIMP with '-Dwindows-installer=true' to build them." -ForegroundColor red
@@ -147,39 +144,36 @@ $langsArray_unofficial = $xmlObject.iso_639_entries.iso_639_entry | Select-Objec
 ### Complete Inno source with not released translations: https://jrsoftware.org/files/istrans/
 function download_langs ([array]$langsArray)
 {
+  git clone --depth 1 https://github.com/jrsoftware/issrc.git "$env:TMP\issrc"
   foreach ($langfile in $langsArray)
     {
       $langfilePath = "$INNO_PATH\$langfile"
       if ($langfile -ne '' -and -not (Test-Path "$langfilePath" -Type Leaf))
         {
           Write-Output "(INFO): temporarily installing $($langfilePath -replace '\\\\','\')"
-          Copy-Item "${PARENT_DIR}issrc\Files\$langfile" "$langfilePath" -Force
+          New-Item $(Split-Path -Parent $langfilePath) -ItemType Directory -Force | Out-Null
+          Copy-Item "$env:TMP\issrc\Files\$langfile" "$langfilePath" -Force
         }
     }
+  Remove-Item "$env:TMP\issrc" -Recurse -Force
 }
-git clone --depth 1 https://github.com/jrsoftware/issrc.git "${PARENT_DIR}issrc"
 download_langs $langsArray_Official
-New-Item "$INNO_PATH\Languages\Unofficial" -ItemType Directory -Force | Out-Null
 download_langs $langsArray_unofficial
-Remove-Item "${PARENT_DIR}issrc" -Recurse -Force
 ### Patch 'AppVer*' against Inno pervasive behavior: https://groups.google.com/g/innosetup/c/w0sebw5YAeg
 function fix_msg ([array]$langsArray, [string]$AppVer)
 {
   foreach ($langfile in $langsArray)
     {
       $langfilePath = "$INNO_PATH\$langfile" -replace '\\\\','\'
-
       if ($AppVer -ne 'revert')
         {
-          Copy-Item "$langfilePath" "$Env:Tmp\$(Split-Path $langfile -Leaf).bak" -Force
-
+          Copy-Item "$langfilePath" "$env:TMP\$(Split-Path $langfile -Leaf).bak" -Force
           #Prefer Python since PowerShell/.NET doesn't handle well files with different encodings
           python build\windows\installer\lang\fix_msg.py "$langfilePath" $AppVer
         }
-
       else #($AppVer -eq 'revert')
         {
-          Move-Item "$Env:Tmp\$(Split-Path $langfile -Leaf).bak" "$langfilePath" -Force
+          Move-Item "$env:TMP\$(Split-Path $langfile -Leaf).bak" "$langfilePath" -Force
         }
     }
 }
@@ -190,34 +184,16 @@ Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):i
 
 
 # 4. PREPARE GIMP FILES
-
-## Get 32-bit TWAIN deps list
-Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):installer_files[collapsed=true]$([char]13)$([char]27)[0KGenerating 32-bit TWAIN dependencies list"
-$twain_list_file = 'build\windows\installer\base_twain32on64.list'
-Copy-Item $twain_list_file "$twain_list_file.bak"
-$twain_list = (python build\windows\2_bundle-gimp-uni_dep.py --debug debug-only $(Resolve-Path $GIMP32/lib/gimp/*/plug-ins/twain/twain.exe) $MSYS_ROOT/mingw32/ $GIMP32/ 32 |
-              Select-String 'Installed' -CaseSensitive -Context 0,1000) -replace "  `t- ",'bin\'
-(Get-Content $twain_list_file) | Foreach-Object {$_ -replace "@DEPS_GENLIST@","$twain_list"} | Set-Content $twain_list_file
-(Get-Content $twain_list_file) | Select-string 'Installed' -notmatch | Set-Content $twain_list_file
-Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):installer_files$([char]13)$([char]27)[0K"
+# (Most of the file processing and special-casing is done on *gimp3264.iss [Files] section.
+#  The resulting .exe installer content should be identical to the .msix and vice-versa)
 
 
 # 5. COMPILE .EXE INSTALLER
 $INSTALLER="gimp-${CUSTOM_GIMP_VERSION}-setup.exe"
 Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0):installer_making[collapsed=true]$([char]13)$([char]27)[0KConstructing $INSTALLER installer"
-Set-Location build\windows\installer
-iscc -DREVISION="$revision" -DBUILD_DIR="$BUILD_DIR" -DGIMP_DIR="$GIMP_BASE" -DDIR32="$GIMP32" -DDIR64="$GIMP64" -DDIRA64="$GIMPA64" -DDEPS_DIR="$GIMP_BASE" -DDDIR32="$GIMP32" -DDDIR64="$GIMP64" -DDDIRA64="$GIMPA64" -DDEBUG_SYMBOLS -DPYTHON base_gimp3264.iss | Out-Null
-if ("$LASTEXITCODE" -gt '0' -or "$?" -eq 'False')
-  {
-    ## We need to manually check failures in pre-7.4 PS
-    exit 1
-  }
-Set-Location $GIMP_BASE
+iscc -DREVISION="$revision" -DBUILD_DIR="$BUILD_DIR" $supported_archs -DDEBUG_SYMBOLS -DPYTHON build\windows\installer\gimp-setup.iss | Out-Null; if ("$LASTEXITCODE" -gt '0') { exit 1 }
 Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):installer_making$([char]13)$([char]27)[0K"
 
-## Revert change done in TWAIN list
-Remove-Item $twain_list_file
-Move-Item "$twain_list_file.bak" $twain_list_file
 ## Clean changes in Inno installation
 fix_msg 'Default.isl' revert
 fix_msg $langsArray_Official revert
@@ -231,26 +207,41 @@ Write-Output "$([char]27)[0Ksection_start:$(Get-Date -UFormat %s -Millisecond 0)
 ## (We use .NET directly because 'sha*sum' does NOT support BOM from pre-PS6 'Set-Content')
 $Utf8NoBomEncoding = New-Object -TypeName System.Text.UTF8Encoding -ArgumentList $False
 $sha256 = (Get-FileHash $INSTALLER -Algorithm SHA256 | Select-Object -ExpandProperty Hash).ToLower()
+Write-Output "(INFO): $INSTALLER SHA-256: $sha256"
 if ($GIMP_RELEASE -and -not $GIMP_IS_RC_GIT)
   {
-    [System.IO.File]::WriteAllText("$GIMP_BASE\$INSTALLER.SHA256SUMS", "$sha256 *$INSTALLER", $Utf8NoBomEncoding)
+    [System.IO.File]::WriteAllText("$PWD\$INSTALLER.SHA256SUMS", "$sha256 *$INSTALLER", $Utf8NoBomEncoding)
     #Set-Content $INSTALLER.SHA256SUMS "$sha256 *$INSTALLER" -Encoding utf8NoBOM -NoNewline
   }
-Write-Output "(INFO): $INSTALLER SHA-256: $sha256"
 $sha512 = (Get-FileHash $INSTALLER -Algorithm SHA512 | Select-Object -ExpandProperty Hash).ToLower()
+Write-Output "(INFO): $INSTALLER SHA-512: $sha512"
 if ($GIMP_RELEASE -and -not $GIMP_IS_RC_GIT)
   {
-    [System.IO.File]::WriteAllText("$GIMP_BASE\$INSTALLER.SHA512SUMS", "$sha512 *$INSTALLER", $Utf8NoBomEncoding)
+    [System.IO.File]::WriteAllText("$PWD\$INSTALLER.SHA512SUMS", "$sha512 *$INSTALLER", $Utf8NoBomEncoding)
     #Set-Content $INSTALLER.SHA512SUMS "$sha512 *$INSTALLER" -Encoding utf8NoBOM -NoNewline
   }
-Write-Output "(INFO): $INSTALLER SHA-512: $sha512"
+## Check in advance if the certificate we will use in the future tagged pipeline is fine
+if ((-not $GIMP_RELEASE -or $GIMP_IS_RC_GIT) -and $CI_COMMIT_TAG)
+  {
+    $latest_installer_cert = New-Object -TypeName System.DateTime -ArgumentList 2027, 2, 28
+    Write-Output "(INFO): Certificate expire date is: $latest_installer_cert"
+    if ((Get-Date) -ge $latest_installer_cert)
+      {
+        $expired_pfx = $latest_installer_cert
+        Write-Host "(ERROR): Signing certificate for releases expired. Please ask the owner to issue a new one then commit its expire date on 'build\windows\installer\*.ps1'." -ForegroundColor Red
+      }
+  }
 Write-Output "$([char]27)[0Ksection_end:$(Get-Date -UFormat %s -Millisecond 0):installer_trust$([char]13)$([char]27)[0K"
 
 
 if ($GITLAB_CI)
   {
     # GitLab doesn't support wildcards when using "expose_as" so let's move to a dir
-    $output_dir = "$GIMP_BASE\build\windows\installer\_Output"
+    $output_dir = "$PWD\build\windows\installer\_Output"
     New-Item $output_dir -ItemType Directory | Out-Null
-    Move-Item $GIMP_BASE\$INSTALLER* $output_dir
+    Move-Item $INSTALLER* $output_dir
+    if ($expired_pfx)
+      {
+        exit 1
+      }
   }

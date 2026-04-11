@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __LAYER_ADD_MASK_DIALOG_H__
-#define __LAYER_ADD_MASK_DIALOG_H__
+#pragma once
 
 
 typedef void (* GimpAddMaskCallback) (GtkWidget       *dialog,
@@ -24,6 +23,7 @@ typedef void (* GimpAddMaskCallback) (GtkWidget       *dialog,
                                       GimpAddMaskType  add_mask_type,
                                       GimpChannel     *channel,
                                       gboolean         invert,
+                                      gboolean         edit_mask,
                                       gpointer         user_data);
 
 
@@ -32,8 +32,6 @@ GtkWidget * layer_add_mask_dialog_new (GList               *layers,
                                        GtkWidget           *parent,
                                        GimpAddMaskType      add_mask_type,
                                        gboolean             invert,
+                                       gboolean             edit_mask,
                                        GimpAddMaskCallback  callback,
                                        gpointer             user_data);
-
-
-#endif /* __LAYER_ADD_MASK_DIALOG_H__ */

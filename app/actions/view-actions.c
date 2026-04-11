@@ -270,12 +270,12 @@ static const GimpToggleActionEntry view_toggle_actions[] =
     FALSE,
     GIMP_HELP_VIEW_SNAP_TO_CANVAS },
 
-  { "view-snap-to-vectors", NULL,
+  { "view-snap-to-path", NULL,
     NC_("view-action", "Snap t_o Active Path"), NULL, { NULL },
     NC_("view-action", "Tool operations snap to the active path"),
-    view_snap_to_vectors_cmd_callback,
+    view_snap_to_path_cmd_callback,
     FALSE,
-    GIMP_HELP_VIEW_SNAP_TO_VECTORS },
+    GIMP_HELP_VIEW_SNAP_TO_PATH },
 
   { "view-snap-to-bbox", NULL,
     NC_("view-action", "Snap to _Bounding Boxes"), NULL, { NULL },
@@ -938,8 +938,8 @@ view_actions_update (GimpActionGroup *group,
   SET_ACTIVE    ("view-snap-to-grid",         display && options->snap_to_grid);
   SET_SENSITIVE ("view-snap-to-canvas",       image);
   SET_ACTIVE    ("view-snap-to-canvas",       display && options->snap_to_canvas);
-  SET_SENSITIVE ("view-snap-to-vectors",      image);
-  SET_ACTIVE    ("view-snap-to-vectors",      display && options->snap_to_path);
+  SET_SENSITIVE ("view-snap-to-path",         image);
+  SET_ACTIVE    ("view-snap-to-path",         display && options->snap_to_path);
   SET_SENSITIVE ("view-snap-to-bbox",         image);
   SET_ACTIVE    ("view-snap-to-bbox",         display && options->snap_to_bbox);
   SET_SENSITIVE ("view-snap-to-equidistance", image);
@@ -992,19 +992,21 @@ view_actions_set_zoom (GimpActionGroup  *group,
 {
   GimpImageWindow *window;
   GimpMenuModel   *model;
-  gchar           *str;
   gchar           *label;
+  gdouble          value;
 
   g_object_get (shell->zoom,
-                "percentage", &str,
+                "value", &value,
                 NULL);
 
   window = gimp_display_shell_get_window (shell);
   model  = gimp_image_window_get_menubar_model (window);
-  label  = g_strdup_printf (_("_Zoom (%s)"), str);
+  if (value >= 0.15)
+    label = g_strdup_printf (_("_Zoom (%.0f%%)"), value * 100.0);
+  else
+    label = g_strdup_printf (_("_Zoom (%.2f%%)"), value * 100.0);
   gimp_menu_model_set_title (model, "/View/Zoom", label);
   g_free (label);
-  g_free (str);
 }
 
 static void

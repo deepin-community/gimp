@@ -11,12 +11,12 @@ subdir('gui')
 subdir('menus')
 subdir('operations')
 subdir('paint')
+subdir('path')
 subdir('pdb')
 subdir('plug-in')
 subdir('propgui')
 subdir('text')
 subdir('tools')
-subdir('vectors')
 subdir('widgets')
 subdir('xcf')
 
@@ -102,10 +102,10 @@ console_libapps = [
     libapplayermodeslegacy,
     libappoperations,
     libapppaint,
+    libapppath,
     libapppdb,
     libappplugin,
     libapptext,
-    libappvectors,
     libappxcf,
 ]
 
@@ -128,7 +128,6 @@ libapp_dep = declare_dependency(
 
 # Those subdirs need to link against the first ones
 subdir('config')
-subdir('tests')
 
 console_libapps += [ libappconfig ]
 
@@ -166,9 +165,8 @@ if platform_windows
   console_rc_file = windows.compile_resources(
     gimp_app_console_rc,
     args: [
-      '--define', 'ORIGINALFILENAME_STR="@0@"'.format(console_rc_name+'.exe'),
-      '--define', 'INTERNALNAME_STR="@0@"'    .format(console_rc_name),
-      '--define', 'TOP_SRCDIR="@0@"'          .format(meson.project_source_root()),
+      rc_define_flag, rc_define_fmt.format('ORIGINALFILENAME_STR', console_rc_name+'.exe'),
+      rc_define_flag, rc_define_fmt.format('INTERNALNAME_STR', console_rc_name),
     ],
     include_directories: [
       rootInclude, appInclude,
@@ -184,9 +182,8 @@ if platform_windows
   gui_rc_file = windows.compile_resources(
     gimp_app_rc,
     args: [
-      '--define', 'ORIGINALFILENAME_STR="@0@"'.format(gui_rc_name+'.exe'),
-      '--define', 'INTERNALNAME_STR="@0@"'    .format(gui_rc_name),
-      '--define', 'TOP_SRCDIR="@0@"'          .format(meson.project_source_root()),
+      rc_define_flag, rc_define_fmt.format('ORIGINALFILENAME_STR', gui_rc_name+'.exe'),
+      rc_define_flag, rc_define_fmt.format('INTERNALNAME_STR', gui_rc_name),
     ],
     include_directories: [
       rootInclude, appInclude,
@@ -240,10 +237,10 @@ if enable_default_bin
                     pointing_to: fs.name(gimpmain_exe.full_path()),
                     install_dir: get_option('bindir'))
   else
-    meson.add_install_script(python, '-c', 'from shutil import copy2; from pathlib import Path; from sys import argv; copy2(argv[1], str(Path(argv[2]) / "bin" / argv[3]))',
-                             gimpmain_exe.full_path(), get_option('prefix'), fs.name(gimpmain_exe.name()).replace(exec_ver, '.exe'))
-    meson.add_install_script(python, '-c', 'from shutil import copy2; from pathlib import Path; from sys import argv; copy2(argv[1], str(Path(argv[2]) / "bin" / argv[3].replace("@0@", argv[4])))',
-                             gimpmain_exe.full_path(), get_option('prefix'), fs.name(gimpmain_exe.name()).replace(exec_ver, '-@0@.exe'), api_version_major.to_string())
+    meson.add_install_script(python, '-c', 'from shutil import copy2; from pathlib import Path; from sys import argv; import os; copy2(argv[1], str(Path(os.environ.get("MESON_INSTALL_DESTDIR_PREFIX")) / "bin" / argv[2]))',
+                             gimpmain_exe.full_path(), fs.name(gimpmain_exe.name()).replace(exec_ver, '.exe'))
+    meson.add_install_script(python, '-c', 'from shutil import copy2; from pathlib import Path; from sys import argv; import os; copy2(argv[1], str(Path(os.environ.get("MESON_INSTALL_DESTDIR_PREFIX")) / "bin" / argv[2].replace("@0@", argv[3])))',
+                             gimpmain_exe.full_path(), fs.name(gimpmain_exe.name()).replace(exec_ver, '-@0@.exe'), gimp_mutex_version) #see the rationale on main meson.build
   endif
   if enable_console_bin
     if not platform_windows
@@ -254,10 +251,10 @@ if enable_default_bin
                       pointing_to: fs.name(gimpconsole_exe.full_path()),
                       install_dir: get_option('bindir'))
     else
-      meson.add_install_script(python, '-c', 'from shutil import copy2; from pathlib import Path; from sys import argv; copy2(argv[1], str(Path(argv[2]) / "bin" / argv[3]))',
-                               gimpconsole_exe.full_path(), get_option('prefix'), fs.name(gimpconsole_exe.name()).replace(exec_ver, '.exe'))
-      meson.add_install_script(python, '-c', 'from shutil import copy2; from pathlib import Path; from sys import argv; copy2(argv[1], str(Path(argv[2]) / "bin" / argv[3].replace("@0@", argv[4])))',
-                               gimpconsole_exe.full_path(), get_option('prefix'), fs.name(gimpconsole_exe.name()).replace(exec_ver, '-@0@.exe'), api_version_major.to_string())
+      meson.add_install_script(python, '-c', 'from shutil import copy2; from pathlib import Path; from sys import argv; import os; copy2(argv[1], str(Path(os.environ.get("MESON_INSTALL_DESTDIR_PREFIX")) / "bin" / argv[2]))',
+                               gimpconsole_exe.full_path(), fs.name(gimpconsole_exe.name()).replace(exec_ver, '.exe'))
+      meson.add_install_script(python, '-c', 'from shutil import copy2; from pathlib import Path; from sys import argv; import os; copy2(argv[1], str(Path(os.environ.get("MESON_INSTALL_DESTDIR_PREFIX")) / "bin" / argv[2].replace("@0@", argv[3])))',
+                               gimpconsole_exe.full_path(), fs.name(gimpconsole_exe.name()).replace(exec_ver, '-@0@.exe'), gimp_mutex_version) #see the rationale on main meson.build
     endif
   endif
 endif

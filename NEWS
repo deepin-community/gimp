@@ -1,161 +1,66 @@
                    ------------------------------
                    GNU Image Manipulation Program
-                         Development Branch
+                           Stable Branch
                    ------------------------------
 
-This is the development branch of GIMP.
+This is the stable branch of GIMP.
 
 
-Overview of Changes from GIMP 3.0.2 to GIMP 3.0.4
+Overview of Changes from GIMP 3.2.0 to GIMP 3.2.2
 =================================================
 
 Core:
 
-  - Make maximum radius for generated brushes consistent across
-    codebase.
-  - Use NDE filter name for undo history.
-  - Module loading improved to be better cross-platform (in particular
-    on macOS both .so and .dylib modules are supported).
-  - Code compliant with GCC 15 (C23).
-  - Filter size updated when its drawable is rotated.
-  - Font loading (at startup) optimized.
-  - Set the proper program name for KDE/Wayland to map the process to
-    the correct desktop file.
-  - "windows-display-*" are hidden from the Shortcuts dialog (they are
-    not meant to be remapped).
-  - Editing non-destructive effects now triggers undo steps.
-  - When migrating from GIMP 2.x to GIMP 3, shortcuts for actions
-    "edit-paste-as-new-layer*" are now converted to "edit-paste-merged*"
-    (and not "edit-paste*" anymore which was confusing and
-    counter-productive).
+  - We removed support for a separate folder for loading 32-bit binaries
+    on 64-bit Windows. This was being used for core plug-ins for the
+    TWAIN plug-in only.
+  - Various fixes related to the new non-destructive layer types, or to
+    non-destructive layer effects.
+  - More robust handling of Procreate and SwatchBooker palettes.
+  - Fix scaling paths when importing SVG as paths.
+  - We now support reading the documentation being installed in the user
+    config directory in the `help/` subdirectory.
+  - Histogram dialog: the unique color count feature now takes into
+    account any selection.
 
 Graphical User Interface:
 
-  - Highlight selected device in GimpDeviceStatus.
-  - Various theme leak fixes.
-  - UX improvement: GimpViewableDialog (e.g. Fill/Stroke path and more)
-    now has "OK" as default response.
-  - Icon size settings now also applying to Move and Transform icon
-    boxes.
-  - Commit hash is now shown in About dialog in all non-release builds
-    (i.e. even in stable series, when we are in-between releases).
-  - Hide Force slider for Pencil Tool (rather than just making it
-    insensitive).
-  - Define merged titlebar icon colors.
-  - Keep menubar color consistent when out of focus.
-  - We don't show Fx icon for tool-based filters.
-  - Updated splash without micro version in it.
-  - Removed size restrictions on Display Filters.
-  - Don't show hidden tools on toolbox tooltips.
-  - Fix "Keep above" Window Manager hint.
-  - Multi-Window mode on Windows: dock windows' title bars now adapt to
-    the Windows system theme colors too.
-  - Show palette name in Palette Color Selector.
+  - Theme fixes.
+  - Various text fixed for better localization.
+  - Display the "Tab" shortcut for the "Hide Docks" action, even though
+    it is not a real global shortcut (it only works on the canvas).
+  - Metadata Rotation import dialog: you can now click the preview for
+    Original and Rotated images in the Metadata Rotation Import Dialog,
+    and have it open the image rotated as shown in the preview.
 
-Tools:
+Plug-Ins:
 
-  - MyPaint Brush: have consistent options layout compared to other
-    paint tools.
-  - Scissors Select Tool: close the curve on Enter, similar to the Path
-    tool.
-  - Path Tool: connect path on click in design mode.
+  - Tile: carry over the source image's profile to the newly created
+    image.
+  - Improve support of: FITS, TIM, PAA, ICNS, PVR, SFW, JIF, PSP, PSD
 
-Plug-ins:
+Translations:
 
-  - Restore GUI to Difference Clouds script. This had been lost since
-    GIMP 2.8!
-  - Fixes in various file format support, such as: DDS, SVG, TIFF, PSD,
-    BMP, ICO…
-  - Screenshot dropdowns replaced by radio buttons, as part of a new UX
-    decision that choice settings with 2 or 3 choices should be dropdown
-    (faster 1-click access), unless there are a lot more settings making
-    the dialog too crowded already.
-
-PDB:
-
-  - Make "gimp-plug-ins-query" public again (yet still not available in
-    libgimp).
+  - Serbian Cyrillic now has upstream support in InnoSetup (in their
+    "Unofficial" list still, which means it is less verified). Our
+    installer now has Serbian Cyrillic localization too.
 
 Build:
 
-  - Windows Installer:
-    * Make the installer aware of Install, Reinstall and Update modes.
-    * Add Repair mode to Windows installer: in particular we can now fix
-      installations when the previous install directory cannot be
-      accessed anymore.
-    * The feature to delete the config folder on Windows uninstall will
-      now make a backup on the Desktop first (allowing people to delete
-      it themselves, move it, or even restore it later if needed).
-    * Uninstalling while GIMP is running is made impossible (among other
-      issues, it was causing partial uninstallation).
-    * Downgrading is only possible by uninstalling first.
-    * Development warning is shown in dev build of stable series too.
-    * Add fractional scaling support to Installer welcome image.
-    * Restore points now have a timeout to prevent stuckness.
-  - Our AppImage won't ship debug symbols anymore. Better debugging can
-    be set with: export DEBUGINFOD_URLS="https://debuginfod.debian.net"
-  - Windows builds:
-    * Ship babl/GEGL and libgimp headers, static libs and pkg-config
-      files for plug-in developers.
-    * Dedicated file icon for XCF files.
-    * Generate native .pdb CodeView symbols on Windows (smaller debug
-      data files, usable by MSIX and better debugging ability), except
-      on x86 (32-bit).
-  - Crossbuilds are dropped from CI.
-  - Shell scripts used in the meson build are ported to Python (more
-    portable and much faster on some platforms, in particular Windows).
-  - Some build scripts were moved around for reorganization.
-  - Depency requirement bumped:
-    * babl 0.1.114
-    * GEGL 0.4.62
-  - New "Inputs" feature for simpler Gitlab pipelines running.
-  - Some in-repository documentation was cleaned up.
-
-
-Overview of Changes from GIMP 3.0.0 to GIMP 3.0.2
-=================================================
-
-This is a bug-fix only release.
-
-Core:
-
-  - Mark some strings translatable.
-  - Fix crash when choosing a brush in grid view.
-  - Windows: temporary revert of some Input Device handling code which
-    was breaking pressure sensitivity for some graphics tablets (though
-    this revert may make issues with the eraser tip).
-  - Fix crash when choosing a non-existing font in text tool options.
-
-Tools:
-
-  - Reorder Line Art Detection options per design decision.
-
-Graphical User Interface:
-
-  - Keep headerbar color consistent when out of focus.
-  - Histogram uses the luminance value of the foreground color as a
-    threshold to lighten or darken the border color for contrast with
-    the histogram itself.
-  - Improve separation between panels in dark theme.
-  - Add default response for GimpQueryBox dialogues.
-  - Spacing between toolbox widgets improved.
-  - GimpSpinScale slider colors inverted.
-  - New icons: "gimp-toggle-on" and "gimp-toggle-off" and using them in
-    the Search Action's list as icons for toggle actions.
-
-Plug-ins:
-
-  - Python Console uses the luminance of the background color for error
-    text.
-  - Metadata Editor: fix buffer overflow.
-  - Gradient Flare: fix crash when setting the size to 0.
-  - Screenshot: X11 implementation is bypassed (in favor of portals)
-    when running on XWayland.
-
-Build:
-
-  - Various packaging fixes and cleanup.
-  - The Windows installer now prompts (only in user installation) about
-    deleting GIMP config files when uninstalling.
-  - GEGL 0.4.58 is now our minimum requirement.
-  - Windows installer: create Restore Point on system-wide install.
+  - NM environment variable is now used in priority for the `nm` tool
+    used for the build. This check is stored from configure-time
+    environment.
+  - Windows x86 32-bit pipeline has now been decommissioned from our CI.
+    This implies that 32-bit builds won't be available anymore in our
+    Windows installer, just as was already the case on the Windows Store.
+  - Meson build:
+    * New boolean option -Dtwain-unmaintained: this puts our TWAIN
+      plug-in behind a disabled-by-default flag, because this plug-in
+      only made sense in 32-bit. The next step will be to replace it by
+      a WIA plug-in.
+    * Option -Dwin32-32bits-dll-folder removed.
+  - GIMP can now be built fully without patches on macOS. The in-house
+    macOS build is slowly moving to become our main CI for this OS and
+    for making the release DMGs.
+  - Snap: enable MIDI (Alsa) support.
+  - AppImage: enable "Send by email".

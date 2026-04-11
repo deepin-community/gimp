@@ -35,6 +35,7 @@
 #include "core/gimp-gui.h"
 #include "core/gimpasync.h"
 #include "core/gimpcancelable.h"
+#include "core/gimpdata.h"
 #include "core/gimpdrawable.h"
 #include "core/gimpdrawable-histogram.h"
 #include "core/gimperror.h"
@@ -406,6 +407,13 @@ gimp_levels_tool_dialog (GimpFilterTool *filter_tool)
   gtk_box_pack_end (GTK_BOX (hbox), hbox2, FALSE, FALSE, 0);
 
   /*  The linear/perceptual radio buttons  */
+  /* XXX: override the default to Perceptual for the time being, until
+   * we are able to change "gimp:levels" default for "trc" directly.
+   * See #15962.
+   */
+  g_object_set (config,
+                "trc", GIMP_TRC_PERCEPTUAL,
+                NULL);
   hbox2 = gimp_prop_enum_icon_box_new (G_OBJECT (config), "trc",
                                        "gimp-color-space",
                                        -1, -1);
@@ -667,6 +675,12 @@ gimp_levels_tool_reset (GimpFilterTool *filter_tool)
   g_object_set (filter_tool->config,
                 "channel", channel,
                 NULL);
+  /* XXX: the tool defaults to Perceptual, unlike the op.
+   * See #15962.
+   */
+  g_object_set (filter_tool->config,
+                "trc", GIMP_TRC_PERCEPTUAL,
+                NULL);
 }
 
 static void
@@ -742,7 +756,11 @@ gimp_levels_tool_settings_import (GimpFilterTool  *filter_tool,
                                  &bytes_read, NULL, error) ||
       bytes_read != sizeof (header))
     {
-      g_prefix_error (error, _("Could not read header: "));
+      if (error && *error)
+        g_prefix_error (error, _("Could not read header: "));
+      else
+        g_set_error (error, GIMP_DATA_ERROR, GIMP_DATA_ERROR_READ,
+                     _("Could not read header: "));
       return FALSE;
     }
 
@@ -750,6 +768,10 @@ gimp_levels_tool_settings_import (GimpFilterTool  *filter_tool,
 
   if (g_str_has_prefix (header, "# GIMP Levels File\n"))
     return gimp_levels_config_load_cruft (config, input, error);
+
+  /* Check if we're loading a Photoshop Levels preset .alv file */
+  if (bytes_read > 2 && header[0] == 0 && (header[1] == 2))
+    return gimp_levels_config_load_alv (config, input, error);
 
   return GIMP_FILTER_TOOL_CLASS (parent_class)->settings_import (filter_tool,
                                                                  input,

@@ -56,8 +56,8 @@
  * automatic. Add the new layer with the [method@Image.insert_layer]
  * method.
  *
- * Other attributes such as layer mask modes and offsets should be set
- * with explicit procedure calls.
+ * Other attributes such as layer mask and offsets should be set with
+ * explicit procedure calls.
  *
  * Returns: (transfer none):
  *          The newly created layer. The object belongs to libgimp and you should not free it.
@@ -107,10 +107,14 @@ gimp_layer_new (GimpImage     *image,
  * Create a new layer from what is visible in an image.
  *
  * This procedure creates a new layer from what is visible in the given
- * image. The new layer still needs to be added to the destination
- * image, as this is not automatic. Add the new layer with the
- * gimp_image_insert_layer() command. Other attributes such as layer
- * mask modes, and offsets should be set with explicit procedure calls.
+ * image.
+ *
+ * The new layer still needs to be added to the image as this is not
+ * automatic. Add the new layer with the [method@Image.insert_layer]
+ * method.
+ *
+ * Other attributes such as layer mask and offsets should be set with
+ * explicit procedure calls.
  *
  * Returns: (transfer none): The newly created layer.
  *
@@ -152,10 +156,14 @@ gimp_layer_new_from_visible (GimpImage   *image,
  * Create a new layer by copying an existing drawable.
  *
  * This procedure creates a new layer as a copy of the specified
- * drawable. The new layer still needs to be added to the image, as
- * this is not automatic. Add the new layer with the
- * gimp_image_insert_layer() command. Other attributes such as layer
- * mask modes, and offsets should be set with explicit procedure calls.
+ * drawable.
+ *
+ * The new layer still needs to be added to the image as this is not
+ * automatic. Add the new layer with the [method@Image.insert_layer]
+ * method.
+ *
+ * Other attributes such as layer mask and offsets should be set with
+ * explicit procedure calls.
  *
  * Returns: (transfer none): The newly copied layer.
  **/
@@ -194,6 +202,13 @@ gimp_layer_new_from_drawable (GimpDrawable *drawable,
  * This procedure copies the specified layer and returns the copy. The
  * newly copied layer is for use within the original layer's image. It
  * should not be subsequently added to any other image.
+ *
+ * The new layer still needs to be added to the image as this is not
+ * automatic. Add the new layer with the [method@Image.insert_layer]
+ * method.
+ *
+ * Other attributes such as layer mask and offsets should be set with
+ * explicit procedure calls.
  *
  * Returns: (transfer none):
  *          The newly copied layer. The object belongs to libgimp and you should not free it.
@@ -477,6 +492,7 @@ gimp_layer_set_offsets (GimpLayer *layer,
  * This procedure creates a layer mask for the specified layer.
  * Layer masks serve as an additional alpha channel for a layer.
  * Different types of masks are allowed for initialisation:
+ *
  * - white mask (leaves the layer fully visible);
  * - black mask (gives the layer complete transparency);
  * - the layer's alpha channel (either a copy, or a transfer, which

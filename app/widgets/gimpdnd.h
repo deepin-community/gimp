@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_DND_H__
-#define __GIMP_DND_H__
+#pragma once
 
 
 #define GIMP_TARGET_URI_LIST \
@@ -32,7 +31,7 @@
         { "XdndDirectSave0", 0, GIMP_DND_TYPE_XDS }
 
 #define GIMP_TARGET_COLOR \
-        { "application/x-color", 0, GIMP_DND_TYPE_COLOR }
+        { "application/x-geglcolor", 0, GIMP_DND_TYPE_COLOR }
 
 #define GIMP_TARGET_SVG \
         { "image/svg", 0, GIMP_DND_TYPE_SVG }
@@ -62,7 +61,7 @@
         { "application/x-gimp-layer-mask-id", GTK_TARGET_SAME_APP, GIMP_DND_TYPE_LAYER_MASK }
 
 #define GIMP_TARGET_PATH \
-        { "application/x-gimp-path-id", GTK_TARGET_SAME_APP, GIMP_DND_TYPE_VECTORS }
+        { "application/x-gimp-path-id", GTK_TARGET_SAME_APP, GIMP_DND_TYPE_PATH }
 
 #define GIMP_TARGET_BRUSH \
         { "application/x-gimp-brush-name", 0, GIMP_DND_TYPE_BRUSH }
@@ -101,7 +100,8 @@
         { "application/x-gimp-channel-list", GTK_TARGET_SAME_APP, GIMP_DND_TYPE_CHANNEL_LIST }
 
 #define GIMP_TARGET_PATH_LIST \
-        { "application/x-gimp-vectors-list", GTK_TARGET_SAME_APP, GIMP_DND_TYPE_VECTORS_LIST }
+        { "application/x-gimp-path-list", GTK_TARGET_SAME_APP, GIMP_DND_TYPE_PATH_LIST }
+
 
 /*  dnd initialization  */
 
@@ -288,6 +288,3 @@ void  gimp_dnd_xds_source_add    (GtkWidget               *widget,
                                   GimpDndDragViewableFunc  get_image_func,
                                   gpointer                 data);
 void  gimp_dnd_xds_source_remove (GtkWidget               *widget);
-
-
-#endif /* __GIMP_DND_H__ */

@@ -25,10 +25,12 @@
 #include "tools-types.h"
 
 #include "core/gimp.h"
+#include "core/gimpdrawable.h"
 #include "core/gimpimage.h"
 #include "core/gimpimage-crop.h"
 #include "core/gimpimage-undo.h"
 #include "core/gimpitem.h"
+#include "core/gimplayer.h"
 #include "core/gimptoolinfo.h"
 
 #include "widgets/gimphelp-ids.h"
@@ -165,7 +167,9 @@ gimp_crop_tool_init (GimpCropTool *crop_tool)
 static void
 gimp_crop_tool_constructed (GObject *object)
 {
-  GimpCropTool    *crop_tool = GIMP_CROP_TOOL (object);
+  GimpTool        *tool      = GIMP_TOOL (object);
+  GimpCropTool    *crop_tool = GIMP_CROP_TOOL (tool);
+  GimpCropOptions *options   = GIMP_CROP_TOOL_GET_OPTIONS (crop_tool);
   GimpContext     *context;
   GimpToolInfo    *tool_info;
 
@@ -186,6 +190,9 @@ gimp_crop_tool_constructed (GObject *object)
   gimp_crop_tool_image_changed (crop_tool,
                                 gimp_context_get_image (context),
                                 context);
+
+  /* The Crop Tool is only destructive when "Delete Pixels" is enabled */
+  GIMP_TOOL_GET_CLASS (tool)->is_destructive = options->delete_pixels;
 }
 
 static void
@@ -302,7 +309,8 @@ gimp_crop_tool_options_notify (GimpTool         *tool,
                                GimpToolOptions  *options,
                                const GParamSpec *pspec)
 {
-  GimpCropTool *crop_tool = GIMP_CROP_TOOL (tool);
+  GimpCropTool    *crop_tool    = GIMP_CROP_TOOL (tool);
+  GimpCropOptions *crop_options = GIMP_CROP_TOOL_GET_OPTIONS (crop_tool);
 
   if (! strcmp (pspec->name, "layer-only") ||
       ! strcmp (pspec->name, "allow-growing"))
@@ -316,6 +324,10 @@ gimp_crop_tool_options_notify (GimpTool         *tool,
         {
           gimp_crop_tool_update_option_defaults (crop_tool, FALSE);
         }
+    }
+  else if (! strcmp (pspec->name, "delete-pixels"))
+    {
+      GIMP_TOOL_GET_CLASS (tool)->is_destructive = crop_options->delete_pixels;
     }
 }
 
@@ -485,6 +497,18 @@ gimp_crop_tool_commit (GimpCropTool *crop_tool)
 
                   off_x -= x;
                   off_y -= y;
+
+                  /* If we have the crop tool set to allow growing and to fill
+                   * with transparency, and the crop rectangle is larger than
+                   * the layer, then we add transparency if there is none */
+                  if (options->allow_growing                                 &&
+                      (gimp_item_get_width (GIMP_ITEM (iter->data)) < w      ||
+                       gimp_item_get_width (GIMP_ITEM (iter->data)) < h)     &&
+                      options->fill_type == GIMP_FILL_TRANSPARENT            &&
+                      ! gimp_drawable_has_alpha (GIMP_DRAWABLE (iter->data)))
+                    {
+                      gimp_layer_add_alpha (GIMP_LAYER (iter->data));
+                    }
 
                   gimp_item_resize (GIMP_ITEM (iter->data),
                                     GIMP_CONTEXT (options), options->fill_type,

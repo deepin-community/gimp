@@ -15,8 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __TOOL_MANAGER_H__
-#define __TOOL_MANAGER_H__
+#pragma once
 
 
 void       tool_manager_init                       (Gimp             *gimp);
@@ -28,6 +27,8 @@ void       tool_manager_push_tool                  (Gimp             *gimp,
                                                     GimpTool         *tool);
 void       tool_manager_pop_tool                   (Gimp             *gimp);
 
+void       tool_manager_swap_tools                 (Gimp             *gimp,
+                                                    gboolean          block_initialization);
 
 gboolean   tool_manager_initialize_active          (Gimp             *gimp,
                                                     GimpDisplay      *display);
@@ -91,6 +92,3 @@ GimpUIManager * tool_manager_get_popup_active      (Gimp             *gimp,
                                                     GdkModifierType   state,
                                                     GimpDisplay      *display,
                                                     const gchar     **ui_path);
-
-
-#endif  /*  __TOOL_MANAGER_H__  */

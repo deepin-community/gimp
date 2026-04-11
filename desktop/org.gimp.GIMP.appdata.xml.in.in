@@ -14,18 +14,17 @@
   <project_license>GPL-3.0+ AND LGPL-3.0+</project_license>
   <developer_name>The GIMP team</developer_name>
   <name>GNU Image Manipulation Program</name>
-  <summary>Create images and edit photographs</summary>
+  <summary>High-end image creation and manipulation</summary>
   <description>
     <p>
-      GIMP is an acronym for GNU Image Manipulation Program. It is a
-      freely distributed program for such tasks as photo retouching,
-      image composition and image authoring.
+      GIMP is an acronym for GNU Image Manipulation Program. It is
+      Community-driven Free Software for high-end image creation and manipulation.
     </p>
     <p>
-      It has many capabilities. It can be used as a simple paint
-      program, an expert quality photo retouching program, an online
-      batch processing system, a mass production image renderer, an
-      image format converter, etc.
+      It has many capabilities. It can be used as a paint program,
+      an expert quality photo retouching program, image composition,
+      an online batch processing system, a mass production image
+      renderer, an image format converter, etc.
     </p>
     <p>
       GIMP is expandable and extensible. It is designed to be
@@ -33,7 +32,7 @@
       anything. The advanced scripting interface allows everything
       from the simplest task to the most complex image manipulation
       procedures to be easily scripted. GIMP is available for Linux,
-      Microsoft Windows and OS X.
+      Microsoft Windows and macOS.
     </p>
   </description>
   <url type="bugtracker">@BUG_REPORT_URL@</url>
@@ -60,7 +59,6 @@
       <caption>Scanned engraving being edited in GIMP. Artwork by Liam (CC0)</caption>
     </screenshot>
   </screenshots>
-  <update_contact>gimp-developer-list_at_gnome.org</update_contact>
   <keywords>
     <keyword>GIMP</keyword>
     <keyword>Photoshop</keyword>
@@ -73,16 +71,311 @@
   </kudos>
   <translation type="gettext">gimp30</translation>
 
-  <launchable type="desktop-id">gimp.desktop</launchable>
+  <launchable type="desktop-id">@GIMP_DESKTOP_NAME@.desktop</launchable>
   <provides>
     <binary>@GIMP_COMMAND@</binary>
     <!-- Fix the ID renaming, and things like past reviews made on the
          older ID in software installers. -->
-    <id>gimp.desktop</id>
+    <id>@GIMP_DESKTOP_NAME@.desktop</id>
   </provides>
 
   <releases>
+    <release version="3.2.2" date="2026-03-28">
+      <url type="details">https://www.gimp.org/release/3.2.2/</url>
+      <description>
+        <p>
+        Here we go! The first bugfix release for the GIMP 3.2 series is here.
+        </p>
+        <ul>
+          <li>A bug when group layers became invisible in some conditions when children had effects got fixed</li>
+          <li>More fixes, especially for the new vector and link layer types, as well as non-destructive effects</li>
+          <li>Various file formats support improved</li>
+          <li>Themes fixes and improvements</li>
+          <li>Support for x86 (32-bit) architecture on Windows was dropped</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.2.0" date="2026-03-14">
+      <url type="details">https://www.gimp.org/release/3.2.0/</url>
+      <description>
+        <p>
+        GIMP 3.2.0 brings fancy new layer types, hence carrying on its non-destructive
+        abilities, all the while strengthening the groundwork from the 3.0 series.
+        Some of the highlights of this release:
+        </p>
+        <ul>
+          <li demo="toolbox:path,
+                    tool-options:create-new-vector-layer-button">
+          New type of layers: vector layers.
+          </li>
+          <li>
+          New type of layers: link layers.
+          </li>
+          <li>Text, link or vector layer must now be explicitly rasterized for direct pixel edits</li>
+
+          <li demo="toolbox:pencil,
+                    tool-options:paint-mode">
+          New paint mode "Overwrite"
+          </li>
+          <li demo="toolbox:flip">
+          The Flip tool can now be controlled with arrow keys
+          </li>
+          <li demo="toolbox:shear">
+          The Shear tool can now be adjusted with arrow keys
+          </li>
+          <li demo="toolbox:mypaint-brush,
+                    tool-options:gain">
+          MyPaint brushes version 2 are now supported, with new "Gain" setting
+          </li>
+          <li demo="toolbox:mypaint-brush">
+          The MyPaint Brushes tool now supports stylus barrel rotation on relevant brushes
+          </li>
+          <li demo="toolbox:text,
+                    tool-options:outline=1,
+                    tool-options:outline-direction">
+          Text tool: new "Outline Direction" option
+          </li>
+          <li demo="toolbox:text">
+          New "Paste unformatted text" action in text tool
+          </li>
+
+          <li>Dragging a file to the image tab bar opens the file as a new image</li>
+          <li>New "System" color scheme</li>
+
+          <li>New "Edit mask immediately" checkbox in "Add Layer Mask" dialog</li>
+          <li demo="layer-list,
+                    layer-list:layers-delete">
+          The Delete button in Layers dialog will delete the layer mask if selected
+          </li>
+
+          <li>The DDS plug-in now supports exporting in BC7 format</li>
+          <li>PDF format export will export vector layer as paths</li>
+          <li>The OpenEXR plug-in can now import Luminance/Chroma OpenEXR images</li>
+          <li>TIFF support improved to handle various unofficial features set by third-party software</li>
+          <li>PSD's legacy Drop Shadow, Inner Shadow and Outer Glow layer styles now imported</li>
+          <li>Image format import newly supported: APNG, AVCI, JIF, PlayStation TIM, OTA bitmap, PAA textures, Seattle Filmworks photos and HRZ Slow Scan Television Images, hgt.zip</li>
+          <li>Image format export newly supported: JPEG 2000, HEJ2, PlayStation TIM, PSB, SVG</li>
+          <li>ART is now supported as a RAW loader</li>
+
+          <li demo="toolbox:curves">
+          Photoshop's curves files (.acv) and levels files (.alv) can be loaded from the Curves and Levels tools respectively
+          </li>
+          <li>Photoshop's RGB and grayscale pattern files now supported</li>
+          <li>Palettes can now be exported as Krita's palettes (.kpl)</li>
+          <li>Palette swatches from the Procreate art program can now be imported</li>
+
+          <li>Support for many more image file formats improved</li>
+
+          <li>The Welcome dialog will now recognize your standard shortcuts to create or open files</li>
+          <li demo="histogram-editor,histogram-editor:toggle-compute-unique-colors">
+          New checkbox "Compute unique colors" on Histogram dockable
+          </li>
+          <li demo="color-editor,color-editor:CMYK=1,color-editor:total-ink-coverage">
+          Total Ink Coverage now displayed in the CMYK color selector
+          </li>
+
+          <li>A new GEGL Filter Browser was added</li>
+
+          <li>Many new API for text, vector and link layers for plug-in developers</li>
+          <li>Various fixes and usability updates</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.2.0~rc3" date="2026-03-02" type="development">
+      <url type="details">https://www.gimp.org/release/3.2.0-RC3/</url>
+      <description>
+        <p>
+        Here is a third release candidate for upcoming GIMP 3.2. We are still hoping it may be the last as we approach reasonable stability.
+        Improvements include:
+        </p>
+        <ul>
+          <li>Font loading on start massively sped up</li>
+          <li>XCF files won't start loading anymore before all fonts are loaded</li>
+          <li>Dropping a color or pattern on a vector layer updates its fill property</li>
+          <li>Curves and Levels now default to working in linear working space</li>
+          <li demo="toolbox:flip">
+          The Flip tool can now be controlled with arrow keys
+          </li>
+          <li demo="toolbox:shear">
+          The Shear tool can now be adjusted with arrow keys
+          </li>
+          <li demo="layer-list,
+                    layer-list:layers-delete">
+          The Delete button in Layers dialog will delete the layer mask if selected
+          </li>
+          <li>The DDS plug-in now supports exporting in BC7 format</li>
+          <li>The OpenEXR plug-in can now import Luminance/Chroma OpenEXR images</li>
+          <li>Palette swatches from the Procreate art program can now be imported</li>
+          <li>Swatchbooker palette support was improved with better color management</li>
+          <li>Several libgimp functions deprecated in favor of using the filter API directly</li>
+          <li>Various fixes and usability updates</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.2.0~rc2" date="2025-12-14" type="development">
+      <url type="details">https://www.gimp.org/release/3.2.0-RC2/</url>
+      <description>
+        <p>
+        With this second release candidate, we are getting closer to GIMP 3.2 than ever!
+        As expected from the RC window, which is string and feature-frozen, the contents of this version is mostly bug fixes,
+        though a few feature-like changes were made too. Highlights include:
+        </p>
+        <ul>
+          <li>Outer Glow layer style can now be imported from PSD files (converted as drop shadow, replicating the effect)</li>
+          <li demo="toolbox:mypaint-brush">
+          The MyPaint Brushes tool now supports stylus barrel rotation on relevant brushes
+          </li>
+          <li>The Paint Select tool's UX has been improved (though it is still in Playground)</li>
+          <li>Various UX and theming fixes</li>
+          <li>A lot of bug fixes</li>
+          <li>Many build improvements, in particular to allow MSVC compilation support</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.2.0~rc1" date="2025-11-17" type="development">
+      <url type="details">https://www.gimp.org/release/3.2.0-RC1/</url>
+      <description>
+        <p>
+        Introducing the first release candidate of what will eventually become GIMP 3.2!
+        Since GIMP 3.1.4 development version, here is what happened:
+        </p>
+        <ul>
+          <li>Text, link or vector layer must now be explicitly rasterized for direct pixel edits</li>
+          <li demo="toolbox:path,
+                    tool-options">
+          Path tool interaction have been reworked
+          </li>
+          <li demo="toolbox:text">
+          New "Paste unformatted text" action in text tool
+          </li>
+          <li>Dragging a file to the image tab bar opens the file as a new image</li>
+          <li>New "Edit mask immediately" checkbox in "Add Layer Mask" dialog</li>
+          <li>Filters on a pass-through group layer are no longer limited to its children's bounding box</li>
+          <li>Import of hgt.zip format added</li>
+          <li>Export of SVG format added</li>
+          <li>PDF format export will export vector layer as paths</li>
+          <li>Many new API for text, vector and link layers for plug-in developers</li>
+          <li>Improved support of macOS application menu and quit action</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.1.4" date="2025-08-31" type="development">
+      <url type="details">https://www.gimp.org/release/3.1.4/</url>
+      <description>
+        <p>
+        Our second development release finally contains the initial implementation of the two new types of
+        less-destructive layers which are the key points of upcoming GIMP 3.2.
+        </p>
+        <ul>
+          <li demo="toolbox:path,
+                    tool-options:create-new-vector-layer-button">
+          New type of layers: vector layers.
+          </li>
+          <li>
+          New type of layers: link layers.
+          </li>
+          <li demo="toolbox:mypaint-brush,
+                    tool-options:gain">
+          MyPaint brushes version 2 are now supported, with new "Gain" setting
+          </li>
+          <li>Code restructuration and factorization in preparation for future GTK4 port and better layer effect UI</li>
+          <li>New setting "Update metadata automatically" in Preferences > Image Import &amp; Export > Export Policies</li>
+          <li>The cursors when hovering and clicking spin scales were changed</li>
+          <li>The "System" color scheme now works on macOS too</li>
+          <li>The Welcome dialog will now recognize your standard shortcuts to create or open files</li>
+          <li>A new GEGL Filter Browser was added</li>
+          <li>Animation Playback and Raw Image data load dialogs were redesigned</li>
+          <li>TIFF support improved to handle various unofficial features set by third-party software</li>
+          <li>New import support for the following image formats: PAA textures, Seattle Filmworks photos and HRZ Slow Scan Television Images</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.1.2" date="2025-06-22" type="development">
+      <url type="details">https://www.gimp.org/release/3.1.2/</url>
+      <description>
+        <p>
+        GIMP 3.1.2 is the first development release leading to the next stable 3.2 series.
+        Among other improvements, it introduces the following features:
+        </p>
+        <ul>
+          <li demo="toolbox:pencil,
+                    tool-options:paint-mode">
+          New paint mode "Overwrite"
+          </li>
+          <li demo="toolbox:text,
+                    tool-options:outline=1,
+                    tool-options:outline-direction">
+          Text tool: new "Outline Direction" option
+          </li>
+          <li demo="channel-list,
+                    channel-list:item-effect-header-icon">
+          Non-destructive effects now allowed on channels
+          </li>
+          <li>New "System" color scheme</li>
+          <li demo="brush-list,brush-list:viewables-follow-theme">
+          New toggle "Use theme colors for preview" on Brushes and Fonts dockables
+          </li>
+          <li demo="histogram-editor,histogram-editor:toggle-compute-unique-colors">
+          New checkbox "Compute unique colors" on Histogram dockable
+          </li>
+          <li demo="color-editor,color-editor:CMYK=1,color-editor:total-ink-coverage">
+          Total Ink Coverage now displayed in the CMYK color selector
+          </li>
+          <li>Image format import newly supported: APNG, AVCI, JIF, TIM, OTA bitmap</li>
+          <li>Image format export newly supported: JPEG 2000, HEJ2, TIM, PSB</li>
+          <li>Improved image format support: OpenEXR, ORA</li>
+          <li>PSD's legacy Drop Shadow and Inner Shadow filters now imported</li>
+          <li demo="toolbox:curves">
+          Photoshop's curves files (.acv) and levels files (.alv) can be loaded from the Curves and Levels tools respectively
+          </li>
+          <li>Photoshop's RGB and grayscale pattern files now supported</li>
+          <li>Palettes can now be exported as Krita's palettes (.kpl)</li>
+          <li>ART is now supported as a RAW loader</li>
+          <li>Refactoring of the non-destructive filter code</li>
+        </ul>
+      </description>
+    </release>
+
+    <release version="3.0.8" date="2026-01-24">
+      <url type="details">https://www.gimp.org/release/3.0.8/</url>
+      <description>
+        <p>
+        This micro release in the 3.0 series fixes many bugs, assorted with various usability improvements.
+        </p>
+        <ul>
+          <li>Font loading on start massively sped up</li>
+          <li>Images won't start loading anymore before all fonts are loaded</li>
+          <li>Several parts of the graphical interface are better matching the theme and settings</li>
+          <li demo="layer-list,
+                    layer-list:item-effect-header-icon">
+          No outlines in the "Fx" column anymore when hovering
+          </li>
+          <li>Three functions added in the public API and one function was deprecated</li>
+          <li>Better support of run environments without a display</li>
+          <li>Many more bugs and usability issues have been fixed</li>
+          <li>Reported instabilities and vulnerabilities were fixed</li>
+        </ul>
+      </description>
+    </release>
+    <release version="3.0.6" date="2025-10-04">
+      <url type="details">https://www.gimp.org/release/3.0.6/</url>
+      <description>
+        <p>
+        This micro release in the 3.0 series fixes some major bugs, assorted with various usability improvements.
+        </p>
+        <ul>
+          <li demo="brush-list,brush-list:viewables-follow-theme">
+          New toggle in Brushes and Fonts dialogs to render their previews using theme colors
+          </li>
+          <li>The Print plug-in now pops a second dialog for fine-tuning prints in sandboxed environments (e.g. Flatpak or Snap)</li>
+          <li>A bug in Windows prevented GIMP to work when the system was set to specific locales</li>
+          <li>Various usability issues have been handled</li>
+          <li>Reported instabilities and vulnerabilities were fixed</li>
+        </ul>
+      </description>
+    </release>
     <release version="3.0.4" date="2025-05-17">
+      <url type="details">https://www.gimp.org/release/3.0.4/</url>
       <description>
         <p>
         This second micro release in the 3.0 series fixes various bugs and improves usability in several parts of the interface:
@@ -106,6 +399,7 @@
       </description>
     </release>
     <release version="3.0.2" date="2025-03-23">
+      <url type="details">https://www.gimp.org/release/3.0.2/</url>
       <description>
         <p>
         As could be expected from a major release, a few critical bugs slipped through our testing!
@@ -114,6 +408,7 @@
       </description>
     </release>
     <release version="3.0.0" date="2025-03-16">
+      <url type="details">https://www.gimp.org/release/3.0.0/</url>
       <description>
         <p>
         Our initial release for the next generation in image manipulation!

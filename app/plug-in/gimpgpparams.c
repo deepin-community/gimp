@@ -33,6 +33,7 @@
 
 #include "core/gimp.h"
 #include "core/gimpbrush.h"
+#include "core/gimpcurve.h"
 #include "core/gimpdisplay.h"
 #include "core/gimpdrawablefilter.h"
 #include "core/gimpgradient.h"
@@ -40,10 +41,15 @@
 #include "core/gimpimage.h"
 #include "core/gimplayer.h"
 #include "core/gimplayermask.h"
+#include "core/gimplinklayer.h"
 #include "core/gimppalette.h"
 #include "core/gimppattern.h"
+#include "core/gimprasterizable.h"
 #include "core/gimpselection.h"
 #include "core/gimpunit.h"
+
+#include "path/gimppath.h"
+#include "path/gimpvectorlayer.h"
 
 #include "text/gimpfont.h"
 #include "text/gimptextlayer.h"
@@ -51,8 +57,6 @@
 #include "core/gimpparamspecs.h"
 
 #include "pdb/gimppdb-utils.h"
-
-#include "vectors/gimppath.h"
 
 #include "libgimp/gimpgpparams.h"
 

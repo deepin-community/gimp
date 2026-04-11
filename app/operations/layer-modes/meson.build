@@ -33,6 +33,7 @@ libapplayermodes_sources = files(
   'gimpoperationmerge.c',
   'gimpoperationnormal.c',
   'gimpoperationpassthrough.c',
+  'gimpoperationoverwrite.c',
   'gimpoperationreplace.c',
   'gimpoperationsplit.c',
 )
@@ -49,5 +50,6 @@ libapplayermodes = static_library('applayermodes',
     cairo,
     gegl,
     gdk_pixbuf,
+    gexiv2
   ],
 )

@@ -6,8 +6,8 @@ import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-MESON_BUILD_ROOT = Path(os.environ.get("MESON_BUILD_ROOT",".")).as_posix() 
-MESON_SOURCE_ROOT = Path(os.environ.get("MESON_SOURCE_ROOT",sys.argv[2])).as_posix() 
+MESON_BUILD_ROOT = Path(os.environ.get("MESON_BUILD_ROOT",".")).as_posix()
+MESON_SOURCE_ROOT = Path(os.environ.get("MESON_SOURCE_ROOT",sys.argv[2])).as_posix()
 
 ## Get list of Inno and GIMP supported languages
 po_inno_files = sorted(glob.glob(os.path.join(MESON_SOURCE_ROOT,'po-windows-installer/*.po')))
@@ -40,7 +40,7 @@ if sys.argv[1] == 'msg':
         inno_code = entry.get('inno_code').replace('\\\\', '\\')
         break
     # Check if everything is alright
-    if inno_code is None:
+    if not inno_code:
       faultingmsg_list = faultingmsg_list + f"{po} "
     if po not in meson_set:
       faultingmeson_list = faultingmeson_list + f"{po} "
@@ -93,7 +93,7 @@ elif sys.argv[1] == 'files':
     # Change po
     po_clean = po.replace('@', '_')
     # Create line
-    files_line = f'Source: "{{#GIMP_DIR32}}\\share\\locale\\{po}\\*"; DestDir: "{{app}}\\share\\locale\\{po}"; Components: loc\\{po_clean}; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion'
+    files_line = f'Source: "{{#MAIN_BUNDLE}}\\share\\locale\\{po}\\*"; DestDir: "{{app}}\\share\\locale\\{po}"; Components: loc\\{po_clean}; Flags: recursesubdirs restartreplace uninsrestartdelete ignoreversion'
     files_list.append(files_line)
   output_file = os.path.join(MESON_BUILD_ROOT, 'build/windows/installer/base_po-files.list')
   with open(output_file, 'w') as f:

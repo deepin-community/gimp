@@ -36,7 +36,9 @@ gboolean      gimp_item_id_is_valid         (gint                item_id);
 gboolean      gimp_item_id_is_drawable      (gint                item_id);
 gboolean      gimp_item_id_is_layer         (gint                item_id);
 gboolean      gimp_item_id_is_text_layer    (gint                item_id);
+gboolean      gimp_item_id_is_vector_layer  (gint                item_id);
 gboolean      gimp_item_id_is_group_layer   (gint                item_id);
+gboolean      gimp_item_id_is_link_layer    (gint                item_id);
 gboolean      gimp_item_id_is_channel       (gint                item_id);
 gboolean      gimp_item_id_is_layer_mask    (gint                item_id);
 gboolean      gimp_item_id_is_path          (gint                item_id);
@@ -77,6 +79,14 @@ gboolean      gimp_item_detach_parasite     (GimpItem           *item,
 GimpParasite* gimp_item_get_parasite        (GimpItem           *item,
                                              const gchar        *name);
 gchar**       gimp_item_get_parasite_list   (GimpItem           *item);
+gboolean      gimp_items_popup              (const gchar        *callback,
+                                             const gchar        *popup_title,
+                                             const gchar        *item_type,
+                                             GimpItem           *initial_item,
+                                             GBytes             *parent_window);
+gboolean      gimp_items_close_popup        (const gchar        *callback);
+gboolean      gimp_items_set_popup          (const gchar        *callback,
+                                             GimpItem           *item);
 
 
 G_END_DECLS

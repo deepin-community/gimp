@@ -18,8 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_APP_PROP_WIDGETS_H__
-#define __GIMP_APP_PROP_WIDGETS_H__
+#pragma once
 
 
 /*  GParamBoolean  */
@@ -50,6 +49,7 @@ GtkWidget * gimp_prop_layer_mode_box_new    (GObject       *config,
 GtkWidget * gimp_prop_color_button_new      (GObject       *config,
                                              const gchar   *property_name,
                                              const gchar   *title,
+                                             gboolean       user_context_aware,
                                              gint           width,
                                              gint           height,
                                              GimpColorAreaType  type);
@@ -133,6 +133,3 @@ gboolean _gimp_prop_widgets_get_numeric_values (GObject     *object,
                                                 gdouble     *lower,
                                                 gdouble     *upper,
                                                 const gchar *strloc);
-
-
-#endif /* __GIMP_APP_PROP_WIDGETS_H__ */

@@ -34,6 +34,8 @@
 #include "core/gimp.h"
 #include "core/gimptoolinfo.h"
 
+#include "actions/filters-actions.h"
+
 #include "widgets/gimphelp-ids.h"
 #include "widgets/gimppropwidgets.h"
 
@@ -164,7 +166,7 @@ gimp_gegl_tool_dialog (GimpFilterTool *filter_tool)
   store = gtk_list_store_new (N_COLUMNS,
                               G_TYPE_STRING, G_TYPE_STRING, G_TYPE_STRING);
 
-  opclasses = gimp_gegl_get_op_classes ();
+  opclasses = gimp_gegl_get_op_classes (TRUE);
 
   for (iter = opclasses; iter; iter = iter->next)
     {
@@ -173,6 +175,9 @@ gimp_gegl_tool_dialog (GimpFilterTool *filter_tool)
       const gchar        *op_name   = opclass->name;
       const gchar        *title;
       gchar              *label;
+
+      if (filters_actions_gegl_op_blocklisted (opclass->name))
+        continue;
 
       if (g_str_has_prefix (opclass->name, "gegl:"))
         icon_name = GIMP_ICON_GEGL;

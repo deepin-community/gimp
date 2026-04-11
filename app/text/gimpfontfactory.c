@@ -23,6 +23,11 @@
 
 #include "config.h"
 
+#ifdef _WIN32
+#include <io.h>
+#define read _read
+#endif
+
 #include <fcntl.h>
 #include <glib/gstdio.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
@@ -55,10 +60,10 @@
 
 struct _GimpFontFactoryPrivate
 {
-  GSList                 *fonts_renaming_config;
-  gchar                  *conf;
-  gchar                  *sysconf;
-  PangoContext           *pango_context;
+  GSList       *fonts_renaming_config;
+  gchar        *conf;
+  gchar        *sysconf;
+  PangoContext *pango_context;
 };
 
 #define GET_PRIVATE(obj) (((GimpFontFactory *) (obj))->priv)
@@ -835,7 +840,6 @@ gimp_font_factory_load_names (GimpFontFactory *factory)
       gpointer              font_info[PROPERTIES_COUNT];
       PangoFontDescription *pattern_pfd;
       gchar                *pattern_pfd_desc;
-      FT_Face               face;
 
       FcPatternGetString (fontset->fonts[i], FC_FILE, 0, (FcChar8 **) &file);
 
@@ -846,44 +850,49 @@ gimp_font_factory_load_names (GimpFontFactory *factory)
           continue;
         }
 
-      if (FT_New_Face (ft, file, 0, &face))
-        {
-          g_string_append_printf (ignored_fonts, "- %s (Failed To Create A FreeType Face)\n", file);
-          n_ignored++;
-          continue;
-        }
-
       /*
        * Pango doesn't support non SFNT fonts because harfbuzz doesn't support them.
        * woff and woff2, not supported by pango (because they are not yet supported by harfbuzz,
        * when using harfbuzz's default loader, which is how pango uses it).
        * pcf,pcf.gz are bitmap font formats, not supported by pango (because of harfbuzz).
        * afm, pfm, pfb are type1 font formats, not supported by pango (because of harfbuzz).
+       * This check is less robust than trying to create an FreeType face or a harfbuzz blob,
+       * but it's much faster.
        */
-      if (face->face_flags & FT_FACE_FLAG_SFNT)
-        {
-          /* If this is an SFNT wrapper, read the first 4 bytes to see if it is a WOFF[2] font. */
-          char buf[4] = {0};
-          int  fd     = g_open ((gchar *) file, O_RDONLY, 0);
+      {
+         char buf[4] = {0};
+         int  fd;
 
-          read (fd, buf, 4);
-          g_close (fd, NULL);
-          FT_Done_Face (face);
+         errno = 0;
+         fd    = g_open ((gchar *) file, O_RDONLY, 0);
+         if (fd == -1)
+           {
+             g_string_append_printf (ignored_fonts, "- %s (access error: %s)\n", file, strerror (errno));
+             n_ignored++;
+             continue;
+           }
 
-          if (buf[0] == 'w' && buf[1] == 'O' && buf[2] == 'F' && (buf[3] == 'F' || buf[3] == '2'))
-            {
-              g_string_append_printf (ignored_fonts, "- %s (WOFF[2] font)\n", file);
-              n_ignored++;
-              continue;
-            }
-        }
-      else
-        {
-          FT_Done_Face (face);
-          g_string_append_printf (ignored_fonts, "- %s (NON SFNT font)\n", file);
-          n_ignored++;
-          continue;
-        }
+         read (fd, buf, 4);
+         g_close (fd, NULL);
+
+         if (buf[0] == 'w' && buf[1] == 'O' && buf[2] == 'F' && (buf[3] == 'F' || buf[3] == '2'))
+           {
+             g_string_append_printf (ignored_fonts, "- %s (WOFF[2] font)\n", file);
+             n_ignored++;
+             continue;
+           }
+
+         if ((buf[0] != 0x00 || buf[1] != 0x01 || buf[2] != 0x00 || buf[3] != 0x00) && /* older truetype */
+             (buf[0] != 't'  || buf[1] != 'y'  || buf[2] != 'p'  || buf[3] != '1')  && /* type1 wrapped in sfnt wrapper */
+             (buf[0] != 't'  || buf[1] != 'r'  || buf[2] != 'u'  || buf[3] != 'e')  && /* truetype */
+             (buf[0] != 'O'  || buf[1] != 'T'  || buf[2] != 'T'  || buf[3] != 'O')  && /* opentype */
+             (buf[0] != 't'  || buf[1] != 't'  || buf[2] != 'c'  || buf[3] != 'f'))    /* truetype collection */
+           {
+             g_string_append_printf (ignored_fonts, "- %s (NON SFNT font)\n", file);
+             n_ignored++;
+             continue;
+           }
+      }
 
       /* Some variable fonts have only a family name and a font version.
        * But we also check in case there is no family name */
@@ -1002,7 +1011,6 @@ gimp_font_factory_load_names (GimpFontFactory *factory)
                               "<edit name=\"family\" mode=\"prepend\" binding=\"strong\"><string>%s</string></edit>",
                               escaped_fullname);
       g_free (escaped_fullname);
-      g_free (family);
 
       escaped_file = g_markup_escape_text (file, -1);
       g_string_append_printf (xml,
@@ -1010,7 +1018,10 @@ gimp_font_factory_load_names (GimpFontFactory *factory)
                               escaped_file);
       g_free (escaped_file);
 
-      if (psname != NULL && g_utf8_validate (psname, -1, NULL))
+      /*Skia behaves in a way such that pango recognizes every font in the family as Bold, unless we don't match with the psname.
+       * Until we figure out why, this is the best we can do. (see issue #14659)
+      */
+      if (psname != NULL && g_utf8_validate (psname, -1, NULL) && g_strcmp0 (family, "Skia"))
         {
           psname = g_markup_escape_text (psname, -1);
           g_string_append_printf (xml,
@@ -1018,6 +1029,7 @@ gimp_font_factory_load_names (GimpFontFactory *factory)
                                   psname);
           g_free (psname);
         }
+      g_free (family);
 
       if (style != NULL && g_utf8_validate (style, -1, NULL))
         {

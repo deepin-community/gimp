@@ -15,27 +15,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef __GIMP_ITEM_H__
-#define __GIMP_ITEM_H__
-
+#pragma once
 
 #include "gimpfilter.h"
 
 
-#define GIMP_TYPE_ITEM            (gimp_item_get_type ())
-#define GIMP_ITEM(obj)            (G_TYPE_CHECK_INSTANCE_CAST ((obj), GIMP_TYPE_ITEM, GimpItem))
-#define GIMP_ITEM_CLASS(klass)    (G_TYPE_CHECK_CLASS_CAST ((klass), GIMP_TYPE_ITEM, GimpItemClass))
-#define GIMP_IS_ITEM(obj)         (G_TYPE_CHECK_INSTANCE_TYPE ((obj), GIMP_TYPE_ITEM))
-#define GIMP_IS_ITEM_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GIMP_TYPE_ITEM))
-#define GIMP_ITEM_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GIMP_TYPE_ITEM, GimpItemClass))
+#define GIMP_TYPE_ITEM (gimp_item_get_type ())
+G_DECLARE_DERIVABLE_TYPE (GimpItem,
+                          gimp_item,
+                          GIMP, ITEM,
+                          GimpFilter)
 
-
-typedef struct _GimpItemClass GimpItemClass;
-
-struct _GimpItem
-{
-  GimpFilter  parent_instance;
-};
 
 struct _GimpItemClass
 {
@@ -117,7 +107,8 @@ struct _GimpItemClass
                                           GimpTransformDirection  direction,
                                           GimpInterpolationType   interpolation_type,
                                           GimpTransformResize     clip_result,
-                                          GimpProgress           *progress);
+                                          GimpProgress           *progress,
+                                          gboolean                push_undo);
   GimpTransformResize (* get_clip)       (GimpItem               *item,
                                           GimpTransformResize     clip_result);
   gboolean        (* fill)               (GimpItem               *item,
@@ -139,7 +130,6 @@ struct _GimpItemClass
                                           gdouble                 feather_radius_x,
                                           gdouble                 feather_radius_y);
 
-  const gchar *default_name;
   const gchar *rename_desc;
   const gchar *translate_desc;
   const gchar *scale_desc;
@@ -410,5 +400,5 @@ gboolean        gimp_item_mask_intersect     (GimpItem           *item,
 gboolean        gimp_item_is_in_set          (GimpItem           *item,
                                               GimpItemSet         set);
 
-
-#endif /* __GIMP_ITEM_H__ */
+gboolean        gimp_item_is_rasterizable    (GimpItem           *item);
+gboolean        gimp_item_is_rasterized      (GimpItem           *item);

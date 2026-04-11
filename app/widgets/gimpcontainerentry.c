@@ -46,6 +46,12 @@ static void     gimp_container_entry_finalize     (GObject                *objec
 
 static void     gimp_container_entry_set_context  (GimpContainerView      *view,
                                                    GimpContext            *context);
+static void     gimp_container_entry_set_view_size(GimpContainerView      *view);
+static gboolean gimp_container_entry_set_selected (GimpContainerView      *view,
+                                                   GList                  *items);
+static gint     gimp_container_entry_get_selected (GimpContainerView      *view,
+                                                   GList                 **items);
+
 static gpointer gimp_container_entry_insert_item  (GimpContainerView      *view,
                                                    GimpViewable           *viewable,
                                                    gpointer                parent_insert_data,
@@ -60,21 +66,14 @@ static void     gimp_container_entry_reorder_item (GimpContainerView      *view,
 static void     gimp_container_entry_rename_item  (GimpContainerView      *view,
                                                    GimpViewable           *viewable,
                                                    gpointer                insert_data);
-static gboolean  gimp_container_entry_select_items(GimpContainerView      *view,
-                                                   GList                  *items,
-                                                   GList                  *paths);
 static void     gimp_container_entry_clear_items  (GimpContainerView      *view);
-static void    gimp_container_entry_set_view_size (GimpContainerView      *view);
-static gint     gimp_container_entry_get_selected (GimpContainerView      *view,
-                                                   GList                 **items,
-                                                   GList                 **items_data);
 
 static void     gimp_container_entry_changed      (GtkEntry               *entry,
                                                    GimpContainerView      *view);
-static void   gimp_container_entry_match_selected (GtkEntryCompletion     *widget,
-                                                   GtkTreeModel           *model,
-                                                   GtkTreeIter            *iter,
-                                                   GimpContainerView      *view);
+static gboolean gimp_container_entry_match_selected (GtkEntryCompletion     *widget,
+                                                     GtkTreeModel           *model,
+                                                     GtkTreeIter            *iter,
+                                                     GimpContainerView      *view);
 
 
 G_DEFINE_TYPE_WITH_CODE (GimpContainerEntry, gimp_container_entry,
@@ -92,11 +91,11 @@ gimp_container_entry_class_init (GimpContainerEntryClass *klass)
 {
   GObjectClass *object_class = G_OBJECT_CLASS (klass);
 
-  object_class->set_property = gimp_container_view_set_property;
-  object_class->get_property = gimp_container_view_get_property;
+  object_class->set_property = _gimp_container_view_set_property;
+  object_class->get_property = _gimp_container_view_get_property;
   object_class->finalize     = gimp_container_entry_finalize;
 
-  gimp_container_view_install_properties (object_class);
+  _gimp_container_view_install_properties (object_class);
 }
 
 static void
@@ -108,14 +107,15 @@ gimp_container_entry_view_iface_init (GimpContainerViewInterface *iface)
     parent_view_iface = g_type_default_interface_peek (GIMP_TYPE_CONTAINER_VIEW);
 
   iface->set_context   = gimp_container_entry_set_context;
+  iface->set_view_size = gimp_container_entry_set_view_size;
+  iface->set_selected  = gimp_container_entry_set_selected;
+  iface->get_selected  = gimp_container_entry_get_selected;
+
   iface->insert_item   = gimp_container_entry_insert_item;
   iface->remove_item   = gimp_container_entry_remove_item;
   iface->reorder_item  = gimp_container_entry_reorder_item;
   iface->rename_item   = gimp_container_entry_rename_item;
-  iface->select_items  = gimp_container_entry_select_items;
   iface->clear_items   = gimp_container_entry_clear_items;
-  iface->set_view_size = gimp_container_entry_set_view_size;
-  iface->get_selected  = gimp_container_entry_get_selected;
 
   iface->insert_data_free = (GDestroyNotify) gtk_tree_iter_free;
 }
@@ -181,26 +181,16 @@ gimp_container_entry_new (GimpContainer *container,
                           gint           view_size,
                           gint           view_border_width)
 {
-  GtkWidget         *entry;
-  GimpContainerView *view;
-
   g_return_val_if_fail (container == NULL || GIMP_IS_CONTAINER (container),
                         NULL);
   g_return_val_if_fail (context == NULL || GIMP_IS_CONTEXT (context), NULL);
 
-  entry = g_object_new (GIMP_TYPE_CONTAINER_ENTRY, NULL);
-
-  view = GIMP_CONTAINER_VIEW (entry);
-
-  gimp_container_view_set_view_size (view, view_size, view_border_width);
-
-  if (container)
-    gimp_container_view_set_container (view, container);
-
-  if (context)
-    gimp_container_view_set_context (view, context);
-
-  return entry;
+  return g_object_new (GIMP_TYPE_CONTAINER_ENTRY,
+                       "view-size",         view_size,
+                       "view-border-width", view_border_width,
+                       "context",           context,
+                       "container",         container,
+                       NULL);
 }
 
 
@@ -240,6 +230,64 @@ gimp_container_entry_set_context (GimpContainerView *view,
   if (model)
     gimp_container_tree_store_set_context (GIMP_CONTAINER_TREE_STORE (model),
                                            context);
+}
+
+static void
+gimp_container_entry_set_view_size (GimpContainerView *view)
+{
+  GtkTreeModel *model = gimp_container_entry_get_model (view);
+
+  gimp_container_tree_store_set_view_size (GIMP_CONTAINER_TREE_STORE (model));
+}
+
+static gboolean
+gimp_container_entry_set_selected (GimpContainerView   *view,
+                                   GList               *viewables)
+{
+  GimpContainerEntry *container_entry = GIMP_CONTAINER_ENTRY (view);
+  GtkEntry           *entry           = GTK_ENTRY (view);
+  GimpViewable       *viewable        = NULL;
+
+  /* XXX Only support 1 selected viewable for now. */
+  if (viewables)
+    viewable = viewables->data;
+
+  g_set_weak_pointer (&container_entry->viewable, viewable);
+
+  if (viewable)
+    {
+      gtk_entry_set_icon_from_icon_name (entry,
+                                         GTK_ENTRY_ICON_SECONDARY,
+                                         NULL);
+    }
+  else
+    {
+      /* The selected item does not exist. */
+      gtk_entry_set_icon_from_icon_name (entry,
+                                         GTK_ENTRY_ICON_SECONDARY,
+                                         GIMP_ICON_WILBER_EEK);
+    }
+
+  gtk_entry_set_text (entry, viewable ? gimp_object_get_name (viewable) : "");
+
+  return TRUE;
+}
+
+static gint
+gimp_container_entry_get_selected (GimpContainerView  *view,
+                                   GList             **items)
+{
+  GimpContainerEntry *container_entry = GIMP_CONTAINER_ENTRY (view);
+
+  if (items)
+    {
+      if (container_entry->viewable)
+        *items = g_list_prepend (NULL, container_entry->viewable);
+      else
+        *items = NULL;
+    }
+
+  return container_entry->viewable ? 1 : 0;
 }
 
 static gpointer
@@ -309,48 +357,6 @@ gimp_container_entry_rename_item (GimpContainerView *view,
                                          insert_data);
 }
 
-static gboolean
-gimp_container_entry_select_items (GimpContainerView   *view,
-                                   GList               *viewables,
-                                   GList               *paths)
-{
-  GimpContainerEntry *container_entry = GIMP_CONTAINER_ENTRY (view);
-  GtkEntry           *entry           = GTK_ENTRY (view);
-  GimpViewable       *viewable        = NULL;
-
-  /* XXX Only support 1 selected viewable for now. */
-  if (viewables)
-    viewable = viewables->data;
-
-  g_signal_handlers_block_by_func (entry,
-                                   gimp_container_entry_changed,
-                                   view);
-
-  g_set_weak_pointer (&container_entry->viewable, viewable);
-
-  if (viewable)
-    {
-      gtk_entry_set_icon_from_icon_name (entry,
-                                         GTK_ENTRY_ICON_SECONDARY,
-                                         NULL);
-    }
-  else
-    {
-      /* The selected item does not exist. */
-      gtk_entry_set_icon_from_icon_name (entry,
-                                         GTK_ENTRY_ICON_SECONDARY,
-                                         GIMP_ICON_WILBER_EEK);
-    }
-
-  gtk_entry_set_text (entry, viewable? gimp_object_get_name (viewable) : "");
-
-  g_signal_handlers_unblock_by_func (entry,
-                                     gimp_container_entry_changed,
-                                     view);
-
-  return TRUE;
-}
-
 static void
 gimp_container_entry_clear_items (GimpContainerView *view)
 {
@@ -361,32 +367,6 @@ gimp_container_entry_clear_items (GimpContainerView *view)
     gimp_container_tree_store_clear_items (GIMP_CONTAINER_TREE_STORE (model));
 
   parent_view_iface->clear_items (view);
-}
-
-static void
-gimp_container_entry_set_view_size (GimpContainerView *view)
-{
-  GtkTreeModel *model = gimp_container_entry_get_model (view);
-
-  gimp_container_tree_store_set_view_size (GIMP_CONTAINER_TREE_STORE (model));
-}
-
-static gint
-gimp_container_entry_get_selected (GimpContainerView  *view,
-                                   GList             **items,
-                                   GList             **items_data)
-{
-  GimpContainerEntry *container_entry = GIMP_CONTAINER_ENTRY (view);
-
-  if (items)
-    {
-      if (container_entry->viewable != NULL)
-        *items = g_list_prepend (NULL, container_entry->viewable);
-      else
-        *items = NULL;
-    }
-
-  return container_entry->viewable == NULL ? 0 : 1;
 }
 
 static void
@@ -402,14 +382,23 @@ gimp_container_entry_changed (GtkEntry          *entry,
     return;
 
   text = gtk_entry_get_text (entry);
-  object = gimp_container_get_child_by_name (container, text);
 
-  g_set_weak_pointer (&container_entry->viewable, GIMP_VIEWABLE (object));
+  /* don't change a valid selection. If we arrive here after selecting an entry from the list, don't do anything.
+   * If we arrive here after typing the full resource name, look for it in the container and set it.
+   * There is a difference, because some resources share the same display name e.g. 2 different fonts named "Holiday",
+   * it's not possible to get the correct one from the container based on display name, as it's not unique.
+  */
+  if (container_entry->viewable == NULL || g_strcmp0 (gimp_object_get_name (container_entry->viewable), text))
+    {
+      object = gimp_container_get_child_by_name (container, text);
+
+      g_set_weak_pointer (&container_entry->viewable, GIMP_VIEWABLE (object));
+
+      _gimp_container_view_selection_changed (view);
+    }
 
   if (container_entry->viewable)
     {
-      gimp_container_view_item_selected (view, container_entry->viewable);
-
       gtk_entry_set_icon_from_icon_name (entry,
                                          GTK_ENTRY_ICON_SECONDARY,
                                          NULL);
@@ -423,18 +412,22 @@ gimp_container_entry_changed (GtkEntry          *entry,
     }
 }
 
-static void
+static gboolean
 gimp_container_entry_match_selected (GtkEntryCompletion *widget,
                                      GtkTreeModel       *model,
                                      GtkTreeIter        *iter,
                                      GimpContainerView  *view)
 {
-  GimpViewRenderer *renderer;
+  GimpContainerEntry *container_entry = GIMP_CONTAINER_ENTRY (GTK_ENTRY (view));
+  GimpViewRenderer   *renderer;
 
   gtk_tree_model_get (model, iter,
                       GIMP_CONTAINER_TREE_STORE_COLUMN_RENDERER, &renderer,
                       -1);
-
-  gimp_container_view_item_selected (view, renderer->viewable);
+  g_set_weak_pointer (&container_entry->viewable, renderer->viewable);
   g_object_unref (renderer);
+
+  _gimp_container_view_selection_changed (view);
+
+  return FALSE;
 }

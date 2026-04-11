@@ -295,7 +295,7 @@ gimp_edit_selection_tool_start (GimpTool          *parent_tool,
                                        edit_select->num_segs_out *
                                        sizeof (GimpBoundSeg));
 
-    if (edit_select->edit_mode == GIMP_TRANSLATE_MODE_VECTORS)
+    if (edit_select->edit_mode == GIMP_TRANSLATE_MODE_PATH)
       {
         edit_select->sel_x      = 0;
         edit_select->sel_y      = 0;
@@ -349,7 +349,7 @@ gimp_edit_selection_tool_start (GimpTool          *parent_tool,
 
       case GIMP_TRANSLATE_MODE_LAYER:
       case GIMP_TRANSLATE_MODE_FLOATING_SEL:
-      case GIMP_TRANSLATE_MODE_VECTORS:
+      case GIMP_TRANSLATE_MODE_PATH:
         edit_select->live_items = gimp_image_item_list_filter (g_list_copy (selected_items));
         gimp_image_item_list_bounds (image, edit_select->live_items, &x, &y, &w, &h);
         break;
@@ -508,7 +508,7 @@ gimp_edit_selection_tool_update_motion (GimpEditSelectionTool *edit_select,
         {
         case GIMP_TRANSLATE_MODE_LAYER_MASK:
         case GIMP_TRANSLATE_MODE_MASK:
-        case GIMP_TRANSLATE_MODE_VECTORS:
+        case GIMP_TRANSLATE_MODE_PATH:
         case GIMP_TRANSLATE_MODE_CHANNEL:
           edit_select->last_x = edit_select->current_x;
           edit_select->last_y = edit_select->current_y;
@@ -619,10 +619,11 @@ gimp_edit_selection_tool_active_modifier_key (GimpTool        *tool,
   edit_select->constrain = (state & gimp_get_constrain_behavior_mask () ?
                             TRUE : FALSE);
 
-  /* If we didn't came here due to a mouse release, immediately update
-   * the position of the thing we move.
+  /* If we didn't came here due to a mouse release and we've moved before,
+   * immediately update the position of the thing we move.
    */
-  if (state & GDK_BUTTON1_MASK)
+  if ((state & GDK_BUTTON1_MASK) &&
+      ! edit_select->first_move)
     {
       gimp_edit_selection_tool_update_motion (edit_select,
                                               edit_select->last_motion_x,
@@ -717,7 +718,7 @@ gimp_edit_selection_tool_draw (GimpDrawTool *draw_tool)
       break;
 
     case GIMP_TRANSLATE_MODE_LAYER:
-    case GIMP_TRANSLATE_MODE_VECTORS:
+    case GIMP_TRANSLATE_MODE_PATH:
         {
           GList             *translate_items;
           GimpAlignmentType  snapped_side_horizontal      = shell->snapped_side_horizontal;
@@ -945,7 +946,7 @@ gimp_edit_selection_tool_get_selected_items (GimpEditSelectionTool *edit_select,
 
   switch (edit_select->edit_mode)
     {
-    case GIMP_TRANSLATE_MODE_VECTORS:
+    case GIMP_TRANSLATE_MODE_PATH:
       selected_items = g_list_copy (gimp_image_get_selected_paths (image));
       break;
 
@@ -1013,7 +1014,7 @@ gimp_edit_selection_tool_start_undo_group (GimpEditSelectionTool *edit_select,
 
   switch (edit_select->edit_mode)
     {
-    case GIMP_TRANSLATE_MODE_VECTORS:
+    case GIMP_TRANSLATE_MODE_PATH:
     case GIMP_TRANSLATE_MODE_CHANNEL:
     case GIMP_TRANSLATE_MODE_LAYER_MASK:
     case GIMP_TRANSLATE_MODE_MASK:
@@ -1267,7 +1268,7 @@ gimp_edit_selection_tool_translate (GimpTool          *tool,
       selected_items = gimp_image_get_selected_paths (image);
       selected_items = g_list_copy (selected_items);
 
-      edit_mode = GIMP_TRANSLATE_MODE_VECTORS;
+      edit_mode = GIMP_TRANSLATE_MODE_PATH;
       undo_type = GIMP_UNDO_GROUP_ITEM_DISPLACE;
 
       if (selected_items == NULL)

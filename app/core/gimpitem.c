@@ -28,12 +28,14 @@
 
 #include "core-types.h"
 
+#include "path/gimpvectorlayer.h"
+
+#include "text/gimptextlayer.h"
+
 #include "gimp.h"
 #include "gimp-parasites.h"
 #include "gimpchannel.h"
 #include "gimpcontainer.h"
-#include "gimpdrawable-filters.h"
-#include "gimpdrawablefilter.h"
 #include "gimpidtable.h"
 #include "gimpimage.h"
 #include "gimpimage-undo.h"
@@ -41,6 +43,7 @@
 #include "gimpitem.h"
 #include "gimpitem-preview.h"
 #include "gimpitemtree.h"
+#include "gimplinklayer.h"
 #include "gimplist.h"
 #include "gimpparasitelist.h"
 #include "gimpprogress.h"
@@ -282,7 +285,6 @@ gimp_item_class_init (GimpItemClass *klass)
   klass->stroke                    = NULL;
   klass->to_selection              = NULL;
 
-  klass->default_name              = NULL;
   klass->rename_desc               = NULL;
   klass->translate_desc            = NULL;
   klass->scale_desc                = NULL;
@@ -663,7 +665,7 @@ gimp_item_real_start_transform (GimpItem *item,
 
 static void
 gimp_item_real_end_transform (GimpItem *item,
-                                gboolean  push_undo)
+                              gboolean  push_undo)
 {
   gimp_item_end_move (item, push_undo);
 }
@@ -777,7 +779,7 @@ gimp_item_new (GType        type,
     gimp_object_set_name (GIMP_OBJECT (item), name);
   else
     gimp_object_set_static_name (GIMP_OBJECT (item),
-                                 GIMP_ITEM_GET_CLASS (item)->default_name);
+                                 GIMP_VIEWABLE_GET_CLASS (item)->default_name);
 
   return item;
 }
@@ -1102,7 +1104,7 @@ gimp_item_rename (GimpItem     *item,
   item_class = GIMP_ITEM_GET_CLASS (item);
 
   if (! new_name || ! *new_name)
-    new_name = item_class->default_name;
+    new_name = GIMP_VIEWABLE_GET_CLASS (item)->default_name;
 
   if (strcmp (new_name, gimp_object_get_name (item)))
     return item_class->rename (item, new_name, item_class->rename_desc, error);
@@ -1656,6 +1658,9 @@ gimp_item_resize (GimpItem     *item,
    */
   gimp_item_start_move (item, push_undo);
 
+  if (push_undo && GIMP_IS_DRAWABLE (item))
+    gimp_drawable_enable_resize_undo (GIMP_DRAWABLE (item));
+
   g_object_freeze_notify (G_OBJECT (item));
 
   item_class->resize (item, context, fill_type,
@@ -1780,41 +1785,11 @@ gimp_item_transform (GimpItem               *item,
   g_object_freeze_notify (G_OBJECT (item));
 
   item_class->transform (item, context, matrix, direction, interpolation,
-                         clip_result, progress);
+                         clip_result, progress, TRUE);
 
   g_object_thaw_notify (G_OBJECT (item));
 
   gimp_item_end_transform (item, push_undo);
-
-  /* Update crop of any filters */
-  if (GIMP_IS_DRAWABLE (item))
-    {
-      GeglRectangle  rect;
-      GimpContainer *filters;
-      GList         *filter_list;
-
-      rect = gimp_drawable_get_bounding_box (GIMP_DRAWABLE (item));
-      gimp_item_mask_intersect (item, &rect.x, &rect.y,
-                                &rect.width, &rect.height);
-
-      filters = gimp_drawable_get_filters (GIMP_DRAWABLE (item));
-
-      for (filter_list = GIMP_LIST (filters)->queue->tail; filter_list;
-           filter_list = g_list_previous (filter_list))
-        {
-          if (GIMP_IS_DRAWABLE_FILTER (filter_list->data))
-            {
-              GimpDrawableFilter *filter = filter_list->data;
-              GimpChannel        *mask;
-
-              mask = GIMP_CHANNEL (gimp_drawable_filter_get_mask (filter));
-
-              /* Don't resize partial layer effects */
-              if (! mask || gimp_channel_is_empty (mask))
-                gimp_drawable_filter_refresh_crop (filter, &rect);
-            }
-        }
-    }
 
   if (push_undo)
     gimp_image_undo_group_end (image);
@@ -2514,12 +2489,9 @@ gimp_item_set_lock_content (GimpItem *item,
     {
       if (push_undo && gimp_item_is_attached (item))
         {
-          /* Right now I don't think this should be pushed. */
-#if 0
           GimpImage *image = gimp_item_get_image (item);
 
           gimp_image_undo_push_item_lock_content (image, NULL, item);
-#endif
         }
 
       GET_PRIVATE (item)->lock_content = lock_content;
@@ -2686,7 +2658,8 @@ gimp_item_mask_bounds (GimpItem *item,
       ! gimp_channel_is_empty (selection) &&
       gimp_item_bounds (GIMP_ITEM (selection), &x, &y, &width, &height))
     {
-      gint off_x, off_y;
+      gint off_x = 0;
+      gint off_y = 0;
       gint x2, y2;
 
       gimp_item_get_offset (item, &off_x, &off_y);
@@ -2760,7 +2733,8 @@ gimp_item_mask_intersect (GimpItem *item,
       gimp_item_bounds (GIMP_ITEM (selection),
                         &tmp_x, &tmp_y, &tmp_width, &tmp_height))
     {
-      gint off_x, off_y;
+      gint off_x = 0;
+      gint off_y = 0;
 
       gimp_item_get_offset (item, &off_x, &off_y);
 
@@ -2817,4 +2791,24 @@ gimp_item_is_in_set (GimpItem    *item,
     }
 
   return FALSE;
+}
+
+gboolean
+gimp_item_is_rasterizable (GimpItem *item)
+{
+  g_return_val_if_fail (GIMP_IS_ITEM (item), FALSE);
+
+  return (gimp_item_is_text_layer (item) ||
+          gimp_item_is_link_layer (item) ||
+          gimp_item_is_vector_layer (item));
+}
+
+gboolean
+gimp_item_is_rasterized (GimpItem *item)
+{
+  g_return_val_if_fail (GIMP_IS_ITEM (item), FALSE);
+
+  return ((GIMP_IS_TEXT_LAYER (item) && ! gimp_item_is_text_layer (item)) ||
+          (GIMP_IS_LINK_LAYER (item) && ! gimp_item_is_link_layer (item)) ||
+          (GIMP_IS_VECTOR_LAYER (item) && ! gimp_item_is_vector_layer (item)));
 }

@@ -18,6 +18,8 @@ static const GimpGetTypeFunc get_type_funcs[] =
   gimp_convert_dither_type_get_type,
   gimp_convert_palette_type_get_type,
   gimp_convolve_type_get_type,
+  gimp_curve_point_type_get_type,
+  gimp_curve_type_get_type,
   gimp_desaturate_mode_get_type,
   gimp_dodge_burn_type_get_type,
   gimp_export_capabilities_get_type,
@@ -45,11 +47,11 @@ static const GimpGetTypeFunc get_type_funcs[] =
   gimp_message_handler_type_get_type,
   gimp_offset_type_get_type,
   gimp_orientation_type_get_type,
+  gimp_paint_application_mode_get_type,
+  gimp_path_stroke_type_get_type,
   gimp_pdb_error_handler_get_type,
   gimp_pdb_proc_type_get_type,
   gimp_pdb_status_type_get_type,
-  gimp_paint_application_mode_get_type,
-  gimp_path_stroke_type_get_type,
   gimp_precision_get_type,
   gimp_progress_command_get_type,
   gimp_repeat_mode_get_type,
@@ -62,9 +64,12 @@ static const GimpGetTypeFunc get_type_funcs[] =
   gimp_text_direction_get_type,
   gimp_text_hint_style_get_type,
   gimp_text_justification_get_type,
+  gimp_text_outline_get_type,
+  gimp_text_outline_direction_get_type,
   gimp_transfer_mode_get_type,
   gimp_transform_direction_get_type,
-  gimp_transform_resize_get_type
+  gimp_transform_resize_get_type,
+  gimp_trc_type_get_type
 };
 
 static const gchar * const type_names[] =
@@ -84,6 +89,8 @@ static const gchar * const type_names[] =
   "GimpConvertDitherType",
   "GimpConvertPaletteType",
   "GimpConvolveType",
+  "GimpCurvePointType",
+  "GimpCurveType",
   "GimpDesaturateMode",
   "GimpDodgeBurnType",
   "GimpExportCapabilities",
@@ -111,11 +118,11 @@ static const gchar * const type_names[] =
   "GimpMessageHandlerType",
   "GimpOffsetType",
   "GimpOrientationType",
+  "GimpPaintApplicationMode",
+  "GimpPathStrokeType",
   "GimpPDBErrorHandler",
   "GimpPDBProcType",
   "GimpPDBStatusType",
-  "GimpPaintApplicationMode",
-  "GimpPathStrokeType",
   "GimpPrecision",
   "GimpProgressCommand",
   "GimpRepeatMode",
@@ -128,9 +135,12 @@ static const gchar * const type_names[] =
   "GimpTextDirection",
   "GimpTextHintStyle",
   "GimpTextJustification",
+  "GimpTextOutline",
+  "GimpTextOutlineDirection",
   "GimpTransferMode",
   "GimpTransformDirection",
-  "GimpTransformResize"
+  "GimpTransformResize",
+  "GimpTRCType"
 };
 
 static gboolean enums_initialized = FALSE;

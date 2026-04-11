@@ -40,6 +40,7 @@
 #include <libgimp/gimpbatchprocedure.h>
 #include <libgimp/gimpbrush.h>
 #include <libgimp/gimpchannel.h>
+#include <libgimp/gimpcurve.h>
 #include <libgimp/gimpdisplay.h>
 #include <libgimp/gimpdrawable.h>
 #include <libgimp/gimpdrawablefilter.h>
@@ -57,6 +58,7 @@
 #include <libgimp/gimpitem.h>
 #include <libgimp/gimplayer.h>
 #include <libgimp/gimplayermask.h>
+#include <libgimp/gimplinklayer.h>
 #include <libgimp/gimploadprocedure.h>
 #include <libgimp/gimppalette.h>
 #include <libgimp/gimpparamspecs.h>
@@ -67,10 +69,12 @@
 #include <libgimp/gimpprocedureconfig.h>
 #include <libgimp/gimpprocedure-params.h>
 #include <libgimp/gimpprogress.h>
+#include <libgimp/gimprasterizable.h>
 #include <libgimp/gimpresource.h>
 #include <libgimp/gimpselection.h>
 #include <libgimp/gimptextlayer.h>
 #include <libgimp/gimpthumbnailprocedure.h>
+#include <libgimp/gimpvectorlayer.h>
 #include <libgimp/gimpvectorloadprocedure.h>
 
 #include <libgimp/gimp_pdb_headers.h>
@@ -188,6 +192,7 @@ gboolean            gimp_export_exif          (void) G_GNUC_CONST;
 gboolean            gimp_export_xmp           (void) G_GNUC_CONST;
 gboolean            gimp_export_iptc          (void) G_GNUC_CONST;
 gboolean            gimp_export_thumbnail     (void) G_GNUC_CONST;
+gboolean            gimp_update_metadata      (void) G_GNUC_CONST;
 gint                gimp_get_num_processors   (void) G_GNUC_CONST;
 GimpCheckSize       gimp_check_size           (void) G_GNUC_CONST;
 GimpCheckType       gimp_check_type           (void) G_GNUC_CONST;

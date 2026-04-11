@@ -1,9 +1,104 @@
-gimp (3.0.4-6.2deepin1) unstable; urgency=medium
+gimp (3.2.2-1) unstable; urgency=medium
 
-  * Revert previous switching from appstream-glib to appstream.
-  * skip test to fix build.
+  * New upstream bugfix release
+    - https://www.gimp.org/news/2026/03/28/gimp-3-2-2-released/
+  * Add Depends & Build-Depends: python3-gi-cairo
 
- -- Tianyu Chen <sweetyfish@deepin.org>  Thu, 20 Nov 2025 14:50:14 +0800
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Sun, 29 Mar 2026 13:19:31 -0700
+
+gimp (3.2.0-1) unstable; urgency=medium
+
+  * New upstream release
+    - https://www.gimp.org/news/2026/03/14/gimp-3-2-released/
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Thu, 19 Mar 2026 12:07:47 -0400
+
+gimp (3.2.0~RC3-1) unstable; urgency=high
+
+  * New upstream release including multiple plug-in security fixes:
+    - CVE-2026-0797 (Closes: #1128601)
+    - CVE-2026-2045 (Closes: #1128604)
+    - CVE-2026-2047 (Closes: #1128605)
+    - CVE-2026-2048 (Closes: #1128606)
+    - https://www.gimp.org/news/2026/03/02/gimp-3-2-RC3-released/
+  * Add Build-Depends: bash-completion
+  * debian/libgimp-3.0-0.symbols: Add new symbols
+  * Bump minimum babl
+  * Remove all patches: applied in new release
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Mon, 02 Mar 2026 18:36:30 -0500
+
+gimp (3.2.0~RC2-3.3) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * plug-ins: fix crash due to uninitialized ptr_array when loading a
+    specially crafted PSD
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Mon, 16 Feb 2026 17:02:46 +0100
+
+gimp (3.2.0~RC2-3.2) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * plug-ins: fix PSD loader: heap-buffer-overflow in fread_pascal_string
+    (CVE-2026-2239) (Closes: #1127838)
+  * Fix PSP File Parsing Integer Overflow Leading to Heap Corruption
+    (CVE-2026-2271) (Closes: #1127841)
+  * plug-ins: Add overflow checks for ICO loading (CVE-2026-2272)
+    (Closes: #1127842)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Sun, 15 Feb 2026 17:03:45 +0100
+
+gimp (3.2.0~RC2-3.1) unstable; urgency=medium
+
+  * Non-maintainer upload.
+  * plug-ins: fix #15284 ZDI-CAN-28232 vulnerability in file-psp
+    (CVE-2025-15059) (Closes: #1126267)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Sat, 31 Jan 2026 13:53:39 +0100
+
+gimp (3.2.0~RC2-3) unstable; urgency=medium
+
+  * Move Maintainer from Debian GNOME to Debian GNOME Extras
+  * Move vala files from gimp to libgimp-3.0-dev
+  * Bump Standards Version to 4.7.3
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Thu, 08 Jan 2026 09:53:39 -0500
+
+gimp (3.2.0~RC2-2) unstable; urgency=medium
+
+  * Allow building on m68k
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Mon, 15 Dec 2025 12:06:27 -0500
+
+gimp (3.2.0~RC2-1) unstable; urgency=medium
+
+  * New upstream release
+  * Add Build-Depends: dbus-x11 for build tests
+  * Bump minimum babl & gegl
+  * Use localehelper for build
+  * Enable mng plugin since libmng-dev now includes the .pc file
+  * Explicitly disable alsa for non-Linux architectures
+  * Only build for little endian (#1088168)
+  * gimp.install: Install new bash completions
+  * Install new plug-ins
+  * Update install files for new version
+  * libgimp-3.0-0.symbols: Add new symbols
+  * Add patch to use a more consistent version number when installing
+    the API docs
+  * Remove all other patches: applied in new release
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Mon, 15 Dec 2025 07:55:31 -0500
+
+gimp (3.0.6-1) unstable; urgency=medium
+
+  * New upstream bugfix release (Closes: #1117537)
+    https://www.gimp.org/news/2025/10/06/gimp-3-0-6-released/
+  * debian/libgimp-3.0-0.symbols: Update
+  * Cherry-pick proposed patch to fix build test failure
+  * Remove all other patches: applied in new release
+  * debian/watch: Convert to Version: 5
+
+ -- Jeremy Bícha <jbicha@ubuntu.com>  Thu, 04 Dec 2025 21:04:56 -0500
 
 gimp (3.0.4-6.2) unstable; urgency=medium
 
