@@ -1,6 +1,7 @@
 gimp (3.2.2-1deepin1) unstable; urgency=medium
 
   * Revert gir1.2 depends.
+  * Disable mng plugin since libmng-dev in Unstable doesn't ship the .pc file.
 
  -- lhdjply <lhdjply@126.com>  Sat, 11 Apr 2026 08:56:56 +0800
 
