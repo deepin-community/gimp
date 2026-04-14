@@ -54,7 +54,7 @@ usr/lib/${DEB_HOST_MULTIARCH}/gimp/3.0/plug-ins/file-ico
 usr/lib/${DEB_HOST_MULTIARCH}/gimp/3.0/plug-ins/file-jp2
 usr/lib/${DEB_HOST_MULTIARCH}/gimp/3.0/plug-ins/file-jpeg
 usr/lib/${DEB_HOST_MULTIARCH}/gimp/3.0/plug-ins/file-jpegxl
-usr/lib/${DEB_HOST_MULTIARCH}/gimp/3.0/plug-ins/file-mng
+#usr/lib/${DEB_HOST_MULTIARCH}/gimp/3.0/plug-ins/file-mng
 usr/lib/${DEB_HOST_MULTIARCH}/gimp/3.0/plug-ins/file-openraster/file-openraster.py
 usr/lib/${DEB_HOST_MULTIARCH}/gimp/3.0/plug-ins/file-paa
 usr/lib/${DEB_HOST_MULTIARCH}/gimp/3.0/plug-ins/file-pat

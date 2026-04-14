@@ -47,6 +47,7 @@ override_dh_auto_configure:
 		-Dilbm=disabled \
 		-Djavascript=$(JS) \
 		-Dlua=$(LUA) \
+		-Dmng=disabled \
 		$(NON_LINUX)
 
 override_dh_auto_build:
