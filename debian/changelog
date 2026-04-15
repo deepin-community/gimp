@@ -1,3 +1,13 @@
+gimp (3.0.4-6.3deepin1) unstable; urgency=medium
+
+  * Fix CVE-2026-4887: PCX buffer overflow in file-pcx.c
+    - Add validation for bpp values (1, 2, 4, 8)
+    - Allocate 1 extra byte for line buffers to prevent overflow
+    - Handle legacy images with incorrect bytesperline values
+    - Upstream: https://gitlab.gnome.org/GNOME/gimp/-/commit/aabce89271a9943a43bda9225aa43fc524f1c8a4
+
+ -- deepin-ci-robot <packages@deepin.org>  Wed, 15 Apr 2026 12:50:00 +0800
+
 gimp (3.0.4-6.2deepin1) unstable; urgency=medium
 
   * Revert previous switching from appstream-glib to appstream.

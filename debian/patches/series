@@ -5,3 +5,4 @@ plug-ins-fix-ZDI-CAN-27878.patch
 plug-ins-Fix-ZDI-CAN-27836.patch
 plug-ins-fix-ZDI-CAN-27823.patch
 skip-test-to-fix-build.patch
+fix-CVE-2026-4887-pcx-buffer-overflow.patch
